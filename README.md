@@ -35,8 +35,15 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 
 | 文档 | 内容 |
 |---|---|
-| [`ost-开发文档.md`](./ost-开发文档.md) | 插件化架构 RFC(动机 / 目标架构 / 扩展点 / 接缝 / 迁移路线 / 不变式 / 边界 / 对标 dsh / 工作台 / 服务商问题清单) |
-| [`ost-开发文档.html`](./ost-开发文档.html) | 同内容的可视化汇报版 |
+| [`docs/ost-开发文档.md`](./docs/ost-开发文档.md) | 插件化架构 RFC(动机 / 目标架构 / 扩展点 / 接缝 / 迁移路线 / 不变式 / 边界 / 对标 dsh / 工作台 / 服务商问题清单) |
+| [`docs/ost-开发文档.html`](./docs/ost-开发文档.html) | 同内容的可视化汇报版 |
+| [`docs/开发进度/阶段追踪.md`](./docs/开发进度/阶段追踪.md) | 里程碑 P1-P8 进度追踪（修订路线图落地，自 2026-09-23 起维护） |
+| [`docs/开发进度/P1a-详细计划.md`](./docs/开发进度/P1a-详细计划.md) | P1a 里程碑详细计划（工作分解 WS-1~7 / 测试矩阵 / 绿灯标准 / 两处小补强附录） |
+| [`docs/开发进度/P1b-详细计划.md`](./docs/开发进度/P1b-详细计划.md) | P1b 里程碑详细计划（Pane 工作台骨架 WS-1~6 + WS-1b 组件库 / 接口定案 / 绿灯标准） |
+| [`docs/开发进度/P2-详细计划.md`](./docs/开发进度/P2-详细计划.md) | P2 里程碑详细计划（DSH 接缝三角：LlmAdapter / StreamChunk / 凭证引用 / retry 声明 + deepseek 单实现） |
+| [`docs/开发进度/P3-详细计划.md`](./docs/开发进度/P3-详细计划.md) | P3 里程碑详细计划（会话存储 + 会话列表 Pane + Loop 编排 + 命令/结果 IPC） |
+| [`docs/开发进度/P4-详细计划.md`](./docs/开发进度/P4-详细计划.md) | P4 里程碑详细计划（凭证 seam + 三 provider + 模型目录 + retry 执行器 + 设置 Pane） |
+| [`docs/core-modules.svg`](./docs/core-modules.svg) | Core 模块依赖图（`core开发文档.md` §1.3 引用） |
 
 ## 主要功能
 
@@ -65,8 +72,7 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 
 ```
 osteosome/
-├── ost-开发文档.md / .html   # 架构与设计文档(v0.5)
-├── docs/                     # 配套决策与调研文档(待迁移)
+├── docs/                     # 设计文档：架构 RFC / Core RFC / 里程碑追踪 / 模块图
 ├── web/server                # 服务端(待迁移)
 ├── web/client                # React 客户端(待迁移)
 ├── desktop                   # Electron 壳与打包(待迁移)

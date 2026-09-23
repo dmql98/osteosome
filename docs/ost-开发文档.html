@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Osteosome 开发文档 — 微内核架构设计汇报 v3（微内核 · 全外部插件 · 可观察总线）</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149;
+    --purple: #bc8cff; --orange: #f0883e; --cyan: #39c5cf;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif; line-height: 1.65; padding: 32px; max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 30px; letter-spacing: 0.5px; }
+  h1 .accent { color: var(--accent); }
+  h2 { font-size: 21px; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); color: var(--accent); display: flex; align-items: center; gap: 10px; }
+  h2 .no { font-size: 13px; background: rgba(88,166,255,0.15); color: var(--accent); border-radius: 6px; padding: 2px 10px; font-weight: 700; }
+  h3 { font-size: 16px; margin: 20px 0 10px; color: var(--purple); }
+  p, li { font-size: 14px; color: var(--text); }
+  ul, ol { padding-left: 22px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  b, strong { color: var(--text); }
+  a { color: var(--accent); text-decoration: none; }
+  .subtitle { color: var(--text2); font-size: 14px; margin: 10px 0 8px; }
+  .meta { color: var(--text2); font-size: 12px; }
+
+  .nav { position: sticky; top: 0; background: rgba(13,17,23,0.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--border); margin: -32px -32px 24px; padding: 12px 32px; display: flex; gap: 16px; flex-wrap: wrap; z-index: 10; }
+  .nav a { font-size: 13px; color: var(--text2); }
+  .nav a:hover { color: var(--accent); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 860px) { .grid, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin: 12px 0; }
+  .card h3 { margin-top: 0; }
+
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-card .value { font-size: 30px; font-weight: 800; color: var(--accent); font-family: 'SF Mono', Menlo, Consolas, monospace; }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.purple { color: var(--purple); }
+  .stat-card .label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+  .stat-card .sub { font-size: 11px; color: var(--text2); opacity: 0.8; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; background: rgba(88,166,255,0.08); color: var(--accent); border-bottom: 1px solid var(--border); font-size: 12px; }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(88,166,255,0.04); }
+
+  code { background: rgba(110,118,129,0.25); padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono', Menlo, Consolas, monospace; color: var(--orange); }
+  pre { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.55; margin: 12px 0; font-family: 'SF Mono', Menlo, Consolas, monospace; }
+  pre code { background: none; padding: 0; color: var(--text); }
+
+  .tag { display: inline-block; padding: 1px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; margin-right: 4px; }
+  .tag-bad { background: rgba(248,81,73,0.15); color: var(--red); }
+  .tag-good { background: rgba(63,185,80,0.15); color: var(--green); }
+  .tag-warn { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .tag-info { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .tag-core { background: rgba(188,140,255,0.15); color: var(--purple); }
+
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 14px; font-size: 11px; font-weight: 600; margin: 2px 4px 2px 0; }
+  .pill.waterfall { background: rgba(63,185,80,0.15); color: var(--green); }
+  .pill.serial { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .pill.emit { background: rgba(57,197,207,0.15); color: var(--cyan); }
+  .pill.durable { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .pill.ext { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .pill.impl { background: rgba(240,136,62,0.15); color: var(--orange); }
+  .pill.client { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .pill.server { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .pill.uni { background: rgba(57,197,207,0.15); color: var(--cyan); }
+
+  .flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  .flow-step { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12.5px; font-family: 'SF Mono', Menlo, monospace; }
+  .flow-step.hot { border-color: var(--orange); color: var(--orange); }
+  .flow-arrow { color: var(--text2); font-size: 15px; }
+  .flow-step.durable { border-color: var(--yellow); color: var(--yellow); }
+  .flow-step.ext { border-style: dashed; color: var(--purple); }
+  .flow-step.uni { border-color: var(--cyan); color: var(--cyan); }
+
+  .timeline { position: relative; padding-left: 26px; }
+  .timeline::before { content: ''; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+  .tl { position: relative; margin: 14px 0; }
+  .tl::before { content: ''; position: absolute; left: -23px; top: 8px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); }
+  .tl.spotlight::before { background: var(--orange); border-color: var(--orange); }
+  .tl.client::before { background: var(--purple); border-color: var(--purple); }
+  .tl h3 { margin: 0 0 4px; font-size: 15px; }
+  .tl .dur { color: var(--text2); font-size: 12px; font-weight: 400; margin-left: 8px; }
+  .tl .gate { margin-top: 6px; font-size: 12.5px; color: var(--green); }
+  .tl .gate b { color: var(--green); }
+
+  .invariant { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+  .invariant .mark { color: var(--red); font-weight: 800; font-size: 18px; line-height: 1; }
+  .invariant.client .mark { color: var(--purple); }
+  .invariant.bus .mark { color: var(--cyan); }
+  .invariant.plugin .mark { color: var(--green); }
+  .invariant .body b { color: var(--text); }
+
+  .note { font-size: 12.5px; color: var(--text2); border-left: 3px solid var(--accent); padding: 8px 14px; background: rgba(88,166,255,0.05); border-radius: 0 6px 6px 0; margin: 12px 0; }
+  .warning { font-size: 12.5px; color: var(--orange); border-left: 3px solid var(--orange); padding: 8px 14px; background: rgba(240,136,62,0.06); border-radius: 0 6px 6px 0; margin: 12px 0; }
+  .callout { font-size: 13px; border-left: 3px solid var(--purple); padding: 10px 16px; background: rgba(188,140,255,0.06); border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .callout b { color: var(--purple); }
+  .callout p { margin: 4px 0; }
+  .callout.server { border-left-color: var(--accent); background: rgba(88,166,255,0.05); }
+  .callout.server b { color: var(--accent); }
+  .callout.bus { border-left-color: var(--cyan); background: rgba(57,197,207,0.05); }
+  .callout.bus b { color: var(--cyan); }
+  .callout.decided { border-left-color: var(--green); background: rgba(63,185,80,0.05); }
+  .callout.decided b { color: var(--green); }
+
+  .dual { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  @media (max-width: 860px) { .dual { grid-template-columns: 1fr; } }
+  .dual > div { padding: 4px 0; }
+  .dual .track-h { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .track-h.server { color: var(--accent); }
+  .track-h.client { color: var(--purple); }
+
+  .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--text2); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="#summary">摘要</a>
+  <a href="#pain">现状之痛</a>
+  <a href="#kernel">微内核模型</a>
+  <a href="#target">目标架构</a>
+  <a href="#core-api">Core 契约</a>
+  <a href="#event-contract">事件契约</a>
+  <a href="#sdk">服务 SDK</a>
+  <a href="#tree">Core 目录</a>
+  <a href="#plugins">插件导入</a>
+  <a href="#bus">消息总线</a>
+  <a href="#unidirectional">单向通信</a>
+  <a href="#lifecycle">服务热插拔</a>
+  <a href="#frontend">前端工作台</a>
+  <a href="#roadmap">迁移路线</a>
+  <a href="#invariants">不变式</a>
+  <a href="#non-goals">边界</a>
+  <a href="#benchmark">对标 dsh</a>
+  <a href="#providers">服务商</a>
+  <a href="#tech-stack">技术选型</a>
+</div>
+
+<h1>Osteosome 开发文档 · <span class="accent">微内核架构设计汇报 v3</span></h1>
+<p class="subtitle">原名《天枢插件化架构设计汇报》（天枢 → Osteosome 更名中）· 以 DeepSeek Harness「一切皆插件」哲学为纲 · <b>微内核 + 全外部插件 + 可观察总线</b>：Core 极薄且稳定，所有服务与 Pane 均为外部插件，统一走 <code>.ostpkg</code> 安装流程，前端 <b>Vue 3 + dockview-vue</b> 通过 SSE 订阅总线事件</p>
+<p class="meta">v3 ｜ 2026-09-23 ｜ 关联 RFC：<code>ost-开发文档.md</code>（v3）、<code>ost-core-rfc.md</code>（Core 独立 RFC）｜ 方式：小步 strangler，每步绿灯通行 ｜ v3 变更：Core 收窄为骨架，全外部插件，通信从「插件内调用」升级为「总线事件 + 旁路可观察」，前端确定 Vue 3</p>
+
+<!-- ============ 01 摘要 ============ -->
+<h2 id="summary"><span class="no">01</span> 一句话摘要</h2>
+<p>Osteosome 的终局形态不是「插件化单体」，而是 <b>微内核 + 全外部插件 + 消息总线</b>：</p>
+<ul>
+  <li><b>Core（TS / Node，极薄、很少更新）</b>：只管三件事——服务进程管理、消息总线、SSE 桥。不做业务逻辑。</li>
+  <li><b>服务（独立进程，语言自由，外部插件）</b>：LLM / Loop / 角色 / 统计，全部走 <code>.ostpkg</code> 安装流程，可单独重启，Core 不重启。</li>
+  <li><b>前端 Shell（Vue 3 + dockview-vue，骨架）</b>：PaneHost + 布局引擎 + SSE 单例。所有 Pane 是外部插件，运行时动态加载。</li>
+</ul>
+<p>核心通信模式：<b>总线上发事件（request / response 配对靠 ID），前端用 SSE 订阅、HTTP POST 发命令</b>。统计服务等旁路消费者<b>零侵入</b>——LLM 服务不需要知道统计服务存在。</p>
+
+<div class="grid-4" style="margin-top:20px;">
+  <div class="stat-card"><div class="value purple">3</div><div class="label">Core 职责</div><div class="sub">进程管理 · 总线 · SSE 桥</div></div>
+  <div class="stat-card"><div class="value green">∞</div><div class="label">服务语言自由</div><div class="sub">TS / Python / Rust 皆可</div></div>
+  <div class="stat-card"><div class="value">1</div><div class="label">插件加载路径</div><div class="sub">全部运行时，无内置</div></div>
+  <div class="stat-card"><div class="value red">0</div><div class="label">服务直连</div><div class="sub">全部经总线，天然可观察</div></div>
+</div>
+
+<div class="callout bus">
+  <b>v3 核心主张：微内核稳定，全外部插件，通信可观察。</b>
+  <p>Core 写一次就稳定，之后很少动。所有服务与 Pane 都是外部插件，统一走 <code>.ostpkg</code> 安装流程。<b>官方插件与第三方插件完全平等</b>——官方插件只是随安装包预置在 <code>seed/</code>，首次启动自动安装。</p>
+</div>
+
+<div class="callout decided">
+  <b>已确定的决策（不再讨论）：</b>
+  <p>① <b>Core 用 TS / Node</b>（薄骨架 + 与前端类型共享 + Electron 同语言）。<br>
+  ② <b>前端用 Vue 3 + dockview-vue</b>（团队熟 Vue，dockview-vue 官方支持与 React 版功能对齐）。<br>
+  ③ <b>通信走总线事件 + SSE/HTTP POST</b>，不用 WebSocket。<br>
+  ④ <b>服务必须进程外</b>（否则无法做到「重启服务不重启 Core」）。<br>
+  ⑤ <b>全外部插件</b>：没有内置服务/Pane，唯一加载路径是运行时加载。</p>
+</div>
+
+<!-- ============ 02 现状之痛 ============ -->
+<h2 id="pain"><span class="no">02</span> 现状：耦合把 Osteosome 焊成一块</h2>
+
+<h3>Server 端三个装配点</h3>
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-bad">焊线点 A</span> app.ts —— 唯一装配中枢</h3>
+    <ul>
+      <li><code>startTianshuServer()</code>（378 行）直接 import <b>20 个路由 + 15+ 子系统</b>。</li>
+      <li>启动时<strong>内联 7 段业务 sweep</strong>：孤儿 run 回收 / 续跑修复 / 数据保留 / 快照清理 / tool_usage 回填 / builtin 物化 / 皮肤迁移。</li>
+      <li><strong>4 个全局可变单例</strong>在 boot 时偷偷塞：<code>setEventDefinitionRuntime / setGoalRuntime / setRunsRuntime / setTransportBroadcaster</code>（app.ts:328-331）。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-bad">焊线点 B</span> outer.ts —— 531 行 god-function</h3>
+    <ul>
+      <li><code>sessionLoop()</code> 一次 run 做完全部：加载角色/provider → 连 MCP → 组工具 → 建 system prompt → 组消息 → 冷启动压缩 → 剪枝 → 跑 loop → git 快照 → 自动续跑 → 缓存统计 → 进化检测 → 断 MCP。</li>
+      <li>直接 <code>import</code> <strong>20+ 模块</strong>（db store / transport / evolution / content / knowledge / mcp / snapshot / config…）。</li>
+    </ul>
+  </div>
+</div>
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-bad">焊线点 C</span> loop-engine.ts —— 784 行内嵌策略</h3>
+    <ul>
+      <li>plan / goal / delegation / doom-loop / 收敛评估全部 <code>if/else</code> 内联在 turn 循环。</li>
+      <li>执行模式（direct / plan_first / goal）是<strong>承诺式功能</strong>，不是可插拔扩展点。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-warn">放大因子</span> Server 底层机制</h3>
+    <ul>
+      <li><b>DB 单例满天飞</b>：<code>getDb()</code> + 各 store 被 20+ 文件直接 import。</li>
+      <li><b>全局 set/get 对</b>：<code>transport/runtime.ts:30-37</code> 隐式依赖 boot 顺序。</li>
+      <li><b>路由 = 模块级单例</b>：<code>const router = new Hono()</code>，无法按场景装配、无法并发多实例。</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Client 端三个装配点（与 server 同构的病）</h3>
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-bad">装配点 A</span> App.tsx —— 前端的 app.ts</h3>
+    <ul>
+      <li>内联导航 <code>&lt;nav class="nav-rail"&gt;</code> + <code>navItems</code> 数组（App.tsx:30-39、113-145）+ 路由表（147-169）。</li>
+      <li><strong>4 组启动副作用硬编码</strong>（48-106）：桌面恢复 / datadir 遮罩 / 主题引导 / 事件轮询。</li>
+      <li><b>导航不是组件，是数组</b>；新增一个信息面要改 App.tsx。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-bad">装配点 B</span> ChatPage.tsx / RightPanel.tsx</h3>
+    <ul>
+      <li><b>ChatPage</b>：装配 SessionPanel / ChatArea / RightPanel / FilePanel，开合布尔漂在 uiStore。</li>
+      <li><b>RightPanel</b>（359 行 monolith）：角色卡 / 项目区 / 授权工作区 / 帮手 / 知识库 / GoalPanel / 会话统计 七段手排顺序。「会话统计」不是可插拔单元。</li>
+      <li>布局<strong>不可序列化、不可持久化、不可拖拽</strong>。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout server">
+  <b>好消息：地基建了一半。</b>
+  <p>工具 = 半个插件系统（<code>tools/registry.ts</code> 目录自动发现 + <code>tool.json</code> 元数据）；provider = 一个成形接缝（统一接口 + <code>openai-compatible</code> 基类 + 30+ 适配器）；会话 = 半个 durable log（<code>run-event-store</code> 的 durable stream / resume）。<strong>缺口：server 缺总线与进程隔离，client 缺 Pane 契约与布局模型。</strong></p>
+</div>
+
+<!-- ============ 03 微内核模型 ============ -->
+<h2 id="kernel"><span class="no">03</span> 微内核模型：Core 极薄，全外部插件</h2>
+<p>v3 的核心判断：<b>「Core 稳定、服务频繁更新、重启服务不重启程序、所有插件一律平等」这个需求，直接决定服务必须是进程外，且没有任何内置服务。</b></p>
+
+<div class="dual">
+  <div>
+    <div class="track-h server">▲ 骨架只有两样（不可插件化）</div>
+    <div class="card">
+      <h3>① Core（后端骨架）</h3>
+      <ul>
+        <li>进程管理（spawn / kill / 健康检查 / 重启）</li>
+        <li>消息总线（publish / subscribe / replay）</li>
+        <li>SSE 桥（/events + /api/command + 静态资源）</li>
+      </ul>
+      <p style="margin-top:8px;font-size:12.5px;color:var(--text2);">Core 是加载器本身，不能是插件。</p>
+    </div>
+    <div class="card">
+      <h3>② 前端 Shell（前端骨架）</h3>
+      <ul>
+        <li>PaneHost + dockview-vue 集成</li>
+        <li>Layout 引擎（序列化 / 持久化）</li>
+        <li>SSE 单例 + core-sdk</li>
+        <li>通用 UI 组件（Button / Input / Icon）</li>
+      </ul>
+      <p style="margin-top:8px;font-size:12.5px;color:var(--text2);">Shell 是 Pane 的宿主，不能是 Pane。</p>
+    </div>
+  </div>
+  <div>
+    <div class="track-h client">▲ 其余全是外部插件</div>
+    <div class="card">
+      <h3>服务插件（<code>.ostpkg</code>）</h3>
+      <ul>
+        <li>LLM 服务 / Loop 服务 / 角色服务 / 统计服务</li>
+        <li>第三方服务（用户自写）</li>
+        <li>全部走 <code>&lt;dataDir&gt;/plugins/&lt;id&gt;/service/</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Pane 插件（<code>.ostpkg</code>）</h3>
+      <ul>
+        <li>聊天 Pane / 统计 Pane / 角色 Pane / 服务商 Pane</li>
+        <li>第三方 Pane（用户自写）</li>
+        <li>全部走 <code>&lt;dataDir&gt;/plugins/&lt;id&gt;/pane/</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>官方插件 = 随安装包预置</h3>
+      <p>官方插件不是「内置」，而是随安装包预置在 <code>seed/</code>，首次启动自动安装到 <code>plugins/</code>。<b>之后用户可卸载、更新、替换</b>——和第三方插件完全平等。</p>
+    </div>
+  </div>
+</div>
+
+<div class="callout bus">
+  <b>一句话：骨架只有 Core + 前端 Shell，其余全是外部插件。</b>
+  <p>代码路径唯一，官方与第三方一视同仁。用户感知是「开箱即用」（seed 预置），架构上是「一切都是插件」。</p>
+</div>
+
+<!-- ============ 04 目标架构 ============ -->
+<h2 id="target"><span class="no">04</span> 目标架构：微内核 + 全外部插件 + Vue 工作台</h2>
+
+<div class="card">
+  <h3>可视化 · 微内核架构</h3>
+  <div style="overflow-x:auto;">
+  <svg viewBox="0 0 980 620" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif">
+    <defs>
+      <marker id="ah3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker>
+      <marker id="ahC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#39c5cf"/></marker>
+    </defs>
+
+    <text x="40" y="18" font-size="11" font-weight="600" fill="#8b949e">Electron 壳（极薄 · 只开窗口 / 原生能力桥）</text>
+    <rect x="40" y="28" width="900" height="60" rx="10" fill="#161b22" stroke="#f0883e" stroke-width="1.2"/>
+    <text x="60" y="56" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#f0883e">Electron main process (Node)</text>
+    <text x="60" y="76" font-size="10.5" fill="#8b949e">BrowserWindow · paneWindow 桥 · 托盘 / 快捷键 / 文件对话框 · 加载 Core 托管的 URL</text>
+
+    <line x1="490" y1="88" x2="490" y2="122" stroke="#8b949e" stroke-width="1.5" marker-end="url(#ah3)"/>
+    <text x="510" y="110" font-size="11" fill="#8b949e">spawn / IPC</text>
+    <text x="40" y="138" font-size="11" font-weight="600" fill="#8b949e">Core（TS / Node · 骨架 · 很少更新）</text>
+    <rect x="40" y="148" width="900" height="122" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+    <g>
+      <rect x="60" y="166" width="270" height="88" rx="8" fill="#0d1117" stroke="#58a6ff"/>
+      <text x="195" y="190" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#58a6ff">进程管理器</text>
+      <text x="195" y="212" text-anchor="middle" font-size="10.5" fill="#8b949e">扫 plugins/*/service.json</text>
+      <text x="195" y="230" text-anchor="middle" font-size="10.5" fill="#8b949e">拓扑排序 · spawn · 健康检查</text>
+    </g>
+    <g>
+      <rect x="350" y="166" width="270" height="88" rx="8" fill="#0d1117" stroke="#39c5cf"/>
+      <text x="485" y="190" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">消息总线</text>
+      <text x="485" y="212" text-anchor="middle" font-size="10.5" fill="#8b949e">publish / subscribe · topic 过滤</text>
+      <text x="485" y="230" text-anchor="middle" font-size="10.5" fill="#8b949e">事件持久化（可选）· 回放</text>
+    </g>
+    <g>
+      <rect x="640" y="166" width="280" height="88" rx="8" fill="#0d1117" stroke="#3fb950"/>
+      <text x="780" y="190" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#3fb950">SSE 桥 + 静态资源</text>
+      <text x="780" y="212" text-anchor="middle" font-size="10.5" fill="#8b949e">/events · /api/command</text>
+      <text x="780" y="230" text-anchor="middle" font-size="10.5" fill="#8b949e">托管 Vue Shell 构建产物</text>
+    </g>
+
+    <line x1="300" y1="270" x2="300" y2="304" stroke="#8b949e" stroke-width="1.5" marker-end="url(#ah3)"/>
+    <line x1="490" y1="270" x2="490" y2="304" stroke="#8b949e" stroke-width="1.5" marker-end="url(#ah3)"/>
+    <line x1="680" y1="270" x2="680" y2="304" stroke="#8b949e" stroke-width="1.5" marker-end="url(#ah3)"/>
+    <text x="40" y="320" font-size="11" font-weight="600" fill="#8b949e">服务插件（外部 · 独立进程 · 语言自由 · 可热插拔）</text>
+
+    <g>
+      <rect x="40" y="330" width="290" height="120" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.2"/>
+      <text x="185" y="354" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#bc8cff">LLM 插件 (TS / Python)</text>
+      <text x="185" y="376" text-anchor="middle" font-size="10.5" fill="#8b949e">· 服务商适配 · 调用编排</text>
+      <text x="185" y="394" text-anchor="middle" font-size="10.5" fill="#8b949e">publishes: llm.request / llm.token / llm.done</text>
+      <text x="185" y="412" text-anchor="middle" font-size="10.5" fill="#8b949e">subscribes: llm.request</text>
+      <text x="185" y="434" text-anchor="middle" font-size="10.5" fill="#39c5cf">2 个 Pane：服务商列表 / 调用配置</text>
+    </g>
+    <g>
+      <rect x="345" y="330" width="290" height="120" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.2"/>
+      <text x="490" y="354" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#bc8cff">Loop 插件 (TS)</text>
+      <text x="490" y="376" text-anchor="middle" font-size="10.5" fill="#8b949e">· loop 控制 · 策略 / 续跑</text>
+      <text x="490" y="394" text-anchor="middle" font-size="10.5" fill="#8b949e">publishes: loop.state / llm.request</text>
+      <text x="490" y="412" text-anchor="middle" font-size="10.5" fill="#8b949e">subscribes: llm.token / llm.done</text>
+      <text x="490" y="434" text-anchor="middle" font-size="10.5" fill="#39c5cf">1 个 Pane：聊天框</text>
+    </g>
+    <g>
+      <rect x="650" y="330" width="290" height="120" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.2"/>
+      <text x="795" y="354" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#bc8cff">角色插件 (TS)</text>
+      <text x="795" y="376" text-anchor="middle" font-size="10.5" fill="#8b949e">· 档案 · prompt / soul / 记忆</text>
+      <text x="795" y="394" text-anchor="middle" font-size="10.5" fill="#8b949e">publishes: character.changed</text>
+      <text x="795" y="412" text-anchor="middle" font-size="10.5" fill="#8b949e">subscribes: loop.state</text>
+      <text x="795" y="434" text-anchor="middle" font-size="10.5" fill="#39c5cf">1 个 Pane：角色展示框</text>
+    </g>
+
+    <line x1="185" y1="452" x2="185" y2="486" stroke="#39c5cf" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ahC)"/>
+    <line x1="490" y1="452" x2="490" y2="486" stroke="#39c5cf" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ahC)"/>
+    <line x1="795" y1="452" x2="795" y2="486" stroke="#39c5cf" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#ahC)"/>
+    <text x="40" y="502" font-size="11" font-weight="600" fill="#8b949e">旁路消费者（零侵入 · 只订阅不发布）</text>
+    <g>
+      <rect x="40" y="512" width="440" height="90" rx="8" fill="#161b22" stroke="#39c5cf" stroke-width="1.2"/>
+      <text x="260" y="536" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">统计插件 (TS)</text>
+      <text x="260" y="558" text-anchor="middle" font-size="10.5" fill="#8b949e">订阅 llm.* → 哪个服务商被调用 +1</text>
+      <text x="260" y="576" text-anchor="middle" font-size="10.5" fill="#8b949e">订阅 tools.* → 哪个技能被调用 +1</text>
+      <text x="260" y="594" text-anchor="middle" font-size="10.5" fill="#8b949e">不发布任何事件 · 对 LLM / Loop 零侵入</text>
+    </g>
+    <g>
+      <rect x="500" y="512" width="440" height="90" rx="8" fill="#161b22" stroke="#39c5cf" stroke-width="1.2" stroke-dasharray="4 4"/>
+      <text x="720" y="536" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">第三方插件（用户自写）</text>
+      <text x="720" y="558" text-anchor="middle" font-size="10.5" fill="#8b949e">任何语言 / 任何 Pane / 零侵入</text>
+      <text x="720" y="576" text-anchor="middle" font-size="10.5" fill="#8b949e">走同一个 .ostpkg 安装流程</text>
+    </g>
+  </svg>
+  </div>
+  <div class="note" style="margin-top:14px;">读图：<b>Electron</b> 极薄，只开窗口；<b>Core</b> 三件职责（进程管理 / 总线 / SSE 桥）；<b>服务插件</b>全部外部，独立进程，各自 publishes / subscribes，语言自由；<b>旁路消费者</b>（统计等）只订阅不发布；<b>第三方插件</b>与官方插件走同一安装流程。</div>
+</div>
+
+<!-- ============ 05 Core 契约 ============ -->
+<h2 id="core-api"><span class="no">05</span> Core 契约细节：三个模块的接口</h2>
+<p>Core 极薄，但薄不等于模糊。<b>三个模块的接口先写清楚，服务开发者和前端 SDK 才能并行开工。</b>Core 用 TS 实现，接口即契约，编译期检查。</p>
+
+<div class="callout server">
+  <b>Core = Bus + ServiceManager + SseBridge。</b>
+  <p>三者职责不重叠：Bus 管事件分发，ServiceManager 管进程生命周期，SseBridge 管前后端桥。Core 不 import 任何业务模块。</p>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">模块 1</span> Bus —— 消息总线</h3>
+  <pre><code>interface Bus {
+  // ── 发布 ─────────────────────────────────────────
+  publish&lt;T extends EventKey&gt;(
+    topic: T,
+    payload: EventPayload&lt;T&gt;,
+    options?: { persist?: boolean }
+  ): void
+
+  // ── 订阅（返回 disposer） ─────────────────────────
+  subscribe&lt;T extends EventKey&gt;(
+    topic: T | Pattern,
+    handler: (payload: EventPayload&lt;T&gt;) =&gt; void | Promise&lt;void&gt;,
+    options?: { once?: boolean; priority?: number; filter?: (p) =&gt; boolean }
+  ): () =&gt; void
+
+  // ── 回放 ─────────────────────────────────────────
+  replay(from: number, to: number, topics?: EventKey[]): AsyncIterable&lt;Event&gt;
+
+  // ── 元信息 ───────────────────────────────────────
+  stats(): { published: number; delivered: number; dropped: number }
+}</code></pre>
+  <table>
+    <tr><th>特性</th><th>说明</th></tr>
+    <tr><td><b>背压</b></td><td>慢订阅者不阻塞总线。内存队列上限 N，超限丢弃最旧并计 <code>stats.dropped</code>。</td></tr>
+    <tr><td><b>通配符</b></td><td><code>llm.*</code> 匹配 <code>llm.request</code> / <code>llm.token</code> / <code>llm.done</code>；<code>*</code> 匹配所有。</td></tr>
+    <tr><td><b>持久化白名单</b></td><td><code>persist: true</code> 或 topic 前缀白名单才落库。</td></tr>
+    <tr><td><b>跨进程</b></td><td>服务通过 stdio 发的 <code>publish</code> 请求，Core 接收后投递到本地 Bus，再 fan-out。</td></tr>
+    <tr><td><b>错误隔离</b></td><td>handler 抛错 → 捕获 → 打日志 → 继续投递。</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">模块 2</span> ServiceManager —— 进程生命周期</h3>
+  <pre><code>interface ServiceManager {
+  start(): Promise&lt;void&gt;                     // 扫 plugins/*/service.json，按 inject 拓扑排序启动
+  stop(timeoutMs?: number): Promise&lt;void&gt;    // 逆序停止，超时强杀
+  restart(serviceId: string): Promise&lt;void&gt;  // 热插拔：单个服务重启，Core 不动
+
+  status(serviceId: string): ServiceStatus
+  list(): ServiceInfo[]
+}
+
+type ServiceStatus = 'starting' | 'ready' | 'restarting' | 'failed' | 'stopped'</code></pre>
+  <table>
+    <tr><th>机制</th><th>说明</th></tr>
+    <tr><td><b>发现</b></td><td>扫 <code>&lt;dataDir&gt;/plugins/*/service/service.json</code>，无内置路径。</td></tr>
+    <tr><td><b>依赖拓扑</b></td><td>manifest 的 <code>inject</code> 声明依赖，Core 推导启动顺序。</td></tr>
+    <tr><td><b>健康检查</b></td><td>按 <code>healthCheck.interval</code> 发心跳；超时 N 次判定 <code>failed</code>。</td></tr>
+    <tr><td><b>重启策略</b></td><td><code>maxRestarts</code> + <code>backoff: exponential</code>。</td></tr>
+    <tr><td><b>优雅停止</b></td><td>SIGTERM → 等待 <code>timeoutMs</code> → SIGKILL。</td></tr>
+    <tr><td><b>stdio 分帧</b></td><td>JSON-RPC 消息用 <code>Content-Length</code> 头分帧（LSP 同款）。</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">模块 3</span> SseBridge —— 前后端桥</h3>
+  <pre><code>// ── 端点 1：事件流（SSE） ──────────────────────────
+// GET /events?topics=llm.*,loop.state,tools.*
+event: message
+data: {"topic":"llm.token.streamed","payload":{"requestId":"req-001","token":"你","index":0}}
+
+: heartbeat
+（每 30s 一条注释行，防代理超时）
+
+// ── 端点 2：命令投递（HTTP POST） ──────────────────
+// POST /api/command
+// { "topic": "llm.request", "payload": { ... } }
+// 返回 202 Accepted（不等待结果，结果通过 SSE 回来）
+
+// ── 端点 3：插件管理 ─────────────────────────────
+// POST /api/plugins/install   （body: URL 或 multipart 文件）
+// GET  /api/plugins/list
+// POST /api/plugins/uninstall
+
+// ── 端点 4：静态资源 ──────────────────────────────
+// GET /*  → Vue Shell 构建产物
+// GET /runtime/panes/<id>/*  → 插件 Pane 的 ESM bundle
+
+interface SseBridge {
+  connections(): number
+  broadcast(event: string, data: unknown): void
+}</code></pre>
+  <table>
+    <tr><th>设计点</th><th>说明</th></tr>
+    <tr><td><b>每个连接独立订阅</b></td><td>前端传 <code>?topics=llm.*</code>，Core 为这个连接创建过滤后的 Bus 订阅。连接关闭自动 dispose。</td></tr>
+    <tr><td><b>统一包成 <code>event: message</code></b></td><td>topic 在 JSON body 里，前端单监听器按 topic 分发。这样 topic 可以动态扩展。</td></tr>
+    <tr><td><b>无需 WebSocket</b></td><td>接收是单向的，SSE 天生为此。命令走 HTTP POST，不占用 SSE 连接。</td></tr>
+    <tr><td><b>心跳</b></td><td>每 30s 发注释行 <code>: heartbeat</code>，防代理超时断开。</td></tr>
+    <tr><td><b>多窗支持</b></td><td>每个 Pane 独立开一个 SSE 连接。弹窗连上即收流。</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>三个模块如何组装</h3>
+  <pre><code>// core/src/main.ts
+import { Bus } from './bus'
+import { ServiceManager } from './service-manager'
+import { SseBridge } from './sse-bridge'
+import { PluginInstaller } from './plugin-installer'
+
+const bus = new Bus({ persist: { adapter: sqliteAdapter } })
+const services = new ServiceManager({ bus, pluginsDir: './plugins' })
+const bridge = new SseBridge({ bus, port: 1420, staticDir: './dist/client' })
+const installer = new PluginInstaller({ services, pluginsDir: './plugins', bus })
+
+// 启动顺序：
+// 1. Bus 就绪
+// 2. SseBridge 起 HTTP 服务（前端可连）
+// 3. 首次启动检测：plugins/ 为空 → 从 seed/ 安装官方插件
+// 4. ServiceManager 扫 plugins/*/service.json → spawn 所有服务
+await bus.ready()
+await bridge.listen()
+await installer.seedIfEmpty('./seed')
+await services.start()</code></pre>
+</div>
+
+<!-- ============ 06 事件契约 ============ -->
+<h2 id="event-contract"><span class="no">06</span> 事件契约规范：服务开发者的合同</h2>
+<p>总线是公开的，事件是公开的。<b>没有规范，事件类型会失控</b>——几百个事件、命名混乱、版本冲突。<b>这一节是服务开发者必须遵守的合同。</b></p>
+
+<div class="callout bus">
+  <b>三条铁律：</b>
+  <p>① <b>只增不改</b>——事件字段只加不删不改，破坏性变更必须升版本。<br>
+  ② <b>payload 可序列化</b>——JSON 能过，不带函数、Symbol、循环引用。<br>
+  ③ <b>类型共享</b>——事件类型定义在 <code>shared/events.ts</code>，Core、服务、前端共用同一份。</p>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">规范 1</span> 命名：domain.entity.action</h3>
+  <pre><code>格式：&lt;domain&gt;.&lt;entity&gt;.&lt;action&gt;
+
+✅ 好例子：
+  llm.request.started       // llm 领域，request 实体，started 动作
+  llm.token.streamed
+  llm.request.finished
+  loop.state.changed
+  character.changed
+  tools.executed
+  service.ready
+  plugin.installed
+
+❌ 坏例子：
+  llmRequestStarted          // 没有分隔符，无法通配符匹配
+  llm_req_start              // 下划线风格不一致
+  LLM.REQUEST.STARTED        // 大写，阅读负担
+  update                     // 太泛，没有 domain 前缀</code></pre>
+  <table>
+    <tr><th>段</th><th>约定</th><th>已有域</th></tr>
+    <tr><td><b>domain</b></td><td>服务归属</td><td><code>llm</code> <code>loop</code> <code>character</code> <code>tools</code> <code>storage</code> <code>session</code> <code>service</code> <code>plugin</code> <code>ui</code></td></tr>
+    <tr><td><b>entity</b></td><td>被操作的对象</td><td><code>request</code> <code>token</code> <code>message</code> <code>state</code> <code>call</code> <code>event</code></td></tr>
+    <tr><td><b>action</b></td><td>过去式动词</td><td><code>started</code> <code>streamed</code> <code>finished</code> <code>changed</code> <code>failed</code> <code>executed</code> <code>ready</code> <code>installed</code></td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">规范 2</span> 版本：只增不改</h3>
+  <table>
+    <tr><th>变更类型</th><th>做法</th></tr>
+    <tr><td><b>加字段</b> ✅</td><td>直接加，不改 topic</td></tr>
+    <tr><td><b>加可选字段</b> ✅</td><td>直接加，标注 optional</td></tr>
+    <tr><td><b>删字段</b> ❌</td><td>标记 deprecated，两个版本周期后删</td></tr>
+    <tr><td><b>改字段类型</b> ❌</td><td>升版本：<code>llm.token.v2</code></td></tr>
+    <tr><td><b>改语义</b> ❌</td><td>升版本，或换新 topic</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">规范 3</span> Payload：必填字段与约束</h3>
+  <pre><code>interface EventBase {
+  ts: number          // 时间戳（毫秒）
+  source: string      // 发布者 serviceId
+  requestId?: string  // 一对一请求-响应配对
+  traceId?: string    // 关联链
+  sessionId?: string  // 会话上下文
+}</code></pre>
+  <table>
+    <tr><th>约束</th><th>值</th><th>理由</th></tr>
+    <tr><td>payload 大小</td><td>≤ 256KB（建议）</td><td>超过则存 blob，事件里带引用 ID</td></tr>
+    <tr><td>高频事件速率</td><td>≤ 1000/s（建议）</td><td>超过则批量合并</td></tr>
+    <tr><td>必填字段</td><td><code>ts</code> <code>source</code></td><td>审计、排序、溯源</td></tr>
+    <tr><td>禁止字段</td><td>函数 / Symbol / 循环引用 / BigInt</td><td>JSON 序列化会失败</td></tr>
+    <tr><td>敏感数据</td><td>不落库，或脱敏后落库</td><td>API key / 用户隐私</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">规范 4</span> 类型共享：一份定义，三处消费</h3>
+  <pre><code>// shared/events.ts —— Core / 服务 / 前端共享
+declare module '@osteosome/bus' {
+  interface EventMap {
+    'llm.request.started': { requestId: string; provider: string; model: string }
+    'llm.token.streamed': { requestId: string; token: string; index: number }
+    'llm.request.finished': {
+      requestId: string
+      usage: { input: number; output: number }
+      finishReason: 'stop' | 'length' | 'error'
+    }
+    'loop.state.changed': { sessionId: string; state: 'idle' | 'running' | 'paused' }
+    'service.ready': { serviceId: string; version: string }
+    'service.failed': { serviceId: string; exitCode: number; reason: string }
+    'plugin.installed': { pluginId: string; version: string; services: string[]; panes: string[] }
+    'plugin.uninstalled': { pluginId: string }
+  }
+}</code></pre>
+  <div class="callout server">
+    <b>这是 TS 相对 Python / Rust 的核心收益：</b>
+    <p>事件类型一份定义，三处消费，编译期检查。<b>Python / Rust 服务做不到这一点</b>——它们的事件类型要手写，和前端 TS 定义手动同步。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">规范 5</span> 落库白名单</h3>
+  <table>
+    <tr><th>事件类型</th><th>是否落库</th><th>判断依据</th></tr>
+    <tr><td><code>llm.request.started</code></td><td>✅ 落</td><td>进入模型上下文的内容</td></tr>
+    <tr><td><code>llm.token.streamed</code></td><td>✅ 落（或聚合后落）</td><td>模型输出</td></tr>
+    <tr><td><code>llm.request.finished</code></td><td>✅ 落</td><td>模型响应完成</td></tr>
+    <tr><td><code>loop.state.changed</code></td><td>✅ 落</td><td>会话状态变更</td></tr>
+    <tr><td><code>service.ready</code></td><td>✅ 落</td><td>审计需要</td></tr>
+    <tr><td><code>plugin.installed</code></td><td>✅ 落</td><td>审计需要</td></tr>
+    <tr><td><code>ui.hover</code> / <code>ui.scroll</code></td><td>❌ 不落</td><td>纯 UI 瞬时状态</td></tr>
+  </table>
+  <div class="note"><b>默认不落，避免高频 UI 事件写爆 DB。</b>白名单：<code>llm.*</code> / <code>loop.*</code> / <code>service.*</code> / <code>plugin.*</code> 默认落。</div>
+</div>
+
+<div class="card">
+  <h3>附录：Osteosome v3 事件清单（首批）</h3>
+  <table>
+    <tr><th>Topic</th><th>发布者</th><th>订阅者</th><th>落库</th><th>用途</th></tr>
+    <tr><td><code>llm.request.started</code></td><td>LLM</td><td>Loop / 统计</td><td>✅</td><td>调用开始</td></tr>
+    <tr><td><code>llm.token.streamed</code></td><td>LLM</td><td>Loop / 聊天 Pane</td><td>✅</td><td>流式 token</td></tr>
+    <tr><td><code>llm.request.finished</code></td><td>LLM</td><td>Loop / 统计</td><td>✅</td><td>调用完成 + usage</td></tr>
+    <tr><td><code>loop.state.changed</code></td><td>Loop</td><td>聊天 Pane / 角色 Pane</td><td>✅</td><td>idle / running / paused</td></tr>
+    <tr><td><code>character.changed</code></td><td>角色</td><td>角色 Pane</td><td>✅</td><td>档案更新</td></tr>
+    <tr><td><code>tools.executed</code></td><td>Loop</td><td>统计 / 日志</td><td>✅</td><td>工具调用</td></tr>
+    <tr><td><code>service.starting</code></td><td>Core</td><td>全部前端</td><td>✅</td><td>服务启动中</td></tr>
+    <tr><td><code>service.ready</code></td><td>Core</td><td>全部前端</td><td>✅</td><td>服务就绪</td></tr>
+    <tr><td><code>service.failed</code></td><td>Core</td><td>全部前端</td><td>✅</td><td>服务崩溃</td></tr>
+    <tr><td><code>service.restarting</code></td><td>Core</td><td>全部前端</td><td>✅</td><td>重启中</td></tr>
+    <tr><td><code>plugin.installed</code></td><td>Core</td><td>全部前端</td><td>✅</td><td>插件安装完成</td></tr>
+    <tr><td><code>plugin.uninstalled</code></td><td>Core</td><td>全部前端</td><td>✅</td><td>插件卸载完成</td></tr>
+    <tr><td><code>ui.activeSession.changed</code></td><td>前端</td><td>前端（BroadcastChannel）</td><td>❌</td><td>跨窗会话同步</td></tr>
+    <tr><td><code>ui.layout.changed</code></td><td>前端</td><td>前端（BroadcastChannel）</td><td>❌</td><td>布局变更</td></tr>
+  </table>
+  <div class="note">前 12 个是 v3 阶段 1-3 必须实现的。最后两个是前端本地通道，走 BroadcastChannel（<code>osteosome:ctx</code> / <code>osteosome:ui</code>），不走 Core 总线。</div>
+</div>
+
+<!-- ============ 07 服务 SDK ============ -->
+<h2 id="sdk"><span class="no">07</span> 服务 SDK 细节：TS / Python 双语言</h2>
+<p>服务开发者不该手写 JSON-RPC 分帧、握手、心跳、重连。<b>SDK 是「服务开发者与 Core 的合同」的可执行版本</b>——每种语言一个包，接口一致。</p>
+
+<div class="callout bus">
+  <b>SDK 的三件职责：</b>
+  <p>① 与 Core 握手、注册、心跳；② 把 <code>bus.publish</code> / <code>bus.subscribe</code> 封装成语言惯用 API；③ 进程退出时优雅清理。<b>服务开发者只写业务逻辑。</b></p>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">握手协议</span> stdio JSON-RPC，LSP 风格分帧</h3>
+  <pre><code>// ── 分帧格式 ─────────────────────────────────────
+Content-Length: 123\r\n
+\r\n
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}
+
+// ── 握手时序 ─────────────────────────────────────
+1. Core → 服务：spawn 进程
+2. 服务 → Core：request 'initialize'
+3. Core → 服务：response { sessionId, heartbeatInterval }
+4. 服务 → Core：notification 'initialized'
+5. 双向进入运行态：publish / subscribe / heartbeat
+6. 服务退出前：notification 'shutdown'，Core 回 'exit'</code></pre>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">方法集</span> SDK 与 Core 的 JSON-RPC 方法</h3>
+  <table>
+    <tr><th>方向</th><th>方法</th><th>说明</th></tr>
+    <tr><td>服务 → Core</td><td><code>initialize</code></td><td>握手</td></tr>
+    <tr><td>服务 → Core</td><td><code>bus.publish</code></td><td>发布事件到总线</td></tr>
+    <tr><td>服务 → Core</td><td><code>bus.subscribe</code></td><td>订阅 topic</td></tr>
+    <tr><td>服务 → Core</td><td><code>bus.unsubscribe</code></td><td>取消订阅</td></tr>
+    <tr><td>服务 → Core</td><td><code>health.pong</code></td><td>心跳应答</td></tr>
+    <tr><td>服务 → Core</td><td><code>shutdown</code></td><td>主动要求退出</td></tr>
+    <tr><td>Core → 服务</td><td><code>bus.event</code></td><td>推送订阅的事件</td></tr>
+    <tr><td>Core → 服务</td><td><code>health.ping</code></td><td>心跳探测</td></tr>
+    <tr><td>Core → 服务</td><td><code>shutdown</code></td><td>要求优雅退出</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">TS SDK</span> <code>@osteosome/service-sdk</code></h3>
+  <pre><code>// 插件服务入口（如 plugins/com.osteosome.llm/service/src/index.ts）
+import { Service, bus, logger } from '@osteosome/service-sdk'
+
+const service = new Service({ id: 'llm', version: '1.0.0' })
+
+service.subscribe('llm.request', async (req) => {
+  const { requestId, provider, model, messages } = req
+
+  bus.publish('llm.request.started', {
+    ts: Date.now(), source: 'llm', requestId, provider, model,
+  })
+
+  try {
+    for await (const token of callProvider(provider, model, messages)) {
+      bus.publish('llm.token.streamed', {
+        ts: Date.now(), source: 'llm', requestId, token: token.text, index: token.index,
+      })
+    }
+    bus.publish('llm.request.finished', {
+      ts: Date.now(), source: 'llm', requestId, usage: {...}, finishReason: 'stop',
+    })
+  } catch (err) {
+    bus.publish('llm.request.finished', {
+      ts: Date.now(), source: 'llm', requestId, usage: null, finishReason: 'error',
+    })
+  }
+})
+
+service.start().catch((err) => {
+  logger.error('LLM service failed to start', err)
+  process.exit(1)
+})</code></pre>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">Python SDK</span> <code>osteosome-service</code></h3>
+  <pre><code># 插件服务入口（如 plugins/com.example.llm-python/service/src/main.py）
+import asyncio
+from osteosome_service import Service, bus, logger
+
+service = Service(id="llm-python", version="1.0.0")
+
+@service.subscribe("llm.request")
+async def handle_llm_request(req: dict):
+    request_id = req["requestId"]
+    bus.publish("llm.request.started", {
+        "ts": ..., "source": "llm-python",
+        "requestId": request_id,
+        "provider": req["provider"],
+        "model": req["model"],
+    })
+    try:
+        async for token in call_provider(req["provider"], req["model"], req["messages"]):
+            bus.publish("llm.token.streamed", {
+                "ts": ..., "source": "llm-python",
+                "requestId": request_id,
+                "token": token.text, "index": token.index,
+            })
+        bus.publish("llm.request.finished", {
+            "ts": ..., "source": "llm-python",
+            "requestId": request_id,
+            "usage": {"input": 10, "output": 42},
+            "finishReason": "stop",
+        })
+    except Exception as err:
+        logger.error(f"LLM call failed: {err}")
+
+if __name__ == "__main__":
+    asyncio.run(service.start())</code></pre>
+  <div class="note"><b>Python SDK 的额外工作：</b>必须处理 <code>stdin</code> / <code>stdout</code> 的二进制模式，必须避免 <code>print()</code> 污染协议流（日志走 stderr），必须注意 asyncio 与同步 HTTP 库的混用。这些 SDK 都封装好了。</div>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">Manifest 校验</span> SDK 启动时做三件事</h3>
+  <ol>
+    <li><b>schema 校验</b>：manifest 是否符合规范。</li>
+    <li><b>版本校验</b>：<code>protocolVersion</code> 是否与 Core 兼容。</li>
+    <li><b>事件一致性</b>：<code>publishes</code> / <code>subscribes</code> 的 topic 必须在 <code>shared/events.ts</code> 声明。<b>不一致直接拒绝启动</b>（fail fast）。</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">SDK 覆盖的通用能力</span></h3>
+  <table>
+    <tr><th>能力</th><th>SDK 内部实现</th></tr>
+    <tr><td>stdio 分帧</td><td><code>Content-Length</code> 解析、粘包处理、UTF-8 边界</td></tr>
+    <tr><td>握手</td><td>自动发送 <code>initialize</code>，等 Core 响应</td></tr>
+    <tr><td>心跳</td><td>收到 <code>health.ping</code> 自动回 <code>health.pong</code></td></tr>
+    <tr><td>事件分派</td><td>收到 <code>bus.event</code> → 按 topic 匹配 handler</td></tr>
+    <tr><td>订阅管理</td><td>进程退出前自动 <code>unsubscribe</code></td></tr>
+    <tr><td>优雅退出</td><td>捕获 SIGTERM → 停止接受新事件 → 等处理完成 → <code>shutdown</code></td></tr>
+    <tr><td>日志</td><td>写 stderr（不污染协议流）</td></tr>
+    <tr><td>错误上报</td><td>handler 抛错 → SDK 捕获 → 发 <code>service.handler-error</code></td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-core">SDK 多语言路线</span></h3>
+  <table>
+    <tr><th>语言</th><th>阶段</th><th>理由</th></tr>
+    <tr><td><b>TS</b></td><td>阶段 1-2</td><td>和 Core 同语言，复用同一份类型定义</td></tr>
+    <tr><td><b>Python</b></td><td>阶段 3</td><td>AI / 数据处理生态；验证协议中立性</td></tr>
+    <tr><td><b>Rust</b></td><td>阶段 4</td><td>性能敏感服务</td></tr>
+    <tr><td><b>Go</b></td><td>阶段 4</td><td>并发密集服务</td></tr>
+  </table>
+  <div class="warning"><b>不要一次做全部：</b>SDK 是最大的工作量。先做 TS（自己用），再做一个 Python（验证协议中立性），其余按需。</div>
+</div>
+
+<!-- ============ 08 Core 目录 ============ -->
+<h2 id="tree"><span class="no">08</span> Core 目录结构：代码仓库组织</h2>
+<p>Core 极薄，仓库也不该复杂。<b>目标是「一个新开发者能在 30 分钟内读完 Core 的全部代码」。</b></p>
+
+<div class="callout decided">
+  <b>没有内置服务目录。</b>
+  <p>骨架仓库只有 <code>core/</code>（后端）+ <code>client/</code>（前端 Shell）+ <code>sdk/</code>（SDK）+ <code>shared/</code>（类型）+ <code>desktop/</code>（Electron 壳）。<b>所有业务插件都在 <code>&lt;dataDir&gt;/plugins/</code>，不在仓库里。</b></p>
+</div>
+
+<div class="card">
+  <h3>骨架仓库总览</h3>
+  <pre><code>osteosome/
+├── package.json                    # monorepo root（pnpm workspaces）
+├── pnpm-workspace.yaml
+├── tsconfig.base.json
+│
+├── core/                           # 微内核（TS / Node）
+├── client/                         # 前端 Shell（Vue 3 + dockview-vue）
+├── shared/                         # Core / 服务 / 前端共享的类型与工具
+├── sdk/                            # 服务 SDK（多语言）
+├── desktop/                        # Electron 壳
+├── seed/                           # 官方插件（.ostpkg，随安装包发布）
+│   ├── com.osteosome.llm.ostpkg
+│   ├── com.osteosome.loop.ostpkg
+│   ├── com.osteosome.character.ostpkg
+│   ├── com.osteosome.stats.ostpkg
+│   ├── com.osteosome.chat.ostpkg
+│   └── ...
+└── docs/                           # RFC / 开发文档</code></pre>
+</div>
+
+<div class="card">
+  <h3>core/ —— 微内核</h3>
+  <pre><code>core/
+├── package.json                    # name: @osteosome/core
+├── src/
+│   ├── main.ts                     # 入口：组装 Bus + ServiceManager + SseBridge + PluginInstaller
+│   ├── bus/
+│   │   ├── bus.ts                  # Bus 实现
+│   │   ├── pattern.ts              # 通配符匹配
+│   │   ├── persistence.ts          # 持久化适配
+│   │   └── types.ts                # EventKey / EventPayload / EventBase
+│   ├── service-manager/
+│   │   ├── manager.ts              # ServiceManager 实现
+│   │   ├── process.ts              # spawn / kill / 信号处理
+│   │   ├── manifest.ts             # manifest 加载与 schema 校验
+│   │   ├── topology.ts             # 依赖拓扑排序
+│   │   ├── health.ts               # 心跳检查与重启策略
+│   │   └── jsonrpc/
+│   │       ├── framing.ts          # Content-Length 分帧
+│   │       ├── client.ts           # Core 侧 JSON-RPC 客户端
+│   │       └── protocol.ts         # 方法集定义
+│   ├── plugin-installer/           # ★ 新增：插件安装器
+│   │   ├── installer.ts            # 解压 / 校验 / 落盘 / 卸载
+│   │   ├── package.ts              # .ostpkg 格式解析
+│   │   ├── verify.ts               # schema / 协议 / 事件一致性校验
+│   │   └── seed.ts                 # 首次启动预置官方插件
+│   ├── sse-bridge/
+│   │   ├── server.ts               # HTTP 服务器（Hono 或原生）
+│   │   ├── sse.ts                  # /events 端点
+│   │   ├── command.ts              # /api/command 端点
+│   │   ├── plugins.ts              # /api/plugins/* 端点
+│   │   └── static.ts               # 静态资源托管（含 /runtime/panes/*）
+│   ├── config/
+│   │   ├── config.ts               # 配置加载
+│   │   └── paths.ts                # dataDir / pluginsDir / seedDir / distDir
+│   └── logger.ts
+└── tests/</code></pre>
+  <div class="note"><b>代码量预估：</b>Core 四个模块约 <b>2000-2500 行</b>（含 JSON-RPC 分帧、插件安装器）。这是 Core 的全部。之后基本不动。</div>
+</div>
+
+<div class="card">
+  <h3>&lt;dataDir&gt; —— 运行时目录（不在仓库里）</h3>
+  <pre><code>&lt;dataDir&gt;/                          # 用户数据目录（如 ~/.osteosome/）
+├── plugins/                        # 所有插件（统一）
+│   ├── com.osteosome.llm/          # 官方插件（首次启动从 seed/ 安装）
+│   │   ├── manifest.json           # 顶层元数据
+│   │   ├── service/                # 服务部分
+│   │   │   ├── service.json
+│   │   │   └── dist/index.js
+│   │   └── pane/                   # 前端部分
+│   │       ├── pane.json
+│   │       └── dist/pane.js
+│   ├── com.osteosome.loop/
+│   ├── com.example.my-plugin/      # 第三方插件
+│   └── ...
+│
+├── runtime/                        # 共享运行时（Core 自带）
+│   ├── vue.esm-browser.prod.js
+│   ├── dockview-vue.js
+│   └── core-sdk.js
+│
+└── preferences/                    # 布局 / 主题 / i18n</code></pre>
+  <div class="note"><b>每个插件是一个目录</b>，由 <code>.ostpkg</code> 解压而来。目录名 = 插件 id。<b>官方和第三方完全平等</b>——官方只是首次启动自动安装。</div>
+</div>
+
+<div class="card">
+  <h3>shared/ —— 共享层</h3>
+  <pre><code>shared/
+└── src/
+    ├── events.ts                   # 事件类型定义（declare module merging）
+    ├── manifest.ts                 # Manifest 类型 + Zod schema
+    ├── plugin-manifest.ts          # .ostpkg 顶层 manifest schema
+    ├── protocol.ts                 # JSON-RPC 协议版本、方法集
+    └── types.ts                    # 通用类型</code></pre>
+  <div class="callout server">
+    <b>shared/ 是 Core / 服务 / 前端共享的唯一真相源。</b>
+    <p>事件类型、manifest schema、协议版本全部在这里。<b>改 shared/ 的类型 → 三处编译期同时报错</b>。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>sdk/ —— 服务 SDK</h3>
+  <pre><code>sdk/
+├── ts/                             # TypeScript SDK
+│   └── src/
+│       ├── service.ts
+│       ├── transport.ts
+│       ├── handshake.ts
+│       ├── heartbeat.ts
+│       └── logger.ts
+├── python/                         # Python SDK（阶段 3）
+└── rust/                           # Rust SDK（阶段 4）</code></pre>
+</div>
+
+<div class="card">
+  <h3>client/ —— 前端 Shell（Vue 3 + dockview-vue）</h3>
+  <pre><code>client/
+├── package.json                    # name: @osteosome/client
+├── vite.config.ts
+├── index.html                      # 含 Import Map 声明
+└── src/
+    ├── main.ts                     # Vue app 入口
+    ├── App.vue                     # 根组件（PaneHost + 布局引擎）
+    ├── core-sdk/
+    │   ├── useEventBus.ts          # 订阅总线事件的 composable
+    │   ├── useCommand.ts           # 发命令的 composable
+    │   ├── useServiceStatus.ts     # 服务状态订阅
+    │   ├── usePluginManager.ts     # 插件安装/卸载
+    │   └── sse.ts                  # EventSource 单例封装（重连、心跳）
+    ├── panes/
+    │   ├── registry.ts             # definePane + 运行时动态加载
+    │   ├── PaneHost.vue            # #/pane/:id 路由壳
+    │   └── PaneFrame.vue           # 标题栏 + Shadow DOM 隔离
+    ├── layout/
+    │   ├── DockviewLayout.vue      # dockview-vue 集成
+    │   ├── layout.store.ts         # 布局序列化 / 持久化
+    │   └── window-manager.ts       # 弹窗机械（Electron / window.open）
+    ├── components/                 # 通用 UI 组件（骨架，不是插件）
+    │   ├── Button.vue
+    │   ├── Input.vue
+    │   └── Icon.vue
+    ├── stores/                     # Pinia
+    │   ├── session.store.ts        # activeSessionId
+    │   ├── ui.store.ts             # 主题 / i18n
+    │   └── plugin.store.ts         # 已安装插件列表
+    └── styles/
+        ├── theme.css               # CSS 变量
+        └── reset.css</code></pre>
+  <div class="warning"><b>注意：没有 <code>features/</code> 目录。</b>所有业务 Pane 都是外部插件，运行时从 <code>&lt;dataDir&gt;/plugins/&lt;id&gt;/pane/dist/pane.js</code> 加载。前端 Shell 构建产物里<b>没有任何业务 Pane</b>。</div>
+</div>
+
+<div class="card">
+  <h3>desktop/ —— Electron 壳</h3>
+  <pre><code>desktop/
+├── package.json
+├── src/
+│   ├── main.ts                     # 主进程：spawn Core + BrowserWindow
+│   ├── preload.ts
+│   └── pane-window.ts              # 弹窗管理
+├── electron-builder.yml            # 打包配置（含 seed/ 资源）
+└── resources/
+    └── seed/                       # 官方插件 .ostpkg（打包时嵌入）</code></pre>
+</div>
+
+<div class="card">
+  <h3>整体启动流程</h3>
+  <pre><code>1. 用户双击 Osteosome 图标
+   ↓
+2. Electron main 启动
+   ├─ spawn Core 子进程（node core/dist/main.js）
+   ├─ 等 Core 的 /health 就绪
+   └─ BrowserWindow 加载 http://127.0.0.1:1420
+   ↓
+3. Core 启动
+   ├─ Bus 就绪
+   ├─ SseBridge 监听 1420
+   ├─ ★ 首次启动检测：<dataDir>/plugins/ 为空？
+   │   └─ 从 <installDir>/seed/*.ostpkg 走标准安装流程
+   ├─ 扫 <dataDir>/plugins/*/service/service.json
+   ├─ 拓扑排序 → spawn 每个服务进程
+   └─ 每个服务握手 → 进入运行态
+   ↓
+4. 前端 Shell 加载
+   ├─ index.html 解析 Import Map（Vue / dockview / core-sdk）
+   ├─ 读 /api/preferences 恢复布局
+   ├─ 读 /api/plugins/list 获取已安装 Pane
+   ├─ 动态 import() 每个 Pane 的 bundle
+   ├─ dockview-vue 渲染 Pane（Shadow DOM 隔离）
+   └─ 每个 Pane 开 SSE 订阅
+   ↓
+5. 用户点「发送」
+   ├─ ChatPane POST /api/command
+   ├─ Core 投递到 Bus
+   ├─ LLM 服务订阅并处理
+   ├─ LLM 服务 publish token
+   ├─ Core fan-out 给 SSE
+   └─ ChatPane 收到 token → 显示</code></pre>
+</div>
+
+<!-- ============ 09 插件导入 ============ -->
+<h2 id="plugins"><span class="no">09</span> 插件导入与安装：全外部插件</h2>
+<p><b>没有内置插件。</b>骨架只有 Core + 前端 Shell，其余全是外部插件。本节定义插件包格式、安装流程、前端动态加载机制、首次启动预置。</p>
+
+<div class="callout decided">
+  <b>统一加载路径：全部运行时加载。</b>
+  <p>删掉两条编译期路径（<code>services/*/service.json</code> 扫目录、<code>import.meta.glob</code> 扫 Pane）。<b>官方插件与第三方插件完全平等</b>——前者随安装包预置在 <code>seed/</code>，首次启动自动安装；后者由用户手动安装。代码路径完全相同。</p>
+</div>
+
+<h3>一、骨架与插件的边界</h3>
+<div class="grid">
+  <div class="card">
+    <h3>骨架（不可插件化）</h3>
+    <ul>
+      <li><b>Core</b>：Bus + ServiceManager + SseBridge + PluginInstaller</li>
+      <li><b>前端 Shell</b>：PaneHost + Layout 引擎 + SSE 单例 + 通用 UI 组件</li>
+    </ul>
+    <p style="margin-top:8px;font-size:12.5px;color:var(--text2);">这两样是加载器本身，随安装包发布，不走插件流程。</p>
+  </div>
+  <div class="card">
+    <h3>插件（全外部）</h3>
+    <ul>
+      <li><b>服务插件</b>：LLM / Loop / 角色 / 统计 / 第三方</li>
+      <li><b>Pane 插件</b>：聊天 / 统计 / 角色 / 服务商 / 第三方</li>
+    </ul>
+    <p style="margin-top:8px;font-size:12.5px;color:var(--text2);">全部走 <code>.ostpkg</code> 安装流程，放 <code>&lt;dataDir&gt;/plugins/</code>。</p>
+  </div>
+</div>
+
+<h3>二、<code>.ostpkg</code> 包格式</h3>
+<div class="card">
+  <p>一个插件 = 一个 <code>.ostpkg</code>（tar.gz），目录结构：</p>
+  <pre><code>com.example.my-plugin.ostpkg
+├── manifest.json               # 顶层元数据
+├── service/                    # 服务部分（可选）
+│   ├── service.json
+│   └── dist/
+│       └── index.js
+├── pane/                       # 前端部分（可选）
+│   ├── pane.json
+│   └── dist/
+│       └── pane.js             # ESM bundle（Vue external）
+└── README.md</code></pre>
+  <p>顶层 <code>manifest.json</code>：</p>
+  <pre><code>{
+  "id": "com.example.my-plugin",
+  "name": "我的插件",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "author": "someone",
+  "license": "MIT",
+  "service": {
+    "entry": "service/service.json"
+  },
+  "pane": {
+    "entry": "pane/pane.json"
+  },
+  "permissions": ["network", "storage.read"]
+}</code></pre>
+  <table>
+    <tr><th>字段</th><th>说明</th></tr>
+    <tr><td><code>id</code></td><td>全局唯一，反域名风格，如 <code>com.osteosome.llm</code></td></tr>
+    <tr><td><code>protocolVersion</code></td><td>与 Core 的 JSON-RPC 协议版本兼容性（semver range）</td></tr>
+    <tr><td><code>service</code></td><td>服务部分入口（可选）</td></tr>
+    <tr><td><code>pane</code></td><td>Pane 部分入口（可选）</td></tr>
+    <tr><td><code>permissions</code></td><td>权限声明（阶段 4 强制）</td></tr>
+  </table>
+  <div class="note"><b>服务可以只有服务、只有前端、或两者兼有</b>。Core 按 <code>service</code> / <code>pane</code> 字段决定装什么。</div>
+</div>
+
+<h3>三、安装流程（官方与第三方完全一致）</h3>
+<div class="card">
+  <pre><code>1. 拿到 .ostpkg（本地文件 / URL / seed/ 预置）
+   ↓
+2. 解压到 <dataDir>/tmp/<uuid>/
+   ↓
+3. 读 manifest.json
+   ├─ schema 校验（shared/plugin-manifest.ts 的 Zod schema）
+   ├─ 协议版本校验（protocolVersion 是否兼容 Core）
+   ├─ 事件一致性校验（publishes/subscribes 必须在 shared/events.ts 声明）
+   └─ 签名校验（阶段 4：ED25519；本期跳过）
+   ↓
+4. 落盘到 <dataDir>/plugins/<id>/
+   ├─ service/ 部分 → ServiceManager 扫到
+   └─ pane/ 部分 → 前端运行时加载
+   ↓
+5. Core 广播 plugin.installed
+   ├─ ServiceManager 扫新目录
+   ├─ 拓扑排序（新服务的 inject 依赖）
+   └─ spawn 服务进程
+   ↓
+6. 服务握手 → service.ready
+   ├─ Core 广播 { serviceId, version, panes: [...] }
+   └─ 前端收到事件
+   ↓
+7. 前端加载 Pane
+   ├─ 收到 plugin.installed / service.ready，发现新 pane
+   ├─ GET /runtime/panes/<id>/dist/pane.js
+   ├─ import() 加载（依赖走 Import Map）
+   ├─ 注册到 paneRegistry
+   └─ 按 defaultSlot append 到布局底部
+   ↓
+8. 用户看到新 Pane</code></pre>
+</div>
+
+<h3>四、首次启动：seed 预置官方插件</h3>
+<div class="card">
+  <p>安装包内含 <code>seed/</code> 目录，预置官方插件：</p>
+  <pre><code>Osteosome.app/
+├── core/
+├── client/
+├── desktop/
+└── seed/
+    ├── com.osteosome.llm.ostpkg
+    ├── com.osteosome.loop.ostpkg
+    ├── com.osteosome.character.ostpkg
+    ├── com.osteosome.stats.ostpkg
+    ├── com.osteosome.chat.ostpkg
+    ├── com.osteosome.providers.ostpkg
+    └── ...</code></pre>
+  <p><b>首次启动流程</b>：</p>
+  <pre><code>1. Core 启动，检测 <dataDir>/plugins/ 为空
+2. 扫 <installDir>/seed/*.ostpkg
+3. 对每个包走标准安装流程（解压 → 校验 → 落盘 → spawn）
+4. 广播 plugin.installed / service.ready
+5. 前端加载 Pane
+6. 用户看到「开箱即用」的界面
+7. 之后用户可以自由卸载 / 更新 / 替换这些官方插件</code></pre>
+  <div class="callout server">
+    <b>这就是「全外部」的正确落地：</b>
+    <p>架构上所有插件平等，但安装包预置一批官方插件作为初始状态。<b>用户感知是「开箱即用」，架构上是「一切都是插件」。</b></p>
+  </div>
+</div>
+
+<h3>五、前端 Pane 的动态加载</h3>
+<div class="card">
+  <p>前端 Shell 构建产物里<b>没有任何业务 Pane</b>。所有 Pane 在运行时动态加载：</p>
+  <pre><code>// panes/registry.ts —— 运行时加载
+const registry = new Map&lt;string, PaneDefinition&gt;()
+
+export function definePane(def: PaneDefinition): PaneDefinition {
+  registry.set(def.id, def)
+  return def
+}
+
+// 不再 import.meta.glob
+// 改为：收到 plugin.installed / service.ready 事件后，动态加载该插件的 Pane
+export async function loadPanesFromPlugin(
+  pluginId: string,
+  paneEntries: { id: string; url: string; version: string }[]
+) {
+  for (const entry of paneEntries) {
+    // 加 cache-bust，避免更新后浏览器命中旧缓存
+    const mod = await import(
+      /* @vite-ignore */ `${entry.url}?v=${entry.version}`
+    )
+    registry.set(mod.default.id, mod.default)
+  }
+}</code></pre>
+</div>
+
+<div class="card">
+  <h3>Import Maps 共享依赖</h3>
+  <p>插件 bundle 里<b>不打包 Vue / dockview / core-sdk</b>，运行时由 Import Map 解析到 Core 的实例：</p>
+  <pre><code>&lt;!-- index.html --&gt;
+&lt;script type="importmap"&gt;
+{
+  "imports": {
+    "vue": "/runtime/vue.esm-browser.prod.js",
+    "dockview-vue": "/runtime/dockview-vue.js",
+    "@osteosome/client/core-sdk": "/runtime/core-sdk.js"
+  }
+}
+&lt;/script&gt;</code></pre>
+  <p>插件作者用 Vite 构建时配 <code>rollupOptions.external</code>，把这三个包标为 external。<b>Vue 实例唯一，响应式互通。</b></p>
+</div>
+
+<div class="card">
+  <h3>Shadow DOM 隔离样式</h3>
+  <p>每个 Pane 渲染在 Shadow DOM 里，插件的 CSS 不污染全局：</p>
+  <pre><code>&lt;!-- PaneFrame.vue --&gt;
+&lt;script setup lang="ts"&gt;
+import { onMounted, ref } from 'vue'
+
+const shadowHost = ref&lt;HTMLElement&gt;()
+let shadowRoot: ShadowRoot | null = null
+
+onMounted(() =&gt; {
+  shadowRoot = shadowHost.value!.attachShadow({ mode: 'open' })
+  // 把 Pane 组件挂到 shadowRoot 里
+  // 插件的 CSS 通过 adoptedStyleSheets 注入
+})
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div ref="shadowHost"&gt;&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+  <p>插件的 CSS 不污染全局，Core 的主题通过 CSS 变量穿过 Shadow 边界。</p>
+</div>
+
+<h3>六、卸载与更新</h3>
+<div class="card">
+  <table>
+    <tr><th>场景</th><th>行为</th></tr>
+    <tr><td><b>同 id 覆盖安装</b></td><td>装到临时目录 → 校验 → 替换旧目录 → 重启该服务 → 广播 <code>plugin.installed</code></td></tr>
+    <tr><td><b>服务重启用 Core 不重启</b></td><td>ServiceManager 的 <code>restart(id)</code> 直接 kill + spawn</td></tr>
+    <tr><td><b>前端 Pane 更新</b></td><td>前端 <code>import()</code> 有缓存，需加 cache-bust：<code>import(url + '?v=' + version)</code></td></tr>
+    <tr><td><b>卸载插件</b></td><td>停止服务 → 删目录 → 广播 <code>plugin.uninstalled</code> → 前端移除 Pane（布局保留占位「插件未安装」）</td></tr>
+    <tr><td><b>版本不兼容</b></td><td>manifest 的 <code>protocolVersion</code> 不满足 → 拒绝安装，提示用户升级 Core</td></tr>
+    <tr><td><b>降级</b></td><td>允许，但需用户显式确认（旧版可能不兼容新事件类型）</td></tr>
+  </table>
+  <div class="note"><b>事件版本升级：</b>如果新服务发 <code>llm.token.v2</code> 而旧前端还在订阅 <code>llm.token</code>，服务需<b>同时发两个 topic 过渡</b>（见 §6 规范 2）。过渡期结束（比如两个版本周期）后停发旧的。</div>
+</div>
+
+<h3>七、安全边界</h3>
+<div class="card">
+  <table>
+    <tr><th>机制</th><th>说明</th><th>落地阶段</th></tr>
+    <tr><td><b>签名校验</b></td><td><code>.ostpkg</code> 带 ED25519 签名，Core 用公钥验签</td><td>阶段 4</td></tr>
+    <tr><td><b>权限声明</b></td><td>manifest 里声明 <code>permissions: ["network", "storage.read"]</code>，Core 拒绝越权</td><td>阶段 4</td></tr>
+    <tr><td><b>沙箱</b></td><td>前端 Pane 跑在 Shadow DOM（样式隔离）；服务进程受限（cgroup / job object）</td><td>阶段 4</td></tr>
+    <tr><td><b>来源白名单</b></td><td>只允许从指定域名 / 本地文件安装</td><td>阶段 3</td></tr>
+    <tr><td><b>审计</b></td><td>所有安装操作落 <code>plugin.installed</code> / <code>plugin.uninstalled</code> 事件</td><td>阶段 3</td></tr>
+  </table>
+  <div class="note"><b>本期（阶段 1-3）：</b>只允许从<b>本地文件</b>和<b>可信 URL</b>安装，不做签名。前端 Pane 用 Shadow DOM 隔离样式即可。</div>
+</div>
+
+<h3>八、分期落地</h3>
+<div class="card">
+  <table>
+    <tr><th>阶段</th><th>插件导入能力</th></tr>
+    <tr><td><b>阶段 1-2</b></td><td>PluginInstaller 完整实现 + seed 首次启动预置。服务与 Pane 都走运行时加载。<b>插件从本地文件/URL 安装</b>。</td></tr>
+    <tr><td><b>阶段 3</b></td><td>插件更新/卸载 UI + Python SDK + 来源白名单。</td></tr>
+    <tr><td><b>阶段 4</b></td><td>签名校验 + 权限声明 + 服务市场 + 沙箱。</td></tr>
+  </table>
+</div>
+
+<div class="callout bus">
+  <b>一句话总结：</b>
+  <p><b>服务插件的导入</b> = 把 <code>.ostpkg</code> 解压到 <code>&lt;dataDir&gt;/plugins/&lt;id&gt;/service/</code> + spawn 服务。<br>
+  <b>前端 Pane 的导入</b> = 动态 ESM（<code>import()</code>）+ Import Maps（共享 Vue）+ Shadow DOM（样式隔离）。<br>
+  <b>官方插件</b> = 随安装包预置在 <code>seed/</code>，首次启动自动安装；<b>之后与第三方插件完全平等</b>。</p>
+</div>
+
+<!-- ============ 10 消息总线 ============ -->
+<h2 id="bus"><span class="no">10</span> 消息总线：服务对等，通信公开可观察</h2>
+
+<div class="callout bus">
+  <b>核心设计：服务之间不直连，全部经过总线。</b>
+  <p>服务 A 要调服务 B：A 发请求事件 → B 订阅并处理 → B 发响应事件 → A 订阅。配对靠 <code>requestId</code>。这样 N 个服务不需要 N(N-1) 个通道，只需要一张总线。</p>
+</div>
+
+<div class="card">
+  <h3>「Loop 调 LLM」的完整走线</h3>
+  <pre><code>// ① Loop 服务发请求事件（带 requestId）
+bus.publish('llm.request', {
+  requestId: 'req-001', provider: 'deepseek', model: 'deepseek-chat',
+  messages: [{ role: 'user', content: '你好' }],
+})
+
+// ② LLM 服务订阅，处理后发响应事件
+bus.subscribe('llm.request', async (e) => {
+  for await (const token of callProvider(e)) {
+    bus.publish('llm.token.streamed', { requestId: e.requestId, token, index })
+  }
+  bus.publish('llm.request.finished', { requestId: e.requestId, usage: {...} })
+})
+
+// ③ Loop 服务订阅响应（匹配自己的请求）
+bus.subscribe('llm.token.streamed', (e) => {
+  if (e.requestId === 'req-001') handleToken(e.token)
+})
+
+// ④ 统计服务旁路订阅（零侵入）
+bus.subscribe('llm.request', (e) => stats.providers[e.provider]++)</code></pre>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-good">好处</span> 旁路观察是免费的</h3>
+    <ul>
+      <li>统计服务订阅 <code>llm.*</code>，<b>LLM 服务不需要为它改任何代码</b>。</li>
+      <li>新增日志 / 审计 / 分析服务，同样零侵入。</li>
+      <li>调试时在总线上打日志，所有服务间通信一览无余。</li>
+      <li>事件天然适合事件溯源：落库、回放、审计都免费。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-warn">注意</span> 总线的工程约束</h3>
+    <ul>
+      <li><b>背压</b>：慢订阅者不能阻塞总线，需要队列 / 丢弃策略。</li>
+      <li><b>事件契约治理</b>：事件类型多了会失控，需要命名规范、版本管理。</li>
+      <li><b>跨进程开销</b>：JSON 序列化 + IPC，高频事件要注意批量与缓冲。</li>
+      <li><b>事件类型共享</b>：TS 定义的事件类型，Core 与 Vue 前端共享，编译期检查。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 11 单向通信 ============ -->
+<h2 id="unidirectional"><span class="no">11</span> 单向通信：语义单向，控制流反向</h2>
+
+<p>流式消息、状态推送这些语义上单向的通信，用 WebSocket 这种全双工协议是浪费。但要区分两层。</p>
+
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-info">语义层单向</span></h3>
+    <p>逻辑上只有一个方向有意义：</p>
+    <ul>
+      <li><b>事件流</b>：Loop 服务发 <code>llm.token</code>，聊天框只接收</li>
+      <li><b>状态推送</b>：角色服务发 <code>character.changed</code>，前端只更新 UI</li>
+      <li><b>日志流</b>：任何服务发日志，观察者只收</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-warn">传输层经常还是双向</span></h3>
+    <p>即使语义上单向，传输层经常需要反向：</p>
+    <ul>
+      <li>建连握手（client → server）</li>
+      <li>心跳保活（双向）</li>
+      <li>断线重连（client → server）</li>
+      <li>取消订阅 / 背压反馈</li>
+    </ul>
+    <p>所以「用单向协议」通常意味着「<b>主数据流单向 + 控制流反向</b>」。</p>
+  </div>
+</div>
+
+<h3>为什么「两个单向接口 ≠ 手工开两个 pipe」</h3>
+
+<div class="card">
+  <p>「双向服务 = 开发两个单向接口」思路对，但<b>不要手工开两个 pipe</b>，因为：</p>
+  <ul>
+    <li><b>配对问题</b>：多个服务同时调 LLM 服务，两个 pipe 怎么知道哪个响应配哪个请求？</li>
+    <li><b>生死同步</b>：两个 pipe 要同时管理，一个挂了另一个成僵尸。</li>
+    <li><b>组合爆炸</b>：N 个服务两两通信需要 N² 个通道。</li>
+  </ul>
+  <p><b>正确形态</b>：请求事件 + 响应事件，配对靠 ID，通道管理归总线。见 §10 的代码示例。</p>
+</div>
+
+<h3>前端协议选择：SSE + HTTP POST</h3>
+
+<table>
+  <tr><th>方向</th><th>协议</th><th>理由</th></tr>
+  <tr><td>后端 → 前端（事件流）</td><td><span class="pill uni">SSE</span></td><td>语义单向，浏览器原生 <code>EventSource</code>，自带重连，纯 HTTP，穿透代理友好</td></tr>
+  <tr><td>前端 → 后端（命令）</td><td><span class="pill uni">HTTP POST</span></td><td>「发完就不管」的短请求，无需长连接</td></tr>
+  <tr><td>进程间控制面</td><td>JSON-RPC over stdio</td><td>语言无关，进程隔离</td></tr>
+  <tr><td>服务 ↔ 服务</td><td>总线（不直连）</td><td>一对多 / 多对多天然，旁路可观察</td></tr>
+</table>
+
+<div class="card">
+  <h3>前端 Pane 订阅事件（Vue 3）</h3>
+  <pre><code>&lt;script setup lang="ts"&gt;
+import { ref } from 'vue'
+import { useEventBus } from '@osteosome/client/core-sdk'
+
+const messages = ref&lt;{ role: string; content: string }[]&gt;([])
+let currentMsg = ''
+
+// 只订阅自己关心的事件类型
+useEventBus('llm.token.streamed', (e) =&gt; {
+  currentMsg += e.token
+})
+useEventBus('llm.request.finished', (e) =&gt; {
+  messages.value.push({ role: 'assistant', content: currentMsg })
+  currentMsg = ''
+})
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div v-for="m in messages"&gt;{{ m.content }}&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+</div>
+
+<div class="callout bus">
+  <b>为什么不用 WebSocket：</b>
+  <p>接收是单向的，SSE 天生为此；发送是「发完就不管」，POST 足够。<b>WebSocket 的复杂度（握手、心跳、状态机）在这里换不来任何收益。</b></p>
+</div>
+
+<!-- ============ 12 服务热插拔 ============ -->
+<h2 id="lifecycle"><span class="no">12</span> 服务热插拔：Core 不重启，单个服务更新</h2>
+
+<p>「Core 很少更新，之后只更新单个服务，重启服务就行，程序本身不需要重启」——这个需求把架构钉死了：<b>服务必须是进程外</b>。</p>
+
+<div class="card">
+  <h3>服务 manifest（在 <code>&lt;dataDir&gt;/plugins/&lt;id&gt;/service/service.json</code>）</h3>
+  <pre><code>{
+  "id": "com.osteosome.llm",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "python -m llm_service",        // 语言自由
+  "inject": ["com.osteosome.storage"],     // 依赖声明 → Core 拓扑排序
+  "publishes": ["llm.request.started", "llm.token.streamed", "llm.request.finished"],
+  "subscribes": ["llm.request"],
+  "panes": [
+    { "id": "pane.llm.providers", "component": "ProvidersPane" },
+    { "id": "pane.llm.config", "component": "LlmConfigPane" }
+  ],
+  "healthCheck": { "interval": 5000, "timeout": 2000 },
+  "restartPolicy": { "maxRestarts": 3, "backoff": "exponential" }
+}</code></pre>
+  <div class="note">注意 <code>inject</code> 用的是<b>插件 id</b>（如 <code>com.osteosome.storage</code>），不是服务名。Core 通过插件 id 找对应服务的启动完成状态。</div>
+</div>
+
+<h3>热插拔带来的五个必须解决的问题</h3>
+
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-bad">1</span> 事件版本管理</h3>
+    <p>服务 v1 发 <code>llm.token { token }</code>，v2 升级成 <code>{ token, confidence }</code>。<b>旧版前端 Pane 怎么办？</b></p>
+    <ul>
+      <li>事件 schema 带版本号：<code>llm.token.v2</code></li>
+      <li>或 payload 向后兼容（只加字段，不改字段）</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-bad">2</span> Pane 与服务生命周期解耦</h3>
+    <p>服务重启时正在显示的 Pane 怎么办？</p>
+    <ul>
+      <li>Core 广播 <code>service.restarting</code> / <code>service.ready</code> 事件</li>
+      <li>Pane 订阅这些事件，显示「服务重连中」状态</li>
+    </ul>
+  </div>
+</div>
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag tag-bad">3</span> 服务重启后的状态恢复</h3>
+    <p>服务重启后之前的状态没了，正在进行的 LLM 调用怎么办？</p>
+    <ul>
+      <li><b>事件溯源</b>：所有状态变更都是事件，落库。服务重启后回放。</li>
+      <li>或：重启时把未完成的任务标记为失败，让用户重试。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3><span class="tag tag-warn">4</span> 事件持久化与回放</h3>
+    <p>如果事件不落库，统计服务重启后计数清零。</p>
+    <ul>
+      <li>关键事件落 SQLite</li>
+      <li>统计服务订阅时，先回放历史事件，再接收实时</li>
+      <li>Core 提供 <code>bus.replay(from, to)</code> API</li>
+    </ul>
+  </div>
+</div>
+
+<div class="card">
+  <h3><span class="tag tag-warn">5</span> 服务依赖关系</h3>
+  <p>Loop 服务依赖 LLM 服务。LLM 服务重启时，Loop 服务怎么办？</p>
+  <ul>
+    <li>服务 manifest 声明 <code>inject</code> 依赖</li>
+    <li>Core 按拓扑排序启动 / 恢复</li>
+    <li>依赖服务不可用时，Loop 服务收到 <code>service.unavailable</code> 事件，决定等待还是报错</li>
+  </ul>
+</div>
+
+<div class="callout bus">
+  <b>热插拔的最终形态：</b>
+  <p>更新 LLM 服务 = 替换 <code>plugins/com.osteosome.llm/service/</code> + Core kill 旧进程 + 启动新进程。Core 不动，其他服务不动，前端 Pane 通过 <code>service.status</code> 事件感知并更新 UI。<b>这就是 VS Code 的语言服务器模型。</b></p>
+</div>
+
+<!-- ============ 13 前端工作台 ============ -->
+<h2 id="frontend"><span class="no">13</span> 前端工作台：Vue 3 + dockview-vue，插件即窗口</h2>
+
+<p>前端从「页面」升级为「工作台」——<strong>每个持久信息面 = 一个独立的窗（Pane）</strong>，默认停泊在主容器，可拉出独立窗口、可自由换位；<b>新增一个插件 = 新增一个或多个插件窗口</b>。参照物是 VSCode / Obsidian 的副窗口停泊模式。</p>
+
+<div class="callout decided">
+  <b>已确定：前端用 Vue 3 + dockview-vue。</b>
+  <p>团队熟 Vue，长期开发效率显著更高；<code>dockview-vue</code> 是 dockview 官方支持，功能与 React 版对齐（停靠 / 拖拽 / 浮动 / 序列化完备）。<b>「Vue 生态缺停靠布局库」的说法不成立。</b></p>
+</div>
+
+<div class="callout">
+  <b>核心模型：Pane = 单元，Layout = 数据，窗口 = 一种挂载方式。</b>
+  <p>布局是一份可序列化的 JSON（主窗内嵌网格 + 同窗悬浮 + 独立窗），存进 <code>/api/preferences</code>。<b>红利</b>：uiStore 的 <code>sidebarOpen / rightPanelOpen / filePanelOpen</code> 三开关直接消失——面板开合 = 布局里有没有该 pane 节点。</p>
+</div>
+
+<h3>从 React 到 Vue 的迁移策略</h3>
+<table>
+  <tr><th>React 模块</th><th>Vue 目标</th><th>迁移方式</th></tr>
+  <tr><td><code>App.tsx</code> 的导航数组</td><td><code>panes/registry.ts</code> + 动态加载各 Pane</td><td><b>重写</b></td></tr>
+  <tr><td><code>App.tsx</code> 的启动副作用</td><td><code>App.vue</code> 的 <code>onMounted</code></td><td><b>重写</b>（逻辑不变）</td></tr>
+  <tr><td><code>ChatPage.tsx</code></td><td><code>layout/DockviewLayout.vue</code> + 各 Pane</td><td><b>重写</b>（装配层）</td></tr>
+  <tr><td><code>RightPanel.tsx</code> 七段</td><td>7 个独立插件 Pane</td><td><b>拆成插件</b>（每段一个 .ostpkg）</td></tr>
+  <tr><td><code>useSessionStats</code></td><td><code>stats-pane.vue</code> 里的 composable</td><td><b>移植</b>（语法换）</td></tr>
+  <tr><td><code>uiStore</code> 三开关</td><td>删除（布局即状态）</td><td><b>删除</b></td></tr>
+  <tr><td>通用组件（Button / Input）</td><td><code>.vue</code> 版本（前端 Shell 自带）</td><td><b>移植</b>（逻辑不变）</td></tr>
+  <tr><td>API 调用层</td><td><code>core-sdk/</code>（前端 Shell 自带）</td><td><b>重写</b>（改用总线）</td></tr>
+</table>
+<div class="note"><b>迁移顺序建议：</b>① 先搭前端 Shell 骨架（main.ts + App.vue + DockviewLayout.vue + 空 PaneHost）→ ② 把「会话统计」拆成第一个插件 Pane 跑通全链路 → ③ 批量迁移其余七段 + 四个面板 + 导航栏（每个都是独立 .ostpkg）→ ④ 删掉旧 React 文件。</div>
+
+<div class="card">
+  <h3>开发合同：写一个 pane = 得到一个窗口</h3>
+  <pre><code>// 插件的前端入口（com.example.my-plugin/pane/src/pane.ts）
+import { definePane } from '@osteosome/client/core-sdk'
+import { defineAsyncComponent } from 'vue'
+
+export default definePane({
+  id: 'pane.example.my',
+  title: '我的 Pane',
+  icon: 'nav-star',
+  defaultSlot: { area: 'right', index: 5 },
+  windowable: true,
+  component: defineAsyncComponent(() =&gt; import('./MyPane.vue')),
+})</code></pre>
+  <p>插件构建时把 <code>@osteosome/client/core-sdk</code> 和 <code>vue</code> 标为 external（走 Import Map）。<b>前端 Shell 不在构建产物里包含任何业务 Pane。</b></p>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h3>布局模型（Layout = 数据）</h3>
+    <pre><code>type Layout =
+  | { kind: 'row'; children: Layout[] }
+  | { kind: 'col'; children: Layout[] }
+  | { kind: 'pane'; id: PaneId }
+
+interface WorkspaceLayout {
+  dock: Layout                    // 主窗内嵌网格
+  floating: { paneId, size }[]    // 同窗悬浮
+  windows: { paneId, rect }[]     // 已拉出独立窗
+}</code></pre>
+  </div>
+  <div class="card">
+    <h3>跨窗同步：SSE 真源 + BroadcastChannel</h3>
+    <ul>
+      <li><b>数据</b>（会话 / 统计 / 运行事件）：全部走服务端 SSE，弹窗连上即收流，<b>不复制内存</b>。</li>
+      <li><b>本地态</b>：只有 <code>activeSessionId</code> 和 layout，走两个 BroadcastChannel 同步。</li>
+      <li><code>osteosome:ctx</code>：<code>{ activeSessionId }</code> 全局唯一，主窗点会话，弹出窗跟随。</li>
+      <li><code>osteosome:ui</code>：布局变更（窗开关 / rect）。</li>
+    </ul>
+  </div>
+</div>
+
+<table>
+  <tr><th>维度</th><th>说明</th></tr>
+  <tr><td><b>桌面拉出</b></td><td>桥 <code>paneWindow.open(paneId, rect?)</code> → 主进程 <code>BrowserWindow</code> 加载 <code>#/pane/&lt;id&gt;</code>；同 partition 共享 localStorage/SSE，零鉴权桥接；启动按 <code>layout.windows</code> 复原</td></tr>
+  <tr><td><b>网页拉出</b></td><td><code>window.open('#/pane/&lt;id&gt;')</code> 弹窗；数据走服务端 SSE，弹窗近乎无状态视口</td></tr>
+  <tr><td><b>宿主壳 <code>&lt;PaneHost&gt;</code></b></td><td><code>#/pane/:id</code> = i18n + ThemeBackdrop + 迷你标题栏 + 该 Pane（Shadow DOM 隔离）；App.vue 启动副作用必须拆进宿主层，否则弹窗黑屏</td></tr>
+  <tr><td><b>生命周期</b></td><td>新装插件按 <code>defaultSlot</code> append 到底部；卸载后留下「插件未安装」占位<b>不崩布局</b>，重装原位复原；paneId 不变则布局不丢</td></tr>
+</table>
+
+<div class="card">
+  <h3>Pane 组件开发合同（三条硬性约定）</h3>
+  <div class="callout server">
+    <b>① SSE 单例 + topic 分发</b>
+    <p>禁止每个 Pane 各开一个 <code>EventSource</code>（浏览器对同源 EventSource 数量有限制，Chrome 是 6 个）。整个应用<b>一个 SSE 连接</b>，由 Shell 的 <code>sse.ts</code> 单例管理，<code>useEventBus</code> 订阅 topic。</p>
+  </div>
+  <div class="callout server">
+    <b>② Pane 组件不直接 fetch</b>
+    <p>禁止 Pane 里直接 <code>fetch('/api/xxx')</code>。所有命令走 <code>useCommand</code>，所有数据走 <code>useEventBus</code>。这样：命令和事件统一走 Core，旁路可观察；Pane 不持有数据，只订阅事件；服务重启时 Pane 通过 <code>service.status</code> 事件感知。</p>
+  </div>
+  <div class="callout server">
+    <b>③ 共享依赖必须 external</b>
+    <p>插件构建时 <code>vue</code> / <code>dockview-vue</code> / <code>@osteosome/client/core-sdk</code> 必须标为 external，由 Import Map 解析到 Shell 的实例。<b>插件 bundle 里不允许打包自己的 Vue。</b></p>
+  </div>
+</div>
+
+<!-- ============ 14 迁移路线 ============ -->
+<h2 id="roadmap"><span class="no">14</span> 迁移路线图（四阶段 strangler，每层全绿）</h2>
+
+<p>改造分四个阶段，<b>从进程内 ctx 到进程外全外部插件</b>，每一步都可独立合入、可单独 revert。</p>
+
+<div class="timeline">
+  <div class="tl spotlight">
+    <h3>阶段 1 · 进程内 ctx + 总线雏形 <span class="dur">~3-5 天</span></h3>
+    <ul>
+      <li>新增 <code>src/container/context.ts</code>（对齐 Cordis：mount/inject/effect/on/emit/waterfall/scope）。</li>
+      <li>四个 <code>setXxxRuntime</code> 单例改写成 <code>ctx.mount({ inject: ['transport.broadcaster'], apply })</code> 插件。</li>
+      <li><b>引入进程内事件总线</b>：<code>bus.publish</code> / <code>bus.subscribe</code>，第一个真实用例是「run.started」日志监听。</li>
+      <li><code>app.ts</code> 里 7 段内联 sweep → 独立 LifecyclePlugin，隐性顺序用 <code>order</code> 显式化。</li>
+      <li>旧 set/get 保留薄兼容壳。</li>
+    </ul>
+    <div class="gate"><b>绿灯</b> 60+ vitest 原样全绿 + container + bus 单测绿；app.ts 收敛成装配器</div>
+  </div>
+
+  <div class="tl">
+    <h3>阶段 2 · Core 骨架 + PluginInstaller + 第一个外部插件 <span class="dur">~2 周</span></h3>
+    <ul>
+      <li>Core 从 server 中剥离，独立为 <code>core/</code>：进程管理 + 总线 + SSE 桥 + PluginInstaller。</li>
+      <li>定义服务 manifest 规范 + <code>shared/events.ts</code> 事件契约 + <code>.ostpkg</code> 格式。</li>
+      <li>写 TS SDK，<b>第一个外部插件</b>：LLM 插件（含服务 + 2 个 Pane），通过 stdio JSON-RPC 接入总线。</li>
+      <li>实现 <b>seed 首次启动预置</b>：安装包内嵌官方插件 .ostpkg，首次启动自动安装。</li>
+      <li>前端暴露 <code>/events</code> SSE 端点 + <code>/api/command</code> + <code>/api/plugins/*</code>。</li>
+      <li>前端 Shell 实现动态 <code>import()</code> + Import Map + Shadow DOM。</li>
+    </ul>
+    <div class="gate"><b>绿灯</b> 重启 LLM 插件不影响 Core 和其他插件；前端 SSE 收到 llm.token 流；卸载重装 LLM 插件原位复原</div>
+  </div>
+
+  <div class="tl client">
+    <h3>阶段 3 · 全部插件拆分 + Vue 工作台 + Python SDK <span class="dur">~3 周</span></h3>
+    <ul>
+      <li>Loop / 角色 / 统计 / 聊天 / 服务商 / 会话列表全部拆成独立 .ostpkg 插件。</li>
+      <li><b>统计插件旁路订阅</b> <code>llm.*</code> / <code>tools.*</code>——验证「零侵入可观察」的设计。</li>
+      <li>Python SDK + 一个 Python 插件（验证协议中立性）。</li>
+      <li>前端 Vue 3 + <code>dockview-vue</code>：PaneHost + Layout 持久化 + 拖拽 + 拉出独立窗 + 跨窗同步。</li>
+      <li>插件管理 UI：安装 / 卸载 / 更新 / 列表。</li>
+      <li>来源白名单 + 安装审计。</li>
+    </ul>
+    <div class="gate"><b>绿灯</b> 拖拽布局 + 刷新还原 + 拉出独立窗 + 重启复原；统计 Pane 实时计数；任意插件独立更新</div>
+  </div>
+
+  <div class="tl">
+    <h3>阶段 4 · 事件持久化 + 签名 + 服务市场 <span class="dur">远期，另立 RFC</span></h3>
+    <ul>
+      <li>关键事件落 SQLite，<code>bus.replay(from, to)</code> API。</li>
+      <li>统计插件支持历史回放，重启不丢计数。</li>
+      <li>Rust SDK / Go SDK，验证更多语言插件接入。</li>
+      <li><code>.ostpkg</code> 签名校验（ED25519）+ 权限声明 + 沙箱。</li>
+      <li>服务市场 / 安装器。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="grid" style="margin-top:16px;">
+  <div class="card">
+    <h3>最低可交付 = 阶段 1 + 2</h3>
+    <p>Core 骨架、总线可用、PluginInstaller + seed 预置、第一个外部插件（LLM）跑通、前端 SSE 收到流。<b>约 3 周</b>。</p>
+  </div>
+  <div class="card">
+    <h3>完整工作台 = 阶段 3</h3>
+    <p>全部插件拆分、统计旁路验证、Vue 工作台化、插件管理 UI。<b>约 6 周</b>。阶段 4 是愿景。</p>
+  </div>
+</div>
+
+<!-- ============ 15 不变式 ============ -->
+<h2 id="invariants"><span class="no">15</span> 迁移期不变式（"don't make it worse"）</h2>
+<div class="invariant"><div class="mark">1</div><div class="body"><b>Model-visible means logged</b> —— 写入模型上下文的任何新内容，必须先有 durable 事件 + 落库，不准只写内存。</div></div>
+<div class="invariant bus"><div class="mark">2</div><div class="body"><b>服务间不直连</b> —— 所有通信经过总线，配对靠 requestId，通道管理归 Core。</div></div>
+<div class="invariant bus"><div class="mark">3</div><div class="body"><b>旁路消费者零侵入</b> —— 统计 / 日志 / 审计服务只订阅不发布，不要求现有服务改代码。</div></div>
+<div class="invariant"><div class="mark">4</div><div class="body"><b>Core 不跑业务逻辑</b> —— Core 只管进程管理、总线、SSE 桥、插件安装；任何业务模块必须下沉为插件。</div></div>
+<div class="invariant"><div class="mark">5</div><div class="body"><b>任一注册必带 disposer</b> —— <code>ctx.on/effect</code> / <code>bus.subscribe</code> 都返回回卷函数，禁止"只塞 Map 不提供卸载"。</div></div>
+<div class="invariant client"><div class="mark">6</div><div class="body"><b>前端禁新增「页面级装配」</b> —— 新信息面一律 <code>definePane</code>，禁止改 App.vue 的 navItems 或 Shell 的装配。</div></div>
+<div class="invariant client"><div class="mark">7</div><div class="body"><b>前端禁复制服务端数据到本地 store</b> —— 所有持久数据走 SSE，本地态只有 <code>activeSessionId</code> 和 layout。</div></div>
+<div class="invariant"><div class="mark">8</div><div class="body"><b>事件只增不改</b> —— 破坏性变更必须升版本；payload 必须 JSON 可序列化。</div></div>
+<div class="invariant client"><div class="mark">9</div><div class="body"><b>前端 SSE 单例</b> —— 禁止每个 Pane 各开 EventSource，全应用一个连接，由 Shell 的 <code>sse.ts</code> 单例管理。</div></div>
+<div class="invariant plugin"><div class="mark">10</div><div class="body"><b>全外部插件，官方与第三方完全平等</b> —— 没有内置服务/Pane；唯一加载路径是 <code>.ostpkg</code> 安装流程；官方插件只是随安装包预置在 <code>seed/</code>。</div></div>
+<div class="invariant plugin"><div class="mark">11</div><div class="body"><b>插件共享依赖必须 external</b> —— 前端插件 bundle 里不允许打包 Vue / dockview-vue / core-sdk，必须走 Import Map 解析到 Shell 的实例。</div></div>
+<div class="invariant"><div class="mark">12</div><div class="body"><b>每阶段一个 PR + 全绿 + 可单独 revert</b> —— 不允许跨阶段大爆炸提交。</div></div>
+
+<!-- ============ 16 边界 ============ -->
+<h2 id="non-goals"><span class="no">16</span> 非目标与边界</h2>
+<div class="grid-3">
+  <div class="card"><h3>❌ 不引入 Cordis 本体</h3><p>初期用约 200 行自研 ctx 对齐接口，预留替换点。</p></div>
+  <div class="card"><h3>❌ 不引入外部消息中间件</h3><p>NATS / Redis / ZeroMQ 都不引。总线自研，桌面应用不跑 broker。</p></div>
+  <div class="card"><h3>❌ 不重写 store/db</h3><p>只加接口皮，零行为变更。storage 服务独立进程是阶段 3。</p></div>
+  <div class="card"><h3>❌ 不做无进程重启的热替换</h3><p>本期只做「重启单个服务不重启 Core」；「不重启服务也能热替换」是远期。</p></div>
+  <div class="card"><h3>❌ 不一次支持所有语言</h3><p>先 TS，再 Python，后 Rust / Go。SDK 是最大的工作量。</p></div>
+  <div class="card"><h3>❌ 不做签名/沙箱（本期）</h3><p>阶段 4 才做。本期只允许本地文件和可信 URL 安装。</p></div>
+</div>
+<div class="grid-3" style="margin-top:4px;">
+  <div class="card"><h3>❌ 跨窗拖拽</h3><p>把一个窗拖进另一窗的网格：远期。v1 只做「同窗内换位 + 拉出独立窗」。</p></div>
+  <div class="card"><h3>❌ 复制窗 / 一窗一会话</h3><p>同一 pane 开多个实例看不同会话：远期。v1 全局单上下文。</p></div>
+  <div class="card"><h3>❌ 操作类对话框窗化</h3><p>选角色 / 审批 / 编辑弹窗保持模态，只有持久信息面才是 pane。</p></div>
+  <div class="card"><h3>❌ 服务直连旁路</h3><p>服务 A 不能绕过总线直接调服务 B，否则旁路观察失效。</p></div>
+  <div class="card"><h3>❌ 进程内跑非 TS 服务</h3><p>进程内只跑 TS 模块；非 TS 服务一律进程外。</p></div>
+  <div class="card"><h3>❌ 内置任何业务插件</h3><p>骨架只有 Core + 前端 Shell。所有业务都是外部插件，官方与第三方完全平等。</p></div>
+</div>
+
+<!-- ============ 17 dsh 对标 ============ -->
+<h2 id="benchmark"><span class="no">17</span> dsh 成熟度对标：谁更成熟就照搬谁</h2>
+<p>决策仍是不嵌入 dsh 运行时；但对个别子系统，若 dsh 的实现明显更成熟，按「<b>移植契约词汇、实现长在 Osteosome 自己的存储上</b>」吸收（dsh 为 MIT）。本表是成熟度基线 + A 组移植契约。</p>
+
+<table>
+  <tr><th>分组</th><th>能力</th><th>dsh 成熟形态</th><th>Osteosome 现状</th><th>结论</th></tr>
+  <tr>
+    <td><span class="tag tag-good">A · 移植</span></td>
+    <td>会话模型</td>
+    <td><code>Session</code> = 仅追加类型化事件日志，单一事实源；LLM 历史<strong>从日志派生</strong></td>
+    <td><code>run_events</code> 仅半套 durable 流；messages/sessions 仍存关系表</td>
+    <td>事件化未走完</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-good">A · 移植</span></td>
+    <td>Compaction</td>
+    <td>完整 seam：<code>compaction/start|summary|end</code> log-only + 全程锁 + <code>shadowedSeqs</code> 书签 + <code>surfaceOp:{op:'replace'}</code> 落面</td>
+    <td>outer.ts 内联冷启动压缩 + loop 内剪枝、硬阈值</td>
+    <td>无锁、无书签、无事件化</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-good">A · 移植</span></td>
+    <td>工具执行管线</td>
+    <td><code>tools/pre-execute → execute → post-execute</code> + policy 监听；审批/权限预设独立成子系统</td>
+    <td>workspace 审批以 if/else 散布在 loop</td>
+    <td>只有肉，没有管线</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-good">A · 移植</span></td>
+    <td>LLM 适配器</td>
+    <td><code>LlmAdapter.stream(): AsyncIterable&lt;StreamChunk&gt;</code> 中立流契约 + 按供应商独立包；provider 声明式 retryPolicy + 错误码化；token-meter 重放测算</td>
+    <td><code>llm/client.ts</code> 单一 openai 兼容 wire（681 行）+ <code>format</code> 死配置 + 字符串判 429 + 4 字段记账</td>
+    <td>契约形状待对齐（见 §18）</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-warn">B · 相当</span></td>
+    <td>skills / goal / plan / 子代理</td>
+    <td>skills 目录；plan mode；subagent providers</td>
+    <td>SKILL.md 技能包；承诺式 goal/plan；角色委托</td>
+    <td>不为移植而移植</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-info">C · 借思路</span></td>
+    <td>sandbox / 终端 / jobs / LSP / 代码运行 / web</td>
+    <td>landlock 沙箱、PTY、代码运行器…（Linux/npm 生态）</td>
+    <td>Windows 桌面 + 工具目录 + SQLite</td>
+    <td>平台不合，只借 seam 分层思路</td>
+  </tr>
+</table>
+
+<div class="grid-3" style="margin-top:16px;">
+  <div class="card">
+    <h3>① 会话模型 → event-sourced log</h3>
+    <ul>
+      <li><b>契约</b>：会话 = 仅追加类型化事件日志；<code>Model-visible means logged</code> 从条文变<strong>结构保证</strong>。</li>
+      <li><b>落点</b>：<code>run_events</code> 已半成形，目标把 messages/sessions 收敛为「写事件 → 派生表」。</li>
+      <li><b>边界</b>：数据模型层改动，独立成步，<strong>只事件化不斩旧表</strong>。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>② Compaction → dsh 形状 seam</h3>
+    <ul>
+      <li><b>词汇</b>：<code>compaction/start|summary|end</code> 锁包围「测长→选区→摘要→落面」，崩溃 = 孤儿锁。</li>
+      <li><b>落点</b>：<code>run.before-compact</code> 扩展为这套词汇 + 触发词。</li>
+      <li><b>验收</b>：全程可重放可审计；孤儿锁由 LifecyclePlugin 回收。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>③ 工具执行管线 → policy 监听</h3>
+    <ul>
+      <li><b>形状</b>：<code>tools.pre-execute / post-execute</code> 两个 waterfall 点。</li>
+      <li><b>落点</b>：审批/只读判定从 if/else 变 listener。</li>
+      <li><b>验收</b>：审批与执行解耦；策略挂载可逆；新增策略不碰 loop。</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>④ LLM 适配器 → 中立流契约</h3>
+    <ul>
+      <li><b>契约</b>：带 block 边界的类型化流（文本/推理/tool-call 显式块）+ <code>finish</code> 终块携带稳定错误码与 Retry-After。</li>
+      <li><b>落点</b>：<code>llm/client.ts</code> 的 LLMChunk 块化；<code>format</code> 兑现或删除；字符串判 429 收敛为错误码。</li>
+      <li><b>验收</b>：新增供应商不再手改单函数；错误告别字符串匹配。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout">
+  <b>落地顺序与边界（四项）。</b>
+  <p>④ LLM 适配器契约对齐（最小、纯行为侧，先做）→ ③ 工具管线（接阶段 3）→ ① 会话事件化（数据层大改，独立小步）→ ② Compaction（依赖事件化土壤，最后）。全程不引入 dsh 依赖。</p>
+</div>
+
+<!-- ============ 18 服务商适配器 ============ -->
+<h2 id="providers"><span class="no">18</span> 服务商适配器对标：目录与问题清单</h2>
+<p><b>复核结论</b>：Osteosome 的 provider 层不是「适配器集合」，而是<strong>「目录 + 单一 openai 兼容 wire」</strong>；dsh 的 <code>packages/llm/*</code> 构型显著更成熟，提级为 A 组「契约对齐」。</p>
+
+<h3>Osteosome 三层栈（适配器其实是目录）</h3>
+<table>
+  <tr><th>层</th><th>内容</th><th>证据</th></tr>
+  <tr><td>① 遗留静态目录</td><td><code>providers/*.ts</code> ×35，每文件 ~16 行（id/baseUrl/envKey/format/models[]），仅作 runtime 断言</td><td>provider-catalog/loader.ts:143</td></tr>
+  <tr><td>② 出厂预设</td><td>content/builtin/providers/*/provider.json（schemaVersion 1，18 家）</td><td>schema.ts:11-74</td></tr>
+  <tr><td>③ 运行时</td><td>db/providerStore.ts 用户记录 + <code>llm/client.ts</code>（681 行）干全部 wire</td><td>outer.ts:78-88 组装 ProviderConfig</td></tr>
+</table>
+
+<h3>问题清单（带证据）</h3>
+<ol>
+  <li><b>format 是死配置</b>：schema.ts:39 声明 3 种格式，请求路径无任何按 format 分支。<b>声明 3 种，实现只有 1 种。</b></li>
+  <li><b>google 预设大概率 404</b>：baseUrl=/v1/ + wire 拼 /chat/completions，与 Gemini 兼容路径 /v1beta/openai/ 不符。</li>
+  <li><b>thinking/reasoning 字符串嗅探</b>：三路硬匹配（client.ts:432-437, 596-602），网关换字段名即静默丢思考。</li>
+  <li><b>重试在 agent 不在 provider</b>：streamWithRetry（agent/inner.ts:238）通用循环 + env 常量，429 靠 <code>includes('429')</code>。</li>
+  <li><b>错误分类是字符串表</b>：isTransientLLMError 一串 includes（llm/errors.ts:39-69），措辞一变即失效。</li>
+  <li><b>双轨并存</b>：35 静态插件 + 预设目录 + DB 三层叠着，新增厂商要手改 providers/index.ts import 数组。</li>
+  <li><b>凭证单轨</b>：getApiKey → process.env（types.ts:27），进程级单 key；OAuth 旁路与 runtime 拆两套。</li>
+  <li><b>记账 4 字段</b>：input/output/cacheHit/cacheMiss（client.ts:64-69），无 disjoint cached/uncached、无 reasoningTokens。</li>
+  <li><b>能力静态元数据</b>：supports_* 写死 + 懒等 models.dev（cache 1h），无运行时能力探测。</li>
+</ol>
+
+<table>
+  <tr><th>维度</th><th>dsh（packages/llm/*）</th><th>Osteosome</th></tr>
+  <tr><td><b>契约</b></td><td>LlmAdapter.stream(): AsyncIterable&lt;StreamChunk&gt;，block-start/delta/block-end + 类型化 reasoning + 原始 JSON 工具参数 + finish 终块</td><td>松散 LLMChunk（delta/done/error/usage），拼装靠调用方</td></tr>
+  <tr><td><b>组织</b></td><td>核心虚类 + 按供应商独立包（llm-deepseek 原生双协议 / llm-pi-ai）</td><td>单函数写死 openai 兼容两种协议</td></tr>
+  <tr><td><b>重试</b></td><td>providerRetryPolicy 声明 + llm-retry 独立插件在 durable 边界执行</td><td>agent 循环 + env 常量</td></tr>
+  <tr><td><b>记账</b></td><td>token-meter 重放日志 + 4字符/token + 图片定价</td><td>仅透传响应 usage，4 字段</td></tr>
+  <tr><td><b>错误</b></td><td>LlmError 稳定码（AUTH/RATE_LIMIT/CONTEXT_WINDOW_EXCEEDED…）</td><td>includes() 字符串表</td></tr>
+  <tr><td><b>凭证</b></td><td>ctx.credentials seam，apiKeyEnv 按请求解析</td><td>env 进程级 + OAuth 旁路</td></tr>
+</table>
+
+<div class="callout">
+  <b>提级决策。</b>
+  <p>providers 从 B 组提级为 A 组「契约对齐」：<b>注重契约不搬代码</b>——LLMChunk 块化、<code>format</code> 兑现或删除、错误码化、disjoint 记账、凭证 seam。独立成步，与 LLM 插件化并行。</p>
+</div>
+
+<!-- ============ 19 技术选型 ============ -->
+<h2 id="tech-stack"><span class="no">19</span> 技术选型</h2>
+
+<h3>Core 选型：TS / Node（已确定）</h3>
+<table>
+  <tr><th>维度</th><th>TS / Node</th><th>Python</th></tr>
+  <tr><td>进程管理</td><td>⭐⭐⭐ <code>child_process</code> + <code>execa</code></td><td>⭐⭐ <code>subprocess</code> + asyncio</td></tr>
+  <tr><td>消息总线</td><td>⭐⭐⭐ <code>EventEmitter</code> 扩展</td><td>⭐⭐ asyncio pub/sub</td></tr>
+  <tr><td>SSE 桥</td><td>⭐⭐⭐ 原生 <code>ReadableStream</code></td><td>⭐⭐ FastAPI / aiohttp</td></tr>
+  <tr><td>插件安装器</td><td>⭐⭐⭐ <code>tar</code> + <code>zod</code> 校验</td><td>⭐⭐ <code>tarfile</code> + pydantic</td></tr>
+  <tr><td>前端类型共享</td><td>⭐⭐⭐ TS 类型共享（Core ↔ Vue Pane）</td><td>⭐ 无法共享</td></tr>
+  <tr><td>Electron 集成</td><td>⭐⭐⭐ 同语言</td><td>⭐ sidecar 复杂</td></tr>
+  <tr><td>打包</td><td>⭐⭐⭐ 一套 Node</td><td>⭐ PyInstaller 坑</td></tr>
+</table>
+<p><b>结论：Core 用 TS / Node。</b>理由：Core 极薄（进程管理 + 总线 + SSE 桥 + 插件安装），IO 密集、协议密集、胶水密集——这是 TS / Node 的主场。<b>Python 应该作为「某个需要 AI 生态的插件」的实现语言，而不是 Core。</b></p>
+
+<h3>前端选型：Vue 3 + dockview-vue（已确定）</h3>
+<table>
+  <tr><th>层</th><th>推荐</th><th>理由</th></tr>
+  <tr><td>桌面框架</td><td><b>Electron</b></td><td>Node.js 生态，动态加载 JS 插件最容易；<code>BrowserWindow</code> 弹窗机械成熟</td></tr>
+  <tr><td>前端框架</td><td><b>Vue 3 + TypeScript</b></td><td>SFC + <code>&lt;script setup&gt;</code> 类型推导自然，Pinia 简洁；团队熟 Vue</td></tr>
+  <tr><td>构建</td><td><b>Vite</b></td><td>快；插件构建时用 <code>rollupOptions.external</code> 标记共享依赖</td></tr>
+  <tr><td>布局引擎</td><td><b>dockview-vue</b></td><td>官方支持，与 React 版本功能对齐，停靠/拖拽/浮动/序列化完备</td></tr>
+  <tr><td>插件加载</td><td><b>动态 ESM + Import Maps</b></td><td>运行时 <code>import()</code> + 浏览器原生 Import Map 共享 Vue 实例</td></tr>
+  <tr><td>样式隔离</td><td><b>Shadow DOM + CSS 变量</b></td><td>插件 CSS 不污染全局；主题通过 CSS 变量穿透</td></tr>
+  <tr><td>状态</td><td><b>Pinia</b></td><td>Vue 官方状态库，简洁</td></tr>
+  <tr><td>跨窗通信</td><td><b>BroadcastChannel</b></td><td>同源零配置（<code>osteosome:ctx</code> / <code>osteosome:ui</code>）</td></tr>
+  <tr><td>数据流</td><td><b>SSE + HTTP POST</b></td><td>单向优先，服务端真源</td></tr>
+</table>
+
+<div class="callout decided">
+  <b>React vs Vue 的决策已尘埃落定：Vue 3 + dockview-vue。</b>
+  <p><code>dockview-vue</code> 是 dockview 官方支持，功能与 React 版对齐。<b>「Vue 生态缺停靠布局库」的说法不成立。</b>团队熟 Vue，长期开发效率显著更高。</p>
+</div>
+
+<h3>SDK 多语言路线</h3>
+<table>
+  <tr><th>语言</th><th>阶段</th><th>理由</th></tr>
+  <tr><td><b>TS</b></td><td>阶段 2</td><td>和 Core 同语言，复用同一份类型定义；官方插件全部用它</td></tr>
+  <tr><td><b>Python</b></td><td>阶段 3</td><td>AI / 数据处理生态；验证协议中立性</td></tr>
+  <tr><td><b>Rust</b></td><td>阶段 4</td><td>性能敏感服务；或复用已有 Rust 库</td></tr>
+  <tr><td><b>Go</b></td><td>阶段 4</td><td>并发密集服务；或团队已有 Go 代码</td></tr>
+</table>
+
+<!-- ============ 20 总结 ============ -->
+<h2 id="summary-end"><span class="no">20</span> 总结</h2>
+<div class="callout server">
+  <b>Osteosome v3 的架构本质：微内核 + 全外部插件 + 可观察总线。</b>
+  <p><b>骨架只有两样</b>：Core（进程管理 + 总线 + SSE 桥 + 插件安装）和前端 Shell（PaneHost + Layout + SSE 单例 + 通用 UI）。</p>
+  <p><b>其余全是外部插件</b>：LLM / Loop / 角色 / 统计 / 聊天 / 服务商 / 第三方，统一走 <code>.ostpkg</code> 安装流程，统一放 <code>&lt;dataDir&gt;/plugins/</code>，统一运行时加载。</p>
+  <p><b>前端（Vue 3 + dockview-vue）</b>：Pane 订阅 SSE，POST 发命令，布局可序列化，可拉出独立窗，Shadow DOM 隔离样式。</p>
+</div>
+
+<p><b>插件 = 独立进程或独立 ESM bundle + manifest + 事件契约</b>。新增一个插件 = 新增一个 <code>.ostpkg</code>。<b>官方插件与第三方插件完全平等</b>——前者随安装包预置在 <code>seed/</code>，首次启动自动安装。</p>
+
+<div class="grid-3" style="margin-top:16px;">
+  <div class="card">
+    <h3>最低可交付 = 阶段 1-2</h3>
+    <p>Core 骨架 + PluginInstaller + seed 预置 + LLM 插件跑通 + 前端 SSE 收到流。<b>约 3 周</b>。</p>
+  </div>
+  <div class="card">
+    <h3>完整工作台 = 阶段 3</h3>
+    <p>全部插件拆分、统计旁路验证、Vue 工作台化、插件管理 UI。<b>约 6 周</b>。</p>
+  </div>
+  <div class="card">
+    <h3>远期愿景 = 阶段 4</h3>
+    <p>事件持久化 + 回放、多语言 SDK、签名 + 沙箱、服务市场。</p>
+  </div>
+</div>
+
+<div class="warning">
+  <b>下一步建议：</b>
+  <ol style="margin-top:6px;">
+    <li>先落 <b>阶段 1</b>：进程内 ctx + 总线雏形 + LifecyclePlugin 化。</li>
+    <li>再落 <b>阶段 2</b>：Core 骨架 + PluginInstaller + seed 预置 + 第一个外部插件（LLM）+ 前端动态加载，验证端到端流。</li>
+    <li>阶段 3 之前先做 <b>Vue 前端 Shell 骨架</b>（1-2 天）：用 dockview-vue + Import Map + Shadow DOM 跑通「动态加载一个 pane」。</li>
+    <li>阶段 4（签名、沙箱、服务市场）独立成 RFC 细化。</li>
+  </ol>
+</div>
+
+<div class="footer">
+  Osteosome（ost）开发文档 · 微内核架构设计汇报 v3（承自天枢 TianShu，更名中）· 基于 <code>ost-开发文档.md</code>（v3）、<code>ost-core-rfc.md</code>（Core 独立 RFC）· 参考：Docs of DeepSeek Harness「Everything is a Plugin」/ Cordis Primer / dockview 文档 / 天枢仓 <code>dev/docs/dsh-vs-tianshu-tools.md</code>
+</div>
+
+</body>
+</html>

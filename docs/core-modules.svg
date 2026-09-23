@@ -1,0 +1,98 @@
+<svg viewBox="0 0 960 680" style="width:100%;height:auto;display:block;" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="ah-core" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+    </marker>
+    <marker id="ah-core-up" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#39c5cf"/>
+    </marker>
+    <marker id="ah-core-down" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f0883e"/>
+    </marker>
+  </defs>
+
+  <!-- 标题 -->
+  <text x="40" y="24" font-size="12" font-weight="600" fill="#8b949e">Core 内部模块依赖 · ServiceManager 与 SseBridge 都依赖 Bus，彼此不直连</text>
+
+  <!-- Bus 顶部大条 -->
+  <rect x="60" y="40" width="840" height="110" rx="12" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="480" y="72" text-anchor="middle" font-size="15" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#58a6ff">Bus</text>
+  <text x="480" y="96" text-anchor="middle" font-size="11.5" fill="#e6edf3">publish / subscribe / replay</text>
+  <text x="480" y="116" text-anchor="middle" font-size="10.5" fill="#8b949e">通配符 · 错误隔离 · 背压队列 · 持久化适配器（SQLite / Memory / Null）</text>
+  <text x="480" y="134" text-anchor="middle" font-size="10" fill="#d29922">订阅返回 disposer · 可回卷效果</text>
+
+  <!-- 中央标注：无直连 -->
+  <line x1="440" y1="260" x2="520" y2="260" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="480" y="255" text-anchor="middle" font-size="10" font-weight="700" fill="#f85149">✕ 无直连</text>
+  <text x="480" y="278" text-anchor="middle" font-size="9.5" fill="#f85149">ServiceManager 与 SseBridge</text>
+  <text x="480" y="292" text-anchor="middle" font-size="9.5" fill="#f85149">只通过 Bus 通信</text>
+
+  <!-- ServiceManager -->
+  <rect x="80" y="320" width="340" height="180" rx="10" fill="#161b22" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="250" y="348" text-anchor="middle" font-size="13" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#bc8cff">ServiceManager</text>
+  <text x="250" y="368" text-anchor="middle" font-size="10" fill="#8b949e">进程生命周期</text>
+  <line x1="100" y1="380" x2="400" y2="380" stroke="#30363d" stroke-width="1"/>
+  <text x="100" y="400" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">spawn / kill / 信号</text>
+  <text x="100" y="420" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">manifest 校验 · 拓扑排序</text>
+  <text x="100" y="440" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">健康检查 · 重启策略</text>
+  <text x="100" y="460" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">JSON-RPC stdio 分帧</text>
+  <text x="100" y="480" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#d29922">发布 service.* 生命周期事件</text>
+
+  <!-- SseBridge -->
+  <rect x="540" y="320" width="340" height="180" rx="10" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="710" y="348" text-anchor="middle" font-size="13" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#3fb950">SseBridge</text>
+  <text x="710" y="368" text-anchor="middle" font-size="10" fill="#8b949e">前后端桥</text>
+  <line x1="560" y1="380" x2="860" y2="380" stroke="#30363d" stroke-width="1"/>
+  <text x="560" y="400" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">GET /events (SSE)</text>
+  <text x="560" y="420" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">POST /api/command</text>
+  <text x="560" y="440" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">静态资源托管</text>
+  <text x="560" y="460" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#e6edf3">每连接独立订阅</text>
+  <text x="560" y="480" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">心跳 / 断线重连</text>
+
+  <!-- 箭头：ServiceManager → Bus（publish） -->
+  <line x1="200" y1="320" x2="200" y2="150" stroke="#39c5cf" stroke-width="1.6" marker-end="url(#ah-core-up)"/>
+  <text x="205" y="240" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">bus.publish('service.*')</text>
+
+  <!-- 箭头：Bus → ServiceManager（push） -->
+  <line x1="300" y1="150" x2="300" y2="320" stroke="#f0883e" stroke-width="1.6" marker-end="url(#ah-core-down)"/>
+  <text x="295" y="245" text-anchor="end" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#f0883e">bus.event → stdio</text>
+
+  <!-- 箭头：SseBridge → Bus（command） -->
+  <line x1="640" y1="320" x2="640" y2="150" stroke="#39c5cf" stroke-width="1.6" marker-end="url(#ah-core-up)"/>
+  <text x="645" y="240" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">bus.publish（command）</text>
+
+  <!-- 箭头：Bus → SseBridge（push） -->
+  <line x1="780" y1="150" x2="780" y2="320" stroke="#f0883e" stroke-width="1.6" marker-end="url(#ah-core-down)"/>
+  <text x="775" y="245" text-anchor="end" font-size="10.5" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#f0883e">bus.event → SSE</text>
+
+  <!-- 服务进程 -->
+  <rect x="80" y="560" width="340" height="90" rx="10" fill="#161b22" stroke="#f0883e" stroke-width="1.2"/>
+  <text x="250" y="588" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#f0883e">服务进程</text>
+  <text x="250" y="610" text-anchor="middle" font-size="10.5" fill="#8b949e">LLM / Loop / 角色 / 统计</text>
+  <text x="250" y="630" text-anchor="middle" font-size="10.5" fill="#8b949e">任意语言：TS / Python / Rust</text>
+
+  <!-- 前端 -->
+  <rect x="540" y="560" width="340" height="90" rx="10" fill="#161b22" stroke="#39c5cf" stroke-width="1.2"/>
+  <text x="710" y="588" text-anchor="middle" font-size="12" font-weight="700" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#39c5cf">前端 Pane</text>
+  <text x="710" y="610" text-anchor="middle" font-size="10.5" fill="#8b949e">EventSource / fetch</text>
+  <text x="710" y="630" text-anchor="middle" font-size="10.5" fill="#8b949e">Vue 3 + dockview-vue</text>
+
+  <!-- 箭头：ServiceManager → 服务进程 -->
+  <line x1="200" y1="500" x2="200" y2="560" stroke="#8b949e" stroke-width="1.4" marker-end="url(#ah-core)"/>
+  <text x="205" y="535" font-size="10" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#8b949e">JSON-RPC</text>
+
+  <!-- 箭头：服务进程 → ServiceManager -->
+  <line x1="300" y1="560" x2="300" y2="500" stroke="#8b949e" stroke-width="1.4" marker-end="url(#ah-core)"/>
+  <text x="295" y="535" text-anchor="end" font-size="10" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#8b949e">bus.publish</text>
+
+  <!-- 箭头：SseBridge → 前端 -->
+  <line x1="640" y1="500" x2="640" y2="560" stroke="#8b949e" stroke-width="1.4" marker-end="url(#ah-core)"/>
+  <text x="645" y="535" font-size="10" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#8b949e">SSE</text>
+
+  <!-- 箭头：前端 → SseBridge -->
+  <line x1="780" y1="560" x2="780" y2="500" stroke="#8b949e" stroke-width="1.4" marker-end="url(#ah-core)"/>
+  <text x="775" y="535" text-anchor="end" font-size="10" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#8b949e">HTTP POST</text>
+
+  <!-- 图例 -->
+  <rect x="60" y="660" width="840" height="0" fill="none"/>
+</svg>
