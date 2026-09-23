@@ -1,0 +1,10 @@
+packages:
+  - core
+  - shared
+  - sdk/ts
+  - services/*
+
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: true

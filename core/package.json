@@ -1,0 +1,21 @@
+{
+  "name": "@osteosome/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Osteosome microkernel — Bus + ServiceManager + SseBridge",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}
