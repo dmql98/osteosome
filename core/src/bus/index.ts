@@ -1,0 +1,6 @@
+export { Bus } from './bus'
+export type { BusOptions, BusStats } from './bus'
+export { matchPattern } from './pattern'
+export { MemoryAdapter, NullAdapter } from './persistence'
+export type { PersistenceAdapter } from './persistence'
+export type { EventRecord, PublishOptions, SubscribeOptions } from './types'
