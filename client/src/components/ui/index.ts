@@ -12,6 +12,7 @@ import Modal from './Modal.vue'
 import Select from './Select.vue'
 import Spinner from './Spinner.vue'
 import Switch from './Switch.vue'
+import Tab from './Tab.vue'
 import Table from './Table.vue'
 import Tabs from './Tabs.vue'
 import Textarea from './Textarea.vue'
@@ -21,7 +22,7 @@ import PageHeader from '../layout/PageHeader.vue'
 import Section from '../layout/Section.vue'
 import SplitPane from '../layout/SplitPane.vue'
 
-export { Button, Card, Checkbox, Dropdown, Drawer, EmptyState, IconButton, Input, List, Modal, Select, Spinner, Switch, Table, Tabs, Textarea, Toast, Tooltip, PageHeader, Section, SplitPane }
+export { Button, Card, Checkbox, Dropdown, Drawer, EmptyState, IconButton, Input, List, Modal, Select, Spinner, Switch, Tab, Table, Tabs, Textarea, Toast, Tooltip, PageHeader, Section, SplitPane }
 
 export const UiPlugin: Plugin = {
   install(app: App) {
@@ -38,6 +39,7 @@ export const UiPlugin: Plugin = {
     app.component('UiSelect', Select)
     app.component('UiSpinner', Spinner)
     app.component('UiSwitch', Switch)
+    app.component('UiTab', Tab)
     app.component('UiTable', Table)
     app.component('UiTabs', Tabs)
     app.component('UiTextarea', Textarea)

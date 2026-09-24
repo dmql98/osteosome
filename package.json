@@ -2,6 +2,7 @@
   "name": "osteosome",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@11.1.2",
   "description": "Osteosome monorepo root — Core microkernel + services + shared contract",
   "type": "commonjs",
   "scripts": {

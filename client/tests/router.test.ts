@@ -21,12 +21,11 @@ describe('router · 三入口', () => {
     expect(wrapper.find('.top-bar').exists()).toBe(true)
   })
 
-  it('/pane/:id 命中 PaneHost 且渲染 pane id', async () => {
-    const { router, wrapper } = await mountAt('/pane/pane.hello')
+  it('/pane/:id 命中 PanelHost 且渲染面板 id', async () => {
+    const { router, wrapper } = await mountAt('/pane/panel.main?w=widget.service-status')
     expect(router.currentRoute.value.name).toBe('pane')
-    expect(router.currentRoute.value.params.id).toBe('pane.hello')
-    expect(wrapper.find('.pane-host__bar').text()).toContain('Hello')
-    expect(wrapper.find('.pane-host__bar').text()).toContain('pane.hello')
+    expect(router.currentRoute.value.params.id).toBe('panel.main')
+    expect(wrapper.find('.panel-host__bar').text()).toContain('panel.main')
   })
 
   it('未匹配路径重定向到主窗', async () => {
@@ -44,7 +43,7 @@ describe('App 装配纪律', () => {
     })
     expect(wrapper.find('.router-view-stub').exists()).toBe(true)
     expect(wrapper.find('.top-bar').exists()).toBe(false)
-    expect(wrapper.find('.pane-host').exists()).toBe(false)
+    expect(wrapper.find('.panel-host').exists()).toBe(false)
   })
 })
 

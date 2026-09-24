@@ -1,12 +1,7 @@
-import type { Component } from 'vue'
+/** dockview 面板容器组件名（所有面板都是它，差异在 params.widgets） */
+export const PANEL_COMPONENT = 'panel'
 
-export interface PaneDefinition {
-  id: string
-  title: string
-  icon?: string
-  component: () => Promise<{ default: Component }>
-  defaultSlot?: { area: 'left' | 'right' | 'bottom'; index: number }
-  windowable?: boolean
-  minSize?: { w: number; h: number }
-  onBeforeClose?: () => boolean | Promise<boolean>
+/** 面板容器参数：内部承载的组件（widget）id 列表 */
+export interface PanelParams {
+  widgets?: string[]
 }

@@ -21,6 +21,14 @@ if (typeof window.matchMedia !== 'function') {
   })) as unknown as typeof window.matchMedia
 }
 
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe(): void { /* test stub */ }
+    unobserve(): void { /* test stub */ }
+    disconnect(): void { /* test stub */ }
+  } as unknown as typeof ResizeObserver
+}
+
 afterEach(() => {
   document.body.innerHTML = ''
 })

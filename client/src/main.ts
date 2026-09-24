@@ -6,6 +6,7 @@ import { UiPlugin } from './components/ui'
 import './styles/tokens.css'
 import './styles/base.css'
 import 'dockview-vue/dist/styles/dockview.css'
+import 'vue-movable-box/style.css'
 
 const app = createApp(App)
 app.use(createPinia())

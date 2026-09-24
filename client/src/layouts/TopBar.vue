@@ -6,16 +6,25 @@
       <span class="top-bar__status-count">服务 {{ services.readyCount }}/{{ services.totalCount }}</span>
     </div>
     <div class="top-bar__actions">
+      <Button size="sm" variant="ghost" @click="layout.newPanel">新建面板</Button>
+      <Dropdown :items="widgetItems" @select="layout.addWidget">
+        <template #trigger>添加组件</template>
+      </Dropdown>
       <button class="top-bar__mode" type="button" @click="toggleMode">{{ layout.mode === 'edit' ? '进入运行' : '返回编辑' }}</button>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useLayoutStore } from '../layout/layout.store'
 import { useServiceStatus } from '../core-sdk/useServiceStatus'
+import Dropdown from '../components/ui/Dropdown.vue'
+import Button from '../components/ui/Button.vue'
+import { listWidgets } from '../widgets/registry'
 const layout = useLayoutStore()
 const services = useServiceStatus()
+const widgetItems = computed(() => listWidgets().map((widget) => ({ label: widget.title, value: widget.id })))
 function toggleMode(): void { layout.setMode(layout.mode === 'edit' ? 'runtime' : 'edit') }
 </script>
 

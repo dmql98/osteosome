@@ -15,8 +15,11 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/pane/:id',
     name: 'pane',
-    component: () => import('./panes/PaneHost.vue'),
-    props: true,
+    component: () => import('./panes/PanelHost.vue'),
+    props: (route) => ({
+      id: String(route.params.id),
+      widgets: String(route.query.w ?? '').split(',').map((item) => item.trim()).filter(Boolean),
+    }),
   },
   {
     path: '/:pathMatch(.*)*',

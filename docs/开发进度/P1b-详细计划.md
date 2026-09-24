@@ -4,6 +4,36 @@
 > 状态：已完成（骨架交付；自动化验证全绿，P1b 手工验收项见 §7） ｜ 作者：dmql ｜ 日期：2026-09-23 ｜ v3 变更：v2「接口化」五处接口级细节 + 三轮 review 补强（Table 组件、import.meta.glob 相对路径、三重围栏解封、组件接口签名）
 > 验收口径：**一个 PR + 全绿 + 可单独 revert**。集成冒烟依赖 **P1a（Core 在场）**。
 
+> **2026-09-24 修订（dockview 原生重构，覆盖本文与之冲突的旧写法）**：按「面板/组件写法全部对齐 dockview、复用其代码与依赖」重构，以下为**现行契约**：
+> - **Pane = dockview 原生组件**：`definePane` 的 `component` 经 `defineAsyncComponent` 注册进 `DockviewVue` 的 `components` 映射，**键 = Pane id**；`addPanel({ id, component: paneId, title })`。**删除** `PaneView.vue`（旧 `params.paneId` 分发层）与 `PANE_VIEW_COMPONENT`。
+> - **布局持久化 = dockview 原生序列化**：直接存 `api.toJSON()` 的 `SerializedDockview`，读回 `api.fromJSON()`。**删除** `layout.model.ts`（`WorkspaceLayout` / `toDockviewGrid` / `fromDockviewGrid`）、`dockview-bridge.ts`、`defaultPanelsFor`；§3.2 的 `layout.store` 以 `snapshot: SerializedDockview | null` + `api` 取代 `workspace`。
+> - **默认布局**：无持久化时用 `panes/default-layout.ts` 的 `applyDefaultLayout(api)` 走原生 `addPanel`（按 `defaultSlot` 排布）。
+> - **表头/动作**：`PaneFrame.vue` 已删除；表头即 dockview 原生 tab，`PaneHeaderActions.vue` 经 `rightHeaderActionsComponent` 注入（重置 = `store.resetLayout()`：`api.clear()` + `applyDefaultLayout`）。
+> - **失效的不变式**：旧「不持久化 dockview 内部序列化格式」作废——现在**正是**持久化 `SerializedDockview`。§1 目录树中 `panes/PaneView.vue`、`panes/PaneFrame.vue`、`layout/layout.model.ts`、`layout/dockview-bridge.ts` 均不再存在。
+> - 其余（`definePane` 元数据、编辑/运行双模式、`core-sdk`、`PaneHost` 弹窗、`window-manager`）不变；`PaneHost` 直接渲染 `paneComponent(definition)`，不再经 `PaneView`。
+>
+> **2026-09-24 二轮修订（以组件为最小单位，覆盖上条与旧契约）**：
+> - **最小单位从 panel 下沉为 widget（组件）**：新增 `widgets/`（`defineWidget` + `registry`，`import.meta.glob('./*/*-widget.vue')`），内置 `widget.service-status`、`widget.hello-command`。
+> - **panel 只是容器**：所有 dockview 面板 `component = 'panel'`（`PANEL_COMPONENT`），由 `panes/PanelContainer.vue` 渲染 `params.widgets: string[]`（垂直堆叠 + 每组件小标题）。`panes/types.ts` 定义 `PANEL_COMPONENT` + `PanelParams`。
+> - **`definePane` 抽象废弃**：`panes/registry.ts`（旧 Pane 注册表）、`features/*`、`panes/PaneHost.vue` 删除；弹窗改为 `panes/PanelHost.vue`（`#/pane/:panelId?w=widgetA,widgetB`）。
+> - **表头/窗口**：`panes/PanelHeaderActions.vue`（重置 / 拉出 / 关闭），`window-manager.openPanelWindow(panelId, widgetIds)`。
+> - **默认布局**：`panes/default-layout.ts` 建一个承载全部默认组件的 `panel.main`。
+> - **store**：`addWidget(paneId)`（放进当前激活面板）/`newPanel()`（原生 `addPanel({component:'panel', params:{widgets:[]}})`）/`resetLayout()`。
+> - TopBar：`新建面板` + `添加组件`（组件下拉）。
+>
+> **2026-09-24 三轮修订（面板内组件可拖拽换位）**：
+> - 面板容器 `PanelContainer.vue` **内部改用 dockview 的 `GridviewVue`（`gridview`）** 承载组件：每个 widget 是一个 inner gridview panel（`component:'WidgetHost'`），可**拖拽换位 / 调整比例**，网格引擎复用 dockview。
+> - 面板内布局随外层序列化：`persist()` 把 inner `api.toJSON()` 写入面板 `params.layout`，`sync()` 优先 `fromJSON(saved)` 还原（含位置与尺寸）；`updateParameters` 后派发 `osteosome:panel-layout` 让 `DockviewLayout` 落盘外层 `toJSON()`。
+> - 组件渲染下沉到 `panes/WidgetHost.vue`（`params.widgetId`）；`PanelContainer` 仅负责内层网格与持久化。
+> - 单组件面板隐藏内层分隔条（`.panel-grid--single`）。
+>
+> **2026-09-24 四轮修订（面板内改用 vue-movable-box）**：
+> - 面板容器 `PanelContainer.vue` 内层由 `GridviewVue` 换成 **`vue-movable-box` 的 `MovableBox`**：每个 widget = 一个可自由拖动/缩放的盒子（绝对定位 + 8 向 resize + snap）。
+> - 每个 widget 的几何（`left/top/width/height/zIndex`）存进面板 `params.layout[widgetId]`（`@drag-stop`/`@resize-stop` → `updateParameters` + `osteosome:panel-layout`），刷新 `fromJSON` 还原。
+> - 新增依赖 `vue-movable-box`（`pnpm --filter @osteosome/client add vue-movable-box`），样式 `vue-movable-box/style.css` 在 `main.ts` 引入。
+> - **注意**：不要给 `MovableBox` 传 `theme`/`inActiveColor` 为非字面量（如 CSS `var()`），否则库内部几何/配色解析异常导致拖动失效。
+> - `WidgetHost.vue` 仍负责按 `widgetId` 渲染组件（外层 issue：`params` 形如 `{ params:{...}, api, containerApi }`，组件内做了两种形状兼容）。
+
 ---
 
 ## 0. 目标与范围
