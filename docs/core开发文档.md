@@ -779,13 +779,13 @@ sdk/
 
 > 含 2 处小补强：framing 非法 `Content-Length` → 丢帧 + 打日志不关连接；sse 90s 无有效写 → 断僵尸连接（客户端 EventSource 自动重连兜底）。见 `docs/开发进度/P1a-详细计划.md` 附录 A。
 
-- [ ] `core/src/bus/` —— publish / subscribe / replay、通配符、背压、`stats()`、持久化适配器（Memory / Null，SQLite 延后）
-- [ ] `core/src/service-manager/` —— manifest 校验、拓扑排序、spawn / kill、健康检查、重启策略、优雅停止
-- [ ] `core/src/service-manager/jsonrpc/` —— Content-Length 分帧 + 握手 + 方法集
-- [ ] `core/src/sse-bridge/` —— `/events` + `/api/command` + `/api/preferences` + 静态资源
-- [ ] `sdk/ts/` —— Service / transport / handshake / heartbeat / logger
-- [ ] `shared/events.ts` —— 首批事件类型定义
-- [ ] **绿灯**：Core 单元测试（bus / manager / sse）全绿 + `build` 零错误 + hello-world TS 服务端到端（/health 可接、spawn、事件推流）
+- [x] `core/src/bus/` —— publish / subscribe / replay、通配符、背压、`stats()`、持久化适配器（Memory / Null，SQLite 延后）
+- [x] `core/src/service-manager/` —— manifest 校验、拓扑排序、spawn / kill、健康检查、重启策略、优雅停止
+- [x] `core/src/service-manager/jsonrpc/` —— Content-Length 分帧 + 握手 + 方法集
+- [x] `core/src/sse-bridge/` —— `/events` + `/api/command` + `/api/preferences` + 静态资源
+- [x] `sdk/ts/` —— Service / transport / handshake / heartbeat / logger
+- [x] `shared/events.ts` —— 首批事件类型定义
+- [x] **绿灯**：Core 单元测试（bus / manager / sse）全绿 + `build` 零错误 + hello-world TS 服务端到端（/health 可接、spawn、事件推流）
 
 ### P1b · Pane 工作台骨架 + 通用组件库（2-3 周）
 

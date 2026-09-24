@@ -1,0 +1,12 @@
+{
+  "id": "hello",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "hello.command.started",
+    "hello.command.executed",
+    "hello.command.failed"
+  ],
+  "subscribes": ["hello.command"]
+}

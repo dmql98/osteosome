@@ -61,3 +61,21 @@ export type EventPayload<T extends EventKey> = EventMap[T]
 
 /** 命令 payload 依 topic 自动推导 */
 export type CommandPayload<T extends CommandKey> = CommandMap[T]
+
+/**
+ * 运行时事件 topic 清单 —— 与 {@link EventMap} 保持同步（只增不改纪律）。
+ * Core 用它在服务启动前做 manifest 事件一致性校验（fail fast）。
+ */
+export const EVENT_TOPICS = [
+  'service.starting',
+  'service.ready',
+  'service.restarting',
+  'service.failed',
+  'service.stopped',
+  'hello.command.started',
+  'hello.command.executed',
+  'hello.command.failed',
+] as const satisfies readonly EventKey[]
+
+/** 运行时命令 topic 清单 —— 与 {@link CommandMap} 同步；服务 manifest 的 subscribes 可引用命令 */
+export const COMMAND_TOPICS = ['hello.command'] as const satisfies readonly CommandKey[]

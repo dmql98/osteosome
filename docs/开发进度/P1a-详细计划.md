@@ -1,7 +1,7 @@
 # P1a 详细计划 · Core 微内核 + hello-world 服务
 
 > 归属：`阶段追踪.md` 里程碑 **P1a** ｜ 上游：`../core开发文档.md`（Core RFC §2-§8）
-> 状态：计划就绪，待开工 ｜ 作者：dmql ｜ 日期：2026-09-23
+> 状态：已完成（2026-09-24 绿灯全过） ｜ 作者：dmql ｜ 日期：2026-09-23
 > 验收口径：**一个 PR + 全绿 + 可单独 revert**
 
 ---
@@ -137,70 +137,70 @@ services/hello/
 
 ### WS-1 · 脚手架就位（0.5d）
 
-- [ ] 根 `package.json`（private）+ `pnpm-workspace.yaml` + `tsconfig.base.json`（strict） + `.gitignore`
-- [ ] 四个 workspace 的 `package.json` / `tsconfig.json` 对齐（路径 `../../tsconfig.base.json`）
-- [ ] 引入 vitest + typescript，版本锁在一个 json（root devDependencies）
-- [ ] **子绿灯**：`pnpm install` 干净；每个 workspace `tsc --noEmit` 零错误（空壳）
+- [x] 根 `package.json`（private）+ `pnpm-workspace.yaml` + `tsconfig.base.json`（strict） + `.gitignore`
+- [x] 四个 workspace 的 `package.json` / `tsconfig.json` 对齐（路径 `../../tsconfig.base.json`）
+- [x] 引入 vitest + typescript，版本锁在一个 json（root devDependencies）
+- [x] **子绿灯**：`pnpm install` 干净；每个 workspace `tsc --noEmit` 零错误（空壳）
 
 ### WS-2 · Bus 模块（2d）
 
-- [ ] `shared/src/events.ts` —— 首批 EventMap（见 §3）
-- [ ] `core/src/bus/types.ts` —— EventKey / EventPayload / EventBase（`ts`/`source` 必填）
-- [ ] `core/src/bus/pattern.ts` —— 通配符：`*` 单段 / `**` 多段 / 裸 `*` 全量
-- [ ] `core/src/bus/persistence.ts` —— MemoryAdapter（Array 存储）/ NullAdapter（不下发）；接口预留 SqliteAdapter
-- [ ] `core/src/bus/bus.ts` ——
+- [x] `shared/src/events.ts` —— 首批 EventMap（见 §3）
+- [x] `core/src/bus/types.ts` —— EventKey / EventPayload / EventBase（`ts`/`source` 必填）
+- [x] `core/src/bus/pattern.ts` —— 通配符：`*` 单段 / `**` 多段 / 裸 `*` 全量
+- [x] `core/src/bus/persistence.ts` —— MemoryAdapter（Array 存储）/ NullAdapter（不下发）；接口预留 SqliteAdapter
+- [x] `core/src/bus/bus.ts` ——
   - `publish`：同步返回、异步投递（微任务）；`persist` 由 `persist:true` 或 topic 前缀白名单决定
   - `subscribe`：`once` / `priority` / `filter`；返回 disposer
   - 背压队列上限默认 10000，超限丢最旧并计 `stats.dropped`
   - 错误隔离：handler 抛错 → 日志 → 继续下一个
   - `replay`：基于持久化适配器的 AsyncIterable；`stats()`；`ready()`
-- [ ] `tests/bus.test.ts` + `tests/pattern.test.ts` —— 见 §4
+- [x] `tests/bus.test.ts` + `tests/pattern.test.ts` —— 见 §4
 
 ### WS-3 · ServiceManager 模块（3d）
 
-- [ ] `shared/src/manifest.ts` —— Zod schema：必填 `id/version/protocolVersion/entry/publishes/subscribes`；`inject/panes/healthCheck/restartPolicy` 可缺省；`writableDirs?: string[]` 可选（声明 `services/<id>/` 下额外子目录，缺省只允许该目录根，见 §3.1）
-- [ ] `shared/src/protocol.ts` —— 方法集常量 + `PROTOCOL_VERSION`
-- [ ] `core/src/service-manager/jsonrpc/framing.ts` —— 解码：流式累积 `Content-Length\r\n\r\n` 消息体，处理粘包 / 拆包 / UTF-8 跨块；编码：`Content-Length` 头；非法 `Content-Length`（非数字 / 超上限 / 头解析失败）→ **关闭该服务的 stdio 连接 + 打日志 + Core 标记该服务 `failed` 触发重启**（对齐 LSP 规范：头解析失败后流已不可信，**不重对齐**——消息体内可能恰好含 `Content-Length:` 字符串被误判为新帧头）〔补强 ①，二轮 review 改为关连接策略〕
-- [ ] `core/src/service-manager/jsonrpc/protocol.ts` —— 方法集定义（RFC §3.5）；`initialize` 响应含 **`dataDir`**（数据根目录）+ `sessionId` + `heartbeatInterval`（见 §3.1）
-- [ ] `core/src/service-manager/jsonrpc/client.ts` —— 请求 / 通知 / 响应配对（`id`），超时判定，pending 表
-- [ ] `core/src/service-manager/process.ts` —— spawn（Windows-safe：直接 `node <abs path>`，不用 shell）；kill；SIGTERM→等→SIGKILL
-- [ ] `core/src/service-manager/topology.ts` —— inject → 有向图；环 → 拒绝启动（fail fast）
-- [ ] `core/src/service-manager/manifest.ts` —— 扫 `services/*/service.json` + 校验（schema / protocolVersion / 事件一致性）
-- [ ] `core/src/service-manager/health.ts` —— interval 发 `health.ping`，timeout 判失败；连续失败 N 次 → kill 重启；超 `maxRestarts` → `failed`；backoff exponential/fixed
-- [ ] `core/src/service-manager/manager.ts` —— 启动顺序（拓扑序、逐个握手、注册、心跳）、`service.*` 事件发布、`restart` 热插拔、逆序停止
-- [ ] `tests/manager.test.ts` —— 见 §4
+- [x] `shared/src/manifest.ts` —— Zod schema：必填 `id/version/protocolVersion/entry/publishes/subscribes`；`inject/panes/healthCheck/restartPolicy` 可缺省；`writableDirs?: string[]` 可选（声明 `services/<id>/` 下额外子目录，缺省只允许该目录根，见 §3.1）
+- [x] `shared/src/protocol.ts` —— 方法集常量 + `PROTOCOL_VERSION`
+- [x] `core/src/service-manager/jsonrpc/framing.ts` —— 解码：流式累积 `Content-Length\r\n\r\n` 消息体，处理粘包 / 拆包 / UTF-8 跨块；编码：`Content-Length` 头；非法 `Content-Length`（非数字 / 超上限 / 头解析失败）→ **关闭该服务的 stdio 连接 + 打日志 + Core 标记该服务 `failed` 触发重启**（对齐 LSP 规范：头解析失败后流已不可信，**不重对齐**——消息体内可能恰好含 `Content-Length:` 字符串被误判为新帧头）〔补强 ①，二轮 review 改为关连接策略〕
+- [x] `core/src/service-manager/jsonrpc/protocol.ts` —— 方法集定义（RFC §3.5）；`initialize` 响应含 **`dataDir`**（数据根目录）+ `sessionId` + `heartbeatInterval`（见 §3.1）
+- [x] `core/src/service-manager/jsonrpc/client.ts` —— 请求 / 通知 / 响应配对（`id`），超时判定，pending 表
+- [x] `core/src/service-manager/process.ts` —— spawn（Windows-safe：直接 `node <abs path>`，不用 shell）；kill；SIGTERM→等→SIGKILL
+- [x] `core/src/service-manager/topology.ts` —— inject → 有向图；环 → 拒绝启动（fail fast）
+- [x] `core/src/service-manager/manifest.ts` —— 扫 `services/*/service.json` + 校验（schema / protocolVersion / 事件一致性）
+- [x] `core/src/service-manager/health.ts` —— interval 发 `health.ping`，timeout 判失败；连续失败 N 次 → kill 重启；超 `maxRestarts` → `failed`；backoff exponential/fixed
+- [x] `core/src/service-manager/manager.ts` —— 启动顺序（拓扑序、逐个握手、注册、心跳）、`service.*` 事件发布、`restart` 热插拔、逆序停止
+- [x] `tests/manager.test.ts` —— 见 §4
 
 ### WS-4 · SseBridge 模块（1.5d）
 
-- [ ] `config/config.ts` + `paths.ts` —— 从 CLI / env 解析 `--services` / `--data` / `--dist` / `--port`（默认 1420）
-- [ ] `sse-bridge/server.ts` —— node:http；路由 `/events` `/api/command` `/api/preferences` `/health` `/*`；`GET /health` 返回 `{ ok, uptime, services: list() }`；**Origin 白名单**（`/events` + 全部 `/api/*`）：放行 `http://127.0.0.1:1420` / `http://localhost:1420` / **不带 `Origin` 头**（非浏览器，如 msw / curl / Node fetch）/ **`Origin: null`**（`file://` 页面、Electron 部分场景），其余（其他 http(s) 源）→ 403——防任意网页 `fetch('http://127.0.0.1:1420/api/...')` 打本机（P4 凭证 CSRF 同源生效，但白名单是 P1a 一次加全局覆盖）
-- [ ] `sse-bridge/sse.ts` —— 每连接 = 一个过滤后的 Bus 订阅；`?topics=` 逗号分隔；统一 `event: message` + body 内带 `topic`；30s 心跳注释行；连接关闭 → dispose；预留 `Last-Event-ID`；**90s 无有效写 → 主动断僵尸连接**（TCP 静默断开兜底，客户端 EventSource 自动重连）〔补强 ②〕
-- [ ] `sse-bridge/command.ts` —— POST → `202 Accepted` → `bus.publish(topic, payload)`
-- [ ] `sse-bridge/preferences.ts` —— GET/PUT，dataDir 下 JSON 文件（P1b 布局使用）
-- [ ] `sse-bridge/static.ts` —— 静态目录存在则 serve，否则回 `index.html` 占位
-- [ ] `logger.ts` —— 统一日志（含帧错误、背压丢弃、服务事件）
-- [ ] `tests/sse.test.ts` —— 见 §4
+- [x] `config/config.ts` + `paths.ts` —— 从 CLI / env 解析 `--services` / `--data` / `--dist` / `--port`（默认 1420）
+- [x] `sse-bridge/server.ts` —— node:http；路由 `/events` `/api/command` `/api/preferences` `/health` `/*`；`GET /health` 返回 `{ ok, uptime, services: list() }`；**Origin 白名单**（`/events` + 全部 `/api/*`）：放行 `http://127.0.0.1:1420` / `http://localhost:1420` / **不带 `Origin` 头**（非浏览器，如 msw / curl / Node fetch）/ **`Origin: null`**（`file://` 页面、Electron 部分场景），其余（其他 http(s) 源）→ 403——防任意网页 `fetch('http://127.0.0.1:1420/api/...')` 打本机（P4 凭证 CSRF 同源生效，但白名单是 P1a 一次加全局覆盖）
+- [x] `sse-bridge/sse.ts` —— 每连接 = 一个过滤后的 Bus 订阅；`?topics=` 逗号分隔；统一 `event: message` + body 内带 `topic`；30s 心跳注释行；连接关闭 → dispose；预留 `Last-Event-ID`；**90s 无有效写 → 主动断僵尸连接**（TCP 静默断开兜底，客户端 EventSource 自动重连）〔补强 ②〕
+- [x] `sse-bridge/command.ts` —— POST → `202 Accepted` → `bus.publish(topic, payload)`
+- [x] `sse-bridge/preferences.ts` —— GET/PUT，dataDir 下 JSON 文件（P1b 布局使用）
+- [x] `sse-bridge/static.ts` —— 静态目录存在则 serve，否则回 `index.html` 占位
+- [x] `logger.ts` —— 统一日志（含帧错误、背压丢弃、服务事件）
+- [x] `tests/sse.test.ts` —— 见 §4
 
 ### WS-5 · TS SDK（1.5d）
 
-- [ ] `transport.ts` —— 复用/独立实现 stdio 分帧（与 Core 同一规范，不共享实现）
-- [ ] `handshake.ts` —— 自动发 `initialize`，等响应（超时重试），发 `initialized`；响应里读 **`dataDir`** 挂到 `service.dataDir`（沿同一规范复用，不重复实现）
-- [ ] `heartbeat.ts` —— 收到 `health.ping` 自动 `health.pong`
-- [ ] `service.ts` —— `new Service({ id, version })`；`service.subscribe(topic, handler)` **返回 disposer**（与 Bus 一致，进程退出前自动调用）；`bus.publish(...)`；**暴露 `service.dataDir`**；SIGTERM 优雅退出（停止接收→等完成→`shutdown`）
-- [ ] `logger.ts` —— stderr
-- [ ] `tests/`（SDK 侧）—— transport 分帧对拍 + service 对伪造 Core 的握手/心跳/事件分派
+- [x] `transport.ts` —— 复用/独立实现 stdio 分帧（与 Core 同一规范，不共享实现）
+- [x] `handshake.ts` —— 自动发 `initialize`，等响应（超时重试），发 `initialized`；响应里读 **`dataDir`** 挂到 `service.dataDir`（沿同一规范复用，不重复实现）
+- [x] `heartbeat.ts` —— 收到 `health.ping` 自动 `health.pong`
+- [x] `service.ts` —— `new Service({ id, version })`；`service.subscribe(topic, handler)` **返回 disposer**（与 Bus 一致，进程退出前自动调用）；`bus.publish(...)`；**暴露 `service.dataDir`**；SIGTERM 优雅退出（停止接收→等完成→`shutdown`）
+- [x] `logger.ts` —— stderr
+- [x] `tests/`（SDK 侧）—— transport 分帧对拍 + service 对伪造 Core 的握手/心跳/事件分派
 
 ### WS-6 · hello-world 服务 + 端到端（1d）
 
-- [ ] `services/hello/` —— manifest + index.ts：订阅 `hello.command` → 发 `hello.command.started/executed`
-- [ ] `core/tests/e2e.test.ts` —— 见 §4
-- [ ] 冒烟脚本（repo 根 `scripts/smoke.mjs` 或 README 命令）：启动 core → `/health` 可接 → 命令注入 → SSE 收流
+- [x] `services/hello/` —— manifest + index.ts：订阅 `hello.command` → 发 `hello.command.started/executed`
+- [x] `core/tests/e2e.test.ts` —— 见 §4
+- [x] 冒烟脚本（repo 根 `scripts/smoke.mjs` 或 README 命令）：启动 core → `/health` 可接 → 命令注入 → SSE 收流
 
 ### WS-7 · 收尾（0.5d）
 
-- [ ] `../core开发文档.md` §8 勾选 P1a 项
-- [ ] `阶段追踪.md` P1a 状态更新 + 交付物全勾
-- [ ] 绿灯命令全集复跑（见 §5）
+- [x] `../core开发文档.md` §8 勾选 P1a 项
+- [x] `阶段追踪.md` P1a 状态更新 + 交付物全勾
+- [x] 绿灯命令全集复跑（见 §5）
 
 ---
 
