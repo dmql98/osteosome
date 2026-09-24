@@ -67,7 +67,8 @@ export async function performHandshake(rpc: RpcPeer, options: HandshakeOptions):
     try {
       const result = await rpc.request<InitializeResult>(METHODS.initialize, params, timeoutMs)
       assertInitializeResult(result)
-      rpc.notify(METHODS.initialized)
+      // initialized 由 Service.start 在本地订阅补发完成后发送，确保 Core 不会先于
+      // bus.subscribe 宣告 ready，避免启动窗口内首条命令丢失。
       logger.debug(
         `handshake: ok sessionId=${result.sessionId} dataDir=${result.dataDir} heartbeat=${result.heartbeatInterval}ms (attempt ${attempt})`,
       )

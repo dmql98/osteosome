@@ -3,6 +3,7 @@
  * body 形状：`{ topic: string, payload?: object }`；缺 topic / 非法 JSON → 400。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { COMMAND_TOPICS } from '@osteosome/shared'
 import type { Bus } from '../bus/bus'
 import { readJsonBody, sendJson } from './util'
 
@@ -26,6 +27,10 @@ export async function handleCommand(
   const { topic, payload } = body as { topic?: unknown; payload?: unknown }
   if (typeof topic !== 'string' || topic.trim() === '') {
     sendJson(res, 400, { error: 'topic (string) is required' })
+    return
+  }
+  if (!(COMMAND_TOPICS as readonly string[]).includes(topic)) {
+    sendJson(res, 400, { error: `topic '${topic}' is not a command` })
     return
   }
   if (payload !== undefined && (payload === null || typeof payload !== 'object' || Array.isArray(payload))) {

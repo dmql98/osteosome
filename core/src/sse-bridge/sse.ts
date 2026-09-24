@@ -47,6 +47,10 @@ export class SseSession {
   private zombieTimer: NodeJS.Timeout | null = null
   private lastOkAt = Date.now()
   private closed = false
+  /** Node response 缓冲满时，后续事件暂存；达到上限主动断开慢客户端。 */
+  private pendingWrites: string[] = []
+  private writeBlocked = false
+  private readonly maxPendingWrites = 1000
 
   /** 连接关闭时回调（server 从连接表移除） */
   onClosed: (() => void) | null = null
@@ -106,6 +110,8 @@ export class SseSession {
     if (this.closed) return
     this.closed = true
 
+    this.pendingWrites.length = 0
+    this.writeBlocked = false
     this.disposeBus?.()
     this.disposeBus = null
 
@@ -145,8 +151,33 @@ export class SseSession {
   /** 写一帧；成功回调刷新 lastOkAt（失败 = 对端可能已死，留给僵尸检查） */
   private write(chunk: string): void {
     if (this.closed || this.res.writableEnded || this.res.destroyed) return
-    this.res.write(chunk, (err) => {
-      if (!err) this.lastOkAt = Date.now()
+    if (this.writeBlocked) {
+      if (this.pendingWrites.length >= this.maxPendingWrites) {
+        this.close()
+        return
+      }
+      this.pendingWrites.push(chunk)
+      return
+    }
+
+    const accepted = this.res.write(chunk, (err) => {
+      if (err) return
+      this.lastOkAt = Date.now()
     })
+    if (!accepted) {
+      this.writeBlocked = true
+      this.res.once('drain', () => {
+        if (this.closed) return
+        this.writeBlocked = false
+        this.flushPending()
+      })
+    }
+  }
+
+  private flushPending(): void {
+    while (!this.closed && !this.writeBlocked && this.pendingWrites.length > 0) {
+      const next = this.pendingWrites.shift()!
+      this.write(next)
+    }
   }
 }

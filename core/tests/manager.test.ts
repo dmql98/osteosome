@@ -11,7 +11,7 @@ const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixture
 
 const BASE_ENV = {
   FAKE_SERVICE_ID: SERVICE_ID,
-  FAKE_MANIFEST: '{"publishes":[],"subscribes":[],"version":"1.0.0"}',
+  FAKE_MANIFEST: '{"publishes":["hello.command.started"],"subscribes":[],"version":"1.0.0"}',
 }
 
 interface LifecycleEvent {
@@ -38,7 +38,7 @@ function makeManager(options: { maxRestarts?: number; extraEnv?: Record<string, 
       version: '1.0.0',
       protocolVersion: '1.0.0',
       entry: 'node service.mjs',
-      publishes: [],
+      publishes: ['hello.command.started'],
       subscribes: [],
       healthCheck: { interval: 60, timeout: 100 },
     }),

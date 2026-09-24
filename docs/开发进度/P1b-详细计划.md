@@ -1,7 +1,7 @@
 # P1b 详细计划 · Pane 工作台骨架（v3 · 接口化）
 
 > 归属：`阶段追踪.md` 里程碑 **P1b** ｜ 上游：`../core开发文档.md`（§8.6 client / §11 前端工作台）、`../ost-开发文档.md`（§17.2 技术选型 / §11.6 开发合同）
-> 状态：计划就绪，待开工 ｜ 作者：dmql ｜ 日期：2026-09-23 ｜ v3 变更：v2「接口化」五处接口级细节 + 三轮 review 补强（Table 组件、import.meta.glob 相对路径、三重围栏解封、组件接口签名）
+> 状态：已完成（骨架交付；自动化验证全绿，P1b 手工验收项见 §7） ｜ 作者：dmql ｜ 日期：2026-09-23 ｜ v3 变更：v2「接口化」五处接口级细节 + 三轮 review 补强（Table 组件、import.meta.glob 相对路径、三重围栏解封、组件接口签名）
 > 验收口径：**一个 PR + 全绿 + 可单独 revert**。集成冒烟依赖 **P1a（Core 在场）**。
 
 ---
@@ -119,21 +119,25 @@ client/
 
 ### WS-1 · client 骨架（1d）
 
-- [ ] workspace：`package.json` + `vite.config.ts`（见 §3.7）+ `tsconfig.json` + `index.html` + `env.d.ts`
-- [ ] 依赖编排：`vue` / `vue-router` / `pinia` / `dockview-vue`；dev：`vite` / `typescript` / `vue-tsc`；test：`vitest` + `@vue/test-utils` + `jsdom` + `msw`
-- [ ] `main.ts` + `App.vue`（仅 RouterView）+ `router.ts`（三入口，见 §3.5）+ `styles/tokens.css` + `base.css`
-- [ ] `layouts/MainLayout.vue` + `layouts/TopBar.vue` 空壳（先不接 store）
-- [ ] **子绿灯**：`pnpm --filter @osteosome/client dev` 空页可跑；`/` 和 `/pane/foo` 分别命中 MainLayout / PaneHost
+- [x] workspace：`package.json` + `vite.config.ts`（见 §3.7）+ `tsconfig.json` + `index.html` + `env.d.ts`
+- [x] 依赖编排：`vue` / `vue-router` / `pinia` / `dockview-vue`；dev：`vite` / `typescript` / `vue-tsc`；test：`vitest` + `@vue/test-utils` + `jsdom` + `msw`
+- [x] `main.ts` + `App.vue`（仅 RouterView）+ `router.ts`（三入口，见 §3.5）+ `styles/tokens.css` + `base.css`
+- [x] `layouts/MainLayout.vue` + `layouts/TopBar.vue` 空壳（先不接 store）
+- [x] **子绿灯**：`pnpm --filter @osteosome/client dev` 空页可跑；`/` 和 `/pane/foo` 分别命中 MainLayout / PaneHost
+
+> **落地偏差（2026-09-24）**：① `tsconfig.json` 的 `extends` 取 `../tsconfig.base.json`（§1 写的 `../../` 是笔误，`client/` 与 `core/` 同级）；② **vite 锁 `^7`**——8.x 换 rolldown 内核后 `Plugin` 类型与 vitest 3 / `@vitejs/plugin-vue` 6 冲突（TS2769）；③ 实际版本 vue 3.5.43 / vue-router 5.3.1 / pinia 4.0.3 / dockview-vue 8.3.1 / vue-tsc 3.3.11；④ `router.ts` 额外导出 `routes` 与 `createAppRouter(history)`，测试用 memory history 复用同一张路由表（断言 `getRoutes()` 顺序按集合比较）；⑤ pnpm 11 用 `allowBuilds` 放行 esbuild + msw。
 
 ### WS-1b · 通用组件库 ui（2d）
 
 > 评估补强（2026-09-23）：原 P1b 只有 Icon/Button/Toast 三个组件，Pane 空手起会糙。补齐 **18 个 ui + 3 个 layout** 组件（二轮 review 加 `Table`，hello-pane 服务清单 / P4 provider 列表 / P5 角色列表都要用），之后所有 Pane 一律用组件库实现（不再裸写样式）。
 
-- [ ] `components/ui/` —— 18 个基础组件：Button / IconButton / Input / Textarea / Select / Checkbox / Switch / Modal / Drawer / Toast / Tooltip / Dropdown / Tabs / Card / List / **Table** / Spinner / EmptyState；全部消费 `tokens.css`（颜色/间距/圆角/z-index 走 CSS 变量，不 import 自定义 CSS）
-- [ ] `components/ui/index.ts` —— 统一导出 + `app.use(UiPlugin)` 全局注册
-- [ ] `components/layout/` —— PageHeader / Section / SplitPane（页面结构三件套）
-- [ ] 可访问性基线：交互组件键盘可达 + `aria-*`；Popover 类（Tooltip/Dropdown/Modal/Drawer）统一 focus-trap + Esc 关闭
-- [ ] **子绿灯**：每个组件一个测试文件（渲染 / 交互 / v-model / 禁用态最小集）；`tokens.css` 双主题下视觉抽查
+> **进度（2026-09-24）**：已完成 8 个 —— `Spinner` / `Button` / `IconButton` / `Input` / `Textarea` / `Select` / `Checkbox` / `Switch`（各带一个测试文件，覆盖渲染 / 交互 / v-model / 禁用态）。本轮补齐剩余 10 个 UI（`Modal` / `Drawer` / `Toast` / `Tooltip` / `Dropdown` / `Tabs` / `Card` / `List` / `Table` / `EmptyState`）与 3 个 layout 组件（`PageHeader` / `Section` / `SplitPane`），并新增 `components/ui/index.ts` + `UiPlugin`；client 全量测试共 75 条。约定：class 前缀 `ui-`，样式一律 scoped + 只取 `tokens.css` 变量，原生元素优先（`select` / `checkbox` / `textarea`），图标用文本字形（图标包不在 P1b 范围）。
+
+- [x] `components/ui/` —— 18 个基础组件：Button / IconButton / Input / Textarea / Select / Checkbox / Switch / Modal / Drawer / Toast / Tooltip / Dropdown / Tabs / Card / List / **Table** / Spinner / EmptyState；全部消费 `tokens.css`（颜色/间距/圆角/z-index 走 CSS 变量，不 import 自定义 CSS）
+- [x] `components/ui/index.ts` —— 统一导出 + `app.use(UiPlugin)` 全局注册
+- [x] `components/layout/` —— PageHeader / Section / SplitPane（页面结构三件套）
+- [x] 可访问性基线：交互组件键盘可达 + `aria-*`；Popover 类（Tooltip/Dropdown/Modal/Drawer）统一 focus-trap + Esc 关闭
+- [x] **子绿灯**：每个组件一个测试文件（渲染 / 交互 / v-model / 禁用态最小集）；`tokens.css` 双主题下视觉抽查
 
 **接口签名（props / emits / slots 一行摘要）**：
 
@@ -189,52 +193,52 @@ client/
 
 ### WS-3 · core-sdk（1.5d）
 
-- [ ] `sse.ts` —— **单例状态机**（§3.4 完整实现）
+- [x] `sse.ts` —— **单例状态机**（§3.4 完整实现）
   - state：`disconnected | connecting | connected | reconnecting`
   - `subscribe(topic, handler): disposer` / `ensureConnected()` / `close()`
   - topics 集合动态合并；变更时重连（带新 `?topics=`）
   - 分发：`event: message` → 解析 body `{ topic, payload }` → 分发到订阅者
   - 断线重连：浏览器原生 + 90s 无消息主动 close 重建（TCP 静默断开兜底）
-- [ ] `useEventBus(topic, handler)` —— 组件 onMounted 订阅 / onUnmounted 退订；支持通配符透传
-- [ ] `useCommand` —— `POST /api/command`（202 即返回；错误打日志不抛）
-- [ ] `useServiceStatus` —— 订阅 `service.*` → 写 Pinia `serviceStore`（响应式服务状态表）
-- [ ] `usePreferences` —— `GET` / `PUT` 封装
-- [ ] **子绿灯**：core-sdk 单测（注入 `FakeEventSource`，断言单例唯一 / topics 合并只重连一次 / 分发 / 90s 兜底 / 清理）
+- [x] `useEventBus(topic, handler)` —— 组件 onMounted 订阅 / onUnmounted 退订；支持通配符透传
+- [x] `useCommand` —— `POST /api/command`（202 即返回；错误打日志不抛）
+- [x] `useServiceStatus` —— 订阅 `service.*` → 写 Pinia `serviceStore`（响应式服务状态表）
+- [x] `usePreferences` —— `GET` / `PUT` 封装
+- [x] **子绿灯**：core-sdk 单测（注入 `FakeEventSource`，断言单例唯一 / topics 合并只重连一次 / 分发 / 90s 兜底 / 清理）
 
 ### WS-4 · Pane 契约与宿主（2d）
 
-- [ ] `panes/types.ts` —— `PaneDefinition`（§3.1）
-- [ ] `panes/registry.ts` ——
+- [x] `panes/types.ts` —— `PaneDefinition`（§3.1）
+- [x] `panes/registry.ts` ——
   - `definePane(def)`：id 唯一校验、缺 id/title 拒绝（抛错）
   - `import.meta.glob('../features/*/*-pane.vue', { eager: true })` 自动发现（**Vite glob 不支持 `@` 别名**，必须相对 `registry.ts` 的路径）
   - `getPane(id)` / `listPanes()` / `defaultPanelsFor(ws)`
-- [ ] `panes/PaneFrame.vue` —— 标题栏（4 个交互，见 §3.6 wireframe）+ `onBeforeClose` 拦截
-- [ ] `panes/PaneError.vue` —— `defineAsyncComponent` 的 `onError` 兜底，**不改布局**
-- [ ] `panes/PaneHost.vue` —— 弹窗入口：迷你标题栏 + 单 Pane（不带 TopBar / DockviewLayout）；挂载时 `sse.ensureConnected()`
-- [ ] `layout/window-manager.ts` ——
+- [x] `panes/PaneFrame.vue` —— 标题栏（4 个交互，见 §3.6 wireframe）+ `onBeforeClose` 拦截
+- [x] `panes/PaneError.vue` —— `defineAsyncComponent` 的 `onError` 兜底，**不改布局**
+- [x] `panes/PaneHost.vue` —— 弹窗入口：迷你标题栏 + 单 Pane（不带 TopBar / DockviewLayout）；挂载时 `sse.ensureConnected()`
+- [x] `layout/window-manager.ts` ——
   - `open(paneId): Window | null`（同 pane 已开 → 聚焦不重开；**被浏览器弹窗拦截返回 null** → 调用方 Toast 提示「请允许弹窗」）
   - 内部登记 `popups: Map<PaneId, Window>`
   - `popup.onbeforeunload` → 清理登记
-- [ ] **子绿灯**：`definePane` 一个 pane 可停靠；点「拉出」→ `window.open` 打开 `#/pane/<id>`，内容与主窗一致
+- [x] **子绿灯**：`definePane` 一个 pane 可停靠；点「拉出」→ `window.open` 打开 `#/pane/<id>`，内容与主窗一致
 
 ### WS-5 · 首个示例 Pane（1d）
 
-- [ ] `features/hello/hello-pane.vue` —— `definePane` 完整样板（§3.1）；**全部用 WS-1b 组件库渲染**（Table/List/Card/Button/EmptyState/Spinner）
+- [x] `features/hello/hello-pane.vue` —— `definePane` 完整样板（§3.1）；**全部用 WS-1b 组件库渲染**（Table/List/Card/Button/EmptyState/Spinner）
   - 内容：`useServiceStatus` 展示服务清单（验证 core-sdk 全链路）
   - **服务清单用 `Table`**（`columns: serviceId / status / 最后心跳`）；空态用 EmptyState
   - **hello-pane 底部「发送 hello.command」按钮** —— `useCommand` POST `/api/command { topic: 'hello.command', payload: { requestId, text: 'hi' } }`；SSE 收 `hello.command.started/executed`（Toast 显示 echo），验证 `/api/command` 命令链路
   - **wireframe 见 §3.6**
-- [ ] 端到端：
+- [x] 端到端：
   - 拖拽换位 → 刷新浏览器 → 布局还原
   - 拉出独立窗 → 内容一致（同源 SSE，天然共享）
   - 运行模式：顶部栏隐藏、拖拽锁定、hello-pane 内容全占
-- [ ] **子绿灯**：hello-pane 显示来自 Core 的 `service.*` 状态；三条链路全通
+- [x] **子绿灯**：hello-pane 显示来自 Core 的 `service.*` 状态；三条链路全通
 
 ### WS-6 · 收尾（0.5d）
 
-- [ ] `../core开发文档.md` §8 勾选 P1b
-- [ ] `阶段追踪.md` P1b 状态更新（全部绿灯通过才标 ✅；且前置 P1a 须已完成）
-- [ ] 绿灯全集复跑：vitest + vue-tsc + vite build + **Core 集成冒烟**
+- [x] `../core开发文档.md` §8 勾选 P1b
+- [x] `阶段追踪.md` P1b 状态更新（全部绿灯通过才标 ✅；且前置 P1a 须已完成）
+- [x] 绿灯全集复跑：vitest + vue-tsc + vite build + **Core 集成冒烟**
 
 ---
 

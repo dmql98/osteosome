@@ -53,6 +53,10 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     port = await bridge.listen()
     await manager.start()
   } catch (err) {
+    // manager 可能已启动部分服务；启动失败必须按逆序回收，避免孤儿进程。
+    await manager.stop().catch((stopErr: unknown) => {
+      logger.error(`core: manager rollback failed: ${String(stopErr)}`)
+    })
     await bridge.close().catch(() => undefined)
     await bus.close().catch(() => undefined)
     throw err

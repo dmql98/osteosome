@@ -1,10 +1,10 @@
 packages:
+  - client
   - core
   - shared
   - sdk/ts
   - services/*
 
-onlyBuiltDependencies:
-  - esbuild
 allowBuilds:
   esbuild: true
+  msw: true

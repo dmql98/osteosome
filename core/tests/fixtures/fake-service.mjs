@@ -59,6 +59,9 @@ function handleMessage(msg) {
     }
     return
   }
+  if ('id' in msg && msg.result) {
+    encode({ jsonrpc: '2.0', method: 'initialized' })
+  }
 }
 
 process.stdin.on('data', (chunk) => {

@@ -263,6 +263,17 @@ describe('SseBridge', () => {
     expect(got).toMatchObject({ requestId: 'r9', text: 'yo' })
   })
 
+  it('POST /api/command rejects event topics', async () => {
+    ctx = await startBridge()
+    const res = await fetch(`${ctx.base}/api/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: 'service.ready', payload: { serviceId: 'fake' } }),
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json() as { error: string }).error).toContain('not a command')
+  })
+
   it('POST /api/command rejects invalid body with 400', async () => {
     ctx = await startBridge()
     const missingTopic = await fetch(`${ctx.base}/api/command`, {

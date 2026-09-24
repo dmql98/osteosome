@@ -789,13 +789,13 @@ sdk/
 
 ### P1b · Pane 工作台骨架 + 通用组件库（2-3 周）
 
-- [ ] 前端骨架：`main.ts` + `App.vue` + `DockviewLayout.vue` + `PaneHost`
-- [ ] 通用组件库（WS-1b）：`components/ui` 17 个 + `components/layout` 3 个，全部消费 `tokens.css`；Pane 一律用组件库实现
-- [ ] `panes/registry.ts` —— `definePane` 契约
-- [ ] `core-sdk/` —— `sse.ts` 单例（全应用单 SSE 连接）+ `useEventBus` / `useCommand` / `useServiceStatus` / `usePreferences`
-- [ ] 布局模型：可序列化 JSON + `/api/preferences` 持久化
-- [ ] 一个空 Pane 停靠 / 拖拽 / 刷新还原
-- [ ] **绿灯**：布局拖拽 → 刷新还原 → 拉出独立窗；`npm test --prefix client` + `npm run build --prefix client` 零错误
+- [x] 前端骨架：`main.ts` + `App.vue` + `DockviewLayout.vue` + `PaneHost`
+- [x] 通用组件库（WS-1b）：`components/ui` 18 个 + `components/layout` 3 个，全部消费 `tokens.css`；Pane 一律用组件库实现
+- [x] `panes/registry.ts` —— `definePane` 契约
+- [x] `core-sdk/` —— `sse.ts` 单例（全应用单 SSE 连接）+ `useEventBus` / `useCommand` / `useServiceStatus` / `usePreferences`
+- [x] 布局模型：可序列化 JSON + `/api/preferences` 持久化
+- [x] 一个空 Pane 停靠 / 拖拽 / 刷新还原
+- [x] **绿灯**：布局拖拽 → 刷新还原 → 拉出独立窗；`npm test --prefix client` + `npm run build --prefix client` 零错误
 
 ### P2 · 最小 LLM 对话（DSH 接缝三角·单 provider 实现）（1 周）
 

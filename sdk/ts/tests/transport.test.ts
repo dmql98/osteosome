@@ -84,6 +84,15 @@ describe('frame codec', () => {
     expect(JSON.parse(out[0])).toEqual(msg)
   })
 
+  it('accepts a legal large frame after a complete frame in the same stream', () => {
+    const d = new FrameDecoder()
+    const first = encodeFrame({ jsonrpc: '2.0', id: 1, result: 'ok' })
+    const large = encodeFrame({ jsonrpc: '2.0', id: 2, result: 'x'.repeat(16_000) })
+    const out = d.push(Buffer.concat([first, large]))
+    expect(out).toHaveLength(2)
+    expect(JSON.parse(out[1])).toMatchObject({ id: 2 })
+  })
+
   it('split packets: byte-by-byte across a multi-byte UTF-8 char', () => {
     const d = new FrameDecoder()
     const msg = { jsonrpc: '2.0', method: 'x', params: { text: '你好🚀' } }

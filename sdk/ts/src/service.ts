@@ -159,6 +159,8 @@ export class Service {
     for (const topic of this.handlers.keys()) {
       this.busRequest(METHODS['bus.subscribe'], { topic })
     }
+    // 只有本地订阅已经写入 Core 的请求队列后，才确认 initialized。
+    this.rpc.notify(METHODS.initialized)
 
     if (this.options.handleSignals !== false) {
       this.installSignalHandlers()

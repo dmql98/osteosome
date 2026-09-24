@@ -57,7 +57,9 @@ export class FramingDecoder {
         const buf = this.buffer()
         const idx = buf.indexOf('\r\n\r\n')
         if (idx === -1) {
-          this.headerBytes += chunk.length
+          // 这里统计的是当前尚未遇到分隔符的 header buffer，而不是本次 push 的
+          // 原始 chunk。后者可能还包含上一帧的 body，会把合法大帧误判成超长头。
+          this.headerBytes = buf.length
           if (this.headerBytes > MAX_HEADER_BYTES) {
             throw new FramingError('header-too-long', 'header block exceeds limit')
           }

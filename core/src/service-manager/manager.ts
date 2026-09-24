@@ -46,6 +46,12 @@ interface HandshakeWaiter {
   timer: NodeJS.Timeout
 }
 
+interface ReadyWaiter {
+  resolve: () => void
+  reject: (err: Error) => void
+  timer: NodeJS.Timeout
+}
+
 interface ManagedService {
   manifest: Manifest
   dir: string
@@ -61,6 +67,10 @@ interface ManagedService {
   protocolFailedReason?: string
   restartReasonOverride?: string
   handshakeWaiter?: HandshakeWaiter
+  readyWaiter?: ReadyWaiter
+  /** initialize 响应已验证；真正的 ready 仍等待 initialized 通知。 */
+  initializeParams?: InitializeParams
+  initializedReceived?: boolean
 }
 
 export interface ServiceManagerOptions {
@@ -165,9 +175,33 @@ export class ServiceManager {
   private async spawnAndHandshake(svc: ManagedService): Promise<void> {
     const spawned = this.spawnService(svc)
     try {
+      // 必须在等待 initialize 之前建立 ready waiter：Core 可能在同一 stdout
+      // chunk 中连续收到 initialize 响应与 initialized 通知。
+      const ready = this.armReady(svc)
+      // 若 initialize 先失败，spawnAndHandshake 会走 catch；提前挂 rejection handler
+      // 避免 ready waiter 的超时/失败变成未处理 Promise rejection。
+      ready.catch(() => undefined)
       const params = await this.armHandshake(svc)
-      this.readyService(svc, params)
+      // initialize 响应只代表协议参数已验证；SDK 会在补发本地订阅后发送
+      // initialized，Core 收到该通知才允许发布 service.ready。
+      svc.initializeParams = params
+      if (svc.initializedReceived) {
+        svc.initializedReceived = false
+        const waiter = svc.readyWaiter
+        if (waiter) {
+          clearTimeout(waiter.timer)
+          svc.readyWaiter = undefined
+          this.readyService(svc, params)
+          waiter.resolve()
+        }
+      } else {
+        await ready
+      }
     } catch (err) {
+      if (svc.readyWaiter) {
+        clearTimeout(svc.readyWaiter.timer)
+        svc.readyWaiter = undefined
+      }
       logger.error(`[${svc.manifest.id}] handshake failed: ${String(err)}`)
       // 只杀本次 spawn 的进程（期间可能已被重启链替换为新进程，勿误杀）
       if (svc.proc === spawned && spawned.child.exitCode === null) {
@@ -216,11 +250,21 @@ export class ServiceManager {
     })
   }
 
+  private armReady(svc: ManagedService): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`initialized timeout after ${this.handshakeTimeoutMs}ms`))
+      }, this.handshakeTimeoutMs)
+      svc.readyWaiter = { resolve, reject, timer }
+    })
+  }
+
   private readyService(svc: ManagedService, params: InitializeParams): void {
     const manifest = svc.manifest
     this.verifyInitialize(svc, params)
     svc.status = 'ready'
     svc.protocolFailedReason = undefined
+    svc.initializeParams = undefined
     const hc: HealthCheck = manifest.healthCheck ?? DEFAULT_HEALTH_CHECK
     this.startHealth(svc, hc)
     const panes: PaneDescriptor[] | undefined = manifest.panes
@@ -266,12 +310,18 @@ export class ServiceManager {
         case 'bus.publish': {
           const { topic, payload } = (params ?? {}) as { topic?: string; payload?: Record<string, unknown> }
           if (typeof topic !== 'string') throw jsonRpcError(-32602, 'bus.publish: topic required')
+          if (!svc.manifest.publishes.includes(topic)) {
+            throw jsonRpcError(-32001, `bus.publish: topic '${topic}' is not declared by service`)
+          }
           this.options.bus.publish(topic, { ...(payload ?? {}), source: svc.manifest.id })
           return { ok: true }
         }
         case 'bus.subscribe': {
           const { topic } = (params ?? {}) as { topic?: string }
           if (typeof topic !== 'string') throw jsonRpcError(-32602, 'bus.subscribe: topic required')
+          if (!svc.manifest.subscribes.includes(topic)) {
+            throw jsonRpcError(-32001, `bus.subscribe: topic '${topic}' is not declared by service`)
+          }
           this.subscribeServiceTopic(svc, topic)
           return { ok: true }
         }
@@ -295,8 +345,21 @@ export class ServiceManager {
         case 'health.pong':
           svc.health?.confirm()
           break
-        case 'initialized':
+        case 'initialized': {
+          const params = svc.initializeParams
+          const waiter = svc.readyWaiter
+          if (params) {
+            if (waiter) {
+              clearTimeout(waiter.timer)
+              svc.readyWaiter = undefined
+              this.readyService(svc, params)
+              waiter.resolve()
+            }
+          } else {
+            svc.initializedReceived = true
+          }
           break
+        }
         case 'shutdown':
           void this.stopService(svc, this.stopGraceMs)
           break
@@ -332,6 +395,7 @@ export class ServiceManager {
       if (waiter) {
         clearTimeout(waiter.timer)
         svc.handshakeWaiter = undefined
+        svc.initializeParams = params
         waiter.resolve(params)
       }
       return result

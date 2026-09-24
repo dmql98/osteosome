@@ -158,26 +158,19 @@ describe('e2e: core + hello', () => {
     text: string,
     timeoutMs = 15_000,
   ): Promise<SseEvent[]> {
-    const deadline = Date.now() + timeoutMs
-    let lastStatus = 0
-    while (Date.now() < deadline) {
-      const res = await fetch(`${base()}/api/command`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: 'hello.command', payload: { requestId, text } }),
-      })
-      lastStatus = res.status
-      await res.text().catch(() => '')
-      await sleep(200)
-      const events = parseSseEvents(sse.text())
-      const executed = events.find(
+    const res = await fetch(`${base()}/api/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: 'hello.command', payload: { requestId, text } }),
+    })
+    expect(res.status).toBe(202)
+    await res.text().catch(() => '')
+    await waitFor(() => {
+      return parseSseEvents(sse.text()).some(
         (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
       )
-      if (executed) return events
-    }
-    throw new Error(
-      `command '${requestId}' not executed in ${timeoutMs}ms (lastStatus=${lastStatus}); sse=${JSON.stringify(sse.text().slice(0, 800))}`,
-    )
+    }, timeoutMs, `command '${requestId}' executed`)
+    return parseSseEvents(sse.text())
   }
 
   beforeAll(async () => {

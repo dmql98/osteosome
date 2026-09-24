@@ -35,6 +35,15 @@ describe('jsonrpc framing', () => {
     expect(JSON.parse(all[0])).toEqual({ jsonrpc: '2.0', id: 9, method: 'health.ping' })
   })
 
+  it('accepts a legal large frame after a complete frame in the same stream', () => {
+    const decoder = new FramingDecoder()
+    const first = encodeMessage({ jsonrpc: '2.0', id: 1, result: 'ok' })
+    const large = encodeMessage({ jsonrpc: '2.0', id: 2, result: 'x'.repeat(16_000) })
+    const messages = decoder.push(Buffer.concat([first, large]))
+    expect(messages).toHaveLength(2)
+    expect(JSON.parse(messages[1])).toMatchObject({ id: 2 })
+  })
+
   it('handles UTF-8 多字节字符跨块拆分', () => {
     const msg = { jsonrpc: '2.0', id: 1, method: 'bus.event', params: { text: '中文内容ß🎯' } }
     const frame = encodeMessage(msg)
