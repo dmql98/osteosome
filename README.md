@@ -105,6 +105,16 @@ Windows 一键启动：
 
 脚本会先构建项目，再启动 Core（`127.0.0.1:1420`）和 Vite（`127.0.0.1:5173`）。前端工作台的现行实现详见 [`docs/前端工作台-现行实现.md`](./docs/前端工作台-现行实现.md)。
 
+### 清理构建缓存
+
+Tauri/Rust 的编译缓存位于 `src-tauri/target/`，包含依赖、调试符号、可执行文件和增量编译数据，可能占用数 GB。该目录已由 `.gitignore` 排除，不会提交到 Git。
+
+停止所有 Tauri/Cargo 进程后可以安全删除；下次构建时会自动重新生成：
+
+```powershell
+Remove-Item -Recurse -Force .\src-tauri\target
+```
+
 ## License
 
 Apache-2.0
