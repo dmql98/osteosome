@@ -79,7 +79,7 @@ Osteosome 功能并不缺，缺的是**模块之间的胶水**。耦合在前后
 - **Provider = 一个成形的 seam**：`providers/types.ts` 统一定义 + `openai-compatible.ts` 基类 + 30+ provider 适配器。
 - **会话 = 半个 durable log**：`run-event-store.ts` 的 `publishRunEvent` / `createDurableStream` / resume 机制。
 
-**缺口就在中间**：server 缺总线与进程隔离，client 缺 Pane 契约与布局模型。
+**缺口就在中间**：server 缺总线与进程隔离，client 缺 Panel / Widget 契约与布局模型。
 
 ---
 
@@ -130,7 +130,7 @@ Cordis 是 dsh 底下真正干活的插件框架（官称 *Meta-Framework of Spa
 | ③ | **依赖用 inject 声明** | 等依赖就位再激活，装配顺序由依赖推导 |
 | ④ | **类型化事件 + 5 种分派模式** | `emit` / `waterfall` / `parallel` / `serial` / `bail` |
 | ⑤ | **注册 = 可回卷的效果** | `ctx.effect()` / `ctx.on()` 返回 disposer，卸载逆序回卷 |
-| ⑥ | **Osteosome 新增：插件是捆绑包** | 后端 `activate(ctx)` + 前端 `definePane(...)` + `manifest.json` |
+| ⑥ | **Osteosome 新增：插件是捆绑包** | 后端 `activate(ctx)` + 前端 Widget / Panel 装配 + `manifest.json` |
 
 **waterfall 是最关键的机制**：listener 收到 `(...args, next)`，**不调 `next()` 即否决**（短路），调则携带改写后的值委托下游。策略、审批、提示注入都是挂上去的 listener，而不是循环里的 if/else。
 
@@ -174,7 +174,7 @@ Cordis 是 dsh 底下真正干活的插件框架（官称 *Meta-Framework of Spa
         │ stdout/JSON-RPC          │ 事件 fan-out      │ HTTP POST
         ▼                          ▼                   ▼
 ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────┐
-│ 服务（独立进程）  │  │ 前端 Pane (Vue)  │  │ 前端 /api/command  │
+│ 服务（独立进程）  │  │ 前端 Panel / Widget (Vue)  │  │ 前端 /api/command  │
 │ ├ LLM (TS/Python)│  │ ├ pane.chat      │  │                    │
 │ ├ Loop (TS)      │  │ ├ pane.stats     │  │                    │
 │ ├ 角色 (TS)      │  │ ├ pane.character │  │                    │
@@ -204,7 +204,7 @@ Cordis 是 dsh 底下真正干活的插件框架（官称 *Meta-Framework of Spa
               │ stdio JSON-RPC                        │ HTTP / SSE
               ▼                                       ▼
      ┌──────────────────┐                    ┌──────────────────┐
-     │  服务进程         │                    │    前端 Pane      │
+     │  服务进程         │                    │    前端 Panel / Widget      │
      └──────────────────┘                    └──────────────────┘
 ```
 
@@ -782,43 +782,35 @@ sdk/
 └── rust/                           # Rust SDK（阶段 4）
 ```
 
-### 8.6 client/ —— 前端工作台（Vue）
+### 8.6 client/ —— Panel / Widget 工作台（Vue）
 
 ```
 client/
-├── package.json
+├── package.json                     # Vue 3 + dockview-vue + vue-movable-box
 ├── vite.config.ts
 ├── index.html
 └── src/
-    ├── main.ts
-    ├── App.vue                     # 根组件：PaneHost + 布局引擎
-    ├── core-sdk/                   # 与 Core 通信
-    │   ├── useEventBus.ts
-    │   ├── useCommand.ts
-    │   ├── useServiceStatus.ts
-    │   ├── usePreferences.ts
-    │   └── sse.ts                  # EventSource 单例封装
-    ├── panes/
-    │   ├── registry.ts             # definePane + import.meta.glob
-    │   ├── PaneHost.vue            # #/pane/:id 路由壳
-    │   ├── PaneFrame.vue           # 标题栏 + 窗口菜单
-    │   └── types.ts
+    ├── main.ts                      # 两套布局样式均在此引入
+    ├── App.vue                      # 只渲染 RouterView
+    ├── core-sdk/                    # SSE / command / preferences / service status
     ├── layout/
-    │   ├── DockviewLayout.vue      # dockview-vue 集成
-    │   ├── layout.store.ts         # 布局序列化 / 持久化
-    │   └── window-manager.ts       # 弹窗机械
-    ├── features/                   # 各服务的前端 Pane
-    │   ├── llm/
-    │   │   ├── providers-pane.vue
-    │   │   └── llm-config-pane.vue
-    │   ├── loop/chat-pane.vue
-    │   ├── character/character-pane.vue
-    │   └── stats/stats-pane.vue
-    ├── components/                 # 通用组件
-    ├── stores/                     # Pinia
-    │   ├── session.store.ts
-    │   └── ui.store.ts
-    └── styles/
+    │   ├── DockviewLayout.vue       # 外层 Panel 停靠、拆分、比例和序列化
+    │   ├── layout.store.ts          # SerializedDockview 快照和偏好持久化
+    │   ├── mode.ts                  # edit / runtime
+    │   └── window-manager.ts        # 独立 Panel 窗口
+    ├── panes/
+    │   ├── PanelContainer.vue       # 内层 vue-movable-box Widget 容器
+    │   ├── PanelHeaderActions.vue   # 重置 / 拉出 / 关闭
+    │   ├── PanelTab.vue             # 自定义 Panel tab
+    │   ├── PanelHost.vue            # 独立窗口壳
+    │   └── default-layout.ts        # 默认 panel.main
+    ├── widgets/                     # 最小业务单元
+    │   ├── definition.ts            # defineWidget
+    │   ├── registry.ts              # import.meta.glob 自动发现
+    │   └── types.ts                 # WidgetDefinition
+    ├── components/                  # 通用 UI 组件
+    ├── stores/                      # Pinia
+    └── styles/                      # tokens.css / base.css
 ```
 
 ### 8.7 desktop/ —— Electron 壳
@@ -955,119 +947,136 @@ useEventBus('llm.request.finished', (e) => {
 | 4 | **事件持久化与回放** | 关键事件落 SQLite；`bus.replay(from, to)` |
 | 5 | **服务依赖关系** | manifest `inject` 声明；Core 拓扑排序；依赖服务不可用时广播 `service.unavailable` |
 
-**热插拔最终形态**：更新 LLM 服务 = 替换 manifest 指向的二进制 + Core kill 旧进程 + 启动新进程。Core 不动，其他服务不动，前端 Pane 通过 `service.status` 事件感知并更新 UI。
+**热插拔最终形态**：更新 LLM 服务 = 替换 manifest 指向的二进制 + Core kill 旧进程 + 启动新进程。Core 不动，其他服务不动，前端 Panel / Widget 通过 `service.status` 事件感知并更新 UI。
 
 ---
 
 ## 11. 前端工作台
 
-### 11.1 从 React 到 Vue 的迁移策略
+> 本节以当前仓库实现为准。当前工作台已经完成从旧 Pane 方案到 **Panel / Widget 两层工作台** 的迁移。详细文件和数据流见 [`前端工作台-现行实现.md`](./前端工作台-现行实现.md) 和 [`开发进度/P1b-详细计划.md`](./开发进度/P1b-详细计划.md)。
 
-| React 模块 | Vue 目标 | 迁移方式 |
-|---|---|---|
-| `App.tsx` 的导航数组 | `panes/registry.ts` + 每个 pane | **重写** |
-| `App.tsx` 的启动副作用 | `App.vue` 的 `onMounted` | **重写**（逻辑不变） |
-| `ChatPage.tsx` | `layout/DockviewLayout.vue` + 各 Pane | **重写**（装配层） |
-| `RightPanel.tsx` 七段 | 7 个独立 pane | **重写**（每段独立） |
-| `useSessionStats` | `stats-pane.vue` 里的 composable | **移植**（语法换） |
-| `uiStore` 三开关 | 删除（布局即状态） | **删除** |
-| 通用组件（Button / Input） | `.vue` 版本 | **移植**（逻辑不变） |
-| API 调用层 | `core-sdk/` | **重写**（改用总线） |
+### 11.1 当前分层
 
-**迁移顺序**：
+```text
+MainLayout
+└─ DockviewLayout                         外层：Panel 停靠、拆分、比例、序列化
+   └─ PanelContainer                      内层：Widget 拖动、缩放、吸附、几何保存
+      └─ Widget component                  最小业务单元
+```
 
-1. **先搭骨架**：`main.ts` + `App.vue` + `DockviewLayout.vue` + 空 PaneHost
-2. **再建一个 Pane**：把 RightPanel 的「会话统计」拆成第一个 pane，跑通「注册 → 布局 → 渲染 → SSE 订阅」
-3. **批量迁移**：RightPanel 其余六段、ChatPage 的四个面板、导航栏
-4. **最后清理**：删掉 App.tsx / ChatPage.tsx / RightPanel.tsx 和 uiStore
+当前职责分工：
 
-### 11.2 Pane 契约
+| 层 | 技术 | 负责 | 不负责 |
+|---|---|---|---|
+| Panel 外层 | `dockview-vue` / `dockview-core` | Panel 创建、停靠、拆分、比例、tab、`toJSON/fromJSON` | Widget 自由拖动和缩放 |
+| Widget 内层 | `vue-movable-box` | Widget 盒子移动、8 向缩放、z-index、吸附、`params.layout` 持久化 | Panel 停靠结构 |
+| 业务单元 | `widgets/*.vue` | 服务状态、命令、表单等具体能力 | 直接操作 dockview / 偏好存储 |
+
+### 11.2 外层 dockview 布局
+
+`client/src/layout/DockviewLayout.vue` 只注册一个 dockview 组件：
 
 ```ts
-interface PaneDefinition {
-  id: string
-  title: string
-  icon?: string
-  component: () => Promise<{ default: Component }>
-  defaultSlot?: { area: 'left' | 'right' | 'bottom'; index: number }
-  windowable?: boolean                        // 默认 true
-  minSize?: { w: number; h: number }
-  onBeforeClose?: () => boolean | Promise<boolean>
+const components = { panel: PanelContainer }
+```
+
+`client/src/layout/layout.store.ts` 保存 dockview 原生 `SerializedDockview` 快照：
+
+```ts
+type LayoutState = {
+  mode: 'edit' | 'runtime'
+  snapshot: SerializedDockview | null
+  api: DockviewApi | null
+  hydrated: boolean
+  saving: boolean
+  lastError: string | null
 }
 ```
 
-**开发合同**：
+- `api.toJSON()` 是外层布局真源；
+- `api.fromJSON()` 恢复外层布局；
+- `onDidLayoutChange` 更新 `layout.store`；
+- `bootstrap()` 从 `/api/preferences` 恢复，损坏时回退默认布局；
+- `resetLayout()` 执行 `api.clear()` + `applyDefaultLayout(api)`；
+- runtime 模式隐藏组头并锁定外层拖拽。
+
+### 11.3 Panel 内层 Widget 布局
+
+`client/src/panes/PanelContainer.vue` 为每个 Widget 创建一个 `MovableBox`：
 
 ```vue
-<!-- features/llm/providers-pane.vue -->
-<script lang="ts">
-import { definePane } from '@/panes/registry'
-
-export default definePane({
-  id: 'pane.llm.providers',
-  title: '服务商',
-  icon: 'nav-cloud',
-  defaultSlot: { area: 'right', index: 1 },
-  windowable: true,
-  component: () => import('./ProvidersPane.vue'),
-})
-</script>
-
-<script setup lang="ts">
-// 组件逻辑
-</script>
+<MovableBox
+  v-for="widget in visible"
+  v-model="widget.rect"
+  drag-handle=".panel-boxes__header"
+  :snap-to-elements="true"
+  :snap-targets="snapTargets"
+  @drag-stop="persist"
+  @resize-stop="persist"
+/>
 ```
 
-`definePane` 自动获得：标题栏（可拖拽）/ 窗口菜单（重置布局 · 拉出 · 关闭）/ i18n key / 初始化上下文。
-
-### 11.3 Layout 模型
+每个 Widget 的几何数据保存为：
 
 ```ts
-type Layout =
-  | { kind: 'row'; children: Layout[] }        // 水平分割
-  | { kind: 'col'; children: Layout[] }        // 垂直分割
-  | { kind: 'pane'; id: PaneId }               // 叶子
-
-interface WorkspaceLayout {
-  dock: Layout                                             // 主窗内嵌网格
-  floating: { paneId: string; size: { w: number; h: number } }[]
-  windows: { paneId: string; rect: { x, y, w, h } }[]
+type MovableBoxRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+  zIndex: number
 }
 ```
 
-布局 JSON 存进 `/api/preferences`（沿用 theme/iconpack 的按文件持久化模式）。**红利**：uiStore 三开关消失——面板开合 = 布局里有没有该 pane 节点。
+持久化路径：
 
-### 11.4 双端拉出机械
+```text
+MovableBox 拖动 / 缩放
+  → Panel.api.updateParameters({ widgets, layout })
+  → window event: osteosome:panel-layout
+  → DockviewLayout.api.toJSON()
+  → layout.store.updateLayout(snapshot)
+  → /api/preferences
+```
 
-- **桌面（Electron）**：桥上加 `paneWindow.open(paneId, rect?)` → 主进程 `new BrowserWindow(...)` 加载 `#/pane/<paneId>`；同 partition → 共享 localStorage / SSE cookie，零鉴权桥接。
-- **纯网页**：`window.open('#/pane/<paneId>')` 弹窗。
-- **宿主壳 `<PaneHost>`**：`#/pane/:id` 路由 = i18n + ThemeBackdrop + 迷你标题栏 + 该 Pane。
+因此 `params.layout[widgetId]` 是 Widget 几何的真源；它嵌入 Panel 的 dockview 参数中，而不是单独维护一份全局 Widget 布局。
 
-### 11.5 跨窗同步
+### 11.4 Widget 注册契约
 
-- **数据**（会话 / 统计 / 运行事件）全部走服务端 SSE，弹窗连上即收流，**不复制内存**。
-- **本地态**只有 `activeSessionId` 和 layout，走两个 BroadcastChannel：
-  - `osteosome:ctx` → `{ activeSessionId }`：全局唯一，任何窗改 → 广播 → 其余跟随
-  - `osteosome:ui` → layout 变更（窗开关 / rect）
-- **恢复**：Electron 启动按 `layout.windows` 复原各窗位置尺寸。
+Widget 是工作台的最小业务单位：
 
-### 11.6 Pane 组件开发合同
+```ts
+export interface WidgetDefinition {
+  id: string
+  title: string
+  component: () => Promise<{ default: Component }>
+}
+```
 
-**两条硬性约定**：
+`client/src/widgets/registry.ts` 通过 `import.meta.glob('./*/*-widget.vue', { eager: true })` 自动发现 Widget。当前内置 `widget.service-status` 和 `widget.hello-command`。
 
-**① SSE 单例 + topic 分发**
+新增业务组件时，优先新增 Widget，而不是新增一个 dockview 外层 Pane。只有当组件需要独立停靠、拆分或独立窗口时，才由 Panel 组织多个 Widget 或增加新的 Panel 使用场景。
 
-禁止每个 Pane 各开一个 `EventSource`（浏览器对同源 EventSource 数量有限制，Chrome 是 6 个）。整个应用**一个 SSE 连接**，由 `sse.ts` 单例管理，`useEventBus` 订阅 topic。
+### 11.5 路由和独立窗口
 
-**② Pane 组件不直接 fetch**
+- `/`：`MainLayout`，包含 TopBar 和 DockviewLayout；
+- `/pane/:id?w=widgetA,widgetB`：`PanelHost`，复用 `PanelContainer`；
+- `openPanelWindow(panelId, widgetIds)`：通过 `window.open` 拉出独立 Panel；
+- 独立窗口不复制业务数据，Widget 继续通过 Core 的 SSE / command 链路获取数据。
 
-禁止 Pane 里直接 `fetch('/api/xxx')`。所有命令走 `useCommand`，所有数据走 `useEventBus`。这样：
-- 命令和事件统一走 Core，旁路可观察
-- Pane 不持有数据，只订阅事件
-- 服务重启时 Pane 通过 `service.status` 事件感知
+### 11.6 组件开发合同
+
+1. **SSE 单例**：Widget 使用 `useEventBus`，不自行创建 `EventSource`；
+2. **命令统一出口**：使用 `useCommand`，不直接绕过 Core 调业务 API；
+3. **Widget 只负责业务能力**：Panel 容器负责拖动、缩放、几何和持久化，Widget 不直接操作 dockview；
+4. **拖动手柄固定**：MovableBox 使用 Widget 标题栏作为拖拽把手；
+5. **布局恢复失败可回退**：偏好损坏时使用默认 Panel，不白屏。
+
+### 11.7 当前实现边界
+
+`PaneView.vue`、`PaneFrame.vue`、`layout.model.ts` 和旧 `features/*` Pane 注册代码仍可能作为 P1b 兼容文件存在，但不是当前主渲染链路。新增功能应优先落在 `DockviewLayout.vue`、`PanelContainer.vue`、`layout.store.ts` 和 `widgets/`。
 
 ---
-
 ## 12. 迁移路线图
 
 每阶段一个可独立合入的 PR。**绿灯标准统一**：
@@ -1109,8 +1118,8 @@ npm run build --prefix client          # tsc + vite build 零错误
 - Loop 服务、角色服务、统计服务逐一拆成独立进程。
 - **统计服务旁路订阅** `llm.*` / `tools.*`——验证「零侵入可观察」。
 - Python SDK + 一个 Python 服务（验证协议中立性）。
-- 前端 Vue 3 + `dockview-vue`：实现 `definePane` 契约 + `<PaneHost>` + 布局持久化。
-- 现有导航 / SessionPanel / ChatArea / RightPanel 七段逐一改写成 Pane。
+- 前端 Vue 3 + `dockview-vue` + `vue-movable-box`：实现 Panel / Widget 两层工作台、布局持久化和独立窗口。
+- 现有导航 / SessionPanel / ChatArea / RightPanel 七段按业务能力拆成 Widget，再由 Panel 组织。
 
 **绿灯**：拖拽布局 + 刷新还原 + 拉出独立窗 + 重启复原；统计 Pane 实时计数。
 
@@ -1132,7 +1141,7 @@ npm run build --prefix client          # tsc + vite build 零错误
 3. **旁路消费者零侵入** —— 统计 / 日志 / 审计服务只订阅不发布，不要求现有服务改代码。
 4. **Core 不跑业务逻辑** —— Core 只管进程管理、总线、SSE 桥；任何业务模块必须下沉为服务。
 5. **任一注册必带 disposer** —— `ctx.on/effect` / `bus.subscribe` 都返回回卷函数。
-6. **前端禁新增「页面级装配」** —— 新信息面一律 `definePane`，禁止改 `App.vue` 的 navItems 或 ChatPage 的装配。
+6. **前端禁新增「页面级装配」** —— 新业务信息面优先注册为 Widget，由 Panel 组织；禁止把业务装配硬编码进 `App.vue` 或 `MainLayout.vue`。
 7. **前端禁复制服务端数据到本地 store** —— 所有持久数据走 SSE，本地态只有 `activeSessionId` 和 layout。
 8. **事件只增不改** —— 破坏性变更必须升版本；payload 必须 JSON 可序列化。
 9. **每阶段一个 PR + 全绿 + 可单独 revert** —— 不允许跨阶段大爆炸提交。
@@ -1265,13 +1274,14 @@ npm run build --prefix client          # tsc + vite build 零错误
 | 桌面框架 | **Electron** | Node.js 生态，`BrowserWindow` 弹窗机械成熟 |
 | 前端框架 | **Vue 3 + TypeScript** | SFC + `<script setup>` 类型推导自然，Pinia 简洁 |
 | 构建 | **Vite** | 快，`import.meta.glob` 编译期发现 |
-| 布局引擎 | **dockview-vue** | 官方支持，与 React 版本功能对齐 |
+| 外层布局引擎 | **dockview-vue** | 官方支持，负责 Panel 停靠、拆分、比例和序列化 |
+| 内层组件布局 | **vue-movable-box** | Panel 内 Widget 自由拖动、缩放、吸附和几何持久化 |
 | 状态 | **Pinia** | Vue 官方状态库 |
 | 样式隔离 | **Shadow DOM + CSS 变量** | 防止服务前端样式污染 |
 | 跨窗通信 | **BroadcastChannel** | 同源零配置 |
 | 数据流 | **SSE + HTTP POST** | 单向优先，服务端真源 |
 
-**关于 React vs Vue**：`dockview-vue` 是官方支持，功能与 React 版对齐。团队熟 Vue，长期开发效率显著更高。现有 React 代码的迁移策略见 §11.1。
+**关于 React vs Vue**：当前仓库已经使用 Vue 3。`dockview-vue` 负责外层 Panel 布局，`vue-movable-box` 负责 Panel 内 Widget 布局；两者职责分层，不能把 Widget 拖动逻辑重新放回 dockview。
 
 ### 17.3 SDK 多语言路线
 
@@ -1290,7 +1300,7 @@ Osteosome v3 的架构本质：**微内核 + 多语言服务 + 可观察总线**
 
 - **Core（TS，极薄，很少更新）**：进程管理 + 消息总线 + SSE 桥，不跑业务。
 - **服务（进程外，语言自由，可热插拔）**：LLM / Loop / 角色 / 统计，各自 publishes / subscribes，通过总线通信。
-- **前端（Vue + dockview-vue）**：Pane 订阅 SSE，POST 发命令，布局可序列化，可拉出独立窗。
+- **前端（Vue + dockview-vue + vue-movable-box）**：Panel 外层布局和 Widget 内层布局均可序列化；Widget 订阅 SSE、POST 发命令，Panel 可拉出独立窗。
 
 **服务 = 独立进程 + manifest + 事件契约**。新增一个服务 = 新增一个进程 + 若干 Pane + 一组事件类型。**旁路消费者（统计 / 日志 / 审计）零侵入**，只订阅不发布。
 
@@ -1349,7 +1359,7 @@ Osteosome v3 的架构本质：**微内核 + 多语言服务 + 可观察总线**
               │ stdio JSON-RPC                        │ HTTP / SSE
               ▼                                       ▼
      ┌──────────────────┐                    ┌──────────────────┐
-     │  服务进程         │                    │    前端 Pane      │
+     │  服务进程         │                    │    前端 Panel / Widget      │
      │  LLM / Loop / ... │                    │  Vue + dockview  │
      └──────────────────┘                    └──────────────────┘
 ```
@@ -1363,7 +1373,7 @@ Osteosome v3 的架构本质：**微内核 + 多语言服务 + 可观察总线**
 | SseBridge → Bus（青色向上） | `bus.publish` —— 前端命令投递到总线 |
 | Bus → SseBridge（橙色向下） | `bus.event` —— 总线事件推给 SSE 连接 |
 | ServiceManager ↔ 服务进程（灰色） | stdio JSON-RPC |
-| SseBridge ↔ 前端 Pane（灰色） | HTTP / SSE |
+| SseBridge ↔ 前端 Panel / Widget（灰色） | HTTP / SSE |
 
 **没有的箭头**：ServiceManager ↔ SseBridge 直连。这是不变式：管道之间不直接说话，都经过 Bus。
 

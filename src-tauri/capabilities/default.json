@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Osteosome 默认能力集：主窗口 + 插件管理外部窗口 + opener",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default"
+  ]
+}

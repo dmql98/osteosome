@@ -4,6 +4,7 @@ packages:
   - shared
   - sdk/ts
   - services/*
+  - src-tauri
 
 allowBuilds:
   esbuild: true

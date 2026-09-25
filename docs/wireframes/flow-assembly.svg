@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="640" viewBox="0 0 800 640">
+  <style>
+    rect, line { stroke: #999; stroke-width: 1; fill: #f5f5f5; }
+    text { font-family: sans-serif; font-size: 12px; fill: #666; }
+    .label { font-size: 14px; font-weight: bold; fill: #333; }
+    .wireframe-line { stroke: #ccc; stroke-dasharray: 4,4; }
+  </style>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#999"/></marker></defs>
+  <rect x="330" y="40" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="69" text-anchor="middle" class="label">新建窗口</text>
+  <rect x="330" y="120" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="149" text-anchor="middle" class="label">打开插件侧栏</text>
+  <line x1="400" y1="90" x2="400" y2="120" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" />
+  <rect x="330" y="200" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="229" text-anchor="middle" class="label">选择插件</text>
+  <line x1="400" y1="170" x2="400" y2="200" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" />
+  <rect x="330" y="280" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="309" text-anchor="middle" class="label">拖拽组件到窗口</text>
+  <line x1="400" y1="250" x2="400" y2="280" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" />
+  <rect x="330" y="360" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="389" text-anchor="middle" class="label">点击加入窗口</text>
+  <line x1="400" y1="330" x2="400" y2="360" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" />
+  <rect x="330" y="440" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="469" text-anchor="middle" class="label">组件显示</text>
+  <line x1="400" y1="410" x2="400" y2="440" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" />
+  <rect x="330" y="520" width="140" height="50" rx="4" fill="#ffffff" />
+  <text x="400" y="549" text-anchor="middle" class="label">运行模式</text>
+  <line x1="400" y1="490" x2="400" y2="520" stroke="#999" stroke-width="1.5" marker-end="url(#arrow)" />
+</svg>
+

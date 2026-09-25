@@ -668,7 +668,7 @@ osteosome/
 ├── services/                       # 内置服务（独立进程）
 ├── shared/                         # Core / 服务 / 前端共享的类型与工具
 ├── sdk/                            # 服务 SDK（多语言）
-├── client/                         # 前端工作台（Vue 3 + dockview-vue）
+├── client/                         # Panel / Widget 工作台（Vue 3 + dockview-vue + vue-movable-box）
 ├── desktop/                        # Electron 壳
 └── docs/                           # RFC / 开发文档
 ```
@@ -787,15 +787,18 @@ sdk/
 - [x] `shared/events.ts` —— 首批事件类型定义
 - [x] **绿灯**：Core 单元测试（bus / manager / sse）全绿 + `build` 零错误 + hello-world TS 服务端到端（/health 可接、spawn、事件推流）
 
-### P1b · Pane 工作台骨架 + 通用组件库（2-3 周）
+### P1b · Panel / Widget 工作台骨架 + 通用组件库（2-3 周）
 
-- [x] 前端骨架：`main.ts` + `App.vue` + `DockviewLayout.vue` + `PaneHost`
-- [x] 通用组件库（WS-1b）：`components/ui` 18 个 + `components/layout` 3 个，全部消费 `tokens.css`；Pane 一律用组件库实现
-- [x] `panes/registry.ts` —— `definePane` 契约
+> 当前前端实现细节以 [`前端工作台-现行实现.md`](./前端工作台-现行实现.md) 为准。
+
+- [x] 前端骨架：`main.ts` + `App.vue` + `DockviewLayout.vue` + `PanelContainer.vue` + `PanelHost.vue`
+- [x] 外层布局：dockview 管理 Panel 停靠、拆分、比例和 `SerializedDockview` 快照
+- [x] 内层布局：vue-movable-box 管理 Widget 拖动、缩放、吸附和 `params.layout`
+- [x] 通用组件库（WS-1b）：`components/ui` 18 个 + `components/layout` 3 个，全部消费 `tokens.css`
+- [x] `widgets/registry.ts` —— `defineWidget` + `import.meta.glob` 自动发现
 - [x] `core-sdk/` —— `sse.ts` 单例（全应用单 SSE 连接）+ `useEventBus` / `useCommand` / `useServiceStatus` / `usePreferences`
-- [x] 布局模型：可序列化 JSON + `/api/preferences` 持久化
-- [x] 一个空 Pane 停靠 / 拖拽 / 刷新还原
-- [x] **绿灯**：布局拖拽 → 刷新还原 → 拉出独立窗；`npm test --prefix client` + `npm run build --prefix client` 零错误
+- [x] 布局模型：Panel 外层和 Widget 内层一起保存到 `/api/preferences`
+- [x] **绿灯**：Panel 停靠 / Widget 拖拽缩放 / 刷新还原 / 拉出独立窗；`pnpm test` + `pnpm build` 零错误
 
 ### P2 · 最小 LLM 对话（DSH 接缝三角·单 provider 实现）（1 周）
 
@@ -876,7 +879,9 @@ sdk/
 | **Manifest** | 服务的声明文件 `service.json` |
 | **Bus** | 消息总线，publish / subscribe / replay |
 | **Topic** | 事件类型名，格式 `domain.entity.action` |
-| **Pane** | 前端工作台的一个窗口单元 |
+| **Panel** | dockview 管理的外层工作台单元，可停靠、拆分和独立打开 |
+| **Widget** | Panel 内的最小业务组件，由 vue-movable-box 管理几何 |
+| **Pane** | 旧 P1b 兼容术语；当前主链路使用 Panel / Widget |
 | **SSE** | Server-Sent Events，服务端推事件给前端 |
 | **旁路消费者** | 只订阅不发布的服务（统计 / 日志 / 审计） |
 | **Model-visible means logged** | 进入模型上下文的内容必须有 durable 事件 |
@@ -910,7 +915,7 @@ sdk/
 1. **Bus 是唯一的枢纽** —— 所有跨模块的事件流都经过它
 2. **ServiceManager 和 SseBridge 对称** —— 都是 Bus 的「端口」，各自向内 publish、向外 push
 3. **中央的红色 ✕** —— 明确标识「两者不直连」这条不变式
-4. **底部两个终端** —— 服务进程（左）和前端 Pane（右）分别是两个端口的对端
+4. **底部两个终端** —— 服务进程（左）和前端 Panel / Widget（右）分别是两个端口的对端
 
 ---
 

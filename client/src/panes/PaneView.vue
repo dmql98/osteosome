@@ -16,9 +16,7 @@ import { getPane } from './registry'
 import PaneError from './PaneError.vue'
 import PaneFrame from './PaneFrame.vue'
 import { useLayoutStore } from '../layout/layout.store'
-import { defaultPanelsFor, listPanes } from './registry'
-import { toDockviewGrid } from '../layout/layout.model'
-import { openPaneWindow } from '../layout/window-manager'
+import { openPanelWindow } from '../layout/window-manager'
 import type { PaneDefinition } from './types'
 
 type DockviewParams = {
@@ -56,17 +54,10 @@ function loadPane(): void {
 loadPane()
 watch(definition, loadPane)
 function closePane(): void { panelApi.value?.close?.() }
-function resetLayout(): void {
-  layout.resetLayout()
-  const api = containerApi.value
-  if (api) {
-    const paneMeta = new Map(listPanes().map((pane) => [pane.id, { title: pane.title }]))
-    api.fromJSON(toDockviewGrid(defaultPanelsFor(layout.workspace).dock, paneMeta))
-  }
-}
+function resetLayout(): void { layout.resetLayout() }
 function detach(): void {
   const pane = definition.value
-  if (pane && pane.windowable !== false) openPaneWindow(pane.id)
+  if (pane && pane.windowable !== false) openPanelWindow(pane.id, [])
 }
 </script>
 

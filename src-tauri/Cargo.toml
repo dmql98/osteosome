@@ -1,0 +1,20 @@
+[package]
+name = "osteosome"
+version = "0.0.0"
+description = "Osteosome client shell — everything-is-a-plugin local desktop AI agent"
+edition = "2021"
+
+# 壳极薄：只开窗口 + 外部原生窗口(插件管理) + 托盘 + 快捷键。
+# 一切业务都在 Node Core（独立进程），壳不碰文件/AI/业务。
+[lib]
+name = "osteosome_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

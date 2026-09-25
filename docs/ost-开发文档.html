@@ -146,8 +146,9 @@
 </div>
 
 <h1>Osteosome 开发文档 · <span class="accent">微内核架构设计汇报 v3</span></h1>
-<p class="subtitle">原名《天枢插件化架构设计汇报》（天枢 → Osteosome 更名中）· 以 DeepSeek Harness「一切皆插件」哲学为纲 · <b>微内核 + 全外部插件 + 可观察总线</b>：Core 极薄且稳定，所有服务与 Pane 均为外部插件，统一走 <code>.ostpkg</code> 安装流程，前端 <b>Vue 3 + dockview-vue</b> 通过 SSE 订阅总线事件</p>
+<p class="subtitle">原名《天枢插件化架构设计汇报》（天枢 → Osteosome 更名中）· 以 DeepSeek Harness「一切皆插件」哲学为纲 · <b>微内核 + 全外部插件 + 可观察总线</b>：Core 极薄且稳定，所有服务与 Pane 均为外部插件，统一走 <code>.ostpkg</code> 安装流程，前端 <b>Vue 3 + dockview-vue + vue-movable-box</b> 通过 SSE 订阅总线事件</p>
 <p class="meta">v3 ｜ 2026-09-23 ｜ 关联 RFC：<code>ost-开发文档.md</code>（v3）、<code>ost-core-rfc.md</code>（Core 独立 RFC）｜ 方式：小步 strangler，每步绿灯通行 ｜ v3 变更：Core 收窄为骨架，全外部插件，通信从「插件内调用」升级为「总线事件 + 旁路可观察」，前端确定 Vue 3</p>
+<div class="warning"><b>实现同步说明：</b>本页是架构汇报快照。当前仓库前端已落地为 <b>dockview 外层 Panel + vue-movable-box 内层 Widget</b>；现行代码、目录和持久化数据流请查看 <a href="前端工作台-现行实现.md">前端工作台-现行实现.md</a>，P1b 状态请查看 <a href="开发进度/P1b-详细计划.md">P1b-详细计划.md</a>。本汇报中早期的 Pane / 单层布局描述属于演进背景。</div>
 
 <!-- ============ 01 摘要 ============ -->
 <h2 id="summary"><span class="no">01</span> 一句话摘要</h2>

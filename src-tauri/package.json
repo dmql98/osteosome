@@ -1,0 +1,15 @@
+{
+  "name": "@osteosome/tauri-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Osteosome Tauri shell — thin client shell that opens the Vue workbench",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.5"
+  }
+}

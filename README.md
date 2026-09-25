@@ -4,7 +4,7 @@
 
 > 原名 **天枢（TianShu）**,2.0 更名与插件化重构中。"Osteosome" 取骨结构单元之意:骨架负责承重与连接,血肉（角色、技能、工具、服务商、界面面板）以插件形式长在骨上。
 >
-> ⚠️ 本仓库当前处于建仓起步阶段,仅含设计文档;源码与构建产物将陆续从天枢仓库迁移。
+> 本仓库正在开发中；客户端、Core、服务、共享契约与 Tauri 桌面壳均已纳入版本管理。
 
 ---
 
@@ -29,7 +29,7 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 
 - **A 组·契约对齐**（落地顺序）:**④ LLM 适配器契约** → **③ 工具管线** → **① 会话事件化** → **② Compaction**
 - **B 组·相当不动**:skills / goal / plan / 子代理抽象
-- **前端工作台化**:Pane 即窗口 —— 写一个 `definePane`,就得到一个可停靠、可拉出成独立窗口的界面单元;布局为可序列化 JSON。
+- **前端工作台化**:采用「dockview 外层 + vue-movable-box 内层」——dockview 管理 Panel 停靠/拆分/比例，vue-movable-box 管理 Panel 内 Widget 的拖动/缩放/吸附；两层布局一起序列化保存。
 
 详见文档:
 
@@ -39,7 +39,8 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 | [`docs/ost-开发文档.html`](./docs/ost-开发文档.html) | 同内容的可视化汇报版 |
 | [`docs/开发进度/阶段追踪.md`](./docs/开发进度/阶段追踪.md) | 里程碑 P1-P8 进度追踪（修订路线图落地，自 2026-09-23 起维护） |
 | [`docs/开发进度/P1a-详细计划.md`](./docs/开发进度/P1a-详细计划.md) | P1a 里程碑详细计划（工作分解 WS-1~7 / 测试矩阵 / 绿灯标准 / 两处小补强附录） |
-| [`docs/开发进度/P1b-详细计划.md`](./docs/开发进度/P1b-详细计划.md) | P1b 里程碑详细计划（Pane 工作台骨架 WS-1~6 + WS-1b 组件库 / 接口定案 / 绿灯标准） |
+| [`docs/开发进度/P1b-详细计划.md`](./docs/开发进度/P1b-详细计划.md) | P1b 里程碑详细计划（工作台演进记录；顶部修订说明现行契约） |
+| [`docs/前端工作台-现行实现.md`](./docs/前端工作台-现行实现.md) | **当前代码权威说明**：dockview 外层 + vue-movable-box 内层、Widget 注册、布局持久化与组件职责 |
 | [`docs/开发进度/P2-详细计划.md`](./docs/开发进度/P2-详细计划.md) | P2 里程碑详细计划（DSH 接缝三角：LlmAdapter / StreamChunk / 凭证引用 / retry 声明 + deepseek 单实现） |
 | [`docs/开发进度/P3-详细计划.md`](./docs/开发进度/P3-详细计划.md) | P3 里程碑详细计划（会话存储 + 会话列表 Pane + Loop 编排 + 命令/结果 IPC） |
 | [`docs/开发进度/P4-详细计划.md`](./docs/开发进度/P4-详细计划.md) | P4 里程碑详细计划（凭证 seam + 三 provider + 模型目录 + retry 执行器 + 设置 Pane） |
@@ -64,39 +65,45 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 
 ## 技术栈
 
-- **客户端**:Electron + React（Vite）;Pane 工作台(Hono 桥 / PaneHost / BroadcastChannel 跨窗同步)。
-- **服务端**:Node.js + TypeScript,Hono / Socket.IO(见天枢仓 `dev/web/server`）。
+- **客户端**:Vue 3 + TypeScript + Vite + Pinia + `dockview-vue` + `vue-movable-box`；`dockview` 管 Panel 外层布局，`vue-movable-box` 管 Panel 内 Widget 的自由拖动、缩放和吸附。
+- **服务端**:Node.js + TypeScript；Core 提供进程管理、消息总线、SSE 桥与 `/api` 接口。
 - **存储**:本地数据库与文件,本地优先,运行轨迹可 git 快照。
 
-## 仓库布局(规划)
+## 仓库布局（当前）
 
 ```
 osteosome/
-├── docs/                     # 设计文档：架构 RFC / Core RFC / 里程碑追踪 / 模块图
-├── web/server                # 服务端(待迁移)
-├── web/client                # React 客户端(待迁移)
-├── desktop                   # Electron 壳与打包(待迁移)
-└── content/builtin           # 内置内容(角色/技能/服务商预设)(待迁移)
+├── client/                    # Vue 3 工作台
+│   ├── src/layout/            # dockview 外层布局与偏好持久化
+│   ├── src/panes/             # Panel 容器、Panel 壳、标题动作
+│   ├── src/widgets/           # Widget 定义与自动发现
+│   └── src/components/        # 通用 UI 组件
+├── core/                      # Node.js + TypeScript 微内核
+├── services/                  # 独立服务进程
+├── shared/                    # 跨 Core / 服务 / 前端的共享契约
+├── sdk/                       # 服务 SDK（当前为 TypeScript）
+├── src-tauri/                 # Tauri 桌面壳、Rust 配置与图标
+├── scripts/                   # 冒烟与辅助脚本
+└── docs/                      # RFC、开发进度与现行实现说明
 ```
 
-## 开发(源码迁移前见天枢仓)
+## 开发
+
+环境要求：Node.js 24+、pnpm 11+；运行 Tauri 桌面客户端还需 Rust stable-msvc 与 Visual Studio 2022 C++ Build Tools。
 
 ```powershell
-cd dev
-npm ci --prefix web/server
-npm ci --prefix web/client
-npm ci --prefix desktop
-npm run dev
+pnpm install
+pnpm build
+pnpm test
 ```
 
-依赖管理:
+Windows 一键启动：
 
-- `npm run build` —— 构建 server + client + desktop
-- `npm run dev` —— 启动 Hono/Socket.IO(:3456)、Vite(:3457) 并打开 Electron 窗口
-- `npm run test:server` / `npm run test:desktop` —— 服务端 / 桌面冒烟测试
-- `npm run dist:*` —— 各平台打包(win / mac:x64 / mac:arm64 / linux:x64)
+```powershell
+.\start-p1b.cmd
+```
 
-> 任何重构以"每步绿灯"为门槛:`npm test --prefix web/server` 全绿 → `npm run build --prefix web/server` 通过。
+脚本会先构建项目，再启动 Core（`127.0.0.1:1420`）和 Vite（`127.0.0.1:5173`）。前端工作台的现行实现详见 [`docs/前端工作台-现行实现.md`](./docs/前端工作台-现行实现.md)。
 
 ## License
 

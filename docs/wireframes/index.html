@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Osteosome · 插件化工作台线框（ASCII）</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#fff; --border:#d5dae1; --border2:#b6bec9;
+    --text:#1b2027; --muted:#5c6673; --primary:#2f6feb; --primary-soft:#e7effd;
+    --success:#1a7f37; --warning:#9a6700; --danger:#cf222e; --success-soft:#e6f4ea;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:26px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:32px}
+  h2{font-size:19px;margin:40px 0 6px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  h2 .tag{font-size:12px;color:var(--primary);background:var(--primary-soft);padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;font-weight:500}
+  h3{font-size:15px;margin:20px 0 8px;color:#333}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 1px 2px rgba(16,22,26,.08);padding:20px;margin:16px 0}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:#0f1217;color:#dbe4ee;border-radius:8px;padding:18px;overflow-x:auto;margin:0}
+  pre .hl{color:#7fd0a0} /* 高亮 */
+  .notes{font-size:13px;color:var(--muted);margin-top:12px}
+  .notes li{margin:2px 0}
+  .pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--border2);color:var(--muted);margin-right:6px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin:12px 0}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+  th{background:#fafbfc;font-weight:600}
+  .ok{color:var(--success);font-weight:600}
+  .warn{color:var(--warning);font-weight:600}
+  .flow-box{display:flex;flex-direction:column;gap:10px}
+  .f-step{display:flex;align-items:center;gap:10px}
+  .f-box{background:var(--surface);border:1.5px solid var(--border2);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;min-width:180px}
+  .f-box.dec{border-style:dashed;border-color:var(--warning)}
+  .f-arrow{color:var(--muted);font-size:16px}
+  .f-branch{margin-left:16px;padding-left:16px;border-left:2px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  .f-branch .f-box{background:var(--primary-soft);border-color:var(--primary)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Osteosome · 插件化工作台界面线框</h1>
+  <div class="sub">编辑界面插件管理侧栏 · 组件装配模型 · ASCII 示意 ｜ 更新于 2026-09-25</div>
+
+  <div class="card">
+    <h3 style="margin-top:0">插件组件模型（定稿）</h3>
+    <table>
+      <tr><th>概念</th><th>定义</th><th>关系</th></tr>
+      <tr><td><b>插件 Plugin</b></td><td>可安装/卸载单元，含服务层 + 一组 UI 组件</td><td>一对多</td></tr>
+      <tr><td><b>服务层</b></td><td>总是运行，headless，贡献 Tool / prompt / 事件 / schema，<b>无 UI</b></td><td>随插件启停</td></tr>
+      <tr><td><b>组件 Component</b></td><td>插件提供的可装配 UI 单元，<b>可多实例</b></td><td>属插件</td></tr>
+      <tr><td><b>装配</b></td><td>用户自建窗口，把组件加入窗口（拖拽 或 点击加入）</td><td>用户决定</td></tr>
+    </table>
+    <div class="notes">要点：
+      <ul>
+        <li><b>组件多实例是硬需求</b>——同插件同组件可同时放入多个窗口各一实例。</li>
+        <li><b>不放 ≠ 关闭</b>——组件未放入任何窗口时 UI 不显示，但插件服务层照常运行（Tool/prompt/事件在位）。</li>
+        <li><b>无「能力位」抽象</b>——附件插件就是贡献自己的附件按钮组件，与官方按钮无隐式冲突，纯用户选放。</li>
+        <li><b>无 UI 插件</b>——组件清单为空，仅改变后端服务能力。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>① 编辑界面 · 插件管理侧栏 + 自建窗口</h2>
+  <div class="card"><pre>
+┌ Osteosome  编辑模式    服务 2/2    [进入运行] ─────────────────────────────┐
+├────────────┬─────────────────────────────────────────────────────────────┤
+│ 插件管理    │  Panel 1: 对话（用户自建）                                   │
+│ (侧栏)     │  ┌────────────────────────────────────────────────────────┐ │
+│ 🔍 搜索    │  │  ┌──────────────────────────────────────────────────┐  │ │
+│            │  │  │ Widget: 消息框                                    │  │ │
+│ ── 已安装  │  │  │  [我] 帮我写个脚本                                │  │ │
+│ ● AI 对话  │  │  │  [Agent] 好的，请看…                             │  │ │
+│   ✨ +4     │  │  └──────────────────────────────────────────────────┘  │ │
+│ ● 附件插件 │  │  ┌────────────────────────────────────────────────────┐ │ │
+│   📎 +1     │  │  │ [📎 附件] [模型▾] [🔄 转md]           [发送]       │ │ │
+│ ● 转换服务 │  │  └────────────────────────────────────────────────────┘ │ │
+│   🔄 +0     │  │  ← 发送/模型=官方对话组件；附件=官方；转md=三方组件      │ │
+│ ● 服务状态 │  │    （每个都是独立组件，可分别拖走/隐藏/再放多个）        │ │
+│   ⚙ +1     │  └─────────────────────────────────────────────────────────┘ │
+│ ● 会话     │                                                              │
+│ ● 角色     │  Panel 2: 分析（用户另一自建窗口）                           │
+│ ● 轨迹     │  ┌─────────────────────────────────────────────────────────┐ │
+│            │  │ Widget: 本地路径附件（三方组件放这里）                    │ │
+│ ── 市场    │  │ [📁 输入路径…] [读取]                                    │ │
+│ [浏览更多] │  └─────────────────────────────────────────────────────────┘ │
+│            │                                                              │
+└────────────┴──────────────────────────────────────────────────────────────┘
+      ↑ dockview 管 Panel 停靠/拆分/比例         ↑ movable-box 管 Panel 内组件拖/缩放
+      ↑ 侧栏默认在编辑模式出现                  ↑ 运行模式隐藏侧栏+锁定拖拽
+  </pre>
+  </div>
+
+  <h2>② 侧栏 · 插件展开（AI 对话 / 附件插件 / 无 UI 插件）</h2>
+  <div class="grid2">
+  <div class="card"><h3 style="margin-top:0">AI 对话（官方）<span class="pill">✨ +4 组件</span></h3><pre>
+┌ AI 对话插件 ─────────────────────────────┐
+│ ● 运行中                                │
+│    工具 chat.reply        ✓             │
+├─────────────────────────────────────────┤
+│ 组件（可多实例）                         │
+│  ┌────────────────────────────────────┐ │
+│  │ ◉ ✨ 消息框                        │ │
+│  │    已放入: 对话窗口 ×1             │ │
+│  │    [+ 加入窗口]                    │ │
+│  ├────────────────────────────────────┤ │
+│  │ ◉ ✨ 发送按钮                      │ │
+│  │    已放入: 对话窗口 ×1             │ │
+│  │    [+ 加入窗口]                    │ │
+│  ├────────────────────────────────────┤ │
+│  │ ◉ 📎 附件按钮（官方·普通上传）     │ │
+│  │    已放入: 对话窗口 ×1             │ │
+│  │    [+ 加入窗口]                    │ │
+│  ├────────────────────────────────────┤ │
+│  │ ◉ 🎛 模型选择下拉                  │ │
+│  │    已放入: 对话窗口 ×1             │ │
+│  │    [+ 加入窗口]                    │ │
+│  └────────────────────────────────────┘ │
+│  [+ 新建实例] [卸载插件]               │
+└──────────────────────────────────────────┘
+  </pre></div>
+
+  <div class="card"><h3 style="margin-top:0">附件插件（三方）<span class="pill">📎 +1 组件</span></h3><pre>
+┌ 附件插件 ───────────────────────────────┐
+│ ● 运行中（headless 引擎）              │
+│    工具 attachment.upload  ✓           │
+│    prompt 片段             ✓ 注入       │
+│    schema attachments      ✓ 扩展       │
+├─────────────────────────────────────────┤
+│ 组件                                     │
+│  ┌────────────────────────────────────┐ │
+│  │ ○ 🔄 附件按钮（转换→md 后上传）    │ │
+│  │    未放入任何窗口                  │ │
+│  │    ← UI 不显示但可运行             │ │
+│  │    [+ 加入窗口]                    │ │
+│  └────────────────────────────────────┘ │
+│  [+ 新建实例] [卸载插件]               │
+└──────────────────────────────────────────┘
+  </pre></div>
+  </div>
+
+  <div class="card"><h3 style="margin-top:0">无 UI 插件（纯 headless）</h3><pre>
+┌ 转换服务插件 ───────────────────────────┐
+│ ● 运行中（无 UI 组件）                 │
+│    类型: 仅改变后端服务能力            │
+│                                         │
+│    贡献能力:                            │
+│      convert.md2text    ✓              │
+│      convert.doc2md     ✓              │
+│                                         │
+│    ⚠ 该插件不提供任何 UI 组件          │
+│      安装后仅影响工具与服务能力         │
+│                                         │
+│  [卸载插件]                             │
+└──────────────────────────────────────────┘
+  </pre>
+  </div>
+
+  <h2>②b 插件管理 · 安装 / 启用 / 卸载 / 市场</h2>
+  <div class="grid2">
+  <div class="card"><h3 style="margin-top:0">插件管理 · 点击某插件 [管理]</h3><pre>
+┌ 附件插件 · 管理 ─────────────────────────┐
+│  ● 运行中                                │
+│  启用  [◉ 开]                            │ ← 关闭=服务停+组件全移除
+│  类型  三方插件 · 版本 v1.2.0            │
+│  来源  本地安装 / 市场                  │
+├─────────────────────────────────────────┤
+│ 能力（服务层，无 UI）                    │
+│  ┌────────────────────────────────────┐ │
+│  │ 工具  attachment.upload   ✓       │ │
+│  │ prompt 片段             ✓ 注入     │ │
+│  │ schema attachments      ✓ 扩展     │ │
+│  └────────────────────────────────────┘ │
+├─────────────────────────────────────────┤
+│ 组件（UI，用户装配）                    │
+│  ┌────────────────────────────────────┐ │
+│  │ 🔄 附件按钮(转md)   [已放入:分析×1]│ │
+│  │    [+ 加入窗口] [移除实例]         │ │
+│  └────────────────────────────────────┘ │
+├─────────────────────────────────────────┤
+│ 依赖                                   │
+│  · 无（或: 需要 转换服务 ✓）           │
+├─────────────────────────────────────────┤
+│ 危险区                                 │
+│  [停用插件] [卸载插件]（二次确认）      │
+└──────────────────────────────────────────┘
+  </pre></div>
+
+  <div class="card"><h3 style="margin-top:0">插件列表（侧栏已安装态）</h3><pre>
+┌ 插件管理 ───────────────────────────────┐
+│ 🔍 搜索                                 │
+│ ── 已安装 ──────────────────────────    │
+│ ● AI 对话    ✨+4  运行中   [管理]      │
+│ ● 附件插件   📎+1  运行中   [管理]      │
+│ ● 转换服务   🔄+0  运行中   [管理]      │
+│ ○ 角色       👤+2  已停用   [启用][管理] │
+│ ● 服务状态   ⚙+1  运行中   [管理]      │
+│ ● 会话       💬+1  运行中   [管理]      │
+│ ● 轨迹       📈+1  运行中   [管理]      │
+│ ── 市场 ──────────────────────────      │
+│ [🔍 浏览更多插件]                       │
+│  ┌────────────────────────────────────┐ │
+│  │ 📦 图片转换    ⭐4.8    [安装]     │ │
+│  │ 📦 代码执行    ⭐4.5    [安装]     │ │
+│  │ 📦 网页抓取    ⭐4.2    [安装]     │ │
+│  └────────────────────────────────────┘ │
+└──────────────────────────────────────────┘
+  </pre></div>
+  </div>
+
+  <div class="card"><h3 style="margin-top:0">安装 / 停用 / 卸载 语义</h3>
+  <table>
+    <tr><th>操作</th><th>服务层</th><th>组件层</th><th>数据</th></tr>
+    <tr><td><b>安装</b></td><td>启动，Tool/prompt/事件/schema 在位</td><td>组件出现在侧栏，可装配</td><td>无</td></tr>
+    <tr><td><b>停用</b></td><td><span class="warn">停止</span>，能力移除</td><td>所有实例从窗口移除</td><td>保留（重启用原位恢复）</td></tr>
+    <tr><td><b>卸载</b></td><td>停止，能力移除</td><td>所有实例从窗口移除</td><td><span class="warn">保留但不可见</span>（重装恢复）</td></tr>
+    <tr><td><b>依赖缺失</b></td><td>不启动，标记「依赖未满足」</td><td>组件不可装配</td><td>—</td></tr>
+  </table>
+  <div class="notes">停用 ≠ 卸载：停用是临时，数据与装配关系都保留，重启用原位恢复；卸载是彻底移除，数据保留但不可见（对齐 capability-design 的「数据保留，只是不可见」）。</div>
+  </div>
+
+  <h2>③ 组件装配 · 加入窗口交互</h2>
+  <div class="grid2">
+  <div class="card"><h3 style="margin-top:0">方式 A · 拖拽</h3><pre>
+┌ 插件侧栏 ─────────────┐   ┌ 对话窗口 ─────────────┐
+│ 附件按钮   ───drag──► │   │ [消息框]              │
+│ [↗] 拖到窗口         │   │                       │
+│                      │   │ [📎]  ← 落入           │
+└──────────────────────┘   └───────────────────────┘
+  从侧栏把组件拖到目标窗口
+  → 窗口出现该组件实例
+  </pre></div>
+  <div class="card"><h3 style="margin-top:0">方式 B · 点击加入</h3><pre>
+  点组件行的 [+ 加入窗口]
+  ┌────────────────────────────────────┐
+  │ 选择目标窗口                       │
+  │  ( ○ ) Panel 1 · 对话             │
+  │  (   ) Panel 2 · 分析             │
+  │  (   ) ＋ 新建窗口                │
+  │                    [取消] [加入]  │
+  └────────────────────────────────────┘
+  同组件可多次加入不同窗口（多实例）
+  </pre></div>
+  </div>
+
+  <h2>④ 组件装配用户流程</h2>
+  <div class="card">
+    <div class="flow-box">
+      <div class="f-step"><div class="f-box">新建窗口</div><div class="f-arrow">→</div><div class="f-box">打开插件侧栏</div><div class="f-arrow">→</div><div class="f-box">选择插件</div></div>
+      <div class="f-step"><div class="f-box dec">如何加入组件？</div></div>
+      <div class="f-branch">
+        <div class="f-step"><div class="f-box">拖拽组件到窗口</div><div class="f-arrow">→</div><div class="f-box">组件实例落入窗口</div></div>
+        <div class="f-step"><div class="f-box">点 [+ 加入窗口] → 选目标窗口</div><div class="f-arrow">→</div><div class="f-box">组件实例落入窗口</div></div>
+      </div>
+      <div class="f-step"><div class="f-box">组件显示（UI 在位）</div><div class="f-arrow">→</div><div class="f-box">进入运行模式</div></div>
+      <div class="f-step"><div class="f-box dec">组件未放入任何窗口？</div></div>
+      <div class="f-branch">
+        <div class="f-step"><div class="f-box">UI 不显示</div><div class="f-arrow">→</div><div class="f-box">但插件服务层照常运行（Tool/prompt/事件在位）</div></div>
+      </div>
+      <div class="f-step"><div class="f-box dec">卸载插件？</div></div>
+      <div class="f-branch">
+        <div class="f-step"><div class="f-box">该插件所有组件实例从所有窗口移除</div><div class="f-arrow">→</div><div class="f-box">服务停止 + Tool/prompt 消失</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>⑤ 运行态 / 编辑态</h2>
+  <div class="grid2">
+  <div class="card"><h3 style="margin-top:0">运行态（默认）</h3><pre>
+┌────────────────────────────────────────────────┐
+│ [⚙][✨][🔍]   Osteosome   服务 2/2  ●         │ ← 极简顶栏
+├────────────────────────────────────────────────┤
+│                                                │
+│ ┌─ 对话窗口 ────┐   ┌─ 会话窗口 ────┐          │
+│ │ 消息框        │   │ [＋新建]      │          │
+│ │ [📎][模型][发送]│  │ ● 最近对话   │          │
+│ └───────────────┘   └───────────────┘          │
+│                                                │
+│  · 无侧栏 · 布局冻结(组件不可拖)               │
+│  · 组件照常运行(服务/流式/事件)                │
+│  · 顶栏仅保留: 编辑⚙ / 新建✨ / 搜索🔍         │
+└────────────────────────────────────────────────┘
+  </pre></div>
+  <div class="card"><h3 style="margin-top:0">编辑态（点 ⚙）</h3><pre>
+┌─ 主窗口（布局解冻，可编辑）───────────────────┐
+│ [⚙ 退出编辑]   Osteosome   服务 2/2  ●      │
+├──────────────────────────────────────────────┤
+│ ┌─ 对话窗口 ────────┐   ┌─ 会话窗口 ──────┐ │
+│ │ 组件可拖/缩放/加入/移除│ │ 可编辑         │ │
+│ │ 消息框              │   │                │ │
+│ │ [📎][模型][发送]    │   │                │ │
+│ └─────────────────────┘   └────────────────┘ │
+└──────────────────────────────────────────────┘
+
+   ┌─ 外部窗口：插件管理（独立原生窗口）─────────┐
+   │ 点 ⚙ → 另开此窗口，可拖出主窗口/多屏      │
+   │ 🔍 搜索                       [刷新] [×]  │
+   │ ● AI 对话 ✨+4  运行中  [管理]            │
+   │ ● 附件插件 📎+1  运行中  [管理]           │
+   │ ● 转换服务 🔄+0  运行中  [管理]           │
+   │ ● 服务状态 ⚙+1  运行中  [管理]           │
+   │ ── 市场 ─────────────                    │
+   │ [🔍 浏览更多插件]                         │
+   └────────────────────────────────────────────┘
+  · 编辑态 = 主窗口(解冻) + 外部窗口(插件管理)
+  · 从外部窗口拖组件 → 跨窗口放到主窗口任意 Panel
+  · 点「退出编辑」/Esc → 主窗口冻结 + 可关闭外部窗口
+  </pre></div>
+  </div>
+  <div class="card"><h3 style="margin-top:0">浮窗形态（原生独立窗口）</h3><pre>
+  点 ⚙ 进入编辑 → 直接打开原生独立窗口（复用 PanelHost）
+  ┌─ 插件管理(原生独立窗口,可拖出主窗口)──────────────────┐
+  │ 🔍 搜索                       [刷新] [×]              │
+  │ ── 已安装 ─────────────────────────────             │
+  │ ● AI 对话  ✨+4  运行中   [管理]                      │
+  │ ● 附件插件 📎+1  运行中   [管理]                      │
+  │ ● 转换服务 🔄+0  运行中   [管理]                      │
+  │ ● 服务状态 ⚙+1  运行中   [管理]                      │
+  │ ● 会话      💬+1  运行中   [管理]                     │
+  │ ● 轨迹      📈+1  运行中   [管理]                     │
+  │ ── 市场 ─────────────────────────────                 │
+  │ [🔍 浏览更多插件]                                     │
+  │ ┌────────────────────────────────────────────────┐   │
+  │ │ 📦 图片转换  ⭐4.8  [安装]                      │   │
+  │ │ 📦 代码执行  ⭐4.5  [安装]                      │   │
+  │ │ 📦 网页抓取  ⭐4.2  [安装]                      │   │
+  │ └────────────────────────────────────────────────┘   │
+  └───────────────────────────────────────────────────────┘
+     ↑ 复用 PanelHost 原生窗口能力：可拖出主窗口边界/多屏/最小化
+     ↑ 从插件管理窗口把组件 → 跨窗口拖到主窗口的某个 Panel
+     ↑ 关闭窗口 ≠ 卸载插件，只是收起编辑台；组件已装配的照常运行
+  </pre>
+  <div class="notes">插件管理始终是<b>独立原生窗口</b>，不做网页内胶囊浮层。进入编辑（点 ⚙ / 快捷键）→ 打开独立窗口；编辑与运行共享同一份布局，收起即冻结。Osteosome 从始至终是客户端形态，<b>不做 webui</b>——webui 仅作开发调试用。</div>
+  </div>
+
+  <h2>⑥ 客户端技术选型 · Tauri（推荐）</h2>
+  <div class="card">
+    <h3 style="margin-top:0">推荐 Tauri，理由</h3>
+    <table>
+      <tr><th>维度</th><th>Tauri</th><th>Electron</th></tr>
+      <tr><td>打包体积</td><td><span class="ok">3~10MB</span></td><td>80~200MB</td></tr>
+      <tr><td>Vue3+Vite</td><td><span class="ok">官方支持</span></td><td>支持</td></tr>
+      <tr><td>原生多窗口</td><td><span class="ok">WebviewWindow</span></td><td>BrowserWindow</td></tr>
+      <tr><td>插件权限控制</td><td><span class="ok">主动式白名单</span></td><td>手动配置</td></tr>
+      <tr><td>跨窗口通信</td><td>emit/listen 事件总线（与 Core 总线相似）</td><td>ipcMain</td></tr>
+      <tr><td>学习成本</td><td>需会 Rust（壳层很薄）</td><td>纯 JS</td></tr>
+    </table>
+    <div class="notes">关键判断：Tauri 只做「壳」（开窗口/浮窗/托盘/快捷键），业务全在 Node Core，因此文件/AI/深度原生操作都不经 Tauri，Rust 生态浅不构成瓶颈。</div>
+  </div>
+
+  <div class="card"><h3 style="margin-top:0">三层架构分层（职责分离）</h3><pre>
+┌─ Tauri（Rust 壳）──────────────────────────────┐
+│  开主窗口 · 原生浮窗(可拖出主窗口) · 托盘 · 快捷键 │
+│  打开 localhost:5173 (Vue 前端)                 │
+│  ❌ 不做文件 / 不做 AI / 不做业务               │
+└──────────────────┬─────────────────────────────┘
+                   │ HTTP / SSE (127.0.0.1:1420)
+┌──────────────────▼─────────────────────────────┐
+│  Node Core（龙骨 · 一切业务）                   │
+│  文件系统 · 命令执行 · 会话 · 记忆 · MCP        │
+│  插件装配 · 凭证 · 事件总线                     │
+└───────┬──────────────────────────┬─────────────┘
+        │                          │ HTTP (OpenAI 兼容)
+┌───────▼──────────┐   ┌───────────▼─────────────┐
+│ 远程 LLM 服务商   │   │ 本地推理引擎(可选)       │
+│ deepseek/openai  │   │ Ollama / llama.cpp      │
+└──────────────────┘   └─────────────────────────┘
+  </pre>
+  <div class="notes">
+    <ul>
+      <li><b>文件深度操作不构成 Tauri 瓶颈</b>——AI agent 的文件操作（read_file / exec / MCP / 附件）全在 Node Core 做，Tauri 壳不碰文件。</li>
+      <li><b>本地 AI 推理引擎由 Core 统一控制</b>——走 HTTP（OpenAI 兼容）或 child_process，Tauri 不碰推理；本地/远程 LLM 都做成统一 provider（P4 的 Registry 一份即可）。</li>
+      <li>前端壳发起命令 → Core 处理 → SSE 回事件，Tauri 不接触业务数据。</li>
+    </ul>
+  </div>
+  </div>
+
+  <h2>⑦ 关键决策对照</h2>
+  <div class="card">
+    <table>
+      <tr><th>场景</th><th>行为</th></tr>
+      <tr><td>用户新建窗口</td><td>空白 Panel，可自由布局</td></tr>
+      <tr><td>用户把组件拖入/加入窗口</td><td>该组件 UI 显示；插件服务本就在跑</td></tr>
+      <tr><td>用户不放某个组件</td><td>UI 不显示，但 Tool/prompt/事件/服务照常运行</td></tr>
+      <tr><td>组件多实例</td><td>同组件可放多个窗口各一实例（如两个「发送」按钮在不同窗口）</td></tr>
+      <tr><td>官方附件 vs 三方附件</td><td>无隐式冲突，纯用户选放；可并存或只用一个</td></tr>
+      <tr><td>无 UI 插件</td><td>只装服务，不产生任何组件，用户看不到界面</td></tr>
+      <tr><td>卸载插件</td><td>该插件所有组件实例从窗口移除 + 服务停止 + Tool/prompt 消失</td></tr>
+    </table>
+  </div>
+
+  <h2>⑧ 组件实例数据模型（草案）</h2>
+  <div class="card"><pre>
+// 插件
+interface Plugin {
+  id: string                 // 'plugin.chat' | 'plugin.attachment'
+  name: string
+  components: ComponentDef[] // 该插件贡献的组件定义
+  onActivate?: (ctx) => void // 服务层启动（headless 引擎）
+}
+
+// 组件定义（可多实例）
+interface ComponentDef {
+  id: string                 // 'comp.chat-attach' | 'comp.attach-button'
+  title: string              // '附件按钮'
+  component: () => Promise<{default: Component}>
+}
+
+// 窗口里的一个组件实例
+interface ComponentInstance {
+  instId: string             // 实例 id（多实例区分）
+  componentId: string        // 指向 ComponentDef.id
+  panelId: string            // 所属窗口
+  rect: {left,top,width,height,zIndex}  // movable-box 几何
+}
+
+// 布局真源：panel → instances
+Panel.params = {
+  instances: ComponentInstance[],   // 取代当前 widgets: string[]
+  layout: Record<instId, rect>
+}
+  </pre>
+  <div class="notes">当前实现 `widgets/registry.ts` 是「全局单例 + import.meta.glob 自动发现」；按此模型需演进为「插件贡献多组件 + 实例化」，布局从 `widgets: string[]` 演进为 `instances: ComponentInstance[]`。</div>
+  </div>
+
+</div>
+</body>
+</html>

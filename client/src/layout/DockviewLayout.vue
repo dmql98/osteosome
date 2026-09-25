@@ -6,6 +6,7 @@
         :right-header-actions-component="headerActions"
         :default-tab-component="panelTab"
         :disable-dnd="false"
+        dnd-strategy="pointer"
         @ready="onReady"
       />
     </div>
