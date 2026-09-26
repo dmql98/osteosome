@@ -18,7 +18,7 @@ describe('router · 三入口', () => {
   it('/ 命中 MainLayout（TopBar 渲染）', async () => {
     const { router, wrapper } = await mountAt('/')
     expect(router.currentRoute.value.name).toBe('main')
-    expect(wrapper.find('.top-bar').exists()).toBe(true)
+    expect(wrapper.find('.topbar').exists()).toBe(true)
   })
 
   it('/pane/:id 命中 PanelHost 且渲染面板 id', async () => {
@@ -32,7 +32,7 @@ describe('router · 三入口', () => {
     const { router, wrapper } = await mountAt('/no-such-route')
     expect(router.currentRoute.value.path).toBe('/')
     expect(router.currentRoute.value.name).toBe('main')
-    expect(wrapper.find('.top-bar').exists()).toBe(true)
+    expect(wrapper.find('.topbar').exists()).toBe(true)
   })
 })
 
@@ -42,7 +42,7 @@ describe('App 装配纪律', () => {
       global: { stubs: { RouterView: { template: '<div class="router-view-stub" />' } } },
     })
     expect(wrapper.find('.router-view-stub').exists()).toBe(true)
-    expect(wrapper.find('.top-bar').exists()).toBe(false)
+    expect(wrapper.find('.topbar').exists()).toBe(false)
     expect(wrapper.find('.panel-host').exists()).toBe(false)
   })
 })

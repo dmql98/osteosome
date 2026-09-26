@@ -45,6 +45,16 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     bus,
     config,
     listServices: () => manager.list(),
+    controlService: async (command, serviceId) => {
+      try {
+        if (command === 'restart') await manager.restart(serviceId)
+        else if (command === 'stop') await manager.stopServicePublic(serviceId)
+        else await manager.startServicePublic(serviceId)
+        return null
+      } catch (err) {
+        return String(err)
+      }
+    },
     ...options.bridge,
   })
 

@@ -35,6 +35,8 @@ export interface SseBridgeOptions {
   config: CoreConfig
   /** 供 /health 的 `services: list()`（由 ServiceManager 注入） */
   listServices?: () => ServiceInfo[]
+  /** 服务控制命令回调（由 ServiceManager 注入）：restart/stop/start 走这里，返回错误信息则视为失败 */
+  controlService?: (command: 'restart' | 'stop' | 'start', serviceId: string) => Promise<string | null>
   /** 心跳间隔 ms（默认 30000；测试注入小值） */
   heartbeatMs?: number
   /** 僵尸断开阈值 ms（默认 90000；测试注入小值） */
@@ -130,7 +132,7 @@ export class SseBridge {
           methodNotAllowed(res, 'POST')
           return
         }
-        await handleCommand(req, res, this.options.bus)
+        await handleCommand(req, res, this.options.bus, this.options.controlService)
         return
       }
       if (path === '/api/preferences') {

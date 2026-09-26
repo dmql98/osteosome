@@ -1,18 +1,26 @@
 <template>
-  <div class="panel-boxes">
+  <div class="panel-boxes" :class="`panel-boxes--${modeClass}`" @pointerdown="onCanvasPointerDown">
     <div ref="canvas" class="panel-boxes__canvas">
       <MovableBox
         v-for="widget in visible"
         :key="widget.id"
         v-model="widget.rect"
         class="panel-boxes__item"
+        :class="{ 'panel-boxes__item--selected': selectedId === widget.id }"
         drag-handle=".panel-boxes__header"
-        :snap-to-elements="true"
-        :snap-targets="snapTargets"
+        :active="editable && selectedId === widget.id"
+        :draggable="editable"
+        :resizable="editable"
+        :disabled="!editable"
+        :snap-to-elements="editable"
+        :snap-targets="editable ? snapTargets : []"
         @drag-stop="persist"
         @resize-stop="persist"
+        @pointerdown.stop="onBoxPointerDown(widget.id)"
       >
-        <header class="panel-boxes__header">{{ widget.title }}</header>
+        <header class="panel-boxes__header" :class="{ 'panel-boxes__header--edit': editable }">
+          <span class="panel-boxes__title">{{ widget.title }}</span>
+        </header>
         <div class="panel-boxes__body"><component :is="widget.component" /></div>
       </MovableBox>
       <p v-if="visible.length === 0" class="panel-boxes__empty">空面板 · 用「添加组件」放入组件</p>
@@ -22,7 +30,9 @@
 
 <script setup lang="ts">
 import { computed, markRaw, nextTick, onMounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { MovableBox, type MovableBoxRect } from 'vue-movable-box'
+import { useLayoutStore } from '../layout/layout.store'
 import { getWidget, widgetComponents } from '../widgets/registry'
 
 type WidgetBox = { id: string; title: string; component: unknown; rect: MovableBoxRect }
@@ -38,6 +48,21 @@ const saved = computed(() => resolved.value.layout ?? {})
 const canvas = ref<HTMLElement | null>(null)
 const componentMap = widgetComponents()
 const gridSize = 8
+
+// 编辑模式才可拖拽/缩放：运行时锁定组件位置与大小
+const layoutStore = useLayoutStore()
+const { mode } = storeToRefs(layoutStore)
+const editable = computed(() => mode.value === 'edit')
+const modeClass = computed(() => (editable.value ? 'edit' : 'runtime'))
+// 当前选中的组件：点它才显示 8 个把手；点空白处取消选中
+const selectedId = ref<string | null>(null)
+
+function onBoxPointerDown(id: string): void {
+  if (editable.value) selectedId.value = id
+}
+function onCanvasPointerDown(): void {
+  if (editable.value) selectedId.value = null
+}
 
 function defaultRect(index: number): MovableBoxRect {
   const width = 360
@@ -81,7 +106,12 @@ watch(saved, () => { if (visible.value.length) rebuild() })
 .panel-boxes { height: 100%; min-height: 0; overflow: auto; background: var(--color-surface-2); }
 .panel-boxes__canvas { position: relative; min-height: 100%; height: 100%; }
 .panel-boxes__item { display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); overflow: hidden; }
-.panel-boxes__header { flex: 0 0 auto; height: 26px; display: flex; align-items: center; padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); cursor: move; user-select: none; }
+.panel-boxes__item--selected { border-color: var(--color-primary); box-shadow: var(--shadow-md); }
+.panel-boxes--edit .panel-boxes__item { border-style: dashed; }
+.panel-boxes__header { flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); user-select: none; }
+.panel-boxes--edit .panel-boxes__header { cursor: move; }
+.panel-boxes--runtime .panel-boxes__header { display: none; }
+.panel-boxes__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel-boxes__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3); }
 .panel-boxes__empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
 </style>

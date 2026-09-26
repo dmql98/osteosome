@@ -150,6 +150,21 @@ export class ServiceManager {
     await this.spawnAndHandshake(svc)
   }
 
+  /** 停用单个服务（系统级服务控制命令用）；未知服务抛错 */
+  async stopServicePublic(serviceId: ServiceId): Promise<void> {
+    const svc = this.services.get(serviceId)
+    if (!svc) throw new Error(`stop: unknown service '${serviceId}'`)
+    await this.stopService(svc, this.stopGraceMs)
+  }
+
+  /** 启动单个服务（系统级服务控制命令用）；未知服务抛错，已启动则幂等 */
+  async startServicePublic(serviceId: ServiceId): Promise<void> {
+    const svc = this.services.get(serviceId)
+    if (!svc) throw new Error(`start: unknown service '${serviceId}'`)
+    if (svc.status === 'starting' || svc.status === 'ready') return
+    await this.spawnAndHandshake(svc)
+  }
+
   status(serviceId: ServiceId): ServiceStatus {
     return this.services.get(serviceId)?.status ?? 'stopped'
   }

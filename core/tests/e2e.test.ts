@@ -284,4 +284,95 @@ describe('e2e: core + hello', () => {
     },
     60_000,
   )
+
+  it(
+    'service.stop command → hello stopped → service.start brings it back',
+    async () => {
+      // 停用
+      const stopRes = await fetch(`${base()}/api/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: 'service.stop', payload: { serviceId: 'hello' } }),
+      })
+      expect(stopRes.status).toBe(202)
+      await waitForHello(
+        (s) => s.status === 'stopped',
+        15_000,
+        'hello stopped via command',
+      )
+
+      // 停用后命令不再执行：POST 仍是 202（命令被接受），但 hello 不再发布事件
+      // 用 /health 确认 status=stopped 即可（上一步已断言）
+
+      // 启用
+      const startRes = await fetch(`${base()}/api/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: 'service.start', payload: { serviceId: 'hello' } }),
+      })
+      expect(startRes.status).toBe(202)
+      await waitForHello(
+        (s) => s.status === 'ready',
+        20_000,
+        'hello started via command',
+      )
+
+      // 命令可用性恢复
+      const sse = await openSse(base(), '?topics=hello.command.*')
+      try {
+        const requestId = `e2e-svc-${Date.now()}`
+        const events = await postUntilExecuted(sse, requestId, 'after-control')
+        const executed = events.find(
+          (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
+        )
+        expect(executed).toBeDefined()
+        expect(executed!.payload).toMatchObject({
+          requestId,
+          echo: 'after-control',
+          source: 'hello',
+        })
+      } finally {
+        sse.close()
+      }
+    },
+    60_000,
+  )
+
+  it(
+    'service.restart command → pid changes → ready again',
+    async () => {
+      const before = await getHello()
+      expect(before?.pid, 'hello pid missing before restart').toBeTypeOf('number')
+
+      const res = await fetch(`${base()}/api/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: 'service.restart', payload: { serviceId: 'hello' } }),
+      })
+      expect(res.status).toBe(202)
+
+      await waitForHello(
+        (s) => s.status === 'ready' && s.pid !== before?.pid,
+        20_000,
+        'hello restarted via command',
+      )
+      expect(lifecycle.some((e) => e.topic === 'service.restarting')).toBe(true)
+    },
+    40_000,
+  )
+
+  it(
+    'service.stop with unknown serviceId → 400 with error',
+    async () => {
+      const res = await fetch(`${base()}/api/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: 'service.stop', payload: { serviceId: 'nope' } }),
+      })
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error?: string }
+      expect(body.error).toContain('unknown service')
+    },
+    20_000,
+  )
 })

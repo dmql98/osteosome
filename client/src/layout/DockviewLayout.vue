@@ -1,5 +1,5 @@
 <template>
-  <div class="dockview-layout">
+  <div class="dockview-layout" :class="{ 'dockview-layout--hoverbar': store.mode === 'runtime' }">
     <div class="dockview-layout__dock">
       <DockviewVue
         :components="components"
@@ -99,6 +99,25 @@ onBeforeUnmount(() => {
 .dockview-layout__dock { flex: 1 1 0%; min-width: 0; min-height: 0; position: relative; }
 .dockview-layout__dock :deep(> div) { width: 100%; height: 100%; }
 .dockview-layout :deep(.dv-shell) { --dv-sash-color: var(--color-border); --dv-active-sash-color: var(--color-primary); }
+/* 面板顶栏：默认隐藏，鼠标悬停到面板顶部时毛玻璃浮现（对齐 demo 规范） */
+.dockview-layout--hoverbar :deep(.dv-groupview > .dv-tabs-and-actions-container) {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) ease;
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--color-border);
+}
+.dockview-layout--hoverbar :deep(.dv-tabs-and-actions-container:hover),
+.dockview-layout--hoverbar :deep(.dv-groupview:hover > .dv-tabs-and-actions-container) {
+  opacity: 1;
+  pointer-events: auto;
+}
 .dockview-layout__fallback { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; overflow: auto; background: var(--color-bg); color: var(--color-text-muted); font-size: var(--text-sm); }
 .dockview-layout__error { position: absolute; left: var(--space-4); bottom: var(--space-4); margin: 0; padding: var(--space-2) var(--space-3); color: var(--color-danger); background: var(--color-danger-soft); border: 1px solid var(--color-danger); border-radius: var(--radius-md); font-size: var(--text-sm); }
 </style>

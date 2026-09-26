@@ -1,6 +1,5 @@
 <template>
   <div v-if="panelId" class="panel-header-actions">
-    <IconButton icon="⇱" size="sm" label="重置布局" @click="layout.resetLayout" />
     <IconButton icon="⤢" size="sm" label="拉出独立窗" @click="detach" />
     <IconButton icon="×" size="sm" label="关闭面板" @click="close" />
   </div>

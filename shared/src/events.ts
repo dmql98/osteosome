@@ -48,6 +48,9 @@ export interface EventMap {
  */
 export interface CommandMap {
   'hello.command': { requestId: string; text: string }
+  'service.restart': { serviceId: string }
+  'service.stop': { serviceId: string }
+  'service.start': { serviceId: string }
 }
 
 /** 事件 topic：keyof EventMap */
@@ -78,4 +81,9 @@ export const EVENT_TOPICS = [
 ] as const satisfies readonly EventKey[]
 
 /** 运行时命令 topic 清单 —— 与 {@link CommandMap} 同步；服务 manifest 的 subscribes 可引用命令 */
-export const COMMAND_TOPICS = ['hello.command'] as const satisfies readonly CommandKey[]
+export const COMMAND_TOPICS = [
+  'hello.command',
+  'service.restart',
+  'service.stop',
+  'service.start',
+] as const satisfies readonly CommandKey[]

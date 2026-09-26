@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Osteosome 界面 Demo</title>
+<style>
+/* ===== 设计令牌（与客户端 tokens.css 同源）===== */
+:root {
+  color-scheme: light;
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef0f4;
+  --color-surface-3: #e3e7ed;
+  --color-border: #d5dae1;
+  --color-border-strong: #b6bec9;
+  --color-text: #1b2027;
+  --color-text-muted: #5c6673;
+  --color-text-inverse: #ffffff;
+  --color-primary: #2f6feb;
+  --color-primary-hover: #2559c4;
+  --color-primary-active: #1f4ba5;
+  --color-primary-soft: #e7effd;
+  --color-danger: #cf222e;
+  --color-danger-soft: #fdecee;
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-focus-ring: #2f6feb;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px;
+  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px; --radius-full: 999px;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --text-xs: 12px; --text-sm: 13px; --text-md: 14px; --text-lg: 16px; --text-xl: 20px;
+  --shadow-sm: 0 1px 2px rgba(16,22,26,.08);
+  --shadow-md: 0 4px 12px rgba(16,22,26,.12);
+  --shadow-lg: 0 12px 32px rgba(16,22,26,.18);
+  --duration-fast: 120ms; --duration-base: 200ms;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #14171c;
+  --color-surface: #1c2027;
+  --color-surface-2: #232832;
+  --color-surface-3: #2b313c;
+  --color-border: #333a45;
+  --color-border-strong: #454e5c;
+  --color-text: #e6e9ee;
+  --color-text-muted: #9aa4b2;
+  --color-text-inverse: #14171c;
+  --color-primary: #4f8cff;
+  --color-primary-hover: #6b9fff;
+  --color-primary-active: #3a72e0;
+  --color-primary-soft: #1d2b45;
+  --color-danger: #f85149;
+  --color-danger-soft: #3a1d20;
+  --color-success: #3fb950;
+  --color-warning: #d29922;
+  --color-focus-ring: #4f8cff;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.5);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,.6);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: var(--font-sans); font-size: var(--text-md); color: var(--color-text); background: var(--color-bg); -webkit-font-smoothing: antialiased; }
+
+/* ===== 演示导航壳 ===== */
+.demo-shell { display: flex; height: 100vh; }
+.demo-nav { width: 232px; flex-shrink: 0; background: var(--color-surface); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; overflow-y: auto; }
+.demo-nav__brand { padding: var(--space-4); font-weight: 700; font-size: var(--text-lg); display: flex; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--color-border); }
+.demo-nav__theme { margin-left: auto; font-size: var(--text-xs); color: var(--color-text-muted); cursor: pointer; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 2px 6px; }
+.demo-nav__section { padding: var(--space-2) var(--space-4); font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 600; letter-spacing: .05em; margin-top: var(--space-2); }
+.demo-nav__item { padding: var(--space-2) var(--space-4); cursor: pointer; font-size: var(--text-sm); display: flex; align-items: center; gap: var(--space-2); border: 0; background: none; color: var(--color-text); text-align: left; width: 100%; }
+.demo-nav__item:hover { background: var(--color-surface-2); }
+.demo-nav__item.active { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 600; }
+.demo-stage { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.demo-stage__toolbar { height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: var(--text-xs); color: var(--color-text-muted); }
+.demo-stage__frame { flex: 1; min-height: 0; position: relative; overflow: auto; padding: var(--space-5); display: flex; align-items: center; justify-content: center; }
+
+/* ===== 通用组件 ===== */
+.btn { font-family: inherit; font-size: var(--text-sm); padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background var(--duration-fast), border-color var(--duration-fast), box-shadow var(--duration-fast); }
+.btn:hover { background: var(--color-surface-2); }
+.btn:active { transform: translateY(0); }
+.btn:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-text-inverse); }
+.btn--primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.btn--danger { background: var(--color-surface); border-color: var(--color-danger); color: var(--color-danger); }
+.btn--danger:hover { background: var(--color-danger-soft); }
+.btn--ghost { background: transparent; border-color: transparent; color: var(--color-text-muted); }
+.btn--ghost:hover { background: var(--color-surface-2); color: var(--color-text); }
+.btn--sm { padding: 4px 8px; font-size: var(--text-xs); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.icon-btn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--color-text-muted); border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm); }
+.icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); padding: 1px 8px; border-radius: var(--radius-full); background: var(--color-surface-2); color: var(--color-text-muted); }
+.badge--dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot.green { background: var(--color-success); }
+.dot.yellow { background: var(--color-warning); }
+.dot.red { background: var(--color-danger); }
+.dot.gray { background: var(--color-border-strong); }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); padding: 3px 10px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted); cursor: grab; }
+
+/* ===== TopBar ===== */
+.topbar { height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); background: var(--color-surface); border-bottom: 1px solid var(--color-border); box-shadow: var(--shadow-sm); }
+.topbar__brand { font-weight: 700; margin-right: var(--space-2); }
+.topbar__spacer { flex: 1; }
+.topbar__mode { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); padding: 5px 12px; border-radius: var(--radius-md); border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; }
+.topbar__mode:hover { background: var(--color-surface-2); }
+
+/* ===== 面板 (dockview 风格) ===== */
+.workspace { flex: 1; min-height: 0; display: flex; gap: var(--space-2); padding: var(--space-2); }
+.panel { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-sm); position: relative; }
+.panel--runtime .panel__header { display: none; }
+.panel__header { flex-shrink: 0; height: 32px; display: flex; align-items: center; padding: 0 var(--space-3); background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); font-size: var(--text-sm); font-weight: 600; }
+.panel__header-actions { margin-left: auto; display: flex; gap: 2px; }
+/* 顶部栏：默认隐藏，鼠标悬停到 panel 顶部时浮现 */
+.panel--hoverbar { padding-top: 0; }
+.panel--hoverbar .panel__hoverbar {
+  position: absolute; top: 0; left: 0; right: 0; height: 32px;
+  display: flex; align-items: center; padding: 0 var(--space-3);
+  background: color-mix(in srgb, var(--color-surface-2) 92%, transparent);
+  backdrop-filter: blur(4px);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm); font-weight: 600; gap: var(--space-2);
+  opacity: 0; pointer-events: none; transition: opacity var(--duration-fast);
+  z-index: 4;
+}
+.panel--hoverbar:hover .panel__hoverbar,
+.panel--hoverbar .panel__hoverbar:hover { opacity: 1; pointer-events: auto; }
+.panel__body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.panel--p1 { flex: 1.4; }
+.panel--p2 { flex: 1; }
+.panel--p3 { flex: 1; }
+
+/* 运行态面板内组件（无边框） */
+.comp { display: flex; flex-direction: column; height: 100%; }
+.comp__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* 消息气泡 */
+.msg { display: flex; flex-direction: column; gap: 2px; max-width: 85%; }
+.msg--user { align-self: flex-end; }
+.msg--agent { align-self: flex-start; }
+.msg__who { font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 600; }
+.msg__bubble { padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); font-size: var(--text-sm); line-height: 1.5; }
+.msg--user .msg__bubble { background: var(--color-primary); color: var(--color-text-inverse); border-bottom-right-radius: 2px; }
+.msg--agent .msg__bubble { background: var(--color-surface-2); border: 1px solid var(--color-border); border-bottom-left-radius: 2px; }
+.msg__bubble pre { margin: var(--space-2) 0 0; background: var(--color-surface-3); padding: var(--space-2); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-xs); overflow-x: auto; }
+
+/* 输入行 */
+.inputrow { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-border); background: var(--color-surface); }
+.inputrow__field { flex: 1; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; font-size: var(--text-sm); background: var(--color-surface); color: var(--color-text); }
+.inputrow__field:focus { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; border-color: transparent; }
+.select { padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; font-size: var(--text-sm); background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+
+/* ===== 侧栏装配区 ===== */
+.assembly { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.assembly__sec { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 600; }
+.assembly__panel { padding: var(--space-2) var(--space-3); display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; border-radius: var(--radius-md); }
+.assembly__panel:hover { background: var(--color-surface-2); }
+.assembly__panel.active { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 600; }
+.assembly__panel.new { color: var(--color-primary); font-weight: 600; }
+.assembly__list { flex: 1; overflow-y: auto; padding: 0 var(--space-2) var(--space-2); }
+.assembly__item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-1); font-size: var(--text-sm); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); cursor: grab; }
+.assembly__item:hover { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.assembly__item:active { cursor: grabbing; }
+.assembly__item.dragging { opacity: .5; border-style: dashed; }
+
+/* ===== 空状态 ===== */
+.empty-center { display: grid; place-items: center; height: 100%; text-align: center; }
+.empty-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-6); max-width: 320px; box-shadow: var(--shadow-sm); }
+.empty-card__icon { font-size: 40px; margin-bottom: var(--space-3); }
+.empty-card__title { font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-2); }
+.empty-card__desc { font-size: var(--text-sm); color: var(--color-text-muted); margin-bottom: var(--space-5); line-height: 1.6; }
+.empty-card__actions { display: flex; gap: var(--space-2); justify-content: center; }
+
+/* ===== 插件管理窗口 ===== */
+.pluginwin { height: 100%; display: flex; flex-direction: column; background: var(--color-surface); }
+.pluginwin__topbar { height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); border-bottom: 1px solid var(--color-border); }
+.pluginwin__title { font-weight: 700; font-size: var(--text-md); }
+.pluginwin__search { margin-left: var(--space-4); flex: 1; max-width: 260px; padding: 5px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: var(--text-sm); }
+.pluginwin__body { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.pluginsec__title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-muted); margin-bottom: var(--space-2); display: flex; align-items: center; gap: var(--space-2); }
+.plugincard { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); margin-bottom: var(--space-2); background: var(--color-surface); }
+.plugincard:hover { border-color: var(--color-primary); }
+.plugincard__icon { width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-surface-2); display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+.plugincard__info { flex: 1; min-width: 0; }
+.plugincard__name { font-weight: 600; font-size: var(--text-sm); display: flex; align-items: center; gap: 6px; }
+.plugincard__meta { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+.plugincard__status { display: flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-text-muted); }
+.plugincard__actions { display: flex; gap: 6px; }
+.plugin-detail { display: flex; flex-direction: column; gap: var(--space-3); }
+.detail-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.detail-card__head { padding: var(--space-2) var(--space-3); background: var(--color-surface-2); font-weight: 700; font-size: var(--text-sm); }
+.detail-card__body { padding: var(--space-3); font-size: var(--text-sm); display: flex; flex-direction: column; gap: var(--space-2); }
+.cap-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.cap-row__name { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-primary); }
+.cap-row__ok { margin-left: auto; color: var(--color-success); }
+.switch { width: 34px; height: 18px; border-radius: var(--radius-full); background: var(--color-surface-3); position: relative; cursor: pointer; border: none; }
+.switch.on { background: var(--color-primary); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform var(--duration-fast); }
+.switch.on::after { transform: translateX(16px); }
+.danger-zone { border-color: var(--color-danger); border-radius: var(--radius-md); padding: var(--space-3); }
+.danger-zone__title { color: var(--color-danger); font-weight: 700; font-size: var(--text-sm); margin-bottom: var(--space-2); }
+
+/* ===== 弹窗 ===== */
+.modal { position: fixed; inset: 0; display: grid; place-items: center; z-index: var(--z-modal, 1100); }
+.modal__backdrop { position: absolute; inset: 0; background: rgba(16,22,26,.4); }
+.modal__card { position: relative; width: 480px; max-width: 90vw; max-height: 90vh; overflow-y: auto; background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+.modal__head { padding: var(--space-4); border-bottom: 1px solid var(--color-border); display: flex; align-items: center; font-weight: 700; font-size: var(--text-md); }
+.modal__close { margin-left: auto; }
+.modal__body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); }
+.modal__foot { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: var(--space-2); }
+.modal__field { display: flex; flex-direction: column; gap: var(--space-1); }
+.modal__field label { font-size: var(--text-xs); color: var(--color-text-muted); font-weight: 600; }
+.field { padding: 6px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; font-size: var(--text-sm); }
+.radio-row { display: flex; align-items: center; gap: var(--space-2); padding: 6px 0; cursor: pointer; font-size: var(--text-sm); }
+.radio-row input { accent-color: var(--color-primary); }
+.radio-row__meta { margin-left: auto; font-size: var(--text-xs); color: var(--color-text-muted); }
+.progress { height: 8px; border-radius: var(--radius-full); background: var(--color-surface-2); overflow: hidden; }
+.progress__bar { height: 100%; background: var(--color-primary); border-radius: var(--radius-full); transition: width var(--duration-base); }
+.install-step { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text-muted); }
+.install-step.done { color: var(--color-success); }
+.install-step.active { color: var(--color-text); font-weight: 600; }
+.install-step__ic { width: 18px; text-align: center; }
+
+/* ===== 服务状态 ===== */
+.svc-list { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
+.svc-row { display: flex; align-items: center; gap: var(--space-2); padding: 4px 0; }
+.svc-row__name { font-family: var(--font-mono); font-size: var(--text-xs); }
+.svc-row__ver { color: var(--color-text-muted); font-size: var(--text-xs); }
+.svc-row__state { margin-left: auto; font-size: var(--text-xs); color: var(--color-text-muted); }
+
+/* ===== 加载 ===== */
+.spinner { width: 28px; height: 28px; border: 3px solid var(--color-surface-3); border-top-color: var(--color-primary); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-center { display: grid; place-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }
+.error-comp { border: 1px dashed var(--color-danger); border-radius: var(--radius-md); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); }
+
+/* ===== Canvas 画布组件 ===== */
+.canvas { position: relative; height: 100%; background: var(--color-surface-2); }
+.canvas-comp { position: absolute; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; overflow: hidden; }
+.canvas-comp__head { height: 26px; flex-shrink: 0; display: flex; align-items: center; padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); cursor: move; user-select: none; }
+.canvas-comp__body { flex: 1; padding: var(--space-3); font-size: var(--text-sm); overflow: auto; }
+.canvas-comp--idle { border-style: dashed; border-color: var(--color-border-strong); }
+.canvas-comp--selected { border: 2px solid var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft); }
+.canvas-comp--drag { opacity: .5; border-style: dashed; }
+.resize-handle { position: absolute; width: 8px; height: 8px; background: var(--color-primary); border: 1px solid #fff; border-radius: 2px; }
+.resize-handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.resize-handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.resize-handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.resize-handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.resize-handle.n { left: 50%; top: -5px; transform: translateX(-50%); cursor: ns-resize; }
+.resize-handle.s { left: 50%; bottom: -5px; transform: translateX(-50%); cursor: ns-resize; }
+.resize-handle.e { right: -5px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.resize-handle.w { left: -5px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.snap-line { position: absolute; background: var(--color-primary); opacity: .7; }
+.snap-line.v { width: 1px; }
+.snap-line.h { height: 1px; }
+.ghost { position: absolute; border: 1px dashed var(--color-primary); background: var(--color-primary-soft); opacity: .5; border-radius: var(--radius-md); pointer-events: none; }
+
+/* ===== 拖拽 Drop ===== */
+.droppable { position: relative; }
+.droppable.drop-hover { box-shadow: 0 0 0 2px var(--color-primary); }
+.drop-preview { position: absolute; inset: 4px; border: 2px dashed var(--color-primary); border-radius: var(--radius-md); background: var(--color-primary-soft); opacity: .6; display: grid; place-items: center; color: var(--color-primary); font-size: var(--text-sm); pointer-events: none; z-index: 3; }
+.multi-toolbar { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-full); box-shadow: var(--shadow-md); padding: var(--space-1) var(--space-2); display: flex; gap: var(--space-1); z-index: 10; }
+</style>
+</head>
+<body>
+<div class="demo-shell">
+  <nav class="demo-nav">
+    <div class="demo-nav__brand">🦴 Osteosome <span class="demo-nav__theme" onclick="toggleTheme()" id="themeToggle">深色</span></div>
+    <div class="demo-nav__section">主窗</div>
+    <button class="demo-nav__item" data-demo="main-runtime" onclick="show('main-runtime')">A · 运行态</button>
+    <button class="demo-nav__item" data-demo="main-edit" onclick="show('main-edit')">B · 编辑态</button>
+    <button class="demo-nav__item" data-demo="main-empty" onclick="show('main-empty')">C · 空状态</button>
+    <div class="demo-nav__section">插件管理（独立窗）</div>
+    <button class="demo-nav__item" data-demo="plugin-list" onclick="show('plugin-list')">D1 · 列表</button>
+    <button class="demo-nav__item" data-demo="plugin-detail" onclick="show('plugin-detail')">D2 · 详情</button>
+    <button class="demo-nav__item" data-demo="plugin-install" onclick="show('plugin-install')">D3 · 安装</button>
+    <div class="demo-nav__section">Panel</div>
+    <button class="demo-nav__item" data-demo="panel-empty" onclick="show('panel-empty')">E1 · 空 Panel</button>
+    <button class="demo-nav__item" data-demo="panel-chat" onclick="show('panel-chat')">E2 · 内容 Panel</button>
+    <button class="demo-nav__item" data-demo="panel-canvas" onclick="show('panel-canvas')">E3 · 画布 Panel</button>
+    <div class="demo-nav__section">组件状态</div>
+    <button class="demo-nav__item" data-demo="comp-idle" onclick="show('comp-idle')">F1 · 未选中</button>
+    <button class="demo-nav__item" data-demo="comp-selected" onclick="show('comp-selected')">F2 · 选中</button>
+    <button class="demo-nav__item" data-demo="comp-drag" onclick="show('comp-drag')">F3 · 拖拽中</button>
+    <button class="demo-nav__item" data-demo="comp-multi" onclick="show('comp-multi')">F4 · 多选</button>
+    <div class="demo-nav__section">装配交互</div>
+    <button class="demo-nav__item" data-demo="assemble-drag" onclick="show('assemble-drag')">G1 · 拖拽装配</button>
+    <button class="demo-nav__item" data-demo="assemble-click" onclick="show('assemble-click')">G2 · 点击装配</button>
+    <div class="demo-nav__section">弹窗</div>
+    <button class="demo-nav__item" data-demo="modal-uninstall" onclick="show('modal-uninstall')">H1 · 卸载确认</button>
+    <button class="demo-nav__item" data-demo="modal-newpanel" onclick="show('modal-newpanel')">H2 · 新建窗口</button>
+    <button class="demo-nav__item" data-demo="modal-installing" onclick="show('modal-installing')">H3 · 安装中</button>
+    <button class="demo-nav__item" data-demo="modal-error" onclick="show('modal-error')">H4 · 错误</button>
+    <div class="demo-nav__section">状态指示</div>
+    <button class="demo-nav__item" data-demo="state-service" onclick="show('state-service')">I1 · 服务状态</button>
+    <button class="demo-nav__item" data-demo="state-empty" onclick="show('state-empty')">I2 · 空状态</button>
+    <button class="demo-nav__item" data-demo="state-loading" onclick="show('state-loading')">I3 · 加载态</button>
+    <button class="demo-nav__item" data-demo="state-error" onclick="show('state-error')">I4 · 错误态</button>
+  </nav>
+  <div class="demo-stage">
+    <div class="demo-stage__toolbar"><span id="stageTitle">选择左侧界面查看 Demo</span><span style="margin-left:auto">每个界面可交互 · 右上角可切深/浅色</span></div>
+    <div class="demo-stage__frame" id="stage"></div>
+  </div>
+</div>
+
+<script>
+function toggleTheme() {
+  const root = document.documentElement;
+  const isDark = root.getAttribute('data-theme') === 'dark';
+  root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeToggle').textContent = isDark ? '深色' : '浅色';
+}
+function show(id) {
+  document.querySelectorAll('.demo-nav__item').forEach(b => b.classList.toggle('active', b.dataset.demo === id));
+  const t = document.getElementById(id).dataset.title;
+  document.getElementById('stageTitle').textContent = t;
+  document.getElementById('stage').innerHTML = document.getElementById(id).innerHTML;
+  // 清掉可能残留的交互状态
+  document.querySelectorAll('.frame').forEach(f => f.classList.remove('frame--window','frame--wide','frame--modal'));
+}
+</script>
+<template id="main-runtime" data-title="A · 主窗运行态（用户装配布局）">
+  <div class="frame frame--wide" style="max-width:920px;max-height:560px">
+    <span class="frame__label">A · 运行态 · 布局=用户装配（无系统侧栏）</span>
+    <div class="topbar">
+      <span class="topbar__brand">🦴 Osteosome</span>
+      <span class="topbar__spacer"></span>
+      <span class="badge"><span class="badge--dot green"></span>5/6 服务</span>
+      <button class="topbar__mode">✏️ 编辑</button>
+      <button class="topbar__mode">🧩 插件</button>
+    </div>
+    <div class="workspace">
+      <div class="panel panel--p1 panel--runtime panel--hoverbar">
+        <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+        <div class="panel__body">
+          <div class="comp">
+            <div class="comp__body">
+              <div class="msg msg--user"><span class="msg__who">我</span><span class="msg__bubble">帮我写个读取 CSV 的 Python 脚本</span></div>
+              <div class="msg msg--agent"><span class="msg__who">Agent</span><span class="msg__bubble">好的，这是一个示例：<pre>import csv
+with open('data.csv') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        print(row)</pre></span></div>
+            </div>
+            <div class="inputrow">
+              <button class="btn btn--ghost btn--sm">📎 附件</button>
+              <select class="select"><option>deepseek-chat</option></select>
+              <button class="btn btn--primary btn--sm">发送</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel--p2 panel--runtime panel--hoverbar">
+        <div class="panel__hoverbar"><span>会话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+        <div class="panel__body">
+          <div class="comp"><div class="comp__body" style="gap:4px">
+            <button class="btn btn--primary btn--sm" style="justify-content:center;margin-bottom:4px">＋ 新建</button>
+            <div class="msg--agent" style="align-self:stretch"><span class="msg__bubble" style="border-bottom-left-radius:var(--radius-lg)"><b>▶ 帮我写脚本</b><br><span style="font-size:var(--text-xs);color:var(--color-text-muted)">10 分钟前</span></span></div>
+            <div class="msg--agent" style="align-self:stretch"><span class="msg__bubble" style="border-bottom-left-radius:var(--radius-lg)">昨天的对话<br><span style="font-size:var(--text-xs);color:var(--color-text-muted)">昨天</span></span></div>
+            <div class="msg--agent" style="align-self:stretch"><span class="msg__bubble" style="border-bottom-left-radius:var(--radius-lg)">上周的调研<br><span style="font-size:var(--text-xs);color:var(--color-text-muted)">上周</span></span></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="panel panel--p3 panel--runtime panel--hoverbar">
+        <div class="panel__hoverbar"><span>服务状态</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+        <div class="panel__body">
+          <div class="comp"><div class="comp__body">
+            <div class="svc-list">
+              <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">core</span><span class="svc-row__ver">v3.0</span><span class="svc-row__state">ready</span></div>
+              <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">llm</span><span class="svc-row__ver">v1.0</span><span class="svc-row__state">ready</span></div>
+              <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">loop</span><span class="svc-row__ver">v1.0</span><span class="svc-row__state">ready</span></div>
+              <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">session</span><span class="svc-row__ver">v1.0</span><span class="svc-row__state">ready</span></div>
+              <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">character</span><span class="svc-row__ver">v1.0</span><span class="svc-row__state">ready</span></div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="main-edit" data-title="B · 主窗编辑态（装配区）">
+  <div class="frame frame--wide" style="max-width:980px;max-height:560px;flex-direction:row">
+    <span class="frame__label">B · 编辑态 · 左=面板装配区（插件管理是独立窗）</span>
+    <div class="assembly">
+      <div class="assembly__sec">已有面板</div>
+      <div class="assembly__panel active">▶ 对话</div>
+      <div class="assembly__panel">分析</div>
+      <div class="assembly__panel">仪表盘</div>
+      <div class="assembly__panel new">＋ 新建面板</div>
+      <div class="assembly__sec">组件库（拖到面板）</div>
+      <div class="assembly__list">
+        <div class="assembly__item" draggable="true">✨ 消息框</div>
+        <div class="assembly__item" draggable="true">✨ 模型选择</div>
+        <div class="assembly__item" draggable="true">📎 附件按钮</div>
+        <div class="assembly__item" draggable="true">⚙ 服务状态</div>
+        <div class="assembly__item" draggable="true">💬 会话列表</div>
+        <div class="assembly__item" draggable="true">📈 LLM 统计</div>
+      </div>
+      <div class="assembly__sec">来源 · 各插件贡献自己的组件</div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2)">
+      <div class="panel panel--hoverbar" style="flex:1.2">
+        <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+        <div class="panel__body" style="display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-2)">
+          <div class="canvas-comp canvas-comp--idle" style="position:relative;flex:1;min-height:60px">
+            <div class="canvas-comp__head">✨ 消息框（未选中）</div>
+            <div class="canvas-comp__body"><span style="color:var(--color-text-muted);font-size:var(--text-xs)">[我] … [Agent] …</span></div>
+          </div>
+          <div class="canvas-comp canvas-comp--selected" style="position:relative;height:52px">
+            <div class="canvas-comp__head">✨ 发送按钮（选中）</div>
+            <div class="canvas-comp__body"><button class="btn btn--primary btn--sm">发送</button></div>
+            <span class="resize-handle se"></span><span class="resize-handle nw"></span><span class="resize-handle ne"></span><span class="resize-handle sw"></span><span class="resize-handle n"></span><span class="resize-handle s"></span><span class="resize-handle e"></span><span class="resize-handle w"></span>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel--hoverbar" style="flex:1">
+        <div class="panel__hoverbar"><span>分析</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+        <div class="panel__body droppable">
+          <div class="empty-center"><div class="empty-card" style="border-style:dashed;border-color:var(--color-border-strong);box-shadow:none;padding:var(--space-5)">
+            <div class="empty-card__icon">＋</div>
+            <div class="empty-card__title" style="font-size:var(--text-md)">拖组件到此处</div>
+            <div class="empty-card__desc" style="font-size:var(--text-xs);margin-bottom:0">或从左侧组件库拖入</div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="main-empty" data-title="C · 主窗空状态（首次启动）">
+  <div class="frame frame--wide" style="max-width:920px;max-height:560px">
+    <span class="frame__label">C · 空状态 · 无任何面板</span>
+    <div class="topbar">
+      <span class="topbar__brand">🦴 Osteosome</span>
+      <span class="topbar__spacer"></span>
+      <button class="topbar__mode">✏️ 编辑</button>
+      <button class="topbar__mode">🧩 插件</button>
+    </div>
+    <div class="empty-center">
+      <div class="empty-card">
+        <div class="empty-card__icon">✨</div>
+        <div class="empty-card__title">欢迎使用 Osteosome</div>
+        <div class="empty-card__desc">从「新建窗口」开始，<br>或进入编辑模式装配你的工作台。</div>
+        <div class="empty-card__actions">
+          <button class="btn btn--primary">新建窗口</button>
+          <button class="btn">浏览插件</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="plugin-list" data-title="D1 · 插件管理 · 列表（独立窗）">
+  <div class="frame frame--wide" style="max-width:760px;max-height:560px">
+    <span class="frame__label">D1 · 插件管理（独立原生窗口）</span>
+    <div class="pluginwin">
+      <div class="pluginwin__topbar">
+        <span class="pluginwin__title">插件管理</span>
+        <input class="pluginwin__search" placeholder="🔍 搜索插件…">
+        <span style="flex:1"></span>
+        <button class="btn btn--ghost btn--sm">刷新</button>
+        <button class="icon-btn">×</button>
+      </div>
+      <div class="pluginwin__body">
+        <div>
+          <div class="pluginsec__title">已安装 (7)</div>
+          <div class="plugincard"><div class="plugincard__icon">✨</div><div class="plugincard__info"><div class="plugincard__name">AI 对话 <span class="badge">v1.0.0</span></div><div class="plugincard__meta">✨ 4 组件</div><div class="plugincard__status"><span class="dot green"></span>运行中</div></div><div class="plugincard__actions"><button class="btn btn--sm">管理</button></div></div>
+          <div class="plugincard"><div class="plugincard__icon">📎</div><div class="plugincard__info"><div class="plugincard__name">附件插件 <span class="badge">v1.2.0</span></div><div class="plugincard__meta">📎 1 组件 · 依赖: 转换服务</div><div class="plugincard__status"><span class="dot green"></span>运行中</div></div><div class="plugincard__actions"><button class="btn btn--sm">管理</button></div></div>
+          <div class="plugincard"><div class="plugincard__icon">🔄</div><div class="plugincard__info"><div class="plugincard__name">转换服务 <span class="badge">v0.8.0</span></div><div class="plugincard__meta">无 UI · 仅服务</div><div class="plugincard__status"><span class="dot green"></span>运行中</div></div><div class="plugincard__actions"><button class="btn btn--sm">管理</button></div></div>
+          <div class="plugincard"><div class="plugincard__icon">👤</div><div class="plugincard__info"><div class="plugincard__name">角色 <span class="badge">v0.9.0</span></div><div class="plugincard__meta">👤 2 组件</div><div class="plugincard__status"><span class="dot gray"></span>已停用</div></div><div class="plugincard__actions"><button class="btn btn--primary btn--sm">启用</button><button class="btn btn--sm">管理</button></div></div>
+        </div>
+        <div>
+          <div class="pluginsec__title">市场</div>
+          <div class="plugincard"><div class="plugincard__icon">📦</div><div class="plugincard__info"><div class="plugincard__name">图片转换 <span class="badge">⭐ 4.8 (128)</span></div><div class="plugincard__meta">批量转换 / 格式适配</div></div><div class="plugincard__actions"><button class="btn btn--primary btn--sm">安装</button></div></div>
+          <div class="plugincard"><div class="plugincard__icon">📦</div><div class="plugincard__info"><div class="plugincard__name">代码执行 <span class="badge">⭐ 4.5 (96)</span></div><div class="plugincard__meta">Python / Node / Shell 沙箱</div></div><div class="plugincard__actions"><button class="btn btn--primary btn--sm">安装</button></div></div>
+          <div class="plugincard"><div class="plugincard__icon">📦</div><div class="plugincard__info"><div class="plugincard__name">网页抓取 <span class="badge">⭐ 4.2 (74)</span></div><div class="plugincard__meta">静态 / 动态页面抓取</div></div><div class="plugincard__actions"><button class="btn btn--primary btn--sm">安装</button></div></div>
+          <div style="text-align:right;margin-top:var(--space-2)"><button class="btn btn--ghost btn--sm">浏览更多 →</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="plugin-detail" data-title="D2 · 插件管理 · 详情">
+  <div class="frame frame--wide" style="max-width:560px;max-height:600px">
+    <span class="frame__label">D2 · 插件详情（附件插件）</span>
+    <div class="pluginwin">
+      <div class="pluginwin__topbar"><span class="pluginwin__title">附件插件 · 管理</span><span style="flex:1"></span><button class="icon-btn">×</button></div>
+      <div class="pluginwin__body">
+        <div style="display:flex;align-items:center;gap:var(--space-3)">
+          <div class="plugincard__icon" style="width:48px;height:48px;font-size:24px">📎</div>
+          <div><div class="plugincard__name">附件插件 <span class="badge">v1.2.0</span></div><div style="font-size:var(--text-xs);color:var(--color-text-muted)">本地安装 · 作者: dmql · MIT</div><div class="plugincard__status"><span class="dot green"></span>运行中</div></div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:var(--space-2)"><span style="font-size:var(--text-xs)">启用</span><button class="switch on" role="switch" aria-checked="true"></button></div>
+        </div>
+        <div class="detail-card"><div class="detail-card__head">能力（服务层，无 UI）</div><div class="detail-card__body">
+          <div class="cap-row"><span class="cap-row__name">attachment.upload</span><span class="cap-row__ok">✓</span></div>
+          <div class="cap-row"><span class="cap-row__name">attachment.upload_path</span><span class="cap-row__ok">✓</span></div>
+          <div class="cap-row"><span>Prompt</span><span style="font-size:var(--text-xs)">「用户可能附加文件…」</span><span class="cap-row__ok">✓</span></div>
+          <div class="cap-row"><span>Schema</span><span class="cap-row__name" style="font-size:var(--text-xs)">Message.attachments?</span><span class="cap-row__ok">✓</span></div>
+          <div class="cap-row"><span>事件</span><span style="font-size:var(--text-xs)">attachment.uploaded / removed</span><span class="cap-row__ok">✓</span></div>
+        </div></div>
+        <div class="detail-card"><div class="detail-card__head">组件（UI，用户装配）</div><div class="detail-card__body">
+          <div style="display:flex;align-items:center;gap:var(--space-2)"><span>📎 附件按钮（转 md 后上传）</span><span style="margin-left:auto;font-size:var(--text-xs);color:var(--color-text-muted)">已放入: 分析窗口 ×1</span></div>
+          <div style="display:flex;gap:var(--space-2)"><button class="btn btn--primary btn--sm">＋ 加入窗口</button><button class="btn btn--sm">移除实例</button></div>
+        </div></div>
+        <div class="detail-card"><div class="detail-card__head">依赖</div><div class="detail-card__body"><span style="color:var(--color-success);font-size:var(--text-xs)">· 转换服务 ✓ 已就绪</span></div></div>
+        <div class="danger-zone"><div class="danger-zone__title">危险区</div><div style="display:flex;gap:var(--space-2)"><button class="btn btn--sm">停用插件</button><button class="btn btn--danger btn--sm">卸载插件</button></div></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="plugin-install" data-title="D3 · 插件管理 · 安装">
+  <div class="frame frame--modal">
+    <span class="frame__label">D3 · 安装插件</span>
+    <div class="modal"><div class="modal__backdrop"></div>
+      <div class="modal__card" style="position:relative">
+        <div class="modal__head">安装插件 <button class="icon-btn modal__close">×</button></div>
+        <div class="modal__body">
+          <div style="display:flex;align-items:center;gap:var(--space-3)"><div class="plugincard__icon" style="width:48px;height:48px;font-size:24px">📦</div><div><div style="font-weight:600">图片转换 <span class="badge">⭐ 4.8</span></div><div style="font-size:var(--text-xs);color:var(--color-text-muted)">作者: xxx · 官方验证 · 12 MB</div></div></div>
+          <div><b>描述</b><div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:2px">批量转换图片格式，支持 PNG / JPG / WebP / AVIF 等。</div></div>
+          <div><b>贡献</b><div style="font-size:var(--text-sm);margin-top:2px">· 工具: image.convert / image.batch<br>· 组件: 🖼 图片转换按钮 / 🖼 批量面板<br>· Schema: Message.images?</div></div>
+          <div><b>权限</b><div style="font-size:var(--text-sm);margin-top:2px">☑ 读写本地文件（图片）<br>☑ 网络访问（CDN）<br>☐ 执行本地命令</div></div>
+          <div><b>依赖</b><div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:2px">· 无</div></div>
+        </div>
+        <div class="modal__foot"><button class="btn">取消</button><button class="btn btn--primary">安装</button></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="panel-empty" data-title="E1 · 空 Panel（新建）">
+  <div class="frame frame--window">
+    <span class="frame__label">E1 · 空 Panel</span>
+    <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>新窗口</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body droppable">
+        <div class="empty-center"><div class="empty-card" style="border-style:dashed;border-color:var(--color-border-strong);box-shadow:none">
+          <div class="empty-card__icon">＋</div>
+          <div class="empty-card__title" style="font-size:var(--text-md)">拖组件到此处</div>
+          <div class="empty-card__desc" style="font-size:var(--text-xs);margin-bottom:0">或点侧栏加入</div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="panel-chat" data-title="E2 · 内容 Panel（聊天）">
+  <div class="frame frame--window">
+    <span class="frame__label">E2 · 内容 Panel · 运行态</span>
+    <div class="panel panel--runtime panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body">
+        <div class="comp">
+          <div class="comp__body">
+            <div class="msg msg--user"><span class="msg__who">我</span><span class="msg__bubble">帮我写个脚本</span></div>
+            <div class="msg msg--agent"><span class="msg__who">Agent</span><span class="msg__bubble">好的，请看…<pre>print('hello')</pre></span></div>
+          </div>
+          <div class="inputrow">
+            <button class="btn btn--ghost btn--sm">📎 附件</button>
+            <select class="select"><option>deepseek ▾</option></select>
+            <button class="btn btn--primary btn--sm">发送</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="panel-canvas" data-title="E3 · 画布 Panel（编辑态多组件）">
+  <div class="frame frame--window">
+    <span class="frame__label">E3 · 画布型 Panel · 编辑态</span>
+    <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>仪表盘</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body">
+        <div class="canvas">
+          <div class="canvas-comp canvas-comp--idle" style="left:16px;top:16px;width:190px;height:150px">
+            <div class="canvas-comp__head">📈 LLM 统计</div>
+            <div class="canvas-comp__body">调用: 42<br>成功率: 98%<br>平均延迟: 1.2s</div>
+          </div>
+          <div class="canvas-comp canvas-comp--idle" style="left:220px;top:16px;width:190px;height:150px">
+            <div class="canvas-comp__head">💬 会话列表</div>
+            <div class="canvas-comp__body">▶ 昨天的对话<br>今天的对话<br>上周的调研</div>
+          </div>
+          <div class="canvas-comp canvas-comp--selected" style="left:90px;top:180px;width:180px;height:140px">
+            <div class="canvas-comp__head">👤 角色卡</div>
+            <div class="canvas-comp__body"><div style="display:flex;gap:8px;align-items:center"><div style="width:32px;height:32px;border-radius:50%;background:var(--color-surface-3);display:grid;place-items:center">🙂</div><div>名字: 小助手</div></div></div>
+            <span class="resize-handle se"></span><span class="resize-handle nw"></span><span class="resize-handle ne"></span><span class="resize-handle sw"></span><span class="resize-handle n"></span><span class="resize-handle s"></span><span class="resize-handle e"></span><span class="resize-handle w"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="comp-idle" data-title="F1 · 组件未选中（编辑态）">
+  <div class="frame frame--window">
+    <span class="frame__label">F1 · 未选中 · 虚线边框</span>
+    <div class="panel" style="height:100%">
+      <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>示例</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body" style="display:grid;place-items:center">
+        <div class="canvas-comp canvas-comp--idle" style="position:relative;width:280px;height:140px">
+          <div class="canvas-comp__head">✨ 消息框</div>
+          <div class="canvas-comp__body"><span style="color:var(--color-text-muted);font-size:var(--text-xs)">鼠标悬停时右上角出现缩放把手</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="comp-selected" data-title="F2 · 组件选中（8 把手）">
+  <div class="frame frame--window">
+    <span class="frame__label">F2 · 选中 · 实线高亮 + 8 把手</span>
+    <div class="panel" style="height:100%">
+      <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>示例</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body" style="display:grid;place-items:center">
+        <div class="canvas-comp canvas-comp--selected" style="position:relative;width:280px;height:150px">
+          <div class="canvas-comp__head">✨ 消息框</div>
+          <div class="canvas-comp__body">内容区域</div>
+          <span class="resize-handle nw"></span><span class="resize-handle n"></span><span class="resize-handle ne"></span><span class="resize-handle w"></span><span class="resize-handle e"></span><span class="resize-handle sw"></span><span class="resize-handle s"></span><span class="resize-handle se"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="comp-drag" data-title="F3 · 组件拖拽中（ghost + 吸附线）">
+  <div class="frame frame--window">
+    <span class="frame__label">F3 · 拖拽中 · 半透明 ghost + 吸附线</span>
+    <div class="panel" style="height:100%">
+      <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>示例</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body" style="padding:0">
+        <div class="canvas">
+          <div class="canvas-comp canvas-comp--drag" style="left:24px;top:24px;width:140px;height:90px"><div class="canvas-comp__head">✨ 消息框</div><div class="canvas-comp__body"></div></div>
+          <div class="canvas-comp" style="left:150px;top:120px;width:120px;height:80px;opacity:.9"><div class="canvas-comp__head">✨ 发送按钮</div><div class="canvas-comp__body"></div></div>
+          <div class="snap-line v" style="left:120px;top:0;height:100%"></div>
+          <div class="snap-line h" style="top:130px;left:0;width:100%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="comp-multi" data-title="F4 · 多选 / 框选">
+  <div class="frame frame--window">
+    <span class="frame__label">F4 · 多选 / 框选</span>
+    <div class="panel" style="height:100%">
+      <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>示例</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body" style="padding:0">
+        <div class="canvas">
+          <div class="canvas-comp canvas-comp--selected" style="left:24px;top:24px;width:140px;height:90px"><div class="canvas-comp__head">组件 A</div><div class="canvas-comp__body"></div></div>
+          <div class="canvas-comp canvas-comp--selected" style="left:180px;top:40px;width:120px;height:80px"><div class="canvas-comp__head">组件 B</div><div class="canvas-comp__body"></div></div>
+          <div class="ghost" style="left:16px;top:16px;width:290px;height:120px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="multi-toolbar"><span style="font-size:var(--text-xs);padding:0 4px">选中: 2 个组件</span><button class="btn btn--sm">删除</button><button class="btn btn--sm">复制</button><button class="btn btn--sm">成组</button></div>
+  </div>
+</template>
+
+<template id="assemble-drag" data-title="G1 · 拖拽装配（装配区 → Panel）">
+  <div class="frame frame--wide" style="max-width:860px;max-height:460px;flex-direction:row">
+    <span class="frame__label">G1 · 拖拽装配 · ghost + Drop 预览</span>
+    <div class="assembly" style="width:200px">
+      <div class="assembly__sec">组件库</div>
+      <div class="assembly__list">
+        <div class="assembly__item">✨ 消息框</div>
+        <div class="assembly__item dragging">📎 附件按钮</div>
+        <div class="assembly__item">⚙ 服务状态</div>
+      </div>
+    </div>
+    <div class="panel panel--hoverbar" style="flex:1;margin:var(--space-2)">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body droppable drop-hover">
+        <div class="comp__body" style="padding:var(--space-2);display:flex;flex-direction:column;gap:var(--space-2)">
+          <div class="canvas-comp canvas-comp--idle" style="position:relative;flex:1;min-height:50px"><div class="canvas-comp__head">✨ 消息框</div><div class="canvas-comp__body"></div></div>
+        </div>
+        <div class="drop-preview">Drop 到此处</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="assemble-click" data-title="G2 · 点击装配（选择器）">
+  <div class="frame frame--modal">
+    <span class="frame__label">G2 · 点击装配 · 选择目标窗口</span>
+    <div class="modal"><div class="modal__backdrop"></div>
+      <div class="modal__card" style="position:relative">
+        <div class="modal__head">选择目标窗口 <button class="icon-btn modal__close">×</button></div>
+        <div class="modal__body">
+          <div>将「📎 附件按钮」加入：</div>
+          <div class="radio-row"><input type="radio" name="target"><span>对话</span><span class="radio-row__meta">已有 4 个组件</span></div>
+          <div class="radio-row"><input type="radio" name="target" checked><span>分析</span><span class="radio-row__meta">已有 0 个组件</span></div>
+          <div class="radio-row"><input type="radio" name="target"><span>仪表盘</span><span class="radio-row__meta">已有 3 个组件</span></div>
+          <div class="radio-row"><input type="radio" name="target"><span>＋ 新建窗口</span></div>
+          <div style="margin-top:var(--space-2)"><b>位置</b></div>
+          <div class="radio-row"><input type="radio" name="pos" checked><span>自动（Panel 中心）</span></div>
+          <div class="radio-row"><input type="radio" name="pos"><span>指定（拖拽放置）</span></div>
+        </div>
+        <div class="modal__foot"><button class="btn">取消</button><button class="btn btn--primary">加入</button></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="modal-uninstall" data-title="H1 · 卸载确认">
+  <div class="frame frame--modal">
+    <span class="frame__label">H1 · 卸载确认</span>
+    <div class="modal"><div class="modal__backdrop"></div>
+      <div class="modal__card" style="position:relative">
+        <div class="modal__head">⚠ 卸载「附件插件」？ <button class="icon-btn modal__close">×</button></div>
+        <div class="modal__body">
+          <div style="background:var(--color-danger-soft);color:var(--color-danger);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-size:var(--text-sm)">卸载后：该插件组件会从所有窗口移除（共 1 个实例）；服务停止，以下能力消失：</div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">- 工具 attachment.upload / upload_path<br>- prompt 片段<br>- schema 扩展 Message.attachments</div>
+          <div style="font-size:var(--text-xs);color:var(--color-success)">历史数据保留，重装后可恢复（会话里的附件不会丢）。</div>
+          <div class="modal__field"><label>输入插件名以确认：</label><input class="field" placeholder="附件插件"></div>
+        </div>
+        <div class="modal__foot"><button class="btn">取消</button><button class="btn btn--danger" disabled>确认卸载</button></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="modal-newpanel" data-title="H2 · 新建窗口">
+  <div class="frame frame--modal">
+    <span class="frame__label">H2 · 新建窗口</span>
+    <div class="modal"><div class="modal__backdrop"></div>
+      <div class="modal__card" style="position:relative">
+        <div class="modal__head">新建窗口 <button class="icon-btn modal__close">×</button></div>
+        <div class="modal__body">
+          <div class="modal__field"><label>名称</label><input class="field" value="我的分析"></div>
+          <div><b>模板</b></div>
+          <div class="radio-row"><input type="radio" name="tpl" checked><span>空白</span></div>
+          <div class="radio-row"><input type="radio" name="tpl"><span>对话（消息框 + 发送）</span></div>
+          <div class="radio-row"><input type="radio" name="tpl"><span>仪表盘（LLM 统计 + 会话列表）</span></div>
+          <div class="radio-row"><input type="radio" name="tpl"><span>画布（自由拖放）</span></div>
+          <div style="margin-top:var(--space-2)"><b>位置</b></div>
+          <div class="radio-row"><input type="radio" name="pos" checked><span>停靠右侧</span></div>
+          <div class="radio-row"><input type="radio" name="pos"><span>停靠底部</span></div>
+          <div class="radio-row"><input type="radio" name="pos"><span>浮动</span></div>
+        </div>
+        <div class="modal__foot"><button class="btn">取消</button><button class="btn btn--primary">创建</button></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="modal-installing" data-title="H3 · 安装中">
+  <div class="frame frame--modal">
+    <span class="frame__label">H3 · 安装中</span>
+    <div class="modal"><div class="modal__backdrop"></div>
+      <div class="modal__card" style="position:relative">
+        <div class="modal__head">安装「图片转换」 <button class="icon-btn modal__close">×</button></div>
+        <div class="modal__body">
+          <div>下载中…</div>
+          <div class="progress"><div class="progress__bar" style="width:68%"></div></div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">8.2 / 12 MB</div>
+          <div class="install-step done"><span class="install-step__ic">✓</span>下载完成</div>
+          <div class="install-step done"><span class="install-step__ic">✓</span>校验签名</div>
+          <div class="install-step active"><span class="install-step__ic">●</span>解压中…</div>
+          <div class="install-step"><span class="install-step__ic">○</span>注册服务</div>
+          <div class="install-step"><span class="install-step__ic">○</span>启动服务</div>
+        </div>
+        <div class="modal__foot"><button class="btn">取消</button></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="modal-error" data-title="H4 · 错误态">
+  <div class="frame frame--modal">
+    <span class="frame__label">H4 · 加载失败</span>
+    <div class="modal"><div class="modal__backdrop"></div>
+      <div class="modal__card" style="position:relative">
+        <div class="modal__head">⚠ 加载失败 <button class="icon-btn modal__close">×</button></div>
+        <div class="modal__body">
+          <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-danger);font-weight:600">❌ 无法连接到 Core 服务</div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">可能原因：<br>· Core 进程未启动<br>· 端口 1420 被占用<br>· 防火墙阻止本地连接</div>
+          <div style="font-family:var(--font-mono);font-size:var(--text-xs);background:var(--color-surface-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);color:var(--color-danger)">Error: connect ECONNREFUSED 127.0.0.1<br>&nbsp;&nbsp;at TCPConnectWrap.afterConnect</div>
+        </div>
+        <div class="modal__foot"><button class="btn btn--primary">重试</button><button class="btn">查看日志</button></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="state-service" data-title="I1 · 服务状态">
+  <div class="frame frame--window">
+    <span class="frame__label">I1 · 服务状态 · TopBar 徽章 + 详情</span>
+    <div class="topbar">
+      <span class="topbar__brand">🦴 Osteosome</span>
+      <span class="topbar__spacer"></span>
+      <span class="badge" style="cursor:pointer"><span class="badge--dot yellow"></span>5/6 服务</span>
+      <button class="topbar__mode">✏️ 编辑</button>
+      <button class="topbar__mode">🧩 插件</button>
+    </div>
+    <div style="flex:1;position:relative">
+      <div class="panel panel--hoverbar" style="position:absolute;right:16px;top:12px;width:300px;box-shadow:var(--shadow-lg)">
+        <div class="panel__hoverbar"><span>服务状态</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+        <div class="panel__body" style="padding:var(--space-3)">
+          <div class="svc-list">
+            <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">core</span><span class="svc-row__state">ready</span></div>
+            <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">llm</span><span class="svc-row__state">ready</span></div>
+            <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">loop</span><span class="svc-row__state">ready</span></div>
+            <div class="svc-row"><span class="dot green"></span><span class="svc-row__name">session</span><span class="svc-row__state">ready</span></div>
+            <div class="svc-row"><span class="dot yellow"></span><span class="svc-row__name">character</span><span class="svc-row__state">restarting ⋯</span></div>
+            <div class="svc-row"><span class="dot red"></span><span class="svc-row__name">convert</span><span class="svc-row__state">failed</span><button class="btn btn--sm">重启</button></div>
+          </div>
+          <button class="btn btn--sm" style="margin-top:var(--space-2)">查看日志</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="state-empty" data-title="I2 · 空状态（插件栏 / Panel）">
+  <div class="frame frame--wide" style="max-width:760px;max-height:460px;flex-direction:row">
+    <span class="frame__label">I2 · 空状态</span>
+    <div class="pluginwin" style="flex:1">
+      <div class="pluginwin__topbar"><span class="pluginwin__title">插件管理</span><span style="flex:1"></span><button class="icon-btn">×</button></div>
+      <div class="pluginwin__body" style="display:grid;place-items:center">
+        <div class="empty-card"><div class="empty-card__icon">📦</div><div class="empty-card__title" style="font-size:var(--text-md)">还没有安装任何插件</div><div class="empty-card__desc" style="margin-bottom:var(--space-4)">从市场安装你的第一个插件</div><div class="empty-card__actions"><button class="btn btn--primary">浏览插件市场</button></div></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="state-loading" data-title="I3 · 加载态">
+  <div class="frame frame--window">
+    <span class="frame__label">I3 · 加载态</span>
+    <div class="panel" style="height:100%">
+      <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body"><div class="loading-center"><div class="spinner"></div><span>加载中…</span></div></div>
+    </div>
+  </div>
+</template>
+
+<template id="state-error" data-title="I4 · 组件错误态">
+  <div class="frame frame--window">
+    <span class="frame__label">I4 · 组件级错误态</span>
+    <div class="panel" style="height:100%">
+      <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body" style="display:grid;place-items:center">
+        <div class="error-comp" style="width:280px">
+          <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-danger);font-weight:600">⚠ 组件加载失败</div>
+          <div style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--color-text-muted)">comp.chat-attach</div>
+          <div style="display:flex;gap:var(--space-2)"><button class="btn btn--sm">重试</button><button class="btn btn--danger btn--sm">移除</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+</body>
+</html>
