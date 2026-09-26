@@ -102,12 +102,17 @@ if defined VS_INSTALL (
   set "VCVARSALL=%VS_INSTALL%\VC\Auxiliary\Build\vcvarsall.bat"
 )
 
+rem NOTE: keep %VS_INSTALL% / %VCVARSALL% out of the parenthesised blocks below.
+rem The default path contains "Program Files (x86)": its ")" would close the
+rem block early and abort the script before the Tauri window is launched.
+if defined VS_INSTALL echo [client] VS install path: %VS_INSTALL%
+
 if defined VCVARSALL (
   if exist "%VCVARSALL%" (
-    echo [client] Loading MSVC env from %VS_INSTALL%
+    echo [client] Loading MSVC build env for x64...
     call "%VCVARSALL%" x64 >nul 2>&1
   ) else (
-    echo [client] WARNING: vcvarsall not found at %VCVARSALL%
+    echo [client] WARNING: vcvarsall.bat not found under the VS install path above.
   )
 ) else (
   echo [client] WARNING: MSVC build tools / Windows SDK not found.
