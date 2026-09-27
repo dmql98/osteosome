@@ -53,9 +53,14 @@ describe('createAppRouter', () => {
     expect(String(router.options.history.base)).toContain('#')
   })
 
-  it('路由表固定三条', () => {
+  it('路由表固定四条', () => {
     const router = createAppRouter(createMemoryHistory())
     const paths = router.getRoutes().map((r) => r.path).sort()
-    expect(paths).toEqual(['/', '/:pathMatch(.*)*', '/pane/:id'].sort())
+    expect(paths).toEqual(['/', '/:pathMatch(.*)*', '/pane/:id', '/plugin-list'].sort())
+  })
+
+  it('/plugin-list 命中插件列表独立窗', async () => {
+    const { wrapper } = await mountAt('/plugin-list')
+    expect(wrapper.find('.plugin-win').exists()).toBe(true)
   })
 })

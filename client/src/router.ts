@@ -22,6 +22,11 @@ export const routes: RouteRecordRaw[] = [
     }),
   },
   {
+    path: '/plugin-list',
+    name: 'plugin-list',
+    component: () => import('./plugins/PluginListWindow.vue'),
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/',
   },

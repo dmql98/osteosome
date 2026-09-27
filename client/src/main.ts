@@ -13,3 +13,5 @@ app.use(createPinia())
 app.use(UiPlugin)
 app.use(router)
 app.mount('#app')
+
+// 独立窗初始摆位（磁吸/跟随已下沉到 Rust 壳）：无需启动时初始化，开窗时再摆位

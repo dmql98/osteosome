@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Osteosome 默认能力集：主窗口 + 插件管理外部窗口 + opener","local":true,"windows":["main"],"permissions":["core:default","opener:default"]}}
+{"default":{"identifier":"default","description":"Osteosome 默认能力集：主窗口 + 插件管理外部窗口 + opener","local":true,"windows":["main","osteosome-plugin-list"],"permissions":["core:default","opener:default",{"identifier":"core:window:allow-create"},{"identifier":"core:window:allow-set-focus"},{"identifier":"core:window:allow-close"},{"identifier":"core:webview:allow-create-webview-window"}]}}

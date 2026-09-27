@@ -14,10 +14,17 @@ import { getPane } from './registry'
 import PaneError from './PaneError.vue'
 import PaneView from './PaneView.vue'
 import { sse } from '../core-sdk/sse'
+import { isTauri, closeCurrentWindowViaTauri } from '../tauri/plugin-window'
 const props = defineProps<{ id: string }>()
 const definition = computed(() => getPane(props.id))
-function closeWindow(): void { window.close() }
-onMounted(() => { sse.ensureConnected() })
+async function closeWindow(): Promise<void> {
+  if (isTauri()) await closeCurrentWindowViaTauri()
+  else window.close()
+}
+onMounted(() => {
+  sse.ensureConnected()
+  // 吸附方案已搁置：不再把面板窗摆到主窗旁
+})
 </script>
 
 <style scoped>
