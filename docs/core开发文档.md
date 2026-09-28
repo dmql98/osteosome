@@ -772,8 +772,8 @@ sdk/
 >
 > 1. **P1 拆成 P1a（Core）+ P1b（Pane 工作台）** —— 各有独立可验收绿灯，避免一次 PR 太大。
 > 2. **显式插入 P3 最小 Loop** —— 角色 / 技能 / MCP 都挂在 session loop 上，必须早于 P5-P7。
-> 3. **P2 写死单 provider，但必须走中立流契约** —— P4 只换 providers 层，不重写骨架。
-> 4. **基座评估（2026-09-23）**：P1-P4 为基座，各阶段扩展 30~50%（P1a 补强 2 处 / P1b 加组件库 / P2 落接缝三角 / P3 加会话存储 / P4 加凭证 seam + 设置 Pane），P5-P8 保持；周期已上调，各阶段详案见 `docs/开发进度/`。
+> 3. **P2 按能力位拆成 6 个 LLM 插件**（2026-09-28 定案）——llm 主位 + 3×provider + credentials + llm-retry，各自独立服务进程，「存在性由插件决定」，P4 只加凭证 store / retry 执行器 / 模型目录 / 设置 Pane。
+> 4. **基座评估（2026-09-23；P2 于 09-28 修订为能力位拆分）**：P1-P4 为基座，各阶段扩展 30~50%（P1a 补强 2 处 / P1b 加组件库 / P2 落六插件 LLM / P3 加会话存储 / P4 加凭证 store + 设置 Pane），P5-P8 保持；周期已上调，各阶段详案见 `docs/开发进度/`。
 
 ### P1a · Core 微内核 + hello-world 服务（1-2 周）
 
@@ -800,15 +800,16 @@ sdk/
 - [x] 布局模型：Panel 外层和 Widget 内层一起保存到 `/api/preferences`
 - [x] **绿灯**：Panel 停靠 / Widget 拖拽缩放 / 刷新还原 / 拉出独立窗；`pnpm test` + `pnpm build` 零错误
 
-### P2 · 最小 LLM 对话（DSH 接缝三角·单 provider 实现）（1 周）
+### P2 · 最小 LLM 对话（能力位拆分 · 六插件实现）（1.5 周）
 
-> 注意：wire 走中立流契约（`llm.request` → `llm.token.streamed` / `llm.request.finished`）；接口先于实现——`LlmAdapter` 接口 / `StreamChunk` 块协议 / 凭证引用 resolver / retry 声明在本阶段落地，deepseek 是唯一真实现，P4 只加 provider 实现与执行器，不重写骨架。详案 `docs/开发进度/P2-详细计划.md`。
+> 注意：wire 走中立流契约（`llm.request` → `llm.provider.request` → `llm.provider.chunk` → `llm.token.streamed` / `llm.request.finished`）；**能力位先于实现**——LLM 拆成 6 个独立服务插件（`llm` 主位 + `llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-opencode` 三个 provider 位 + `credentials` 凭证位 + `llm-retry` 重试记账位），每个能力位一个进程，「存在性由插件决定」：卸 provider 插件 → 该 provider 从系统消失（`unsupported_provider`）。`StreamChunk` / `ProviderDescriptor` / 凭证引用 / retry 声明在 P2 落地，P4 只加凭证 store + retry 执行器 + 模型目录 + 设置 Pane，不重写骨架。设计定案见 `docs/开发进度/LLM能力位拆分设计.md`，详案 `docs/开发进度/P2-详细计划.md`。
 
-- [ ] `services/llm/` —— manifest + index.ts；`adapter/{types,registry,deepseek}.ts` + `stream.ts`（native SSE → StreamChunk）
-- [ ] `credentials/resolver.ts`（`env:` v1，预留 `core:`）+ `retry/policy.ts`（声明不执行）+ 错误码化
-- [ ] 事件契约：`llm.request.started` / `llm.token.streamed` / `llm.request.finished` / `llm.request.failed`
-- [ ] 前端 ChatPane：`POST /api/command` → SSE 收流式 token
-- [ ] **绿灯**：前端点击 → SSE 收到流式 token；缺 API key → `missing_credential` 错误占位；重启 LLM 服务不影响 Core
+- [ ] `shared/src/llm/` —— `StreamChunk` / `readSseJson` / `ChatMessage` / `ProviderDescriptor` 上移为唯一真相源；events.ts 只增 `llm.provider.*` / `credentials.*` / `llm.metrics.*`
+- [ ] `services/credentials/` —— 凭证能力位（`env:` v1，预留 `core:`）；`services/llm-retry/` —— retry 声明消费 + usage 记账（P2 不执行）
+- [ ] `services/llm/` —— 能力主位：provider 路由表 + chunk 翻译对外事件 + cancel 转发（不 import 任何 provider 实现）
+- [ ] `services/llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-opencode` —— 三个 provider 能力位（注册 + 流式 chunk + 错误码化）
+- [ ] 前端：`widget.llm-chat`（发问 / 停止 / 流式累积）+ `widget.llm-providers`（provider 状态）
+- [ ] **绿灯**：chat Widget 发问 → SSE 收到流式 token；缺 API key → `missing_credential` 错误占位；kill provider → `llm.provider.unregistered` → `unsupported_provider` → Core 拉起恢复；重启服务不影响 Core
 
 ### P3 · 会话存储 + 最小 Loop · 会话编排（2-3 周）
 
@@ -819,11 +820,13 @@ sdk/
 - [ ] 前端 loop 状态展示 + ChatPane 会话化（历史加载 / 流式追加绑定当前会话）
 - [ ] **绿灯**：新建会话发问 → 流式回填 → 落库；刷新 / 双窗历史完整；切会话互不干扰；kill loop 自动恢复
 
-### P4 · 多模型服务商管理（凭证 seam + 设置 Pane）（1.5-2 周）
+### P4 · 多模型服务商管理（凭证 store + 设置 Pane）（1.5-2 周）
 
-- [ ] 凭证 seam：`core/src/credentials/`（store + api）+ JSON-RPC `credentials.*`（§3.5）+ `/api/credentials` 掩码端点（§4.1）+ `credential.saved/deleted` 事件（**值永不进总线**，§4.7）；resolver 接 `core:` kind
+> **2026-09-28 修订**：P2 已按能力位把 provider / 凭证 / retry 服务化（`services/llm-provider-*` / `services/credentials` / `services/llm-retry`），旧 P4 的「凭证 seam + 三 provider 实现」大部提前；**P4 剩余**：凭证 store 实装（`core:<id>` kind 落 `dataDir/credentials.json`，`credentials` 服务接上，值永不进总线）、retry 执行器（`llm-retry` 读 P2 声明执行）、模型目录 `listModels()`（消费 `llm.provider.registered` 的 `ProviderDescriptor`）、设置 Pane 套件、i18n/主题。
+
+- [ ] 凭证 store：`core` 落 `dataDir/credentials.json` + JSON-RPC `credentials.*`（§3.5）+ `/api/credentials` 掩码端点（§4.1）+ `credential.saved/deleted` 事件（**值永不进总线**，§4.7）；`services/credentials` 接 `core:` kind
 - [ ] providers 契约对齐（§16）：三 provider 适配器（openai / anthropic / openrouter）+ `format` 删除 + 错误码化 + 模型目录 `listModels()` + disjoint 记账（usage 归一落 `Message.usage`）
-- [ ] retry 执行器：`retry/engine.ts` 读 P2 声明（backoff + jitter + `retryableCodes`）
+- [ ] retry 执行器：`services/llm-retry` 读 P2 声明执行（backoff + jitter + `retryableCodes`）
 - [ ] 设置 Pane 套件：`settings-pane` / `llm-settings`（provider 增删改查 + 凭证绑定 + 模型下拉）/ `ui-settings`（主题 + i18n，P1b 延后项补齐）/ `advanced-settings`
 - [ ] **绿灯**：四家 provider 均能流式对话；新增服务商不再手改单函数；凭证值全程不进总线 / SSE
 
@@ -860,7 +863,7 @@ sdk/
 |---|---|---|
 | P1a | 阶段 A | Core 骨架 + hello-world |
 | P1b | §8.6 client + §11 | 前端工作台骨架 |
-| P2 | 阶段 B（收缩） | 只做 LLM 服务 + 单 provider + ChatPane |
+| P2 | 阶段 B（收缩） | 能力位六插件 LLM（llm + 3×provider + credentials + llm-retry + 2 Widget） |
 | P3 | 阶段 C（loop） | 会话编排引擎，拆到角色之前 |
 | P4 | §16 A组④ | LLM 适配器契约对齐 |
 | P5 | 阶段 C（character） | 角色服务 |

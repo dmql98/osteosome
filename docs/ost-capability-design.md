@@ -422,7 +422,7 @@ LLM 下一轮不该再说「你可以接收附件」。**在内存里立即重�
 
 **最小实现细节**：
 
-- **Slot**：聊天 Pane（P3 的 ChatPane）声明 `chat.composer.actions` 插槽；附件插件注册按钮
+- **Slot**：聊天 Pane（P3 的 ChatPane，即 P2 `widget.llm-chat` 的会话化升级）声明 `chat.composer.actions` 插槽；附件插件注册按钮
 - **Tool**：附件插件注册 `attachment.upload`，走 P7 之前的简化路径（直接注册到 tool registry，不经过 capability 自动导出）
 - **Prompt**：P3 的 `prompt.ts` 从常量改为「读 capabilities 组装」
 - **Schema**：`Message.attachments?` 可选字段，Zod schema 用 `.optional()`

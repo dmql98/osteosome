@@ -738,19 +738,23 @@ core/
 
 ```
 services/
-├── llm/                            # LLM 服务
+├── llm/                            # LLM 能力主位（P2 定案）
 │   ├── service.json                # manifest
-│   ├── src/
-│   │   ├── index.ts
-│   │   ├── providers/              # 服务商适配器
-│   │   ├── stream.ts               # 流式 token 解析
-│   │   └── usage.ts                # usage 记账
-│   └── tests/
+│   └── src/
+│       ├── index.ts                # 收 llm.request → 查 provider 路由 → 转发 → chunk 翻译对外事件
+│       └── routes.ts               # provider 路由表（registered/unregistered 维护）
+├── llm-provider-deepseek/          # provider 能力位（独立进程）
+├── llm-provider-openrouter/        # provider 能力位（独立进程）
+├── llm-provider-opencode/          # provider 能力位（独立进程，opencode serve HTTP）
+├── credentials/                    # 凭证能力位（独立进程，env: v1 / core: P4）
+├── llm-retry/                      # 重试 + usage 记账能力位（独立进程，P2 声明 / P4 执行）
 ├── loop/                           # Loop 服务
 ├── character/                      # 角色服务
 ├── storage/                        # storage 服务（DB 唯一持有者）
 └── stats/                          # 统计服务（旁路消费者）
 ```
+
+> **LLM 能力位拆分（2026-09-28 定案）**：LLM 不再是一个服务进程内包多个 adapter，而是拆成 6 个独立服务插件——每个能力位一个进程，「存在性由插件决定」：装 provider 插件 → 该 provider 存在；卸掉 → 从系统消失（`unsupported_provider`）。`StreamChunk` / `readSseJson` / `ProviderDescriptor` 上移 `shared/src/llm/` 为唯一真相源，provider 服务只依赖 shared 协议、不相互 import。设计定案与超越 dsh 的论证见 [`LLM能力位拆分设计.md`](./开发进度/LLM能力位拆分设计.md)。
 
 **每个服务的结构一致**：`service.json` + `src/index.ts` + 业务模块。
 
@@ -849,12 +853,12 @@ desktop/
    └─ 每个 Pane 开 SSE 订阅
    ↓
 5. 用户点「发送」
-   ├─ ChatPane POST /api/command
+   ├─ chat Widget POST /api/command（llm.request）
    ├─ Core 投递到 Bus
-   ├─ LLM 服务订阅并处理
-   ├─ LLM 服务 publish token
+   ├─ LLM 主位订阅 → 查 provider 路由 → 转发 llm.provider.request
+   ├─ provider 服务 publish llm.provider.chunk → 主位翻译 llm.token.streamed
    ├─ Core fan-out 给 SSE
-   └─ ChatPane 收到 token → 显示
+   └─ chat Widget 收到 token → 显示
 ```
 
 ---
@@ -1107,11 +1111,13 @@ npm run build --prefix client          # tsc + vite build 零错误
 
 - Core 从 server 剥离，独立为 `core/`：进程管理 + 总线 + SSE 桥。
 - 定义服务 manifest 规范 + `shared/events.ts` 事件契约。
-- 写 TS SDK，**第一个进程外服务**：LLM 服务，通过 stdio JSON-RPC 接入总线。
+- 写 TS SDK，**第一个进程外服务**：LLM 服务（能力位拆分后的 `services/llm` 主位），通过 stdio JSON-RPC 接入总线。
 - 健康检查、崩溃重启、优雅停止。
 - 前端暴露 `/events` SSE 端点 + `/api/command`。
 
 **绿灯**：重启 LLM 服务不影响 Core 和其他服务；前端 SSE 收到 `llm.token.streamed` 流。
+
+> **注（2026-09-28）**：阶段 2/3 的「LLM 服务」在里程碑 P2 落地为**能力位六插件**（`llm` 主位 + 3×`llm-provider-*` + `credentials` + `llm-retry`，各自独立进程）——每个能力位可独立 kill/拉起，「存在性由插件决定」；此处的「服务拆分」即指这套插件化进程组。详 `P2-详细计划.md` / `LLM能力位拆分设计.md`。
 
 ### 阶段 3 · 服务拆分 + 前端工作台（~2-3 周）
 
@@ -1207,7 +1213,7 @@ npm run build --prefix client          # tsc + vite build 零错误
 - 契约：`stream()` 输出带 block 边界的类型化流（文本 / 推理 / 工具 call 显式块），末尾 `finish` 终块携带稳定错误码与 Retry-After。
 - 落点：`llm/client.ts` 的 `LLMChunk` 块化；`format` 兑现或删除；字符串判 429 收敛为错误码；disjoint 记账；凭证 seam。
 - 验收：新增供应商不再手改单函数；google preset baseUrl 恢复可连通；错误告别字符串匹配。
-- **本地化落点（2026-09-23）**：接缝三角（`LlmAdapter` / `StreamChunk` / 凭证引用 / retry 声明）+ deepseek 单实现见 `docs/开发进度/P2-详细计划.md`；三 provider 实现 + 凭证 seam + `listModels()` + retry 执行器见 `docs/开发进度/P4-详细计划.md`。
+- **本地化落点（2026-09-23；P2 于 09-28 修订为能力位拆分）**：能力位六插件（`services/llm` 主位 + `llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-opencode` 三个 provider 位 + `credentials` 凭证位 + `llm-retry` 重试记账位）见 `docs/开发进度/P2-详细计划.md` 与 `LLM能力位拆分设计.md`；凭证 store（`core:<id>` kind）+ retry 执行器 + `listModels()` + 设置 Pane 见 `docs/开发进度/P4-详细计划.md`。
 
 **落地顺序**：④ LLM 适配器（最小、纯行为侧，先做）→ ③ 工具管线 → ① 会话事件化（数据层大改）→ ② Compaction（依赖事件化土壤）。
 
@@ -1313,7 +1319,7 @@ Osteosome v3 的架构本质：**微内核 + 多语言服务 + 可观察总线**
 **下一步建议**：
 
 1. 开工起点参考修订路线图（`core开发文档.md` §8 + `阶段追踪.md`），从 **P1a（Core + hello-world）** 起步。
-2. P1b（Pane 工作台骨架）先于 P2；P2 写死单 provider 但必须走中立流契约，P4 只换 providers 层。
+2. P1b（Pane 工作台骨架）先于 P2；P2 按**能力位拆成 6 个 LLM 插件**（llm 主位 + 3×provider + credentials + llm-retry，各自独立进程，「存在性由插件决定」），P4 只加凭证 store + retry 执行器 + 模型目录 + 设置 Pane。
 3. P3 显式做最小 Loop 再上 P5-P7 —— 角色 / 技能 / MCP 都挂在它上面。
 4. P8（事件持久化、多语言 SDK、服务市场）独立成 RFC 细化。
 
