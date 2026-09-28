@@ -18,7 +18,9 @@ if errorlevel 1 (
 )
 
 echo [P1b] Building Core, SDK, hello service, and client...
-call pnpm.cmd build
+rem Exclude the Tauri shell: `tauri build` needs the packaged web assets and
+rem would fail here (it is a release-packaging step, not part of dev startup).
+call pnpm.cmd -r --filter "!@osteosome/tauri-app" run build
 if errorlevel 1 (
   echo.
   echo [P1b] ERROR: build failed. Review the log above.

@@ -4,8 +4,6 @@ import { isTauri, openPluginWindowViaTauri } from '../tauri/plugin-window'
 import { PANEL_WINDOW_PREFIX, sanitizeWindowLabel } from '../tauri/window-registry'
 
 const popups = new Map<PaneId, Window>()
-/** 面板独立窗 → Tauri label 的映射（Tauri 环境下同步到 window-registry 供吸附轮询） */
-const panelTauriLabels = new Map<PaneId, string>()
 
 export function openPanelWindow(panelId: PaneId, widgetIds: string[]): Window | null {
   if (isTauri()) {
@@ -26,7 +24,8 @@ export function openPanelWindow(panelId: PaneId, widgetIds: string[]): Window | 
   return popup
 }
 
-/** Tauri：面板独立窗 = 原生 WebviewWindow；已存在聚焦，否则新建并注册吸附 label */
+/** Tauri：面板独立窗 = 原生 WebviewWindow；已存在则聚焦，否则新建。
+ *  窗口吸附（边缘距主窗 ≤ 8px 贴边、并随主窗拖动）由 Rust 壳统一处理，前端不做摆位。 */
 export async function openPanelWindowViaTauri(panelId: PaneId, widgetIds: string[]): Promise<void> {
   const label = `${PANEL_WINDOW_PREFIX}${sanitizeWindowLabel(panelId)}`
   const existing = await WebviewWindow.getByLabel(label)
@@ -35,7 +34,8 @@ export async function openPanelWindowViaTauri(panelId: PaneId, widgetIds: string
     return
   }
   const query = widgetIds.length ? `?w=${encodeURIComponent(widgetIds.join(','))}` : ''
-  const win = new WebviewWindow(label, {
+  // 吸附由 src-tauri 壳的 on_window_event 统一接管（见 src-tauri/src/lib.rs）。
+  new WebviewWindow(label, {
     url: `#/pane/${encodeURIComponent(panelId)}${query}`,
     title: panelId,
     width: 960,
@@ -45,10 +45,6 @@ export async function openPanelWindowViaTauri(panelId: PaneId, widgetIds: string
     center: true,
     resizable: true,
   })
-  if (win) {
-    panelTauriLabels.set(panelId, label)
-    // 开窗完成：不做吸附摆位（吸附方案已搁置）
-  }
 }
 
 export function getPaneWindow(panelId: PaneId): Window | null { return popups.get(panelId) ?? null }

@@ -23,7 +23,7 @@ async function closeWindow(): Promise<void> {
 }
 onMounted(() => {
   sse.ensureConnected()
-  // 吸附方案已搁置：不再把面板窗摆到主窗旁
+  // 窗口吸附（贴边 + 随主窗拖动）由 Rust 壳统一处理，见 src-tauri/src/lib.rs。
 })
 </script>
 

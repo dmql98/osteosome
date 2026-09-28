@@ -47,6 +47,20 @@ if not exist "%~dp0src-tauri\Cargo.toml" (
   echo.
 )
 
+rem -------------------------------------------------------------------------
+rem  Build the Core runtime (shared / service-sdk / services / core) so that
+rem  core\dist\main.js exists before we start it. Excludes the Tauri shell
+rem  (tauri build needs the packaged web assets) and the client (served by
+rem  Vite in dev, no build needed).
+rem -------------------------------------------------------------------------
+echo [client] Building Core runtime (shared / sdk / services / core)...
+call pnpm.cmd -r --filter "!@osteosome/tauri-app" --filter "!@osteosome/client" run build
+if errorlevel 1 (
+  echo [client] ERROR: Core build failed. Review the log above.
+  pause
+  exit /b 1
+)
+
 echo [client] Starting Core on port 1420...
 start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --services "%~dp0\services" --data "%~dp0\.data" --dist "%~dp0\core\dist\client"
 

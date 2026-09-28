@@ -29,9 +29,7 @@ export async function openPluginWindowViaTauri(): Promise<boolean> {
     center: true,
     resizable: true,
   })
-  if (win) {
-    // 开窗完成：不做吸附摆位（吸附方案已搁置）
-  }
+  // 窗口吸附（边缘距主窗 ≤ 8px 贴边、并随主窗拖动）由 Rust 壳统一处理。
   return !!win
 }
 
