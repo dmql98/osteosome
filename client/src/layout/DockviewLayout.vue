@@ -23,6 +23,7 @@ import { DockviewVue, type VueComponent } from 'dockview-vue'
 import type { DockviewApi, DockviewReadyEvent } from 'dockview-core'
 import { useLayoutStore } from './layout.store'
 import { applyModeToAllGroups } from './mode'
+import { onPanelWindowClosed } from './window-manager'
 import { applyDefaultLayout } from '../panes/default-layout'
 import PanelContainer from '../panes/PanelContainer.vue'
 import PanelHeaderActions from '../panes/PanelHeaderActions.vue'
@@ -56,6 +57,7 @@ function onReady(event: DockviewReadyEvent): void {
   store.attachApi(event.api)
   applyLayout()
   if (store.hydrated && !store.snapshot) store.updateLayout(api.toJSON())
+  if (store.hydrated) void store.reconcileDetached()
   disposers = [
     api.onDidLayoutChange(() => {
       if (!api) return
@@ -69,6 +71,8 @@ function onReady(event: DockviewReadyEvent): void {
     }),
   ]
   window.addEventListener('osteosome:panel-layout', onInnerLayoutChange)
+  // 面板独立窗关闭：把对应 tab 放回工作台
+  void onPanelWindowClosed((panelId) => store.restorePanel(panelId))
 }
 
 function onInnerLayoutChange(): void {
@@ -83,6 +87,7 @@ watch(() => store.hydrated, (hydrated) => {
   if (!hydrated || !api) return
   if (store.snapshot) applyLayout()
   else store.updateLayout(api.toJSON())
+  void store.reconcileDetached()
 })
 
 onBeforeUnmount(() => {

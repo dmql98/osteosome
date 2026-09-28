@@ -1,5 +1,7 @@
 export interface Preferences {
   layout?: string
+  /** 已拉出独立窗的面板：panelId -> { state, referencePanel }（见 layout.store DetachedPanel）。 */
+  detachedPanels?: unknown
   [key: string]: unknown
 }
 

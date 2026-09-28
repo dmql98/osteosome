@@ -29,7 +29,7 @@ export async function openPluginWindowViaTauri(): Promise<boolean> {
     center: true,
     resizable: true,
   })
-  // 窗口吸附（边缘距主窗 ≤ 8px 贴边、并随主窗拖动）由 Rust 壳统一处理。
+  // 窗口吸附（边缘距主窗 ≤ 13px 贴边、并随主窗拖动）由 Rust 壳统一处理。
   return !!win
 }
 

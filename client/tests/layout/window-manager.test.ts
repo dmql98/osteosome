@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { openPanelWindow, paneWindowCount, closeAllPaneWindows, openPluginWindow, pluginWindowOpen, closePluginWindow } from '../../src/layout/window-manager'
+import { openPanelWindow, onPanelWindowClosed, panelWindowExists, paneWindowCount, closeAllPaneWindows, openPluginWindow, pluginWindowOpen, closePluginWindow } from '../../src/layout/window-manager'
 
 describe('window-manager', () => {
   it('同一面板不重复打开，弹窗被拦截返回 null', () => {
@@ -12,6 +12,30 @@ describe('window-manager', () => {
     expect(openPanelWindow('panel.blocked', [])).toBeNull()
     closeAllPaneWindows()
     open.mockRestore()
+  })
+
+  it('面板独立窗关闭触发主窗回调（浏览器回退）', async () => {
+    const listeners: Record<string, () => void> = {}
+    const popup = {
+      closed: false,
+      focus: vi.fn(),
+      close: vi.fn(),
+      addEventListener: (type: string, handler: () => void) => { listeners[type] = handler },
+    } as unknown as Window
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup)
+    const onClosed = vi.fn()
+    await onPanelWindowClosed(onClosed)
+
+    openPanelWindow('panel.closed', [])
+    listeners.beforeunload?.()
+    expect(onClosed).toHaveBeenCalledWith('panel.closed')
+
+    closeAllPaneWindows()
+    open.mockRestore()
+  })
+
+  it('非 Tauri 环境 panelWindowExists 恒为 false', async () => {
+    await expect(panelWindowExists('panel.x')).resolves.toBe(false)
   })
 
   it('插件列表独立窗：单例、重复打开聚焦、关闭后置空', () => {

@@ -8,7 +8,7 @@
 //   Tauri 壳（Rust, 薄）  ── HTTP/SSE ──►  Node Core（龙骨, 一切业务）  ──►  远程/本地 LLM
 //
 // 窗口吸附：所有可独立出来的窗口（面板独立窗 osteosome-panel-* / 插件管理窗等）
-// 在移动时若边缘距主窗 ≤ 8px 自动吸附贴边；吸附后主窗拖动时随之一起移动。
+// 在移动时若边缘距主窗 ≤ 13px 自动吸附贴边；吸附后主窗拖动时随之一起移动。
 // 实现在本文件，挂在 Builder::on_window_event 上，前端无需轮询。
 //
 // 后续需扩展的能力（见 docs/wireframes/index.html）：
@@ -24,12 +24,17 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime, WindowEvent}
 
 /// 主窗口 label（tauri.conf.json 的 windows 首项未指定 label，Tauri 默认即 "main"）。
 const MAIN_WINDOW_LABEL: &str = "main";
-/// 吸附阈值：独立窗任意边缘距主窗边缘 ≤ 8px（物理像素）即自动吸附贴边。
-const SNAP_DISTANCE: i32 = 8;
+/// 吸附阈值：独立窗任意边缘距主窗边缘 ≤ 13px（物理像素）即自动吸附贴边。
+const SNAP_DISTANCE: i32 = 13;
 /// 壳主动摆位后的静默时长：这段窗口内的 Moved 事件不再回送吸附判定，避免自吸附回环。
 const FOLLOW_QUIET: Duration = Duration::from_millis(150);
 /// 贴边瞬间广播的高亮事件（前端渲染脉冲，见 client/src/tauri/snap-feedback.ts）。
 const SNAP_EVENT: &str = "ost:window-snap";
+/// 面板独立窗 label 前缀（与 client/src/tauri/window-registry.ts 保持一致）。
+const PANEL_WINDOW_PREFIX: &str = "osteosome-panel-";
+/// 面板独立窗关闭时广播给主窗的事件：前端据此把面板 tab 放回工作台。
+/// （事件名与 client/src/layout/window-manager.ts 保持一致。）
+const PANEL_CLOSED_EVENT: &str = "ost:panel-window-closed";
 
 /// 吸附方向：独立窗相对主窗的位置。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -157,6 +162,11 @@ fn place<R: Runtime>(state: &mut SnapState, label: &str, win: &tauri::WebviewWin
 }
 
 /// 记录吸附关系、贴边落位；若是「新吸附」再通知两侧窗口高亮。
+///
+/// `quiet`：主窗拖动引起的跟随落位要打静默标记（避免把跟随位移误判为独立窗自主移动而脱离）。
+/// 独立窗自身拖动时的吸附落位**不**打静默——拖动过程中系统会持续用鼠标位置覆盖壳的摆位，
+/// 只有松开鼠标后这一次落位才会真正生效；若把它静默掉，松开鼠标后的最后一帧 Moved 会被忽略，
+/// 于是吸附处留下缝隙，非得等主窗再动一次才无缝。
 fn attach<R: Runtime>(
     app: &AppHandle<R>,
     state: &mut SnapState,
@@ -165,12 +175,19 @@ fn attach<R: Runtime>(
     main_outer: Rect,
     child: Frame,
     snapped: (Side, i32, i32),
+    quiet: bool,
 ) {
     let (side, x, y) = snapped;
     let target = outer_pos(child, (x, y));
     let fresh = !state.attached.contains_key(label);
     state.attached.insert(label.to_string(), (target.0 - main_outer.x, target.1 - main_outer.y));
-    place(state, label, win, target.0, target.1);
+    if quiet {
+        state.quiet.insert(label.to_string(), Instant::now());
+    }
+    // 已贴边则不再重复摆位，避免 set_position 触发的 Moved 形成回环。
+    if (target.0, target.1) != (child.outer.x, child.outer.y) {
+        let _ = win.set_position(PhysicalPosition::new(target.0, target.1));
+    }
     if fresh {
         flash(app, label, side);
     }
@@ -191,14 +208,14 @@ fn on_main_moved<R: Runtime>(app: &AppHandle<R>, state: &mut SnapState) {
         place(state, &label, &win, main.outer.x + dx, main.outer.y + dy);
     }
 
-    // 2) 尚未吸附但已进入 8px 的独立窗：吸附贴边。
+    // 2) 尚未吸附但已进入 13px 的独立窗：吸附贴边。
     for (label, win) in app.webview_windows() {
         if label == MAIN_WINDOW_LABEL || state.attached.contains_key(&label) {
             continue;
         }
         let Some(child) = window_frame(&win) else { continue };
         if let Some(snapped) = snap_target(main.visible, child.visible, SNAP_DISTANCE) {
-            attach(app, state, &label, &win, main.outer, child, snapped);
+            attach(app, state, &label, &win, main.outer, child, snapped, true);
         }
     }
 }
@@ -218,7 +235,8 @@ fn on_child_moved<R: Runtime>(app: &AppHandle<R>, state: &mut SnapState, label: 
     let Some(child) = window_frame(&child_win) else { return };
 
     match snap_target(main.visible, child.visible, SNAP_DISTANCE) {
-        Some(snapped) => attach(app, state, label, &child_win, main.outer, child, snapped),
+        // 独立窗自主拖动：落位不静默，保证松开鼠标后的最后一次贴合能生效。
+        Some(snapped) => attach(app, state, label, &child_win, main.outer, child, snapped, false),
         None => {
             state.attached.remove(label);
         }
@@ -235,14 +253,37 @@ fn on_window_moved<R: Runtime>(app: &AppHandle<R>, label: &str) {
     }
 }
 
+/// 从面板独立窗 URL 的 `#/pane/<id>?w=...` 取回面板 id。
+fn panel_id_from_url<R: Runtime>(win: &tauri::WebviewWindow<R>) -> Option<String> {
+    let url = win.url().ok()?;
+    let path = url.fragment()?.split('?').next()?;
+    path.strip_prefix("/pane/").map(str::to_string)
+}
+
+/// 面板独立窗被请求关闭：广播给主窗，让前端把对应的面板 tab 放回工作台。
+/// 由壳统一监听窗口生命周期（与吸附同一处），前端无需 closeRequested 权限。
+fn on_panel_window_closing<R: Runtime>(app: &AppHandle<R>, label: &str) {
+    if !label.starts_with(PANEL_WINDOW_PREFIX) {
+        return;
+    }
+    let Some(panel_id) = app.get_webview_window(label).and_then(|w| panel_id_from_url(&w)) else {
+        return;
+    };
+    let _ = app.emit_to(MAIN_WINDOW_LABEL, PANEL_CLOSED_EVENT, panel_id);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(SnapState::default()))
         .on_window_event(|window, event| {
-            if let WindowEvent::Moved(_) = event {
-                on_window_moved(window.app_handle(), window.label());
+            match event {
+                WindowEvent::Moved(_) => on_window_moved(window.app_handle(), window.label()),
+                WindowEvent::CloseRequested { .. } => {
+                    on_panel_window_closing(window.app_handle(), window.label())
+                }
+                _ => {}
             }
         })
         .setup(|_app| {
@@ -293,7 +334,7 @@ mod tests {
     #[test]
     fn ignores_when_gap_exceeds_threshold() {
         let main = rect(0, 0, 1000, 800);
-        let child = rect(1010, 100, 400, 600); // 10px > 8px
+        let child = rect(1015, 100, 400, 600); // 15px > 13px
         assert_eq!(snap_target(main, child, SNAP_DISTANCE), None);
     }
 

@@ -1,13 +1,21 @@
 import { defineStore } from 'pinia'
 import { markRaw } from 'vue'
-import type { DockviewApi, SerializedDockview } from 'dockview-core'
+import type { DockviewApi, GroupviewPanelState, SerializedDockview } from 'dockview-core'
 import { usePreferences } from '@/core-sdk/usePreferences'
 import { getWidget } from '@/widgets/registry'
 import { applyDefaultLayout } from '@/panes/default-layout'
 import { PANEL_COMPONENT, type PanelParams } from '@/panes/types'
+import { panelWindowExists } from './window-manager'
 import type { LayoutMode } from './types'
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 被拉出独立窗的面板：记住序列化状态与同组参考面板，关闭独立窗时据此原位恢复。 */
+interface DetachedPanel {
+  state: GroupviewPanelState
+  /** 原所在分组内的邻近面板 id；为 null 表示该面板独占了原分组。 */
+  referencePanel: string | null
+}
 
 function parseLayout(json: string): SerializedDockview | null {
   try {
@@ -16,6 +24,10 @@ function parseLayout(json: string): SerializedDockview | null {
   } catch {
     return null
   }
+}
+
+function parseDetached(value: unknown): Record<string, DetachedPanel> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, DetachedPanel>) : {}
 }
 
 export const useLayoutStore = defineStore('layout', {
@@ -27,6 +39,8 @@ export const useLayoutStore = defineStore('layout', {
     hydrated: false,
     saving: false,
     lastError: null as string | null,
+    /** 已拉出独立窗、暂不在工作台中的面板：panelId -> 恢复信息 */
+    detachedPanels: {} as Record<string, DetachedPanel>,
   }),
   actions: {
     async bootstrap() {
@@ -34,10 +48,12 @@ export const useLayoutStore = defineStore('layout', {
         const preferences = await usePreferences().get()
         const parsed = preferences.layout ? parseLayout(preferences.layout) : null
         this.snapshot = parsed
+        this.detachedPanels = parseDetached(preferences.detachedPanels)
         this.lastError = preferences.layout && !parsed ? '布局已损坏，已重置为默认' : null
       } catch {
         this.lastError = '加载布局失败，已使用默认布局'
         this.snapshot = null
+        this.detachedPanels = {}
       } finally {
         this.hydrated = true
       }
@@ -81,6 +97,43 @@ export const useLayoutStore = defineStore('layout', {
       api.clear()
       applyDefaultLayout(api)
     },
+    /** 拉出独立窗：把面板从工作台摘除并记住状态，关闭独立窗时再放回原位。
+     *  `api.close()` 会触发 onDidLayoutChange，由 DockviewLayout 回写快照，无需在此重复 updateLayout。 */
+    detachPanel(panelId: string): boolean {
+      const api = this.api as DockviewApi | null
+      const panel = api?.getPanel(panelId)
+      if (!api || !panel) return false
+      this.detachedPanels[panelId] = {
+        state: panel.toJSON(),
+        referencePanel: panel.group.panels.find((item) => item.id !== panelId)?.id ?? null,
+      }
+      panel.api.close()
+      return true
+    },
+    /** 独立窗关闭：把面板按原样（尽量回原 tab 组）放回工作台。幂等。 */
+    restorePanel(panelId: string): void {
+      const api = this.api as DockviewApi | null
+      const record = this.detachedPanels[panelId]
+      if (!api || !record) return
+      delete this.detachedPanels[panelId]
+      if (api.getPanel(panelId)) return
+      const reference = record.referencePanel ? api.getPanel(record.referencePanel) : undefined
+      const options = {
+        id: record.state.id,
+        component: record.state.contentComponent ?? PANEL_COMPONENT,
+        title: record.state.title ?? '工作台',
+        params: record.state.params ?? { widgets: [] },
+      }
+      api.addPanel(reference ? { ...options, position: { referencePanel: reference, direction: 'within' } } : options)
+    },
+    /** 载入持久化布局后，把「独立窗已不存在」（App 重启过）的面板放回工作台；
+     *  独立窗仍开着的（仅主窗刷新）保持等待，关窗时由事件恢复。 */
+    async reconcileDetached(): Promise<void> {
+      for (const panelId of Object.keys(this.detachedPanels)) {
+        if (await panelWindowExists(panelId)) continue
+        this.restorePanel(panelId)
+      }
+    },
     scheduleSave() {
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(() => void this.saveNow(), 500)
@@ -88,7 +141,10 @@ export const useLayoutStore = defineStore('layout', {
     async saveNow() {
       this.saving = true
       try {
-        await usePreferences().put({ layout: this.snapshot ? JSON.stringify(this.snapshot) : '' })
+        await usePreferences().put({
+          layout: this.snapshot ? JSON.stringify(this.snapshot) : '',
+          detachedPanels: this.detachedPanels,
+        })
         this.lastError = null
       } catch {
         this.lastError = '保存布局失败'

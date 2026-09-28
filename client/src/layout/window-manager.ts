@@ -5,6 +5,41 @@ import { PANEL_WINDOW_PREFIX, sanitizeWindowLabel } from '../tauri/window-regist
 
 const popups = new Map<PaneId, Window>()
 
+/** 跨窗事件：面板独立窗关闭前广播该事件，主窗收到后把面板 tab 放回工作台。 */
+const PANEL_CLOSED_EVENT = 'ost:panel-window-closed'
+
+type PanelClosedHandler = (panelId: PaneId) => void
+let panelClosedHandler: PanelClosedHandler | null = null
+let panelClosedListening = false
+
+/** 主窗订阅面板独立窗关闭。
+ *  Tauri：壳在 on_window_event 里广播事件（见 src-tauri/src/lib.rs）；
+ *  浏览器：由 popup 的 beforeunload 触发。 */
+export async function onPanelWindowClosed(handler: PanelClosedHandler): Promise<void> {
+  panelClosedHandler = handler
+  if (panelClosedListening || !isTauri()) return
+  panelClosedListening = true
+  const { listen } = await import('@tauri-apps/api/event')
+  await listen<string>(PANEL_CLOSED_EVENT, (event) => panelClosedHandler?.(event.payload))
+}
+
+/** 面板独立窗 label：供创建与存在性探测复用。 */
+function panelWindowLabel(panelId: PaneId): string {
+  return `${PANEL_WINDOW_PREFIX}${sanitizeWindowLabel(panelId)}`
+}
+
+/** 面板独立窗的路由片段 `#/pane/<id>?w=...`；Tauri 相对 app URL，浏览器再拼 origin + pathname。 */
+function panelRoute(panelId: PaneId, widgetIds: string[]): string {
+  const query = widgetIds.length ? `?w=${encodeURIComponent(widgetIds.join(','))}` : ''
+  return `#/pane/${encodeURIComponent(panelId)}${query}`
+}
+
+/** 该面板的独立窗是否仍打开（Tauri）。用于刷新主窗后判断是等待关窗还是直接恢复。 */
+export async function panelWindowExists(panelId: PaneId): Promise<boolean> {
+  if (!isTauri()) return false
+  return (await WebviewWindow.getByLabel(panelWindowLabel(panelId))) !== null
+}
+
 export function openPanelWindow(panelId: PaneId, widgetIds: string[]): Window | null {
   if (isTauri()) {
     void openPanelWindowViaTauri(panelId, widgetIds)
@@ -15,28 +50,29 @@ export function openPanelWindow(panelId: PaneId, widgetIds: string[]): Window | 
     current.focus()
     return current
   }
-  const query = widgetIds.length ? `?w=${encodeURIComponent(widgetIds.join(','))}` : ''
-  const url = `${window.location.origin}${window.location.pathname}#/pane/${encodeURIComponent(panelId)}${query}`
-  const popup = window.open(url, `osteosome-panel-${panelId}`, 'popup,width=960,height=680')
+  const url = `${window.location.origin}${window.location.pathname}${panelRoute(panelId, widgetIds)}`
+  const popup = window.open(url, panelWindowLabel(panelId), 'popup,width=960,height=680')
   if (!popup) return null
   popups.set(panelId, popup)
-  popup.addEventListener('beforeunload', () => { if (popups.get(panelId) === popup) popups.delete(panelId) }, { once: true })
+  popup.addEventListener('beforeunload', () => {
+    if (popups.get(panelId) === popup) popups.delete(panelId)
+    panelClosedHandler?.(panelId)
+  }, { once: true })
   return popup
 }
 
 /** Tauri：面板独立窗 = 原生 WebviewWindow；已存在则聚焦，否则新建。
- *  窗口吸附（边缘距主窗 ≤ 8px 贴边、并随主窗拖动）由 Rust 壳统一处理，前端不做摆位。 */
+ *  窗口吸附（边缘距主窗 ≤ 13px 贴边、并随主窗拖动）由 Rust 壳统一处理，前端不做摆位。 */
 export async function openPanelWindowViaTauri(panelId: PaneId, widgetIds: string[]): Promise<void> {
-  const label = `${PANEL_WINDOW_PREFIX}${sanitizeWindowLabel(panelId)}`
+  const label = panelWindowLabel(panelId)
   const existing = await WebviewWindow.getByLabel(label)
   if (existing) {
     await existing.setFocus()
     return
   }
-  const query = widgetIds.length ? `?w=${encodeURIComponent(widgetIds.join(','))}` : ''
   // 吸附由 src-tauri 壳的 on_window_event 统一接管（见 src-tauri/src/lib.rs）。
   new WebviewWindow(label, {
-    url: `#/pane/${encodeURIComponent(panelId)}${query}`,
+    url: panelRoute(panelId, widgetIds),
     title: panelId,
     width: 960,
     height: 680,
