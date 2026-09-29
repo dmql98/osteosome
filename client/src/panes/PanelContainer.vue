@@ -1,28 +1,30 @@
 <template>
   <div class="panel-boxes" :class="`panel-boxes--${modeClass}`" @pointerdown="onCanvasPointerDown">
     <div ref="canvas" class="panel-boxes__canvas">
-      <MovableBox
-        v-for="widget in visible"
-        :key="widget.id"
-        v-model="widget.rect"
-        class="panel-boxes__item"
-        :class="{ 'panel-boxes__item--selected': selectedId === widget.id }"
-        drag-handle=".panel-boxes__header"
-        :active="editable && selectedId === widget.id"
-        :draggable="editable"
-        :resizable="editable"
-        :disabled="!editable"
-        :snap-to-elements="editable"
-        :snap-targets="editable ? snapTargets : []"
-        @drag-stop="persist"
-        @resize-stop="persist"
-        @pointerdown.stop="onBoxPointerDown(widget.id)"
-      >
-        <header class="panel-boxes__header" :class="{ 'panel-boxes__header--edit': editable }">
-          <span class="panel-boxes__title">{{ widget.title }}</span>
-        </header>
-        <div class="panel-boxes__body"><component :is="widget.component" /></div>
-      </MovableBox>
+      <MovableGroup v-model:selected="selectedIds" @move-stop="persist">
+        <MovableBox
+          v-for="widget in visible"
+          :key="widget.id"
+          v-model="widget.rect"
+          :member-id="widget.id"
+          class="panel-boxes__item"
+          :class="{ 'panel-boxes__item--selected': isSelected(widget.id) }"
+          drag-handle=".panel-boxes__header"
+          :active="editable && isSelected(widget.id)"
+          :draggable="editable"
+          :resizable="editable"
+          :disabled="!editable"
+          :snap-to-elements="editable"
+          :snap-targets="editable ? snapTargets : []"
+          @resize-stop="persist"
+          @pointerdown.stop="onBoxPointerDown(widget.id, $event)"
+        >
+          <header class="panel-boxes__header" :class="{ 'panel-boxes__header--edit': editable }">
+            <span class="panel-boxes__title">{{ widget.title }}</span>
+          </header>
+          <div class="panel-boxes__body"><component :is="widget.component" /></div>
+        </MovableBox>
+      </MovableGroup>
       <p v-if="visible.length === 0" class="panel-boxes__empty">空面板 · 用「添加组件」放入组件</p>
     </div>
   </div>
@@ -31,7 +33,7 @@
 <script setup lang="ts">
 import { computed, markRaw, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { MovableBox, type MovableBoxRect } from 'vue-movable-box'
+import { MovableBox, MovableGroup, type MovableBoxRect } from 'vue-movable-box'
 import { useLayoutStore } from '../layout/layout.store'
 import { getWidget, widgetComponents } from '../widgets/registry'
 
@@ -54,14 +56,26 @@ const layoutStore = useLayoutStore()
 const { mode } = storeToRefs(layoutStore)
 const editable = computed(() => mode.value === 'edit')
 const modeClass = computed(() => (editable.value ? 'edit' : 'runtime'))
-// 当前选中的组件：点它才显示 8 个把手；点空白处取消选中
-const selectedId = ref<string | null>(null)
+// 当前选中的组件：可多选（Ctrl/Cmd/Shift 点选加减），拖任一个选中项一起移动。
+const selectedIds = ref<string[]>([])
 
-function onBoxPointerDown(id: string): void {
-  if (editable.value) selectedId.value = id
+function isSelected(id: string): boolean {
+  return selectedIds.value.includes(id)
+}
+
+function onBoxPointerDown(id: string, event: PointerEvent): void {
+  if (!editable.value) return
+  const additive = event.ctrlKey || event.metaKey || event.shiftKey
+  if (additive) {
+    selectedIds.value = isSelected(id)
+      ? selectedIds.value.filter((item) => item !== id)
+      : [...selectedIds.value, id]
+  } else if (!isSelected(id)) {
+    selectedIds.value = [id]
+  }
 }
 function onCanvasPointerDown(): void {
-  if (editable.value) selectedId.value = null
+  if (editable.value) selectedIds.value = []
 }
 
 function defaultRect(index: number): MovableBoxRect {
@@ -85,6 +99,8 @@ function rebuild(): void {
     if (!widget) return []
     return [{ id, title: widget.title, component: markRaw(componentMap[id] as object), rect: saved.value[id] ?? defaultRect(index) }]
   })
+  const alive = new Set(visible.value.map((widget) => widget.id))
+  selectedIds.value = selectedIds.value.filter((id) => alive.has(id))
 }
 
 const snapTargets = computed(() => visible.value.map((widget) => ({ ...widget.rect, id: widget.id })))
