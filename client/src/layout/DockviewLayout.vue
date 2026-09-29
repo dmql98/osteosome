@@ -24,6 +24,8 @@ import type { DockviewApi, DockviewReadyEvent } from 'dockview-core'
 import { useLayoutStore } from './layout.store'
 import { applyModeToAllGroups } from './mode'
 import { onPanelWindowClosed } from './window-manager'
+import { onMainWindowRequest } from './window-events'
+import { usePluginStore } from '@/stores/plugin.store'
 import { applyDefaultLayout } from '../panes/default-layout'
 import PanelContainer from '../panes/PanelContainer.vue'
 import PanelHeaderActions from '../panes/PanelHeaderActions.vue'
@@ -31,11 +33,13 @@ import PanelTab from '../panes/PanelTab.vue'
 import { PANEL_COMPONENT } from '../panes/types'
 
 const store = useLayoutStore()
+const plugins = usePluginStore()
 const components = { [PANEL_COMPONENT]: PanelContainer } as unknown as Record<string, VueComponent>
 const headerActions = PanelHeaderActions as unknown as VueComponent
 const panelTab = PanelTab as unknown as VueComponent
 let api: DockviewApi | null = null
 let disposers: Array<{ dispose(): void }> = []
+let unsubWindowEvents: (() => void) | null = null
 let applying = false
 const dockHasPanels = ref(false)
 
@@ -73,6 +77,14 @@ function onReady(event: DockviewReadyEvent): void {
   window.addEventListener('osteosome:panel-layout', onInnerLayoutChange)
   // 面板独立窗关闭：把对应 tab 放回工作台
   void onPanelWindowClosed((panelId) => store.restorePanel(panelId))
+  // 插件列表 / 详情窗的跨窗请求：加入组件、或在插件状态变更后收敛布局
+  void onMainWindowRequest({
+    onAddWidget: (widgetId) => store.addWidget(widgetId),
+    onPluginsChanged: async () => {
+      await plugins.bootstrap()
+      store.reconcilePlugins()
+    },
+  }).then((unsubscribe) => { unsubWindowEvents = unsubscribe })
 }
 
 function onInnerLayoutChange(): void {
@@ -94,6 +106,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('osteosome:panel-layout', onInnerLayoutChange)
   if (disposers.length) disposers.forEach((disposer) => disposer.dispose())
   disposers = []
+  unsubWindowEvents?.()
+  unsubWindowEvents = null
   store.attachApi(null)
   api = null
 })

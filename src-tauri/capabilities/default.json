@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Osteosome 默认能力集：主窗口 + 插件管理外部窗口 + opener",
-  "windows": ["main", "osteosome-plugin-list", "osteosome-panel-*"],
+  "windows": ["main", "osteosome-plugin-list", "osteosome-plugin-detail-*", "osteosome-panel-*"],
   "permissions": [
     "core:default",
     "opener:default",
@@ -17,6 +17,9 @@
     },
     {
       "identifier": "core:webview:allow-create-webview-window"
+    },
+    {
+      "identifier": "core:event:allow-emit-to"
     }
   ]
 }

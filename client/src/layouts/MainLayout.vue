@@ -12,9 +12,14 @@ import { onMounted } from 'vue'
 import TopBar from './TopBar.vue'
 import DockviewLayout from '../layout/DockviewLayout.vue'
 import { useLayoutStore } from '../layout/layout.store'
+import { usePluginStore } from '../stores/plugin.store'
 
 const layout = useLayoutStore()
-onMounted(() => { void layout.bootstrap() })
+const plugins = usePluginStore()
+onMounted(() => {
+  void plugins.bootstrap()
+  void layout.bootstrap()
+})
 </script>
 
 <style scoped>

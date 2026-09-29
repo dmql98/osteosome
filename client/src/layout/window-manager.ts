@@ -1,6 +1,6 @@
 import type { PaneId } from './types'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { isTauri, openPluginWindowViaTauri } from '../tauri/plugin-window'
+import { isTauri, openPluginWindowViaTauri, openPluginDetailWindowViaTauri } from '../tauri/plugin-window'
 import { PANEL_WINDOW_PREFIX, sanitizeWindowLabel } from '../tauri/window-registry'
 
 const popups = new Map<PaneId, Window>()
@@ -34,6 +34,30 @@ function panelRoute(panelId: PaneId, widgetIds: string[]): string {
   return `#/pane/${encodeURIComponent(panelId)}${query}`
 }
 
+/** 浏览器独立窗：已打开则聚焦，否则新开；关闭（beforeunload）后从缓存移除。 */
+function openOrFocus(
+  store: Map<string, Window>,
+  key: string,
+  url: string,
+  name: string,
+  features: string,
+  onClose?: () => void,
+): Window | null {
+  const current = store.get(key)
+  if (current && !current.closed) {
+    current.focus()
+    return current
+  }
+  const popup = window.open(url, name, features)
+  if (!popup) return null
+  store.set(key, popup)
+  popup.addEventListener('beforeunload', () => {
+    if (store.get(key) === popup) store.delete(key)
+    onClose?.()
+  }, { once: true })
+  return popup
+}
+
 /** 该面板的独立窗是否仍打开（Tauri）。用于刷新主窗后判断是等待关窗还是直接恢复。 */
 export async function panelWindowExists(panelId: PaneId): Promise<boolean> {
   if (!isTauri()) return false
@@ -45,20 +69,8 @@ export function openPanelWindow(panelId: PaneId, widgetIds: string[]): Window | 
     void openPanelWindowViaTauri(panelId, widgetIds)
     return null
   }
-  const current = popups.get(panelId)
-  if (current && !current.closed) {
-    current.focus()
-    return current
-  }
   const url = `${window.location.origin}${window.location.pathname}${panelRoute(panelId, widgetIds)}`
-  const popup = window.open(url, panelWindowLabel(panelId), 'popup,width=960,height=680')
-  if (!popup) return null
-  popups.set(panelId, popup)
-  popup.addEventListener('beforeunload', () => {
-    if (popups.get(panelId) === popup) popups.delete(panelId)
-    panelClosedHandler?.(panelId)
-  }, { once: true })
-  return popup
+  return openOrFocus(popups, panelId, url, panelWindowLabel(panelId), 'popup,width=960,height=680', () => panelClosedHandler?.(panelId))
 }
 
 /** Tauri：面板独立窗 = 原生 WebviewWindow；已存在则聚焦，否则新建。
@@ -83,31 +95,46 @@ export async function openPanelWindowViaTauri(panelId: PaneId, widgetIds: string
   })
 }
 
-export function getPaneWindow(panelId: PaneId): Window | null { return popups.get(panelId) ?? null }
 export function paneWindowCount(): number { return popups.size }
 export function closeAllPaneWindows(): void { for (const popup of popups.values()) popup.close(); popups.clear() }
 
-let pluginWindow: Window | null = null
+const pluginWindows = new Map<string, Window>()
 
 /** 插件管理 = 独立原生窗（对齐 demo D1）。同一时刻至多一个，重复打开则聚焦。
  *  Tauri 环境用原生 WebviewWindow（src-tauri 壳负责真窗口），否则回退 window.open。 */
 export function openPluginWindow(): Window | null {
-  if (pluginWindow && !pluginWindow.closed) {
-    pluginWindow.focus()
-    return pluginWindow
-  }
   if (isTauri()) {
     void openPluginWindowViaTauri()
     return null
   }
   const url = `${window.location.origin}${window.location.pathname}#/plugin-list`
-  const popup = window.open(url, 'osteosome-plugin-list', 'popup,width=760,height=620')
-  if (!popup) return null
-  pluginWindow = popup
-  popup.addEventListener('beforeunload', () => { if (pluginWindow === popup) pluginWindow = null }, { once: true })
-  return popup
+  return openOrFocus(pluginWindows, 'list', url, 'osteosome-plugin-list', 'popup,width=760,height=620')
 }
 
-export function pluginWindowOpen(): boolean { return !!pluginWindow && !pluginWindow.closed }
-export function closePluginWindow(): void { if (pluginWindow) pluginWindow.close(); pluginWindow = null }
+export function pluginWindowOpen(): boolean {
+  const popup = pluginWindows.get('list')
+  return !!popup && !popup.closed
+}
+export function closePluginWindow(): void {
+  pluginWindows.get('list')?.close()
+  pluginWindows.delete('list')
+}
+
+const pluginDetailWindows = new Map<string, Window>()
+
+/** 插件详情 = 独立原生窗（对齐 demo D2，每个插件一个）；已存在则聚焦。
+ *  吸附 / 拖拽 / 拉伸 / 自适应与其它独立窗一致（Rust 壳统一处理吸附）。 */
+export function openPluginDetailWindow(pluginId: string): Window | null {
+  if (isTauri()) {
+    void openPluginDetailWindowViaTauri(pluginId)
+    return null
+  }
+  const url = `${window.location.origin}${window.location.pathname}#/plugin-detail/${encodeURIComponent(pluginId)}`
+  return openOrFocus(pluginDetailWindows, pluginId, url, `osteosome-plugin-detail-${pluginId}`, 'popup,width=600,height=860')
+}
+
+export function closeAllPluginDetailWindows(): void {
+  for (const popup of pluginDetailWindows.values()) popup.close()
+  pluginDetailWindows.clear()
+}
 

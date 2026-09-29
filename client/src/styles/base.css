@@ -43,6 +43,19 @@ textarea {
   outline-offset: 2px;
 }
 
+/* 状态点：服务状态 / 插件状态等复用。 */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+.dot.green { background-color: var(--color-success); }
+.dot.yellow { background-color: var(--color-warning); }
+.dot.red { background-color: var(--color-danger); }
+.dot.gray { background-color: var(--color-border-strong); }
+
 /* 吸附反馈：贴边高亮脉冲。边名由 Rust 壳 emit，见 client/src/tauri/snap-feedback.ts */
 html.snap-pulse::after {
   content: '';

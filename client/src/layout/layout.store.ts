@@ -3,6 +3,8 @@ import { markRaw } from 'vue'
 import type { DockviewApi, GroupviewPanelState, SerializedDockview } from 'dockview-core'
 import { usePreferences } from '@/core-sdk/usePreferences'
 import { getWidget } from '@/widgets/registry'
+import { pluginForWidget } from '@/plugins/registry'
+import { usePluginStore } from '@/stores/plugin.store'
 import { applyDefaultLayout } from '@/panes/default-layout'
 import { PANEL_COMPONENT, type PanelParams } from '@/panes/types'
 import { panelWindowExists } from './window-manager'
@@ -68,11 +70,13 @@ export const useLayoutStore = defineStore('layout', {
     setMode(mode: LayoutMode) {
       this.mode = mode
     },
-    /** 组件为最小单位：把 widget 放进当前激活面板；无面板则新建一个 */
+    /** 组件为最小单位：把 widget 放进当前激活面板；无面板则新建一个。
+     *  停用 / 已卸载插件的 widget 不可加入。 */
     addWidget(widgetId: string) {
       const api = this.api as DockviewApi | null
       const widget = getWidget(widgetId)
       if (!api || !widget) return
+      if (!usePluginStore().isWidgetEnabled(widgetId)) return
       const panel = api.activePanel
       if (!panel) {
         api.addPanel({ id: `panel.${Date.now()}`, component: PANEL_COMPONENT, title: '工作台', params: { widgets: [widgetId] } })
@@ -85,6 +89,26 @@ export const useLayoutStore = defineStore('layout', {
       }
       panel.api.updateParameters({ widgets: [...current, widgetId] })
       this.updateLayout(api.toJSON())
+    },
+    /** 插件卸载后：把其组件从所有面板 params 中剔除。
+     *  仅停用不清洗（PanelContainer 隐藏即可，重新启用后自动恢复）。 */
+    reconcilePlugins() {
+      const api = this.api as DockviewApi | null
+      if (!api) return
+      const plugins = usePluginStore()
+      let changed = false
+      for (const panel of api.panels) {
+        const current = (panel.params as PanelParams | undefined)?.widgets ?? []
+        const next = current.filter((id) => {
+          const owner = pluginForWidget(id)
+          return !owner || plugins.isInstalled(owner.id)
+        })
+        if (next.length !== current.length) {
+          panel.api.updateParameters({ widgets: next })
+          changed = true
+        }
+      }
+      if (changed) this.updateLayout(api.toJSON())
     },
     newPanel() {
       const api = this.api as DockviewApi | null
@@ -141,7 +165,7 @@ export const useLayoutStore = defineStore('layout', {
     async saveNow() {
       this.saving = true
       try {
-        await usePreferences().put({
+        await usePreferences().patch({
           layout: this.snapshot ? JSON.stringify(this.snapshot) : '',
           detachedPanels: this.detachedPanels,
         })

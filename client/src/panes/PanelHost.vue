@@ -11,17 +11,20 @@
 import { computed, onMounted } from 'vue'
 import PanelContainer from './PanelContainer.vue'
 import { sse } from '../core-sdk/sse'
-import { isTauri, closeCurrentWindowViaTauri } from '../tauri/plugin-window'
+import { usePluginStore } from '../stores/plugin.store'
+import { closeCurrentWindow } from '../tauri/plugin-window'
 const props = defineProps<{ id: string; widgets?: string[] }>()
 const widgets = computed(() => props.widgets ?? [])
 
 /** 关闭独立窗：Tauri 走原生 close（壳在 on_window_event 里广播恢复），浏览器由主窗 beforeunload 兜底。 */
 function closeWindow(): void {
-  if (isTauri()) void closeCurrentWindowViaTauri()
-  else window.close()
+  void closeCurrentWindow()
 }
 
-onMounted(() => { sse.ensureConnected() })
+onMounted(() => {
+  sse.ensureConnected()
+  void usePluginStore().bootstrap()
+})
 </script>
 
 <style scoped>
