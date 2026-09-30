@@ -249,8 +249,8 @@ dsh 的 LLM 组拆了 **9 个 npm 包**（`packages/llm/`）：
 
 ```text
 WS-1 shared: llm 协议上移 + 事件/命令契约追加
-WS-2 service-sdk: credentials 客户端（resolve → resolved Promise 封装）
-WS-3 services/credentials: 凭证能力位
+WS-2 service-sdk: credentials 客户端（attachCredentialClient：resolve → resolved Promise 配对，单在途/超时/并发保护）
+WS-3 services/credentials: 凭证能力位（src/resolve.ts 纯逻辑 + 装配）
 WS-4 services/llm: 主位重写（路由表 + 翻译 + cancel 转发）
 WS-5 services/llm-provider-deepseek + openrouter: openai 兼容 provider
 WS-6 services/llm-provider-opencode: opencode serve 适配器

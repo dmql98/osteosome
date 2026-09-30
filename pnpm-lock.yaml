@@ -105,6 +105,25 @@ importers:
         specifier: ^3.1.1
         version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
 
+  services/credentials:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
   services/hello:
     dependencies:
       '@osteosome/service-sdk':
