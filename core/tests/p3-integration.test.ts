@@ -81,23 +81,46 @@ async function post(base: string, topic: string, payload: Record<string, unknown
   await res.text().catch(() => '')
 }
 
-/** 起本地假 openai 上游（/chat/completions SSE）；内容可由 mutable 变量控制 */
-function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: { text: string } }> {
-  const state = { text: '你好' }
+/**
+ * 起本地假 openai 上游（/chat/completions SSE）。
+ * - `state.text`：回给模型的固定回答（默认 '你好'）。
+ * - `state.echoMessages`：为 true 时，把请求里的 messages 条数与角色回显进回答，
+ *   供多轮测试断言「loop 真的把上文带上了」。
+ * - `state.lastRequestMessages`：记录最后一次请求的 messages（多轮断言用）。
+ */
+function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: { text: string; echoMessages: boolean; lastRequestMessages: unknown[] } }> {
+  const state = { text: '你好', echoMessages: false, lastRequestMessages: [] as unknown[] }
   const server = createServer((req, res) => {
     if (!req.url?.includes('/chat/completions')) {
       res.writeHead(404).end()
       return
     }
-    res.writeHead(200, { 'Content-Type': 'text/event-stream' })
-    const send = (o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`)
-    const chars = [...state.text]
-    for (const c of chars) {
-      send({ id: 'x', choices: [{ index: 0, delta: { content: c }, finish_reason: null }] })
-    }
-    send({ id: 'x', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: chars.length } })
-    res.write('data: [DONE]\n\n')
-    res.end()
+    let body = ''
+    req.on('data', (c) => {
+      body += c
+    })
+    req.on('end', () => {
+      let messages: { role?: string; content?: string }[] = []
+      try {
+        const parsed = JSON.parse(body) as { messages?: { role?: string; content?: string }[] }
+        messages = parsed.messages ?? []
+        state.lastRequestMessages = parsed.messages ?? []
+      } catch {
+        /* 忽略畸形 body */
+      }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      const send = (o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`)
+      const answer = state.echoMessages
+        ? `n=${messages.length} last=${messages[messages.length - 1]?.content ?? ''}`
+        : state.text
+      const chars = [...answer]
+      for (const c of chars) {
+        send({ id: 'x', choices: [{ index: 0, delta: { content: c }, finish_reason: null }] })
+      }
+      send({ id: 'x', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: chars.length } })
+      res.write('data: [DONE]\n\n')
+      res.end()
+    })
   })
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
@@ -111,7 +134,9 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
 describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
   let core: Core | undefined
   let dataDir = ''
-  let upstream: { server: Server; baseUrl: string; state: { text: string } } | undefined
+  let upstream:
+    | { server: Server; baseUrl: string; state: { text: string; echoMessages: boolean; lastRequestMessages: unknown[] } }
+    | undefined
   const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'LLM_PROVIDER']
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
@@ -247,6 +272,60 @@ describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
       }
     },
     35_000,
+  )
+
+  it(
+    '第二轮带上文：loop 拉 session.get 历史 → 拼多轮 → llm.request messages 含 system + 全部历史',
+    async () => {
+      const sse = await openSse(base(), '?topics=session.**,message.**,loop.**')
+      try {
+        upstream!.state.echoMessages = true
+
+        // 建会话
+        const createReq = `mr-create-${Date.now()}`
+        await post(base(), 'session.create', { requestId: createReq, title: '多轮会话' })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => e.topic === 'session.create.result' && e.payload.requestId === createReq),
+          10_000,
+          'session.create.result',
+        )
+        const sessionId = parseSseEvents(sse.text()).find((e) => e.topic === 'session.create.result' && e.payload.requestId === createReq)!
+          .payload.sessionId as string
+
+        // 第一轮
+        const a1 = `mr-1-${Date.now()}`
+        await post(base(), 'loop.run', { requestId: a1, sessionId, text: '第一问' })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => e.topic === 'loop.state.changed' && e.payload.requestId === a1 && e.payload.state === 'idle'),
+          20_000,
+          'round 1 idle',
+        )
+        // 第一轮 messages = [system, user '第一问']
+        expect(upstream!.state.lastRequestMessages).toHaveLength(2)
+
+        // 第二轮（同会话）
+        const a2 = `mr-2-${Date.now()}`
+        await post(base(), 'loop.run', { requestId: a2, sessionId, text: '第二问' })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => e.topic === 'loop.state.changed' && e.payload.requestId === a2 && e.payload.state === 'idle'),
+          20_000,
+          'round 2 idle',
+        )
+
+        // 第二轮 messages = [system, user '第一问', assistant 'n=2 last=第一问', user '第二问']
+        const messages = upstream!.state.lastRequestMessages as { role: string; content: string }[]
+        expect(messages).toHaveLength(4)
+        expect(messages[0].role).toBe('system')
+        expect(messages[1]).toMatchObject({ role: 'user', content: '第一问' })
+        expect(messages[2].role).toBe('assistant')
+        expect(messages[3]).toMatchObject({ role: 'user', content: '第二问' })
+
+        upstream!.state.echoMessages = false
+      } finally {
+        sse.close()
+      }
+    },
+    45_000,
   )
 
   it(

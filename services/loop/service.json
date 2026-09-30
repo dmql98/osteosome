@@ -4,19 +4,21 @@
   "protocolVersion": "1.0.0",
   "entry": "node dist/index.js",
   "publishes": [
-    "loop.state.changed",
-    "loop.run.failed",
+    "llm.cancel",
+    "llm.request",
     "loop.run.cancelled",
+    "loop.run.failed",
+    "loop.state.changed",
     "loop.token.streamed",
     "message.append",
-    "llm.request",
-    "llm.cancel"
+    "session.get"
   ],
   "subscribes": [
     "loop.run",
     "loop.cancel",
     "llm.token.streamed",
     "llm.request.finished",
-    "llm.request.failed"
+    "llm.request.failed",
+    "session.get.result"
   ]
 }

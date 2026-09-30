@@ -28,10 +28,22 @@ export interface LoopCoreDeps {
   sendLlmCancel(b: string): void
 }
 
+/**
+ * 一次 run 的两阶段状态（多轮接线）：
+ *
+ * - `accept(A, sessionId, text)` —— 受理 loop.run：查重入 → 进入 `awaiting`（已占位防重入），
+ *   返回 true/false（false=忙）。此时**尚未**发 llm.request。
+ * - `start(B, messages)` —— 拿到 session.get.result 拼好多轮后调用：记 A↔B in-flight → 发 llm.request(B)。
+ *
+ * 消息驱动模型下「拉历史」是一次总线往返（A 先占位 → 装配层订阅 session.get.result → 再 start），
+ * 因此 A→B 的映射在 start(B) 时才建立。
+ */
 export class LoopCore {
   private state: LoopState = 'idle'
   private readonly byA = new Map<string, Inflight>()
   private readonly aByB = new Map<string, string>()
+  /** 已受理但等 session.get.result 的 A（占位防重入，尚未发 llm.request） */
+  private awaiting: { a: string; sessionId: string; text: string } | null = null
 
   constructor(private readonly deps: LoopCoreDeps) {}
 
@@ -44,10 +56,42 @@ export class LoopCore {
   }
 
   /**
-   * 启动一次 run（A）：查重入 → 记 A↔B in-flight → 发 llm.request（B）。
+   * 受理一次 loop.run（A）：查重入 → 进入 awaiting（占位）→ 返回 true。
    * 返回 false 表示重入被拒（调用方发 loop.run.failed{code:'busy'}）。
+   * 调用方随后发 session.get，拿到 result 再 start(B, messages)。
+   */
+  accept(a: string, sessionId: string, text: string): boolean {
+    if (this.isBusy()) return false
+    this.state = 'running'
+    this.awaiting = { a, sessionId, text }
+    return true
+  }
+
+  /** 当前 awaiting 的 A / sessionId（装配层据此关联 session.get 往返） */
+  awaitingRun(): { a: string; sessionId: string; text: string } | null {
+    return this.awaiting
+  }
+
+  /**
+   * 拿到历史后启动（A 已 accept）：记 A↔B in-flight → 发 llm.request(B)。
+   * 返回 false 表示已无 awaiting（重复/已取消）。
    */
   start(
+    b: string,
+    messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+    model?: string,
+  ): boolean {
+    if (!this.awaiting) return false
+    const { a, sessionId } = this.awaiting
+    this.awaiting = null
+    this.byA.set(a, { a, b, sessionId, buffer: '' })
+    this.aByB.set(b, a)
+    this.deps.sendLlmRequest(b, sessionId, messages, model)
+    return true
+  }
+
+  /** 直接启动（无 awaiting 的快路径，单测/不需要历史的场景） */
+  startNow(
     a: string,
     b: string,
     sessionId: string,
@@ -86,12 +130,30 @@ export class LoopCore {
     return out
   }
 
-  /** loop.cancel（A）→ 查 B 并发 llm.cancel(B)；未知 A 静默。返回是否发出取消。 */
+  /**
+   * loop.cancel（A）：在途（已 start）→ 发 llm.cancel(B)；awaiting（等历史）→ 直接丢弃占位（还没发 llm.request）。
+   * 未知 A 静默。返回是否需要发 llm.cancel（awaiting 场景返回 false 但已清占位）。
+   */
   cancel(a: string): boolean {
+    // awaiting 阶段：还没发 llm.request，直接清占位回 idle
+    if (this.awaiting?.a === a) {
+      this.awaiting = null
+      this.state = 'idle'
+      return false
+    }
     const inflight = this.byA.get(a)
     if (!inflight) return false
     this.deps.sendLlmCancel(inflight.b)
     return true
+  }
+
+  /** awaiting 阶段取消收尾（A）：清占位回 idle，返回 sessionId 供发 loop.run.cancelled */
+  cancelAwaiting(a: string): { a: string; sessionId: string } | null {
+    if (this.awaiting?.a !== a) return null
+    const out = { a, sessionId: this.awaiting.sessionId }
+    this.awaiting = null
+    this.state = 'idle'
+    return out
   }
 
   /**
@@ -127,10 +189,11 @@ export class LoopCore {
     this.state = 'idle'
   }
 
-  /** 崩溃恢复（P3 WS-5）：进程重启后 in-flight 归零、state 回 idle（进程内态，无回放） */
+  /** 崩溃恢复（P3 WS-5）：进程重启后 in-flight / awaiting 归零、state 回 idle（进程内态，无回放） */
   reset(): void {
     this.byA.clear()
     this.aByB.clear()
+    this.awaiting = null
     this.state = 'idle'
   }
 }

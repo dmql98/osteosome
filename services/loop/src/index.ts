@@ -16,6 +16,8 @@ const service = new Service({ id: 'loop', version: '1.0.0' })
 
 /** A → { sessionId }（loop.run 时记，finish/fail 后发 state.changed 用） */
 const sessionsByA = new Map<string, string>()
+/** historyReq（session.get 命令 id）→ A（关联多轮历史拉取往返） */
+const historyReqByRun = new Map<string, string>()
 
 /**
  * 目标 provider（P3 简化：常量经 env 可配，默认 deepseek；P4 接设置 Pane 后由前端传）。
@@ -59,17 +61,41 @@ service.subscribe('loop.run', (payload) => {
   // 1) 先落 user 消息（不等 llm 响应，会话里立即可见）
   service.publish('message.append', { requestId: `mu-${a}`, sessionId, message: { role: 'user', content: text } })
 
-  // 2) 取历史拼多轮（先落 user 后取，service.append 是异步回执；这里用 payload 文本直接拼最小多轮）
-  //    真实多轮在 message.append 回执 / session.get.result 到齐后由 P3.5 细化；P3 先保证一问一答链路通。
-  const messages = buildMessages([{ role: 'user', content: text }], DEFAULT_SYSTEM_PROMPT, DEFAULT_MAX_MESSAGES)
-
-  // 3) B 内部 id + A↔B 映射 + 发 llm.request
-  const b = newB()
+  // 2) 受理 run（占位防重入）→ 发 session.get 拉历史；拿到 result 后才 start(B) 发 llm.request（多轮）
+  const historyReq = `hg-${a}`
+  historyReqByRun.set(historyReq, a)
+  if (!core.accept(a, sessionId, text)) {
+    fail('busy', 'loop is running')
+    return
+  }
   sessionsByA.set(a, sessionId)
-  core.start(a, b, sessionId, messages)
+  service.publish('session.get', { requestId: historyReq, sessionId })
 
-  // 4) state running
+  // 3) state running（已受理，模型在途）
   service.publish('loop.state.changed', { requestId: a, sessionId, state: 'running' })
+})
+
+// session.get.result（关联 historyReq）→ 拼多轮 → core.start(B) → 发 llm.request
+service.subscribe('session.get.result', (payload) => {
+  const p = payload as { requestId?: string; session?: { messages?: unknown[] } | null; error?: { code?: string; message?: string } }
+  const a = p?.requestId ? historyReqByRun.get(p.requestId) : undefined
+  if (!a) return // 非本次历史拉取（或已释放/已取消）
+  historyReqByRun.delete(p.requestId!)
+
+  // 兜底1：session.get 报错（会话不存在等）→ 用本轮 text 跑一问一答，不卡在 running
+  if (p?.error) {
+    const sessionId = sessionsByA.get(a) ?? ''
+    const messages = buildMessages([{ role: 'user', content: core.awaitingRun()?.text ?? '' }], DEFAULT_SYSTEM_PROMPT, DEFAULT_MAX_MESSAGES)
+    core.start(newB(), messages)
+    return
+  }
+
+  // 兜底2：session 为 null（会话已被删）→ 同样用本轮 text 跑一问一答
+  // 正常路径：历史已含 loop.run 先落库的 user 消息（末尾），buildMessages 直接用完整历史
+  const history = (p?.session?.messages ?? []) as HistoryMessage[]
+  const messages = buildMessages(history, DEFAULT_SYSTEM_PROMPT, DEFAULT_MAX_MESSAGES)
+
+  core.start(newB(), messages)
 })
 
 // llm.token.streamed（B）→ 累积 + 换发 A（P3 §3.4：B 不泄前端）
@@ -123,12 +149,20 @@ service.subscribe('llm.request.failed', (payload) => {
   sessionsByA.delete(failed.a)
 })
 
-// loop.cancel（A）→ 查 B → llm.cancel(B)；等 llm finish{stop} 收尾（不落半截）；未知 A 静默
+// loop.cancel（A）→ 在途：llm.cancel(B)（等 finish{stop} 收尾）；awaiting：直接清占位发 run.cancelled
 service.subscribe('loop.cancel', (payload) => {
   const a = typeof payload.requestId === 'string' ? payload.requestId : ''
   if (!a) return
-  // 发 llm.cancel(B)；等 llm finish{stop} 走 finish 路径（成功不留半截 assistant）
-  core.cancel(a) // 未知 A → 静默忽略
+  // awaiting 阶段（等 session.get 还没发 llm.request）：直接收尾
+  const cancelledEarly = core.cancelAwaiting(a)
+  if (cancelledEarly) {
+    const sessionId = sessionsByA.get(a) ?? cancelledEarly.sessionId
+    service.publish('loop.run.cancelled', { requestId: a, sessionId })
+    service.publish('loop.state.changed', { requestId: a, sessionId, state: 'idle' })
+    sessionsByA.delete(a)
+    return
+  }
+  core.cancel(a) // 未知 A → 静默忽略；在途则发 llm.cancel(B)
 })
 
 async function main(): Promise<void> {
