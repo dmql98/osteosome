@@ -40,8 +40,11 @@ function emit(topic: string, payload: unknown): void {
   sseHandlers.get(topic)?.(payload)
 }
 
-function commandBodies(fetchMock: ReturnType<typeof vi.spyOn>): Record<string, unknown>[] {
-  return fetchMock.mock.calls.map((c) => JSON.parse(String(c[1]?.body)) as Record<string, unknown>)
+function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<string, unknown>[] {
+  return fetchMock.mock.calls.map((c) => {
+    const init = c[1] as { body?: unknown } | undefined
+    return JSON.parse(String(init?.body)) as Record<string, unknown>
+  })
 }
 
 beforeEach(() => {
