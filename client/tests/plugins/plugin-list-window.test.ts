@@ -20,7 +20,7 @@ describe('PluginListWindow 插件列表独立窗', () => {
   it('渲染内置插件列表（名称 / 版本 / 组件数 / 状态）', async () => {
     const wrapper = mountWindow()
     await flushPromises()
-    expect(wrapper.text()).toContain('已安装 (5)')
+    expect(wrapper.text()).toContain('已安装 (6)')
     expect(wrapper.text()).toContain('工作台基础')
     expect(wrapper.text()).toContain('LLM 对话')
     expect(wrapper.text()).toContain('LLM Providers')

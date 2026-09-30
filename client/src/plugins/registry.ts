@@ -105,6 +105,22 @@ export const PLUGINS: PluginDefinition[] = [
     ],
   },
   {
+    id: 'plugin.session',
+    name: '会话',
+    icon: '💬',
+    version: '0.1.0',
+    author: 'osteosome',
+    license: 'Apache-2.0',
+    description:
+      '会话管理（P3 WS-4）：会话列表（新建 / 切换 / 重命名 / 删除 / 当前高亮）经 SSE 事件跨窗实时同步；curId 当前会话为本地态（各窗独立）。组件（widget.session-list）。',
+    capabilities: [
+      { name: 'session.list', detail: '会话索引列表' },
+      { name: 'session.create/rename/delete', detail: '会话 CRUD' },
+    ],
+    widgets: ['widget.session-list'],
+    dependencies: [{ id: 'session', label: '会话服务' }],
+  },
+  {
     id: 'plugin.llm',
     name: 'LLM 对话',
     icon: '🤖',

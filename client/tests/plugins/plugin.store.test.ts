@@ -20,11 +20,12 @@ describe('plugin.store', () => {
   it('默认全部启用、全部已安装', () => {
     mockPrefs()
     const store = usePluginStore()
-    expect(store.installed.length).toBe(5)
+    expect(store.installed.length).toBe(6)
     expect(store.installed.map((plugin) => plugin.id)).toEqual([
       'plugin.workbench',
       'plugin.event-stream',
       'plugin.service-manager',
+      'plugin.session',
       'plugin.llm',
       'plugin.llm-providers',
     ])
