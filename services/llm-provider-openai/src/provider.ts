@@ -63,10 +63,13 @@ export const RETRY_POLICY: RetryPolicy = {
   retryableCodes: ['rate_limited', 'server_error'],
 }
 
+/** openai 兼容工具定义（原样透传上游，不解释语义） */
+export type ToolSpec = Record<string, unknown>
+
 export interface StreamRequest {
   requestId: string
   model?: string
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+  messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }[]
   temperature?: number
   signal?: AbortSignal
   apiKey: string
@@ -74,11 +77,21 @@ export interface StreamRequest {
   baseURL?: string
   /** 合并到默认 EXTRA_HEADERS 之上的附加 header */
   extraHeaders?: Record<string, string>
+  /** 工具定义（非空即上送，让模型可发起 tool_calls —— P7 agent 循环的前提） */
+  tools?: ToolSpec[]
+}
+
+/** wire 层工具调用增量（openai 兼容形状：`delta.tool_calls[]`，按 `index` 分片累积） */
+interface WireToolCallDelta {
+  index: number
+  id?: string
+  type?: string
+  function?: { name?: string; arguments?: string }
 }
 
 interface WireChoice {
   index: number
-  delta?: { content?: string | null; reasoning?: string | null }
+  delta?: { content?: string | null; reasoning?: string | null; tool_calls?: WireToolCallDelta[] }
   finish_reason?: string | null
 }
 interface WireChunk {
@@ -121,6 +134,7 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
         model: req.model ?? DEFAULT_MODEL,
         messages: req.messages,
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        ...(req.tools && req.tools.length > 0 ? { tools: req.tools } : {}),
         stream: true,
       }),
       signal: req.signal,
@@ -139,7 +153,16 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
 
   let textId: string | null = null
   let reasoningId: string | null = null
+  /** wire tool_calls[].index → 本地块 id（wire 同一 tool_call 分多帧累积 arguments） */
+  const toolIds = new Map<number, string>()
   let seq = 0
+  /** 收尾：关掉所有未闭合的块（text / reasoning / tool_call） */
+  function* closeAll(): Generator<StreamChunk> {
+    if (textId !== null) yield { kind: 'block-end', id: textId, blockType: 'text' }
+    if (reasoningId !== null) yield { kind: 'block-end', id: reasoningId, blockType: 'reasoning' }
+    for (const id of toolIds.values()) yield { kind: 'block-end', id, blockType: 'tool_call' }
+  }
+
   try {
     for await (const event of readSseJson(res.body, { signal: req.signal })) {
       if (event.done) break
@@ -169,16 +192,38 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
         }
         yield { kind: 'delta', id: textId, blockType: 'text', text: delta.content }
       }
+      // 工具调用增量：wire 按 tool_calls[].index 分片，name 只在首帧，arguments 分多帧累积
+      for (const call of delta.tool_calls ?? []) {
+        if (!call || typeof call.index !== 'number') continue
+        let id = toolIds.get(call.index)
+        if (id === undefined) {
+          id = `c-${req.requestId}-${call.index}-${seq++}`
+          toolIds.set(call.index, id)
+          yield { kind: 'block-start', id, blockType: 'tool_call', index: seq - 1 }
+        }
+        const name = typeof call.function?.name === 'string' ? call.function.name : null
+        const args = call.function?.arguments
+        // 注意：openai 首帧把 name 与**空** arguments（''）放在同一帧。若只在 args 非空时 yield，
+        // 工具名会被整段丢弃 → agent 知道要调工具却不知道调哪个。故 name 存在或 args 非空都要吐。
+        if (name !== null || (typeof args === 'string' && args.length > 0)) {
+          yield {
+            kind: 'tool-arg-delta',
+            id,
+            blockType: 'tool_call',
+            // name 只在首帧携带，后续为 null（块边界自带完整信息，调用方无需拼装）
+            name,
+            arguments: typeof args === 'string' ? args : '',
+          }
+        }
+      }
       if (typeof choice.finish_reason === 'string' && choice.finish_reason.length > 0) {
-        if (textId !== null) yield { kind: 'block-end', id: textId, blockType: 'text' }
-        if (reasoningId !== null) yield { kind: 'block-end', id: reasoningId, blockType: 'reasoning' }
+        yield* closeAll()
         const finalUsage = normalizeUsage(data.usage)
         yield { kind: 'finish', finishReason: normalizeFinishReason(choice.finish_reason), ...(finalUsage ? { usage: finalUsage } : {}) }
         return
       }
     }
-    if (textId !== null) yield { kind: 'block-end', id: textId, blockType: 'text' }
-    if (reasoningId !== null) yield { kind: 'block-end', id: reasoningId, blockType: 'reasoning' }
+    yield* closeAll()
     yield { kind: 'finish', finishReason: 'stop' }
   } catch (err) {
     if (req.signal?.aborted) return
