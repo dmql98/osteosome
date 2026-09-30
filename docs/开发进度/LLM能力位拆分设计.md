@@ -44,7 +44,7 @@ dsh 的 LLM 组拆了 **9 个 npm 包**（`packages/llm/`）：
 | 1 | `services/llm` | `capability.llm` | 能力主位：收 `llm.request` → 查 provider 路由 → 转发 `llm.provider.request` → 收 chunk 事件 → 翻译对外事件（`llm.token.streamed` 等）；`llm.cancel` 转发 | P2 |
 | 2 | `services/llm-provider-deepseek` | `capability.llm.provider.deepseek` | deepseek-chat 适配器服务：注册能力 + 凭证引用 + retry 声明 + 流式 chunk | P2 |
 | 3 | `services/llm-provider-openrouter` | `capability.llm.provider.openrouter` | openrouter（openai 兼容）适配器服务 | P2 |
-| 4 | `services/llm-provider-opencode` | `capability.llm.provider.opencode` | opencode serve HTTP 适配器服务（本地 agent 引擎） | P2 |
+| 4 | `services/llm-provider-openai` | `capability.llm.provider.openai` | 通用 openai 兼容 provider（baseURL 可配，openrouter 等一键接入） | P2 |
 | 5 | `services/credentials` | `capability.credentials` | 凭证能力位：`credentials.resolve` 命令 → `credentials.resolved` 事件（env 引用 v1，core store P4） | P2 |
 | 6 | `services/llm-retry` | `capability.llm.retry` | retry 声明消费 + 执行器（P2 先声明与记账，P4 补真重试）+ token 用量记账 | P2 声明 / P4 执行 |
 
@@ -69,7 +69,7 @@ dsh 的 LLM 组拆了 **9 个 npm 包**（`packages/llm/`）：
 │   services/   │───────────────────────┐     ┌──────────────────────────────┐
 │      llm      │                       │     │  llm-provider-deepseek       │
 │  capability.llm│  ┌───────────────┐   │     │  llm-provider-openrouter     │
-└───────────────┘  │   llm-retry    │   │     │  llm-provider-opencode       │
+└───────────────┘  │   llm-retry    │   │     │  llm-provider-openai         │
                    │（旁路订阅 llm.*）│   │     │  （各 provider 服务）         │
                    └───────┬───────┘   │     └──────────────┬───────────────┘
                            │           │                    │
@@ -176,7 +176,7 @@ dsh 的 LLM 组拆了 **9 个 npm 包**（`packages/llm/`）：
 | `services/llm`（能力主位） | `widget.llm-chat` | 前端与 LLM 对话交互的唯一直连面：`llm.request` / `llm.cancel` / 流式事件 |
 | `services/llm-provider-deepseek` | `widget.llm-providers`（状态行） | 前端**不直连** provider，只经 `llm.provider.registered/unregistered` 被动感知存在与 defaultModel |
 | `services/llm-provider-openrouter` | `widget.llm-providers`（状态行） | 同上 |
-| `services/llm-provider-opencode` | `widget.llm-providers`（状态行） | 同上 |
+| `services/llm-provider-openai` | `widget.llm-providers`（状态行） | 同上 |
 | `services/credentials` | **无组件** | 凭证能力位对前端**不可见**——`credentials.resolve/resolved` 只在服务间总线传播，值永不进 SSE/前端；P4 凭证管理走 `llm-providers` 扩展的 Pane（绑定/掩码展示），不新建独立组件 |
 | `services/llm-retry` | **无组件** | retry 是服务端旁路行为（声明消费 + usage 记账），前端无感知；P4 重试参数经 `llm-settings` Pane 配置，不新建独立组件 |
 
@@ -225,10 +225,10 @@ dsh 的 LLM 组拆了 **9 个 npm 包**（`packages/llm/`）：
 | 凭证 | `services/llm/src/credentials/resolver.ts`（进程内 env） | 独立服务 `services/credentials`（总线 resolve/resolved） |
 | retry | `services/llm/src/retry/policy.ts`（声明不执行） | 独立服务 `services/llm-retry`（P2 声明+记账 / P4 执行） |
 | 前端 | `features/chat/chat-pane.vue` 单 Pane | `widget.llm-chat` + `widget.llm-providers` 两个 Widget |
-| provider 数量 | deepseek 唯一 | deepseek / openrouter / opencode 三个 |
+| provider 数量 | deepseek 唯一 | deepseek / openrouter / openai（通用兼容） |
 | 卸载语义 | 删代码 | 卸服务进程 → 能力从系统消失（`unsupported_provider`） |
 
-**P4 的再分配**：旧 P4 的「三 provider + 凭证 seam + retry 执行器 + 设置 Pane」大部分被 P2 提前实现（凭证/retry 服务化、三 provider、opencode）。P4 只剩：凭证 store（`core:<id>` kind 落 `dataDir/credentials.json`，值永不进总线）、retry 执行器实装、模型目录 `listModels()`、设置 Pane 套件、i18n/主题。
+**P4 的再分配**：旧 P4 的「三 provider + 凭证 seam + retry 执行器 + 设置 Pane」大部分被 P2 提前实现（凭证/retry 服务化、provider 服务）。P4 只剩：凭证 store（`core:<id>` kind 落 `dataDir/credentials.json`，值永不进总线）、retry 执行器实装、模型目录 `listModels()`、设置 Pane 套件、i18n/主题。
 
 ---
 
@@ -239,7 +239,7 @@ dsh 的 LLM 组拆了 **9 个 npm 包**（`packages/llm/`）：
 | **服务进程数量膨胀** | 每 provider 一个进程，开销是 Node 进程启动成本；P2 三个 provider + 主位 + 凭证 + retry = 6 进程，可接受；P4 若 provider 增多，可引入「provider 容器进程」（多 provider 共享一个进程，仍保持能力位语义） |
 | **chunk 事件走总线带宽** | token 逐条发布 OK（RFC 既有契约）；若 P4 吞吐瓶颈，再以 `llm.block.*` 增量降频（只增不改） |
 | **凭证值进总线** | `credentials.resolved` 的 apiKey **只在服务间总线传播，永不进 SSE/前端**；前端永远见不到凭证值；P4 落 core store 后值甚至不出 credentials 服务 |
-| **opencode 是 agent 不是纯 LLM** | `llm-provider-opencode` 走 `opencode serve` HTTP（`/session/message` SSE）；它产出的不是 token 而是 agent 消息块——适配器把它翻译成 `StreamChunk`（text delta / finish），对主位透明 |
+| **通用 openai 兼容接入** | `llm-provider-openai` 走 openai 兼容 `/chat/completions`（baseURL 可配），对主位透明；**opencode 不做**（另有安排，非 P2 范围） |
 | **retry 空转** | retry 在 P2 只声明 + 记账，不执行——避免半吊子重试造成重复请求；执行器 P4 与凭证 store 一并装备 |
 | **崩溃恢复** | 重试交给 Core 进程管理（P1a）：kill provider → 拉起 → `llm.provider.registered` 重新注册；请求级重试 P4 再做 |
 
@@ -253,7 +253,7 @@ WS-2 service-sdk: credentials 客户端（attachCredentialClient：resolve → r
 WS-3 services/credentials: 凭证能力位（src/resolve.ts 纯逻辑 + 装配）
 WS-4 services/llm: 主位重写（路由表 + 翻译 + cancel 转发）
 WS-5 services/llm-provider-deepseek + openrouter: openai 兼容 provider
-WS-6 services/llm-provider-opencode: opencode serve 适配器
+WS-6 services/llm-provider-openai: 通用 openai 兼容 provider（baseURL 可配）
 WS-7 services/llm-retry: 声明消费 + 记账
 WS-8 client: chat-widget + providers-widget
 WS-9 收尾: 文档勾选 + 绿灯全集复跑

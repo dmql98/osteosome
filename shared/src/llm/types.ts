@@ -63,7 +63,7 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
 
 /** ProviderDescriptor（provider 服务注册时发布，§3.2） */
 export interface ProviderDescriptor {
-  /** 如 'deepseek' / 'openrouter' / 'opencode' */
+  /** 如 'deepseek' / 'openrouter' / 'openai' */
   provider: string
   defaultModel: string
   /** 如 'env:DEEPSEEK_API_KEY'；P4 支持 'core:<id>' */

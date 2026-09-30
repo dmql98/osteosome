@@ -131,7 +131,7 @@ export const PLUGINS: PluginDefinition[] = [
     author: 'osteosome',
     license: 'Apache-2.0',
     description:
-      'LLM provider 能力位（services/llm-provider-*）：deepseek / openrouter / opencode 三个独立服务，经 llm.provider.registered 注册自身能力。组件（widget.llm-providers）由 WS-8 提供，渲染 provider 存在性与状态。',
+      'LLM provider 能力位（services/llm-provider-*）：deepseek / openrouter / openai（通用兼容）独立服务，经 llm.provider.registered 注册自身能力。组件（widget.llm-providers）由 WS-8 提供，渲染 provider 存在性与状态。',
     capabilities: [
       { name: 'llm.provider.registered', detail: 'provider 注册（defaultModel / credentialRef / retryPolicy）' },
       { name: 'llm.provider.unregistered', detail: 'provider 退出（主位摘路由）' },

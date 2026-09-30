@@ -745,7 +745,7 @@ services/
 │       └── routes.ts               # provider 路由表（registered/unregistered 维护）
 ├── llm-provider-deepseek/          # provider 能力位（独立进程）
 ├── llm-provider-openrouter/        # provider 能力位（独立进程）
-├── llm-provider-opencode/          # provider 能力位（独立进程，opencode serve HTTP）
+├── llm-provider-openai/            # provider 能力位（独立进程，通用 openai 兼容，baseURL 可配）
 ├── credentials/                    # 凭证能力位（独立进程，env: v1 / core: P4）
 ├── llm-retry/                      # 重试 + usage 记账能力位（独立进程，P2 声明 / P4 执行）
 ├── loop/                           # Loop 服务
@@ -1213,7 +1213,7 @@ npm run build --prefix client          # tsc + vite build 零错误
 - 契约：`stream()` 输出带 block 边界的类型化流（文本 / 推理 / 工具 call 显式块），末尾 `finish` 终块携带稳定错误码与 Retry-After。
 - 落点：`llm/client.ts` 的 `LLMChunk` 块化；`format` 兑现或删除；字符串判 429 收敛为错误码；disjoint 记账；凭证 seam。
 - 验收：新增供应商不再手改单函数；google preset baseUrl 恢复可连通；错误告别字符串匹配。
-- **本地化落点（2026-09-23；P2 于 09-28 修订为能力位拆分）**：能力位六插件（`services/llm` 主位 + `llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-opencode` 三个 provider 位 + `credentials` 凭证位 + `llm-retry` 重试记账位）见 `docs/开发进度/P2-详细计划.md` 与 `LLM能力位拆分设计.md`；凭证 store（`core:<id>` kind）+ retry 执行器 + `listModels()` + 设置 Pane 见 `docs/开发进度/P4-详细计划.md`。
+- **本地化落点（2026-09-23；P2 于 09-28 修订为能力位拆分，09-28 WS-6 改向）**：能力位六插件（`services/llm` 主位 + `llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-openai` 三个 provider 位 + `credentials` 凭证位 + `llm-retry` 重试记账位）见 `docs/开发进度/P2-详细计划.md` 与 `LLM能力位拆分设计.md`；凭证 store（`core:<id>` kind）+ retry 执行器 + `listModels()` + 设置 Pane 见 `docs/开发进度/P4-详细计划.md`。
 
 **落地顺序**：④ LLM 适配器（最小、纯行为侧，先做）→ ③ 工具管线 → ① 会话事件化（数据层大改）→ ② Compaction（依赖事件化土壤）。
 

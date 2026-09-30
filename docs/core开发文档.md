@@ -802,12 +802,12 @@ sdk/
 
 ### P2 · 最小 LLM 对话（能力位拆分 · 六插件实现）（1.5 周）
 
-> 注意：wire 走中立流契约（`llm.request` → `llm.provider.request` → `llm.provider.chunk` → `llm.token.streamed` / `llm.request.finished`）；**能力位先于实现**——LLM 拆成 6 个独立服务插件（`llm` 主位 + `llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-opencode` 三个 provider 位 + `credentials` 凭证位 + `llm-retry` 重试记账位），每个能力位一个进程，「存在性由插件决定」：卸 provider 插件 → 该 provider 从系统消失（`unsupported_provider`）。`StreamChunk` / `ProviderDescriptor` / 凭证引用 / retry 声明在 P2 落地，P4 只加凭证 store + retry 执行器 + 模型目录 + 设置 Pane，不重写骨架。设计定案见 `docs/开发进度/LLM能力位拆分设计.md`，详案 `docs/开发进度/P2-详细计划.md`。
+> 注意：wire 走中立流契约（`llm.request` → `llm.provider.request` → `llm.provider.chunk` → `llm.token.streamed` / `llm.request.finished`）；**能力位先于实现**——LLM 拆成 6 个独立服务插件（`llm` 主位 + `llm-provider-deepseek` / `llm-provider-openrouter` / `llm-provider-openai` 三个 provider 位 + `credentials` 凭证位 + `llm-retry` 重试记账位；**WS-6 改向：opencode 不做，另有安排，改做通用 openai 兼容 provider**），每个能力位一个进程，「存在性由插件决定」：卸 provider 插件 → 该 provider 从系统消失（`unsupported_provider`）。`StreamChunk` / `ProviderDescriptor` / 凭证引用 / retry 声明在 P2 落地，P4 只加凭证 store + retry 执行器 + 模型目录 + 设置 Pane，不重写骨架。设计定案见 `docs/开发进度/LLM能力位拆分设计.md`，详案 `docs/开发进度/P2-详细计划.md`。
 
 - [x] `shared/src/llm/` —— `StreamChunk` / `readSseJson` / `ChatMessage` / `ProviderDescriptor` 上移为唯一真相源；events.ts 只增 `llm.provider.*` / `credentials.*` / `llm.metrics.*`（WS-1）
 - [ ] `services/credentials/` —— 凭证能力位（`env:` v1，预留 `core:`）；`services/llm-retry/` —— retry 声明消费 + usage 记账（P2 不执行）
 - [x] `services/llm/` —— 能力主位：provider 路由表 + chunk 翻译对外事件 + cancel 转发（不 import 任何 provider 实现）（WS-4）
-- [x] `services/llm-provider-deepseek` / `llm-provider-openrouter`（WS-5 已完成；`llm-provider-opencode` 归 WS-6）—— 注册 + 流式 chunk + 错误码化
+- [x] `services/llm-provider-deepseek` / `llm-provider-openrouter`（WS-5 已完成；`llm-provider-openai` 通用兼容归 WS-6，**opencode 不做**）—— 注册 + 流式 chunk + 错误码化
 - [ ] 前端：`widget.llm-chat`（发问 / 停止 / 流式累积）+ `widget.llm-providers`（provider 状态）
 - [ ] **绿灯**：chat Widget 发问 → SSE 收到流式 token；缺 API key → `missing_credential` 错误占位；kill provider → `llm.provider.unregistered` → `unsupported_provider` → Core 拉起恢复；重启服务不影响 Core
 
