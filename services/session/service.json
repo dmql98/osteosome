@@ -1,0 +1,28 @@
+{
+  "id": "session",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "session.created",
+    "session.updated",
+    "session.deleted",
+    "message.appended",
+    "session.list.result",
+    "session.get.result",
+    "session.create.result",
+    "session.rename.result",
+    "session.delete.result",
+    "session.clear.result",
+    "message.append.result"
+  ],
+  "subscribes": [
+    "session.list",
+    "session.get",
+    "session.create",
+    "session.rename",
+    "session.delete",
+    "session.clear",
+    "message.append"
+  ]
+}

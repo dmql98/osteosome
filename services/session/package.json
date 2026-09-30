@@ -1,0 +1,22 @@
+{
+  "name": "@osteosome/session",
+  "version": "0.0.0",
+  "private": true,
+  "description": "会话能力位（P3 WS-1）：会话 CRUD + 消息 append-only，dataDir JSON 持久化",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}
