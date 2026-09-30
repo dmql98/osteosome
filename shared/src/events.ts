@@ -35,6 +35,39 @@ export interface PaneDescriptor {
   component: string
 }
 
+/** 事件/结果错误（P3 §3.3：缺字段/不存在 → <cmd>.result 带 error，不吞静默） */
+export interface EventError {
+  code: string
+  message: string
+}
+
+/** 会话元信息（session 索引条目） */
+export interface SessionMeta {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  pinned?: boolean
+  /** 全文/索引损坏标记（读到但不可用） */
+  corrupted?: boolean
+}
+
+/** 消息（append-only，不可变） */
+export interface Message {
+  id: string
+  role: 'system' | 'user' | 'assistant'
+  createdAt: string
+  content: string
+  finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'error'
+  usage?: { promptTokens: number; completionTokens: number }
+}
+
+/** 单会话全文（session.get.result） */
+export interface SessionFile {
+  meta: SessionMeta
+  messages: Message[]
+}
+
 /**
  * 事件映射 —— 后续阶段（P2+）追加 llm / loop / session 等只增不删。
  * interface 合并语义：所有 topic 集中于此，一处定义三处消费。
@@ -75,6 +108,29 @@ export interface EventMap {
   }
   /** llm-retry 记账输出（P2 只声明消费 + 记账，P4 执行器） */
   'llm.metrics.usage': EventBase & { requestId: string; provider: string; usage: Usage }
+  // ── session（P3 §3.3/§3.4，只增不改）──
+  /** session 命令结果（`session.get` 不存在时 session:null，调用方回退最近会话） */
+  'session.list.result': EventBase & { requestId: string; sessions: SessionMeta[]; error?: EventError }
+  'session.get.result': EventBase & { requestId: string; session: SessionFile | null; error?: EventError }
+  'session.create.result': EventBase & { requestId: string; sessionId: string; title: string; error?: EventError }
+  'session.rename.result': EventBase & { requestId: string; sessionId: string; title: string; error?: EventError }
+  'session.delete.result': EventBase & { requestId: string; sessionId: string; error?: EventError }
+  'session.clear.result': EventBase & { requestId: string; deletedCount: number; error?: EventError }
+  'message.append.result': EventBase & { requestId: string; sessionId: string; message: Message; error?: EventError }
+  /** session 领域事件（前端列表 + loop 旁路消费） */
+  'session.created': EventBase & { sessionId: string; title: string; updatedAt: string }
+  'session.updated': EventBase & { sessionId: string; title?: string; updatedAt: string }
+  'session.deleted': EventBase & { sessionId: string }
+  'message.appended': EventBase & { sessionId: string; message: Message }
+  // ── loop（P3 §3.2/§3.4，只增不改）──
+  /** loop 状态切换（requestId = A，loop.run 的对外 id） */
+  'loop.state.changed': EventBase & { requestId: string; sessionId: string; state: 'idle' | 'running' }
+  /** 本次跑动失败（错误码透传；不落 assistant 消息） */
+  'loop.run.failed': EventBase & { requestId: string; sessionId: string; error: EventError }
+  /** 本次跑动被主动取消（成功路径，不留半截 assistant） */
+  'loop.run.cancelled': EventBase & { requestId: string; sessionId: string }
+  /** loop 转发 llm 的 token（B→A 换发；B 不泄前端，index 保留 llm 原值） */
+  'loop.token.streamed': EventBase & { requestId: string; sessionId: string; token: string; index: number }
 }
 
 /**
@@ -112,6 +168,18 @@ export interface CommandMap {
   'llm.provider.cancel': { requestId: string }
   /** provider → credentials：解析凭证引用（ref 如 `env:DEEPSEEK_API_KEY`；P4 支持 `core:<id>`） */
   'credentials.resolve': { requestId: string; ref: string }
+  // ── session 命令（P3 §3.3，只增不改；响应走 <cmd>.result 事件）──
+  'session.list': { requestId: string }
+  'session.get': { requestId: string; sessionId: string }
+  'session.create': { requestId: string; title?: string }
+  'session.rename': { requestId: string; sessionId: string; title: string }
+  'session.delete': { requestId: string; sessionId: string }
+  'session.clear': { requestId: string }
+  'message.append': { requestId: string; sessionId: string; message: { role: 'system' | 'user' | 'assistant'; content: string; id?: string } }
+  // ── loop 命令（P3 §3.4；requestId = A，对外可见）──
+  'loop.run': { requestId: string; sessionId: string; text: string }
+  /** 取消在途 run（fire-and-forget，无 <cmd>.result；结果由 loop.run.cancelled / loop.run.failed 体现） */
+  'loop.cancel': { requestId: string }
 }
 
 /** 事件 topic：keyof EventMap */
@@ -148,6 +216,21 @@ export const EVENT_TOPICS = [
   'llm.provider.chunk',
   'credentials.resolved',
   'llm.metrics.usage',
+  'session.list.result',
+  'session.get.result',
+  'session.create.result',
+  'session.rename.result',
+  'session.delete.result',
+  'session.clear.result',
+  'message.append.result',
+  'session.created',
+  'session.updated',
+  'session.deleted',
+  'message.appended',
+  'loop.state.changed',
+  'loop.run.failed',
+  'loop.run.cancelled',
+  'loop.token.streamed',
 ] as const satisfies readonly EventKey[]
 
 /** 运行时命令 topic 清单 —— 与 {@link CommandMap} 同步；服务 manifest 的 subscribes 可引用命令 */
@@ -161,4 +244,13 @@ export const COMMAND_TOPICS = [
   'llm.provider.request',
   'llm.provider.cancel',
   'credentials.resolve',
+  'session.list',
+  'session.get',
+  'session.create',
+  'session.rename',
+  'session.delete',
+  'session.clear',
+  'message.append',
+  'loop.run',
+  'loop.cancel',
 ] as const satisfies readonly CommandKey[]
