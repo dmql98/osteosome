@@ -19,4 +19,13 @@ describe('plugin registry', () => {
     expect(pluginForWidget('widget.unknown')).toBeUndefined()
     expect(getPlugin('missing')).toBeUndefined()
   })
+
+  it('LLM 能力位插件已登记（依赖对齐服务 id）', () => {
+    const llm = getPlugin('plugin.llm')
+    expect(llm?.widgets).toContain('widget.llm-chat')
+    expect(llm?.dependencies.map((dep) => dep.id)).toContain('llm')
+    const providers = getPlugin('plugin.llm-providers')
+    expect(providers?.widgets).toContain('widget.llm-providers')
+    expect(providers?.dependencies.map((dep) => dep.id)).toEqual(expect.arrayContaining(['llm', 'credentials']))
+  })
 })
