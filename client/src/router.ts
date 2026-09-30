@@ -27,6 +27,12 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('./plugins/PluginListWindow.vue'),
   },
   {
+    path: '/plugin-detail/:id',
+    name: 'plugin-detail',
+    component: () => import('./plugins/PluginDetailWindow.vue'),
+    props: (route) => ({ pluginId: String(route.params.id) }),
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/',
   },

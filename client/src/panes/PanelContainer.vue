@@ -1,29 +1,40 @@
 <template>
   <div class="panel-boxes" :class="`panel-boxes--${modeClass}`" @pointerdown="onCanvasPointerDown">
     <div ref="canvas" class="panel-boxes__canvas">
-      <MovableBox
-        v-for="widget in visible"
-        :key="widget.id"
-        v-model="widget.rect"
-        class="panel-boxes__item"
-        :class="{ 'panel-boxes__item--selected': selectedId === widget.id }"
-        drag-handle=".panel-boxes__header"
-        :active="editable && selectedId === widget.id"
-        :draggable="editable"
-        :resizable="editable"
-        :disabled="!editable"
-        :snap-to-elements="editable"
-        :snap-targets="editable ? snapTargets : []"
-        @drag-stop="persist"
-        @resize-stop="persist"
-        @pointerdown.stop="onBoxPointerDown(widget.id)"
-      >
-        <header class="panel-boxes__header" :class="{ 'panel-boxes__header--edit': editable }">
-          <span class="panel-boxes__title">{{ widget.title }}</span>
-        </header>
-        <div class="panel-boxes__body"><component :is="widget.component" /></div>
-      </MovableBox>
-      <p v-if="visible.length === 0" class="panel-boxes__empty">空面板 · 用「添加组件」放入组件</p>
+      <MovableGroup v-model:selected="selectedIds" @move-stop="persist">
+        <MovableBox
+          v-for="widget in visible"
+          :key="widget.id"
+          v-model="widget.rect"
+          :member-id="widget.id"
+          class="panel-boxes__item"
+          :class="{ 'panel-boxes__item--selected': isSelected(widget.id) }"
+          drag-handle=".panel-boxes__header"
+          :active="editable && isSelected(widget.id)"
+          :draggable="editable"
+          :resizable="editable"
+          :disabled="!editable"
+          :snap-to-elements="editable"
+          :snap-targets="editable ? snapTargets : []"
+          @resize-stop="persist"
+          @pointerdown.stop="onBoxPointerDown(widget.id, $event)"
+        >
+          <header class="panel-boxes__header" :class="{ 'panel-boxes__header--edit': editable }">
+            <span class="panel-boxes__title">{{ widget.title }}</span>
+            <button
+              v-if="editable"
+              type="button"
+              class="panel-boxes__remove"
+              title="从面板移除"
+              aria-label="从面板移除组件"
+              @pointerdown.stop
+              @click.stop="removeWidget(widget.id)"
+            >×</button>
+          </header>
+          <div class="panel-boxes__body"><component :is="widget.component" /></div>
+        </MovableBox>
+      </MovableGroup>
+      <p v-if="visible.length === 0" class="panel-boxes__empty">空面板 · 到「插件管理」里选组件加入</p>
     </div>
   </div>
 </template>
@@ -31,8 +42,9 @@
 <script setup lang="ts">
 import { computed, markRaw, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { MovableBox, type MovableBoxRect } from 'vue-movable-box'
+import { MovableBox, MovableGroup, type MovableBoxRect } from 'vue-movable-box'
 import { useLayoutStore } from '../layout/layout.store'
+import { usePluginStore } from '../stores/plugin.store'
 import { getWidget, widgetComponents } from '../widgets/registry'
 
 type WidgetBox = { id: string; title: string; component: unknown; rect: MovableBoxRect }
@@ -51,17 +63,30 @@ const gridSize = 8
 
 // 编辑模式才可拖拽/缩放：运行时锁定组件位置与大小
 const layoutStore = useLayoutStore()
+const pluginStore = usePluginStore()
 const { mode } = storeToRefs(layoutStore)
 const editable = computed(() => mode.value === 'edit')
 const modeClass = computed(() => (editable.value ? 'edit' : 'runtime'))
-// 当前选中的组件：点它才显示 8 个把手；点空白处取消选中
-const selectedId = ref<string | null>(null)
+// 当前选中的组件：可多选（Ctrl/Cmd/Shift 点选加减），拖任一个选中项一起移动。
+const selectedIds = ref<string[]>([])
 
-function onBoxPointerDown(id: string): void {
-  if (editable.value) selectedId.value = id
+function isSelected(id: string): boolean {
+  return selectedIds.value.includes(id)
+}
+
+function onBoxPointerDown(id: string, event: PointerEvent): void {
+  if (!editable.value) return
+  const additive = event.ctrlKey || event.metaKey || event.shiftKey
+  if (additive) {
+    selectedIds.value = isSelected(id)
+      ? selectedIds.value.filter((item) => item !== id)
+      : [...selectedIds.value, id]
+  } else if (!isSelected(id)) {
+    selectedIds.value = [id]
+  }
 }
 function onCanvasPointerDown(): void {
-  if (editable.value) selectedId.value = null
+  if (editable.value) selectedIds.value = []
 }
 
 function defaultRect(index: number): MovableBoxRect {
@@ -81,25 +106,42 @@ const visible = ref<WidgetBox[]>([])
 
 function rebuild(): void {
   visible.value = widgets.value.flatMap((id, index) => {
+    // 停用 / 已卸载插件的组件不渲染（停用仅隐藏，重新启用自动恢复）
+    if (!pluginStore.isWidgetEnabled(id)) return []
     const widget = getWidget(id)
     if (!widget) return []
     return [{ id, title: widget.title, component: markRaw(componentMap[id] as object), rect: saved.value[id] ?? defaultRect(index) }]
   })
+  const alive = new Set(visible.value.map((widget) => widget.id))
+  selectedIds.value = selectedIds.value.filter((id) => alive.has(id))
 }
 
 const snapTargets = computed(() => visible.value.map((widget) => ({ ...widget.rect, id: widget.id })))
 
-function persist(): void {
+function writeWidgets(nextWidgets: string[], nextVisible: WidgetBox[] = visible.value): void {
   panelApi.value?.updateParameters?.({
-    widgets: widgets.value,
-    layout: Object.fromEntries(visible.value.map((widget) => [widget.id, widget.rect])),
+    widgets: nextWidgets,
+    layout: Object.fromEntries(nextVisible.map((widget) => [widget.id, widget.rect])),
   })
   window.dispatchEvent(new CustomEvent('osteosome:panel-layout'))
+}
+
+function persist(): void {
+  writeWidgets(widgets.value)
+}
+
+/** 从本面板移除组件：更新 params.widgets 并同步几何，由 DockviewLayout 回写快照。 */
+function removeWidget(id: string): void {
+  writeWidgets(
+    widgets.value.filter((widgetId) => widgetId !== id),
+    visible.value.filter((widget) => widget.id !== id),
+  )
 }
 
 onMounted(() => nextTick(rebuild))
 watch(widgets, rebuild)
 watch(saved, () => { if (visible.value.length) rebuild() })
+watch(() => pluginStore.revision, rebuild)
 </script>
 
 <style scoped>
@@ -112,6 +154,8 @@ watch(saved, () => { if (visible.value.length) rebuild() })
 .panel-boxes--edit .panel-boxes__header { cursor: move; }
 .panel-boxes--runtime .panel-boxes__header { display: none; }
 .panel-boxes__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-boxes__remove { flex: none; width: 16px; height: 16px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1; cursor: pointer; }
+.panel-boxes__remove:hover { background: var(--color-danger-soft); color: var(--color-danger); }
 .panel-boxes__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3); }
 .panel-boxes__empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
 </style>

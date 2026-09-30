@@ -8,9 +8,6 @@
     </span>
     <template v-if="layout.mode === 'edit'">
       <Button size="sm" variant="ghost" @click="layout.newPanel">新建面板</Button>
-      <Dropdown :items="widgetItems" @select="layout.addWidget">
-        <template #trigger>添加组件</template>
-      </Dropdown>
     </template>
     <button
       class="topbar__mode"
@@ -25,32 +22,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
 import { useLayoutStore } from '../layout/layout.store'
 import { useServiceStatus } from '../core-sdk/useServiceStatus'
-import { listWidgets } from '../widgets/registry'
 import { openPluginWindow } from '../layout/window-manager'
 import Button from '../components/ui/Button.vue'
-import Dropdown from '../components/ui/Dropdown.vue'
 
 const layout = useLayoutStore()
 const services = useServiceStatus()
 
-const widgetItems = computed(() => listWidgets().map((widget) => ({ label: widget.title, value: widget.id })))
 const allReady = services.readyCount === services.totalCount && services.totalCount > 0
 
 function toggleMode(): void { layout.setMode(layout.mode === 'edit' ? 'runtime' : 'edit') }
 
 function openPlugins(): void {
-  // 插件管理：独立原生窗（对齐 demo D1 列表，无市场）。不再塞进工作台面板。
+  // 插件管理：独立原生窗（对齐 demo D1 列表）。点击「插件」弹出，不再进编辑模式自动弹。
   openPluginWindow()
 }
-
-// 进入编辑模式时自动弹出插件列表独立窗
-watch(() => layout.mode, (mode) => {
-  if (mode === 'edit') openPluginWindow()
-})
-
 </script>
 
 <style scoped>

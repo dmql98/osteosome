@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useLayoutStore } from '../../src/layout/layout.store'
 import { usePreferences } from '../../src/core-sdk/usePreferences'
+import { usePluginStore } from '../../src/stores/plugin.store'
+import { panelWindowExists } from '../../src/layout/window-manager'
 
 vi.mock('../../src/core-sdk/usePreferences', () => ({ usePreferences: vi.fn() }))
+vi.mock('../../src/layout/window-manager', () => ({ panelWindowExists: vi.fn() }))
 
 const validLayout = { grid: { root: { type: 'branch', data: [] }, width: 0, height: 0, orientation: 'HORIZONTAL' }, panels: {} }
 
@@ -49,11 +52,11 @@ describe('layout.store', () => {
     vi.useFakeTimers()
     const put = vi.fn().mockResolvedValue(undefined)
     const preferences = usePreferences as unknown as ReturnType<typeof vi.fn>
-    preferences.mockReturnValue({ get: vi.fn(), put })
+    preferences.mockReturnValue({ get: vi.fn(), patch: put })
     const store = useLayoutStore()
     store.updateLayout({ ...validLayout, panels: { 'panel.changed': {} } } as never)
     await vi.advanceTimersByTimeAsync(500)
-    expect(put).toHaveBeenCalledWith({ layout: expect.stringContaining('panel.changed') })
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({ layout: expect.stringContaining('panel.changed') }))
   })
 
   it('addWidget 把组件加入当前激活面板 params', () => {
@@ -72,6 +75,77 @@ describe('layout.store', () => {
     expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ component: 'panel', params: { widgets: ['widget.service-status'] } }))
   })
 
+  it('detachPanel 摘除面板并记住状态，restorePanel 回到原 tab 组', () => {
+    const store = useLayoutStore()
+    let closed = false
+    const reference = { id: 'panel.b' }
+    const target = {
+      id: 'panel.a',
+      toJSON: () => ({ id: 'panel.a', contentComponent: 'panel', title: '工作台', params: { widgets: ['widget.service-status'] } }),
+      group: { panels: [{ id: 'panel.a' }, reference] },
+      api: { close: vi.fn(() => { closed = true }) },
+    }
+    const api = {
+      getPanel: vi.fn((id: string) => {
+        if (id === 'panel.a') return closed ? undefined : target
+        if (id === 'panel.b') return reference
+        return undefined
+      }),
+      addPanel: vi.fn(),
+      toJSON: vi.fn(() => ({ grid: {}, panels: {} })),
+    }
+    store.attachApi(api as never)
+
+    expect(store.detachPanel('panel.a')).toBe(true)
+    expect(target.api.close).toHaveBeenCalled()
+    expect(store.detachedPanels['panel.a']).toBeTruthy()
+
+    store.restorePanel('panel.a')
+    expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'panel.a',
+      component: 'panel',
+      title: '工作台',
+      params: { widgets: ['widget.service-status'] },
+      position: { referencePanel: reference, direction: 'within' },
+    }))
+    expect(store.detachedPanels['panel.a']).toBeUndefined()
+  })
+
+  it('bootstrap 读取持久化的独立面板记录', async () => {
+    const detachedPanels = { 'panel.a': { state: { id: 'panel.a' }, referencePanel: null } }
+    const preferences = usePreferences as unknown as ReturnType<typeof vi.fn>
+    preferences.mockReturnValue({ get: vi.fn().mockResolvedValue({ layout: JSON.stringify(validLayout), detachedPanels }), put: vi.fn() })
+    const store = useLayoutStore()
+    await store.bootstrap()
+    expect(store.detachedPanels).toEqual(detachedPanels)
+  })
+
+  it('reconcileDetached 只恢复独立窗已不存在的面板', async () => {
+    const exists = panelWindowExists as unknown as ReturnType<typeof vi.fn>
+    exists.mockImplementation(async (id: string) => id === 'panel.still')
+    const store = useLayoutStore()
+    const api = { getPanel: vi.fn(() => undefined), addPanel: vi.fn(), toJSON: vi.fn() }
+    store.attachApi(api as never)
+    const record = (id: string) => ({ state: { id, contentComponent: 'panel', title: '工作台', params: { widgets: [] } }, referencePanel: null })
+    store.detachedPanels = { 'panel.still': record('panel.still'), 'panel.gone': record('panel.gone') }
+
+    await store.reconcileDetached()
+    expect(api.addPanel).toHaveBeenCalledTimes(1)
+    expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ id: 'panel.gone' }))
+    expect(store.detachedPanels['panel.gone']).toBeUndefined()
+    expect(store.detachedPanels['panel.still']).toBeTruthy()
+  })
+
+  it('restorePanel 对未拉出/已存在的面板是空操作', () => {
+    const store = useLayoutStore()
+    const existing = { id: 'panel.x' }
+    const api = { getPanel: vi.fn((id: string) => (id === 'panel.x' ? existing : undefined)), addPanel: vi.fn(), toJSON: vi.fn() }
+    store.attachApi(api as never)
+    store.restorePanel('panel.never')
+    store.restorePanel('panel.x')
+    expect(api.addPanel).not.toHaveBeenCalled()
+  })
+
   it('newPanel 用原生 addPanel 建空面板，resetLayout 清空铺默认', () => {
     const store = useLayoutStore()
     const api = fakeApi()
@@ -80,5 +154,33 @@ describe('layout.store', () => {
     expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ component: 'panel', params: { widgets: [] } }))
     store.resetLayout()
     expect(api.clear).toHaveBeenCalled()
+  })
+
+  it('addWidget 跳过已停用插件的组件', async () => {
+    const preferences = usePreferences as unknown as ReturnType<typeof vi.fn>
+    preferences.mockReturnValue({ get: vi.fn(), patch: vi.fn().mockResolvedValue(undefined) })
+    const store = useLayoutStore()
+    const panel = { id: 'panel.main', params: { widgets: [] }, api: { setActive: vi.fn(), updateParameters: vi.fn() } }
+    store.attachApi(fakeApi(panel) as never)
+    await usePluginStore().setEnabled('plugin.service-manager', false)
+    store.addWidget('widget.service-status')
+    expect(panel.api.updateParameters).not.toHaveBeenCalled()
+  })
+
+  it('reconcilePlugins 剔除已卸载插件的组件', async () => {
+    const preferences = usePreferences as unknown as ReturnType<typeof vi.fn>
+    preferences.mockReturnValue({ get: vi.fn(), patch: vi.fn().mockResolvedValue(undefined) })
+    const store = useLayoutStore()
+    const updateParameters = vi.fn()
+    const panel = {
+      id: 'panel.main',
+      params: { widgets: ['widget.service-status', 'widget.system-info'] },
+      api: { setActive: vi.fn(), updateParameters },
+    }
+    const api = { panels: [panel], activePanel: panel, addPanel: vi.fn(), clear: vi.fn(), toJSON: vi.fn(() => ({ grid: {}, panels: {} })) }
+    store.attachApi(api as never)
+    await usePluginStore().uninstall('plugin.service-manager')
+    store.reconcilePlugins()
+    expect(updateParameters).toHaveBeenCalledWith({ widgets: ['widget.system-info'] })
   })
 })

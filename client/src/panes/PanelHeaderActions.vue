@@ -21,7 +21,10 @@ const panelId = computed(() => props.params?.activePanel?.id ?? '')
 
 function detach(): void {
   const panel = props.params?.activePanel
-  if (panel?.id) openPanelWindow(panel.id, panel.params?.widgets ?? [])
+  if (!panel?.id) return
+  // 先把面板从工作台摘除，再开独立窗；关闭独立窗时由主窗监听恢复
+  if (!layout.detachPanel(panel.id)) return
+  openPanelWindow(panel.id, panel.params?.widgets ?? [])
 }
 
 function close(): void {
