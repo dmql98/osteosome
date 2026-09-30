@@ -108,6 +108,11 @@ export interface EventMap {
   }
   /** llm-retry 记账输出（P2 只声明消费 + 记账，P4 执行器） */
   'llm.metrics.usage': EventBase & { requestId: string; provider: string; usage: Usage }
+  // ── credential（P4 §3.4，只增不改；**值永不入 payload**）──
+  /** 凭证写入（只带 { id, name, provider }；明文值不出 Core） */
+  'credential.saved': EventBase & { id: string; name: string; provider: string }
+  /** 凭证删除（只带 { id }） */
+  'credential.deleted': EventBase & { id: string }
   // ── session（P3 §3.3/§3.4，只增不改）──
   /** session 命令结果（`session.get` 不存在时 session:null，调用方回退最近会话） */
   'session.list.result': EventBase & { requestId: string; sessions: SessionMeta[]; error?: EventError }
@@ -216,6 +221,8 @@ export const EVENT_TOPICS = [
   'llm.provider.chunk',
   'credentials.resolved',
   'llm.metrics.usage',
+  'credential.saved',
+  'credential.deleted',
   'session.list.result',
   'session.get.result',
   'session.create.result',

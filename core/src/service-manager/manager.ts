@@ -35,6 +35,7 @@ import { HealthMonitor } from './health'
 import { loadServices } from './manifest'
 import { forceKill, sendSigterm, spawnServiceProcess, waitExit, type ManagedProcess } from './process'
 import { topologicalOrder } from './topology'
+import { CredentialApi, CredentialStoreError } from '../credentials/api'
 
 const DEFAULT_STOP_GRACE_MS = 5000
 const DEFAULT_BACKOFF_BASE_MS = 1000
@@ -85,6 +86,8 @@ export interface ServiceManagerOptions {
   consecutiveHealthFailures?: number
   /** 可注入 sleep（测试用） */
   sleep?: (ms: number) => Promise<void>
+  /** 凭证能力（P4 WS-1）：注入后开放 `credentials.*` JSON-RPC 方法（只给服务进程） */
+  credentials?: CredentialApi
 }
 
 /** 带 ts/source 的生命周期事件发布（source 永远 core） */
@@ -351,6 +354,12 @@ export class ServiceManager {
         case 'shutdown':
           void this.stopService(svc, this.stopGraceMs)
           return { ok: true }
+        // ── credentials.*（P4 WS-1）：只给服务进程；credentials.get 返回原值 ──
+        case 'credentials.get':
+        case 'credentials.set':
+        case 'credentials.delete':
+        case 'credentials.list':
+          return this.handleCredentialRpc(method, params)
         default:
           throw jsonRpcError(-32601, `method not found: ${method}`)
       }
@@ -383,6 +392,52 @@ export class ServiceManager {
       }
     }
     client.onError = (err) => this.onProtocolError(svc, err)
+  }
+
+  /**
+   * `credentials.*` JSON-RPC（P4 WS-1）—— 服务进程取凭证原值的唯一通道。
+   *
+   * - `credentials.get { id }` → `{ value }`（**原值只在此返回，永不进总线/事件**）
+   * - `credentials.set { id?, name, provider, value }` → 掩码形态
+   * - `credentials.delete { id }` → `{ ok }`
+   * - `credentials.list` → 掩码列表
+   */
+  private handleCredentialRpc(method: string, params: unknown): unknown {
+    const api = this.options.credentials
+    if (!api) throw jsonRpcError(-32001, `${method}: credentials not enabled`)
+    const p = (params ?? {}) as { id?: string; name?: string; provider?: string; value?: string }
+    try {
+      switch (method) {
+        case 'credentials.get': {
+          if (!p.id) throw jsonRpcError(-32602, 'credentials.get: id required')
+          return api.getRaw(p.id)
+        }
+        case 'credentials.set': {
+          if (typeof p.value !== 'string' || !p.value) {
+            throw jsonRpcError(-32602, 'credentials.set: value required')
+          }
+          return api.set({
+            ...(p.id ? { id: p.id } : {}),
+            name: p.name ?? '',
+            provider: p.provider ?? '',
+            value: p.value,
+          })
+        }
+        case 'credentials.delete': {
+          if (!p.id) throw jsonRpcError(-32602, 'credentials.delete: id required')
+          return { ok: api.delete(p.id) }
+        }
+        case 'credentials.list':
+          return { credentials: api.list() }
+        default:
+          throw jsonRpcError(-32601, `method not found: ${method}`)
+      }
+    } catch (err) {
+      if (err instanceof CredentialStoreError) {
+        throw jsonRpcError(-32010, `${method}: ${err.message}`)
+      }
+      throw err
+    }
   }
 
   private async handleInitialize(

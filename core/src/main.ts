@@ -4,6 +4,8 @@ import { ensureDir, loadConfig, type CoreConfig } from './config'
 import { logger } from './logger'
 import { ServiceManager, type ServiceManagerOptions } from './service-manager'
 import { SseBridge, type SseBridgeOptions } from './sse-bridge'
+import { CredentialApi } from './credentials/api'
+import { CredentialStore } from './credentials/store'
 
 export interface StartCoreOptions {
   argv?: string[]
@@ -24,6 +26,8 @@ export interface Core {
   bus: Bus
   manager: ServiceManager
   bridge: SseBridge
+  /** 凭证能力（P4 WS-1） */
+  credentials: CredentialApi
   port: number
   stop: () => Promise<void>
 }
@@ -34,16 +38,24 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
   ensureDir(config.dataDir)
 
   const bus = new Bus()
+  // 凭证能力（P4 WS-1）：Core 特权数据（不走 P1a §3.1 服务 dataDir 约定）
+  const credentialStore = new CredentialStore(config.dataDir)
+  const credentials = new CredentialApi(credentialStore, bus)
+  if (credentialStore.isCorrupted()) {
+    logger.warn('core: credentials.json corrupted — credential ops report error state (Core stays up)')
+  }
   const manager = new ServiceManager({
     servicesDir: config.servicesDir,
     dataDir: config.dataDir,
     sessionId: randomUUID(),
     bus,
+    credentials,
     ...options.manager,
   })
   const bridge = new SseBridge({
     bus,
     config,
+    credentials,
     listServices: () => manager.list(),
     controlService: async (command, serviceId) => {
       try {
@@ -93,7 +105,7 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
   logger.info(
     `core: started port=${port} services=${config.servicesDir} data=${config.dataDir}`,
   )
-  return { config, bus, manager, bridge, port, stop }
+  return { config, bus, manager, bridge, credentials, port, stop }
 }
 
 function isCliEntry(): boolean {

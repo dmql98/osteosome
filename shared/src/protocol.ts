@@ -18,6 +18,12 @@ export const METHODS = {
   'bus.unsubscribe': 'bus.unsubscribe',
   /** Core → 服务：推送订阅的事件 */
   'bus.event': 'bus.event',
+  // ── credentials.*（P4 WS-1 追加，只增不改；只给服务进程）──
+  /** 服务 → Core：取凭证原值（唯一出 Core 的通道；不经总线） */
+  'credentials.get': 'credentials.get',
+  'credentials.set': 'credentials.set',
+  'credentials.delete': 'credentials.delete',
+  'credentials.list': 'credentials.list',
   /** Core → 服务：心跳探测 */
   'health.ping': 'health.ping',
   /** 服务 → Core：心跳应答 */

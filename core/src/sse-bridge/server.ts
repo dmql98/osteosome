@@ -18,8 +18,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { ServiceInfo } from '@osteosome/shared'
 import type { Bus } from '../bus/bus'
 import type { CoreConfig } from '../config'
+import type { CredentialApi } from '../credentials/api'
 import { logger } from '../logger'
 import { handleCommand } from './command'
+import { handleCredentials } from './credentials'
 import { handlePreferences } from './preferences'
 import { handleStatic } from './static'
 import {
@@ -41,6 +43,8 @@ export interface SseBridgeOptions {
   heartbeatMs?: number
   /** 僵尸断开阈值 ms（默认 90000；测试注入小值） */
   zombieMs?: number
+  /** 凭证能力（P4 WS-1）：提供则挂载 /api/credentials（掩码通道） */
+  credentials?: CredentialApi
 }
 
 export class SseBridge {
@@ -141,6 +145,19 @@ export class SseBridge {
           return
         }
         await handlePreferences(req, res, this.options.config.dataDir)
+        return
+      }
+      if (path === '/api/credentials') {
+        const api = this.options.credentials
+        if (!api) {
+          sendJson(res, 404, { error: 'credentials not enabled' })
+          return
+        }
+        if (req.method !== 'GET' && req.method !== 'PUT' && req.method !== 'DELETE') {
+          methodNotAllowed(res, 'GET, PUT, DELETE')
+          return
+        }
+        await handleCredentials(req, res, url, api)
         return
       }
       sendJson(res, 404, { error: 'not found' })
