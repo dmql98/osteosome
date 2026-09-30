@@ -219,6 +219,19 @@ export class Service {
   }
 
   /**
+   * 通用请求/响应配对调用（P4 WS-1）：服务 → Core 的**点对点 RPC**（不经总线）。
+   *
+   * 与 publish/busRequest 的区别：本方法**等响应并返回 result**（Promise），
+   * 用于「服务向 Core 取数据 / 要结果」的场景——目前是 `credentials.get` 等凭证能力位。
+   * 通道与 bus.* 相同（Core onRequest 受理），只是不回灌总线、不发事件。
+   *
+   * 错误：Core 回 JSON-RPC error 时 reject（RpcError）；连接关闭 / 超时 reject。
+   */
+  async call<T = unknown>(method: string, params?: unknown, timeoutMs?: number): Promise<T> {
+    return this.rpc.request<T>(method, params, timeoutMs)
+  }
+
+  /**
    * 优雅退出：停止接收 → 摘除订阅 → 等 in-flight 完成 → 可选 notify `shutdown`。
    * 不调用 process.exit（信号/远端 shutdown 路径在外层收口）。
    * 并发调用共享同一次停止（第二个调用者 await 首个调用的完成）。

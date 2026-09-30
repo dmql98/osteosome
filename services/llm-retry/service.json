@@ -4,13 +4,16 @@
   "protocolVersion": "1.0.0",
   "entry": "node dist/index.js",
   "publishes": [
-    "llm.metrics.usage"
+    "llm.metrics.usage",
+    "llm.request"
   ],
   "subscribes": [
-    "llm.request.started",
+    "llm.provider.registered",
+    "llm.provider.unregistered",
+    "llm.request",
     "llm.request.failed",
     "llm.request.finished",
-    "llm.provider.registered",
-    "llm.provider.unregistered"
+    "llm.request.started",
+    "llm.token.streamed"
   ]
 }
