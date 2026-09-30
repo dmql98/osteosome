@@ -30,15 +30,35 @@ export interface FailureRecord {
   error: StreamError
 }
 
-/** 归一化 `llm.request.finished` payload → UsageRecord（未知 provider 记 'unknown'） */
+/**
+ * requestId → provider 映射（来自 `llm.request.started`）。
+ * `llm.request.finished/failed` 契约不带 provider，只能靠 started 事件回填——
+ * 否则 usage 记账 provider 恒为 'unknown'（WS-9 集成冒烟实证）。
+ */
+export type ProviderByRequest = Map<string, string>
+
+/** 从 `llm.request.started` payload 记录 requestId → provider */
+export function rememberRequestProvider(payload: Record<string, unknown>, map: ProviderByRequest): void {
+  const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
+  const provider = typeof payload.provider === 'string' ? payload.provider : ''
+  if (requestId && provider) map.set(requestId, provider)
+}
+
+function resolveProvider(payload: Record<string, unknown>, map: ProviderByRequest): string {
+  if (typeof payload.provider === 'string' && payload.provider) return payload.provider
+  const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
+  return map.get(requestId) ?? 'unknown'
+}
+
+/** 归一化 `llm.request.finished` payload → UsageRecord（provider 由 started 事件回填，兜底 'unknown'） */
 export function recordUsage(
   payload: Record<string, unknown>,
   declarations: Map<string, ProviderDeclaration>,
+  requestProviders: ProviderByRequest,
 ): UsageRecord | undefined {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
   if (!requestId) return undefined
-  const provider =
-    typeof payload.provider === 'string' && payload.provider ? payload.provider : 'unknown'
+  const provider = resolveProvider(payload, requestProviders)
   const finishReason = payload.finishReason as UsageRecord['finishReason']
   const rawUsage = payload.usage as Record<string, unknown> | undefined
   let usage: Usage | undefined
@@ -57,11 +77,11 @@ export function recordUsage(
 export function recordFailure(
   payload: Record<string, unknown>,
   declarations: Map<string, ProviderDeclaration>,
+  requestProviders: ProviderByRequest,
 ): FailureRecord | undefined {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
   if (!requestId) return undefined
-  const provider =
-    typeof payload.provider === 'string' && payload.provider ? payload.provider : 'unknown'
+  const provider = resolveProvider(payload, requestProviders)
   const rawError = payload.error as StreamError | undefined
   const error: StreamError =
     rawError && typeof rawError === 'object' && typeof rawError.code === 'string'

@@ -7,7 +7,9 @@
     "llm.request.started",
     "llm.token.streamed",
     "llm.request.finished",
-    "llm.request.failed"
+    "llm.request.failed",
+    "llm.provider.request",
+    "llm.provider.cancel"
   ],
   "subscribes": [
     "llm.request",

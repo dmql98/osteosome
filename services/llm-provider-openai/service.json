@@ -6,7 +6,8 @@
   "publishes": [
     "llm.provider.registered",
     "llm.provider.chunk",
-    "llm.provider.unregistered"
+    "llm.provider.unregistered",
+    "credentials.resolve"
   ],
   "subscribes": [
     "llm.provider.request",

@@ -18,13 +18,16 @@ const credentials = attachCredentialClient(service)
 /** 在途请求表（requestId → AbortController） */
 const inflight = new Map<string, AbortController>()
 
-/** 启动即注册能力（存在性由插件决定） */
-service.publish('llm.provider.registered', {
-  provider: PROVIDER,
-  defaultModel: DEFAULT_MODEL,
-  credentialRef: CREDENTIAL_REF,
-  retryPolicy: RETRY_POLICY,
-})
+/** 注册能力（存在性由插件决定）—— 必须在 service.start() 之后调用：
+ *  SDK 在 started=false 时丢弃 publish，模块顶层注册会丢失（WS-9 集成冒烟实证）。 */
+function registerCapability(): void {
+  service.publish('llm.provider.registered', {
+    provider: PROVIDER,
+    defaultModel: DEFAULT_MODEL,
+    credentialRef: CREDENTIAL_REF,
+    retryPolicy: RETRY_POLICY,
+  })
+}
 
 service.subscribe('llm.provider.request', async (payload) => {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
@@ -94,6 +97,8 @@ service.subscribe('llm.provider.cancel', (payload) => {
 
 async function main(): Promise<void> {
   await service.start()
+  // 握手完成、订阅已生效后再注册能力（否则 publish 被丢弃，主位拿不到路由）
+  registerCapability()
 }
 
 main().catch((err: unknown) => {

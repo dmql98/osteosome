@@ -44,8 +44,10 @@ export function validateManifest(raw: unknown): Manifest {
   const eventSet = new Set<string>(EVENT_TOPICS)
   const commandSet = new Set<string>(COMMAND_TOPICS)
   for (const topic of manifest.publishes) {
-    if (!eventSet.has(topic)) {
-      throw new ManifestError([`[${manifest.id}] publishes '${topic}' not declared in shared EventMap`])
+    // publishes 允许「事件 + 命令」：能力位架构下服务间调用（主位→provider llm.provider.request、
+    // provider→credentials credentials.resolve）也走总线命令，只有一个 publish 出口（WS-9 集成冒烟实证）。
+    if (!eventSet.has(topic) && !commandSet.has(topic)) {
+      throw new ManifestError([`[${manifest.id}] publishes '${topic}' not declared in shared EventMap/CommandMap`])
     }
   }
   for (const topic of manifest.subscribes) {

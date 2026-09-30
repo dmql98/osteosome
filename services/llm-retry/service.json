@@ -7,8 +7,10 @@
     "llm.metrics.usage"
   ],
   "subscribes": [
+    "llm.request.started",
     "llm.request.failed",
     "llm.request.finished",
-    "llm.provider.registered"
+    "llm.provider.registered",
+    "llm.provider.unregistered"
   ]
 }
