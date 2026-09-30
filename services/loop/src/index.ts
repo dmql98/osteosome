@@ -17,9 +17,15 @@ const service = new Service({ id: 'loop', version: '1.0.0' })
 /** A → { sessionId }（loop.run 时记，finish/fail 后发 state.changed 用） */
 const sessionsByA = new Map<string, string>()
 
+/**
+ * 目标 provider（P3 简化：常量经 env 可配，默认 deepseek；P4 接设置 Pane 后由前端传）。
+ * 测试与冒烟经 LLM_PROVIDER 指向本地假上游（openai 位）。
+ */
+const PROVIDER = process.env.LLM_PROVIDER?.trim() || 'deepseek'
+
 const core = new LoopCore({
   sendLlmRequest(b, sessionId, messages) {
-    service.publish('llm.request', { requestId: b, provider: 'deepseek', messages })
+    service.publish('llm.request', { requestId: b, provider: PROVIDER, messages })
   },
   sendLlmCancel(b) {
     service.publish('llm.cancel', { requestId: b })
