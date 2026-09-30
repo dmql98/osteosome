@@ -1,0 +1,22 @@
+{
+  "name": "@osteosome/llm-provider-openrouter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LLM provider 能力位（P2 WS-5）：openrouter（迁移自旧 adapter），注册 + 流式 chunk + 错误码化",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}

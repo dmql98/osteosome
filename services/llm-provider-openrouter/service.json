@@ -1,0 +1,16 @@
+{
+  "id": "llm-provider-openrouter",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "llm.provider.registered",
+    "llm.provider.chunk",
+    "llm.provider.unregistered"
+  ],
+  "subscribes": [
+    "llm.provider.request",
+    "llm.provider.cancel",
+    "credentials.resolved"
+  ]
+}
