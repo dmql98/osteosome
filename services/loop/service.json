@@ -1,0 +1,22 @@
+{
+  "id": "loop",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "loop.state.changed",
+    "loop.run.failed",
+    "loop.run.cancelled",
+    "loop.token.streamed",
+    "message.append",
+    "llm.request",
+    "llm.cancel"
+  ],
+  "subscribes": [
+    "loop.run",
+    "loop.cancel",
+    "llm.token.streamed",
+    "llm.request.finished",
+    "llm.request.failed"
+  ]
+}
