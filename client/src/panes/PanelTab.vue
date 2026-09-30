@@ -39,4 +39,8 @@ function activate(): void { api.value?.setActive?.() }
 
 <style scoped>
 .panel-tab { height: 100%; padding: 0; border-bottom: 0; }
+/* 标签栏工业蓝底：标签文字改用高对比浅色 */
+.panel-tab.ui-tab { color: var(--color-topbar-text-muted); border-bottom-color: transparent; }
+.panel-tab.ui-tab:hover:not(:disabled) { color: var(--color-topbar-text); }
+.panel-tab.ui-tab.ui-tab--active { color: var(--color-topbar-text); font-weight: 600; border-bottom-color: var(--color-topbar-text); }
 </style>

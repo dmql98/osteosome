@@ -117,7 +117,23 @@ onBeforeUnmount(() => {
 .dockview-layout { display: flex; flex: 1; width: 100%; height: 100%; min-height: 0; position: relative; }
 .dockview-layout__dock { flex: 1 1 0%; min-width: 0; min-height: 0; position: relative; }
 .dockview-layout__dock :deep(> div) { width: 100%; height: 100%; }
-.dockview-layout :deep(.dv-shell) { --dv-sash-color: var(--color-border); --dv-active-sash-color: var(--color-primary); }
+.dockview-layout :deep(.dv-shell) {
+  --dv-sash-color: var(--color-border);
+  --dv-active-sash-color: var(--color-primary);
+  /* 面板标签栏：工业蓝底 + 高对比浅色文字（与工作台导航栏一致） */
+  --dv-tabs-and-actions-container-background-color: var(--color-topbar-bg);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--color-topbar-overlay-strong);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--color-topbar-text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--color-topbar-text-muted);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-topbar-overlay);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-color: var(--color-topbar-text-muted);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--color-topbar-text-muted);
+  --dv-tab-divider-color: var(--color-topbar-overlay-strong);
+  --dv-group-view-background-color: var(--color-surface);
+  --dv-floating-titlebar-background-color: var(--color-topbar-bg);
+}
 /* 面板顶栏：默认隐藏，鼠标悬停到面板顶部时毛玻璃浮现（对齐 demo 规范） */
 .dockview-layout--hoverbar :deep(.dv-groupview > .dv-tabs-and-actions-container) {
   position: absolute;
@@ -128,9 +144,9 @@ onBeforeUnmount(() => {
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-fast) ease;
-  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  background: color-mix(in srgb, var(--color-topbar-bg) 90%, transparent);
   backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-topbar-border);
 }
 .dockview-layout--hoverbar :deep(.dv-tabs-and-actions-container:hover),
 .dockview-layout--hoverbar :deep(.dv-groupview:hover > .dv-tabs-and-actions-container) {

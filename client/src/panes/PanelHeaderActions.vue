@@ -34,4 +34,7 @@ function close(): void {
 
 <style scoped>
 .panel-header-actions { display: inline-flex; align-items: center; gap: 2px; height: 100%; padding: 0 var(--space-2); }
+/* 面板标签栏为工业蓝底：动作按钮改用高对比浅色 */
+.panel-header-actions :deep(.ui-icon-button) { color: var(--color-topbar-text-muted); }
+.panel-header-actions :deep(.ui-icon-button:hover:not(:disabled)) { background-color: var(--color-topbar-overlay-strong); color: var(--color-topbar-text); }
 </style>

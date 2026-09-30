@@ -17,6 +17,15 @@
   --color-primary-hover: #2559c4;
   --color-primary-active: #1f4ba5;
   --color-primary-soft: #e7effd;
+
+  /* 工作台导航栏：工业蓝底色 + 高对比浅色文字 */
+  --color-topbar-bg: #0e4c8a;
+  --color-topbar-bg-2: #0b3f74;
+  --color-topbar-border: #082f57;
+  --color-topbar-text: #f2f7ff;
+  --color-topbar-text-muted: #b9cde8;
+  --color-topbar-overlay: rgba(255, 255, 255, 0.14);
+  --color-topbar-overlay-strong: rgba(255, 255, 255, 0.24);
   --color-danger: #cf222e;
   --color-danger-soft: #fdecee;
   --color-success: #1a7f37;
@@ -79,6 +88,15 @@
   --color-primary-hover: #6b9fff;
   --color-primary-active: #3a72e0;
   --color-primary-soft: #1d2b45;
+
+  /* 工作台导航栏：工业蓝底色 + 高对比浅色文字 */
+  --color-topbar-bg: #0b3f74;
+  --color-topbar-bg-2: #093460;
+  --color-topbar-border: #062647;
+  --color-topbar-text: #eaf2ff;
+  --color-topbar-text-muted: #9fb8da;
+  --color-topbar-overlay: rgba(255, 255, 255, 0.12);
+  --color-topbar-overlay-strong: rgba(255, 255, 255, 0.22);
   --color-danger: #f85149;
   --color-danger-soft: #3a1d20;
   --color-success: #3fb950;

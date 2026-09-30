@@ -48,11 +48,17 @@ function openPlugins(): void {
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-4);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, var(--color-topbar-bg) 0%, var(--color-topbar-bg-2) 100%);
+  border-bottom: 1px solid var(--color-topbar-border);
   box-shadow: var(--shadow-sm);
+  color: var(--color-topbar-text);
 }
-.topbar__brand { font-weight: 700; margin-right: var(--space-2); }
+.topbar__brand {
+  font-weight: 700;
+  margin-right: var(--space-2);
+  color: var(--color-topbar-text);
+  letter-spacing: 0.02em;
+}
 .topbar__spacer { flex: 1; }
 .topbar__badge {
   display: inline-flex;
@@ -61,12 +67,12 @@ function openPlugins(): void {
   font-size: var(--text-xs);
   padding: 1px 8px;
   border-radius: var(--radius-full);
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
+  background: var(--color-topbar-overlay);
+  color: var(--color-topbar-text);
 }
 .topbar__dot { width: 7px; height: 7px; border-radius: 50%; }
-.topbar__dot.ok { background: var(--color-success); }
-.topbar__dot.warn { background: var(--color-warning); }
+.topbar__dot.ok { background: #4ade80; box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.25); }
+.topbar__dot.warn { background: #fbbf24; box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.25); }
 .topbar__mode {
   display: inline-flex;
   align-items: center;
@@ -74,18 +80,26 @@ function openPlugins(): void {
   font-size: var(--text-sm);
   padding: 5px 12px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
+  border: 1px solid var(--color-topbar-overlay-strong);
+  background: var(--color-topbar-overlay);
+  color: var(--color-topbar-text);
   cursor: pointer;
   font-family: inherit;
 }
-.topbar__mode:hover { background: var(--color-surface-2); }
-.topbar__mode:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.topbar__mode:hover { background: var(--color-topbar-overlay-strong); }
+.topbar__mode:focus-visible { outline: 2px solid var(--color-topbar-text); outline-offset: 2px; }
 .topbar__mode--on {
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: var(--color-topbar-text);
+  border-color: var(--color-topbar-text);
+  color: var(--color-topbar-bg);
   font-weight: 600;
+}
+.topbar :deep(.ui-button--ghost) {
+  background: var(--color-topbar-overlay);
+  border-color: var(--color-topbar-overlay-strong);
+  color: var(--color-topbar-text);
+}
+.topbar :deep(.ui-button--ghost:hover:not(:disabled)) {
+  background: var(--color-topbar-overlay-strong);
 }
 </style>

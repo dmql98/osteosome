@@ -150,12 +150,12 @@ watch(() => pluginStore.revision, rebuild)
 .panel-boxes__item { display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); overflow: hidden; }
 .panel-boxes__item--selected { border-color: var(--color-primary); box-shadow: var(--shadow-md); }
 .panel-boxes--edit .panel-boxes__item { border-style: dashed; }
-.panel-boxes__header { flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); user-select: none; }
+.panel-boxes__header { flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-topbar-text); background: linear-gradient(180deg, var(--color-topbar-bg) 0%, var(--color-topbar-bg-2) 100%); border-bottom: 1px solid var(--color-topbar-border); user-select: none; }
 .panel-boxes--edit .panel-boxes__header { cursor: move; }
 .panel-boxes--runtime .panel-boxes__header { display: none; }
 .panel-boxes__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.panel-boxes__remove { flex: none; width: 16px; height: 16px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1; cursor: pointer; }
-.panel-boxes__remove:hover { background: var(--color-danger-soft); color: var(--color-danger); }
+.panel-boxes__remove { flex: none; width: 16px; height: 16px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-topbar-text-muted); font-size: var(--text-sm); line-height: 1; cursor: pointer; }
+.panel-boxes__remove:hover { background: var(--color-topbar-overlay-strong); color: var(--color-topbar-text); }
 .panel-boxes__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-3); }
 .panel-boxes__empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
 </style>
