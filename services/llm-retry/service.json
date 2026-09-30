@@ -1,0 +1,14 @@
+{
+  "id": "llm-retry",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "llm.metrics.usage"
+  ],
+  "subscribes": [
+    "llm.request.failed",
+    "llm.request.finished",
+    "llm.provider.registered"
+  ]
+}

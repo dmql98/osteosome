@@ -1,0 +1,22 @@
+{
+  "name": "@osteosome/llm-retry",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LLM retry + usage 记账能力位（P2 WS-7：声明消费 + 记账，不执行重试）",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}
