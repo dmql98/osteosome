@@ -11,6 +11,7 @@
  * ```
  */
 export { Service, type ServiceOptions, type ServiceHandler } from './service'
+export { attachCredentialClient, CredentialClientError, type CredentialClient, type ResolvedCredential, type AttachCredentialClientOptions } from './credentials'
 export { performHandshake, assertInitializeResult, type HandshakeOptions } from './handshake'
 export { attachHeartbeat } from './heartbeat'
 export {
