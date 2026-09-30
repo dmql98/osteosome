@@ -1,8 +1,8 @@
 <template>
-  <header class="topbar">
-    <span class="topbar__brand">🦴 Osteosome</span>
-    <span class="topbar__spacer"></span>
-    <span class="topbar__badge" :class="{ 'topbar__badge--ok': allReady }">
+  <header class="topbar" data-tauri-drag-region>
+    <span class="topbar__brand" data-tauri-drag-region>🦴 Osteosome</span>
+    <span class="topbar__spacer" data-tauri-drag-region></span>
+    <span class="topbar__badge" :class="{ 'topbar__badge--ok': allReady }" data-tauri-drag-region>
       <span class="topbar__dot" :class="allReady ? 'ok' : 'warn'"></span>
       {{ services.readyCount }}/{{ services.totalCount }} 服务
     </span>
@@ -18,6 +18,7 @@
       {{ layout.mode === 'edit' ? '✓ 编辑' : '✏️ 编辑' }}
     </button>
     <button class="topbar__mode" type="button" @click="openPlugins">🧩 插件</button>
+    <WindowControls />
   </header>
 </template>
 
@@ -26,6 +27,7 @@ import { useLayoutStore } from '../layout/layout.store'
 import { useServiceStatus } from '../core-sdk/useServiceStatus'
 import { openPluginWindow } from '../layout/window-manager'
 import Button from '../components/ui/Button.vue'
+import WindowControls from '../components/layout/WindowControls.vue'
 
 const layout = useLayoutStore()
 const services = useServiceStatus()
@@ -47,7 +49,7 @@ function openPlugins(): void {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-4);
+  padding: 0 0 0 var(--space-4);
   background: linear-gradient(180deg, var(--color-topbar-bg) 0%, var(--color-topbar-bg-2) 100%);
   border-bottom: 1px solid var(--color-topbar-border);
   box-shadow: var(--shadow-sm);

@@ -1,11 +1,11 @@
 <template>
   <div class="plugin-win">
-    <header class="plugin-win__bar">
-      <span class="plugin-win__title">🧩 插件管理</span>
+    <header class="plugin-win__bar" data-tauri-drag-region>
+      <span class="plugin-win__title" data-tauri-drag-region>🧩 插件管理</span>
       <input v-model="query" class="plugin-win__search" placeholder="搜索插件…" />
-      <span class="plugin-win__spacer"></span>
+      <span class="plugin-win__spacer" data-tauri-drag-region></span>
       <Button size="sm" variant="ghost" @click="refresh">刷新</Button>
-      <IconButton icon="×" size="sm" label="关闭窗口" @click="closeCurrentWindow" />
+      <WindowControls />
     </header>
     <div class="plugin-win__body">
       <EmptyState
@@ -51,11 +51,10 @@
 import { computed, onMounted, ref } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import IconButton from '@/components/ui/IconButton.vue'
+import WindowControls from '@/components/layout/WindowControls.vue'
 import { usePluginStore } from '@/stores/plugin.store'
 import { openPluginDetailWindow } from '@/layout/window-manager'
 import { notifyPluginsChanged } from '@/layout/window-events'
-import { closeCurrentWindow } from '@/tauri/plugin-window'
 import type { PluginDefinition } from './registry'
 
 const store = usePluginStore()
@@ -94,7 +93,7 @@ onMounted(() => {
 
 <style scoped>
 .plugin-win { display: flex; flex-direction: column; height: 100%; background: var(--color-surface); }
-.plugin-win__bar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-3); border-bottom: 1px solid var(--color-border); flex: none; }
+.plugin-win__bar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 0 0 var(--space-3); border-bottom: 1px solid var(--color-border); flex: none; }
 .plugin-win__title { font-weight: 700; font-size: var(--text-md); }
 .plugin-win__search { flex: 1; max-width: 240px; padding: 5px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; font-size: var(--text-sm); background: var(--color-surface); color: var(--color-text); }
 .plugin-win__search:focus { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; border-color: transparent; }

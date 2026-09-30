@@ -11,6 +11,9 @@
 // 在移动时若边缘距主窗 ≤ 13px 自动吸附贴边；吸附后主窗拖动时随之一起移动。
 // 实现在本文件，挂在 Builder::on_window_event 上，前端无需轮询。
 //
+// 窗口外观：主窗口与所有浮窗均无系统边框（tauri.conf.json + WebviewWindow decorations:false），
+// 由前端「窗口控制」组件（client/src/components/layout/WindowControls.vue）自绘最小化/最大化/关闭。
+//
 // 后续需扩展的能力（见 docs/wireframes/index.html）：
 //   - 从插件管理窗口把组件跨窗口拖到主窗口 Panel
 //   - 托盘 / 全局快捷键 / 系统集成

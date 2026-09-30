@@ -92,6 +92,7 @@ export async function openPanelWindowViaTauri(panelId: PaneId, widgetIds: string
     minHeight: 340,
     center: true,
     resizable: true,
+    decorations: false,
   })
 }
 
