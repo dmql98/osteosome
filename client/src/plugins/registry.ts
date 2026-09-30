@@ -7,14 +7,12 @@
  *
  * P2（LLM 能力位拆分）追加：`plugin.llm`（主位服务 `llm`）+ 3 个 provider 服务插件。
  * 按「能力位 = 独立服务进程」的 OST 思想，**服务插件 = 服务的呈现**：
- * - `plugin.llm`           → `services/llm`（能力主位，组件 `widget.llm-chat`，WS-8 提供）
- * - `plugin.llm-providers` → 3×`services/llm-provider-*`（provider 位，组件 `widget.llm-providers`，WS-8 提供）
+ * - `plugin.llm`           → `services/llm`（能力主位，组件 `widget.llm-chat`）
+ * - `plugin.llm-providers` → 3×`services/llm-provider-*`（provider 位，组件 `widget.llm-providers`）
  * - credentials / llm-retry 是旁路服务，无独立组件（见 LLM能力位拆分设计.md §4.5.1），
  *   不在本表列为可管理插件——它们的启停由服务层 manifest 控制，UI 不镜像服务内部结构。
  *
- * 注意：插件定义里 `widgets` 指向的 widget 由 WS-8 提供；在本表合入的当下
- * （WS-8 尚未落地 widget），详情窗「组件」卡会显示 widget id 原文（getWidget 回退），
- * 不影响插件的启用/停用/依赖状态展示。
+ * 注意：插件定义里 `widgets` 指向的 widget 由 WS-8 提供（llm-chat / llm-providers 已落地）。
  */
 
 export interface PluginCapability {
@@ -114,7 +112,7 @@ export const PLUGINS: PluginDefinition[] = [
     author: 'osteosome',
     license: 'Apache-2.0',
     description:
-      'LLM 能力主位（services/llm）：接收前端 llm.request 命令、按 provider 路由、把流式块翻译成 llm.token.streamed 等对外事件。组件（widget.llm-chat）由 WS-8 提供。',
+      'LLM 能力主位（services/llm）：接收前端 llm.request 命令、按 provider 路由、把流式块翻译成 llm.token.streamed 等对外事件。组件（widget.llm-chat）由 WS-8 提供（发问 / 停止 / 流式累积）。',
     capabilities: [
       { name: 'llm.request', detail: '发起流式对话' },
       { name: 'llm.cancel', detail: '取消在途请求' },
@@ -131,7 +129,7 @@ export const PLUGINS: PluginDefinition[] = [
     author: 'osteosome',
     license: 'Apache-2.0',
     description:
-      'LLM provider 能力位（services/llm-provider-*）：deepseek / openrouter / openai（通用兼容）独立服务，经 llm.provider.registered 注册自身能力。组件（widget.llm-providers）由 WS-8 提供，渲染 provider 存在性与状态。',
+      'LLM provider 能力位（services/llm-provider-*）：deepseek / openrouter / openai（通用兼容）独立服务，经 llm.provider.registered 注册自身能力。组件（widget.llm-providers）由 WS-8 提供，渲染 provider 存在性与状态（defaultModel / credentialRef / retry 声明）。',
     capabilities: [
       { name: 'llm.provider.registered', detail: 'provider 注册（defaultModel / credentialRef / retryPolicy）' },
       { name: 'llm.provider.unregistered', detail: 'provider 退出（主位摘路由）' },
