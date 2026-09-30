@@ -1,28 +1,24 @@
 /**
- * LLM 服务入口（P2 §2 WS-1 / WS-3 装配）。
+ * LLM 能力主位（P2 WS-4 重写）—— 不 import 任何 provider 实现。
  *
- * 订阅 `llm.request` / `llm.cancel`：
- * - `llm.request` → started → 解析凭证 → resolve adapter → 逐块流式发布 → finished / failed
- * - `llm.cancel { requestId }` → abort 对应在途请求；成功取消走 finished{stop}（不发 failed）
- * - 同一 service 进程内并发请求互不覆盖（requestId 关联 in-flight 表）
+ * 职责：
+ * - 维护 provider 路由表（`llm.provider.registered/unregistered` 驱动，见 routes.ts）；
+ * - 收前端 `llm.request`：查路由 → 发 `llm.request.started` → 转发 `llm.provider.request`
+ *   （凭证引用 / retry 声明由 provider 路由带出，主位**透传**）；
+ * - 收 `llm.provider.chunk`：翻译对外事件（delta → `llm.token.streamed`；finish → finished/failed）；
+ * - 收 `llm.cancel`：转发 `llm.provider.cancel`。
+ *
+ * 一次走线（对齐 LLM能力位拆分设计.md §3）：前端 POST /api/command → llm.request →
+ * started → provider 注册过？→ llm.provider.request → provider 回 llm.provider.chunk → 翻译对外。
+ * 不注册 → 直接 `llm.request.failed { error.code: 'unsupported_provider' }`（存在性由插件决定）。
  */
 import { Service } from '@osteosome/service-sdk'
-import { DEFAULT_RETRY_POLICY, type StreamChunk, type StreamError, type Usage } from '@osteosome/shared'
-import { openrouterAdapter } from './adapter/openrouter'
-import { register, resolve } from './adapter/registry'
-import { resolveApiKey, CredentialError } from './credentials/resolver'
+import { isFinishBlock, isDelta, type StreamChunk } from '@osteosome/shared'
+import { clearRoutes, resolve, upsert, remove } from './routes'
 
 const service = new Service({ id: 'llm', version: '1.0.0' })
 
-register(openrouterAdapter)
-
-interface Inflight {
-  abort: AbortController
-}
-
-const inflight = new Map<string, Inflight>()
-
-/** 断言 payload 是 llm.request 形状；非法 → 抛错由调用方兜底 */
+/** 解析 llm.request payload（宽松容错：非法 → 抛错由订阅处兜底转 failed） */
 function parseLlmRequest(
   payload: Record<string, unknown>,
 ): {
@@ -35,24 +31,15 @@ function parseLlmRequest(
 } {
   const requestId = typeof payload.requestId === 'string' && payload.requestId ? payload.requestId : ''
   const provider = typeof payload.provider === 'string' && payload.provider ? payload.provider : ''
-  if (!requestId || !provider) {
-    throw new Error(`llm.request: requestId and provider are required`)
-  }
-  if (!Array.isArray(payload.messages)) {
-    throw new Error(`llm.request: messages (array) is required`)
-  }
-  const messages = payload.messages.map(
-    (m): { role: 'system' | 'user' | 'assistant'; content: string } => {
-      const role = (m as { role?: unknown }).role
-      const content = (m as { content?: unknown }).content
-      const normalizedRole: 'system' | 'user' | 'assistant' =
-        role === 'system' || role === 'user' || role === 'assistant' ? role : 'user'
-      return {
-        role: normalizedRole,
-        content: typeof content === 'string' ? content : String(content ?? ''),
-      }
-    },
-  )
+  if (!requestId || !provider) throw new Error('llm.request: requestId and provider are required')
+  if (!Array.isArray(payload.messages)) throw new Error('llm.request: messages (array) is required')
+  const messages = payload.messages.map((m) => {
+    const role = (m as { role?: unknown }).role
+    const content = (m as { content?: unknown }).content
+    const normalizedRole: 'system' | 'user' | 'assistant' =
+      role === 'system' || role === 'user' || role === 'assistant' ? role : 'user'
+    return { role: normalizedRole, content: typeof content === 'string' ? content : String(content ?? '') }
+  })
   return {
     requestId,
     provider,
@@ -65,114 +52,99 @@ function parseLlmRequest(
   }
 }
 
+/** provider 路由注册/摘除（存在性由插件决定） */
+service.subscribe('llm.provider.registered', (payload) => {
+  const descriptor = {
+    provider: typeof payload.provider === 'string' ? payload.provider : '',
+    defaultModel: typeof payload.defaultModel === 'string' ? payload.defaultModel : '',
+    credentialRef: typeof payload.credentialRef === 'string' ? payload.credentialRef : '',
+    retryPolicy:
+      payload.retryPolicy && typeof payload.retryPolicy === 'object'
+        ? (payload.retryPolicy as Record<string, unknown>)
+        : {},
+  }
+  if (!descriptor.provider) return
+  upsert(descriptor as never)
+})
+
+service.subscribe('llm.provider.unregistered', (payload) => {
+  const provider = typeof payload.provider === 'string' ? payload.provider : ''
+  if (provider) remove(provider)
+})
+
+/** 收 llm.request：查路由 → started → 转发 provider.request（缺路由 → unsupported_provider） */
 service.subscribe('llm.request', (payload) => {
   const p = payload as Record<string, unknown>
   let parsed: ReturnType<typeof parseLlmRequest>
   try {
     parsed = parseLlmRequest(p)
   } catch (err) {
-    const requestId = typeof p.requestId === 'string' ? p.requestId : ''
     service.publish('llm.request.failed', {
-      requestId,
+      requestId: typeof p.requestId === 'string' ? p.requestId : '',
       error: { code: 'invalid_request', message: String(err) },
     })
     return
   }
-  void runRequest(parsed)
+  const { requestId, provider } = parsed
+  const route = resolve(provider)
+  if (!route) {
+    service.publish('llm.request.failed', {
+      requestId,
+      error: { code: 'unsupported_provider', message: `no provider service registered for '${provider}'` },
+    })
+    return
+  }
+  service.publish('llm.request.started', {
+    requestId,
+    provider,
+    model: parsed.model ?? route.defaultModel,
+  })
+  service.publish('llm.provider.request', {
+    requestId,
+    provider,
+    model: parsed.model ?? route.defaultModel,
+    messages: parsed.messages,
+    ...(parsed.temperature !== undefined ? { temperature: parsed.temperature } : {}),
+    credentialRef: route.credentialRef,
+    retryPolicy: route.retryPolicy,
+    meta: { ...(parsed.meta ?? {}), requestId },
+  })
 })
 
+/** 收 provider.chunk：翻译对外事件（delta → token.streamed；finish → finished/failed） */
+const tokenIndexes = new Map<string, number>()
+service.subscribe('llm.provider.chunk', (payload) => {
+  const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
+  const chunk = payload.chunk as StreamChunk | undefined
+  if (!requestId || !chunk || typeof chunk !== 'object') return
+  if (isDelta(chunk)) {
+    // delta 块无 index：主位按 requestId 维护递增序号（对齐 llm.token.streamed.index 递增契约）
+    const index = tokenIndexes.get(requestId) ?? 0
+    tokenIndexes.set(requestId, index + 1)
+    service.publish('llm.token.streamed', { requestId, token: chunk.text, index })
+    return
+  }
+  if (isFinishBlock(chunk)) {
+    tokenIndexes.delete(requestId)
+    if (chunk.error) {
+      service.publish('llm.request.failed', { requestId, error: chunk.error })
+      return
+    }
+    service.publish('llm.request.finished', {
+      requestId,
+      finishReason: chunk.finishReason,
+      ...(chunk.usage ? { usage: chunk.usage } : {}),
+    })
+  }
+  // block-start / block-end / tool-arg-delta：识别降级，不渲染不报错（P2 §0.3）
+})
+
+/** 收 llm.cancel：转发 provider.cancel（provider 侧 abort → finish{stop} 成功路径） */
 service.subscribe('llm.cancel', (payload) => {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
   if (!requestId) return
-  const entry = inflight.get(requestId)
-  if (!entry) return // 已结束 / 不存在 → 静默忽略
-  entry.abort.abort()
-  // 取消是成功路径：abort 后适配器 yield finish{stop}，runRequest 负责收尾；
-  // 若 1s 内未收到 finish，这里强制补发（§3.4「1s 上限」）
-  const forceTimer = setTimeout(() => {
-    if (inflight.delete(requestId)) {
-      service.publish('llm.request.finished', { requestId, finishReason: 'stop' })
-    }
-  }, 1000)
-  forceTimer.unref?.()
+  service.publish('llm.provider.cancel', { requestId })
 })
-
-async function runRequest(
-  req: ReturnType<typeof parseLlmRequest>,
-): Promise<void> {
-  const { requestId } = req
-  const controller = new AbortController()
-  inflight.set(requestId, { abort: controller })
-
-  let providerModel = req.model
-  try {
-    const adapter = resolve(req.provider)
-    providerModel = req.model ?? adapter.defaultModel
-    service.publish('llm.request.started', {
-      requestId,
-      provider: req.provider,
-      model: providerModel,
-    })
-
-    const apiKey = resolveApiKey('env:OPENROUTER_API_KEY')
-    const ctx = {
-      apiKey,
-      retryPolicy: DEFAULT_RETRY_POLICY,
-      signal: controller.signal,
-    }
-
-    let index = 0
-    let usage: Usage | undefined
-    let finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'error' = 'stop'
-    let failed = false
-
-    for await (const chunk of adapter.stream(
-      {
-        provider: req.provider,
-        ...(req.model ? { model: req.model } : {}),
-        messages: req.messages,
-        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
-        meta: { ...(req.meta ?? {}), requestId },
-      },
-      ctx,
-    )) {
-      if (!isFinish(chunk)) continue
-      finishReason = chunk.finishReason
-      usage = chunk.usage
-      if (chunk.error) {
-        failed = true
-        // 硬错误（非瞬态 / 无 retry）：直接 failed，不再等后续块
-        service.publish('llm.request.failed', {
-          requestId,
-          error: { code: chunk.error.code, message: chunk.error.message },
-        })
-      }
-    }
-
-    if (inflight.delete(requestId)) {
-      if (!failed) {
-        service.publish('llm.request.finished', {
-          requestId,
-          finishReason,
-          ...(usage ? { usage } : {}),
-        })
-      }
-    }
-  } catch (err) {
-    inflight.delete(requestId)
-    const error: StreamError =
-      err instanceof CredentialError
-        ? { code: err.code, message: err.message }
-        : { code: 'network', message: String(err) }
-    service.publish('llm.request.failed', { requestId, error })
-  }
-}
-
-function isFinish(
-  chunk: StreamChunk,
-): chunk is Extract<StreamChunk, { kind: 'finish' }> {
-  return chunk.kind === 'finish'
-}
 
 async function main(): Promise<void> {
   await service.start()

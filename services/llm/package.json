@@ -2,7 +2,7 @@
   "name": "@osteosome/llm",
   "version": "0.0.0",
   "private": true,
-  "description": "LLM 服务 — DSH 接缝三角（LlmAdapter / Registry / StreamChunk）+ openrouter 单实现（P2）",
+  "description": "LLM 能力主位（P2 WS-4）：provider 路由表 + chunk 翻译 + cancel 转发，不 import 任何 provider",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

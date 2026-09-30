@@ -9,5 +9,11 @@
     "llm.request.finished",
     "llm.request.failed"
   ],
-  "subscribes": ["llm.request", "llm.cancel"]
+  "subscribes": [
+    "llm.request",
+    "llm.cancel",
+    "llm.provider.registered",
+    "llm.provider.chunk",
+    "llm.provider.unregistered"
+  ]
 }
