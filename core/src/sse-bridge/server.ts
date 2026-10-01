@@ -160,6 +160,14 @@ export class SseBridge {
         await handleCredentials(req, res, url, api)
         return
       }
+      if (path === '/api/info') {
+        if (req.method !== 'GET') {
+          methodNotAllowed(res, 'GET')
+          return
+        }
+        sendJson(res, 200, { dataDir: this.options.config.dataDir })
+        return
+      }
       sendJson(res, 404, { error: 'not found' })
       return
     }

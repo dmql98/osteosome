@@ -1,0 +1,20 @@
+export default {
+  common: {
+    name: '名称',
+    save: '保存',
+    cancel: '取消',
+    delete: '删除',
+    edit: '编辑',
+    add: '新增',
+    confirm: '确认',
+    close: '关闭',
+    loading: '加载中…',
+    empty: '暂无数据',
+    search: '搜索',
+    retry: '重试',
+    enabled: '已启用',
+    disabled: '已停用',
+    error: '出错',
+    success: '成功',
+  },
+}

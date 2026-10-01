@@ -65,7 +65,7 @@ export const PLUGINS: PluginDefinition[] = [
       { name: 'command.execute', detail: '向 Core 投递命令' },
       { name: 'hello.greet', detail: '示例问候命令' },
     ],
-    widgets: ['widget.system-info', 'widget.command-palette', 'widget.hello-command'],
+    widgets: ['widget.system-info', 'widget.command-palette', 'widget.hello-command', 'widget.settings'],
     dependencies: [{ id: 'core', label: 'Core 微内核' }],
   },
   {

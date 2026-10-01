@@ -37,7 +37,7 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
     const wrapper = mountDetail('plugin.workbench')
     await flushPromises()
     const addButtons = wrapper.findAll('button').filter((button) => button.text().includes('加入窗口'))
-    expect(addButtons.length).toBe(3)
+    expect(addButtons.length).toBe(4)
     await addButtons[0].trigger('click')
     expect(wrapper.text()).toContain('已加入')
   })

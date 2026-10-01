@@ -1,0 +1,20 @@
+export default {
+  common: {
+    name: 'Name',
+    save: 'Save',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    edit: 'Edit',
+    add: 'Add',
+    confirm: 'Confirm',
+    close: 'Close',
+    loading: 'Loading…',
+    empty: 'No data',
+    search: 'Search',
+    retry: 'Retry',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    error: 'Error',
+    success: 'Success',
+  },
+}
