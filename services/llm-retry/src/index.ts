@@ -38,6 +38,7 @@ const streamed = new Set<string>()
 
 service.subscribe('llm.provider.registered', (payload) => {
   upsertDeclaration(payload as Record<string, unknown>, declarations)
+  console.error(`[llm-retry] registered=${(payload as { provider?: string }).provider} declarations=${[...declarations.keys()].join(',')}`)
 })
 
 service.subscribe('llm.provider.unregistered', (payload) => {

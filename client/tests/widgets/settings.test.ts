@@ -142,7 +142,7 @@ describe('LlmSettings LLM 设置', () => {
       requestId: 'models-1',
       provider: 'openai',
       models: ['gpt-4o-mini', 'gpt-4o'],
-      source: 'static',
+      catalog: 'static',
     })
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('静态列表')

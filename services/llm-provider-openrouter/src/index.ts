@@ -110,10 +110,10 @@ service.subscribe('llm.models.list', async (payload) => {
       staticModels,
       timeoutMs: 5000,
     })
-    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: result.models, source: result.source })
+    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: result.models, catalog: result.source })
   } catch {
     // 凭证都拿不到 → 静态兜底（前端仍可用，只是列表可能不全）
-    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: staticModels, source: 'static' })
+    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: staticModels, catalog: 'static' })
   }
 })
 

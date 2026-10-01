@@ -24,12 +24,17 @@ const credentials = attachCredentialClient(service)
 /** 在途请求表（requestId → AbortController） */
 const inflight = new Map<string, AbortController>()
 
-service.publish('llm.provider.registered', {
-  provider: PROVIDER,
-  defaultModel: DEFAULT_MODEL,
-  credentialRef: CREDENTIAL_REF,
-  retryPolicy: RETRY_POLICY,
-})
+/** 注册能力（存在性由插件决定）—— 必须在 service.start() 之后调用：
+ *  SDK 在 started=false 时丢弃 publish，模块顶层注册会丢失（P2 WS-9 集成冒烟实证，
+ *  此处与 openai 系对齐）。 */
+function registerCapability(): void {
+  service.publish('llm.provider.registered', {
+    provider: PROVIDER,
+    defaultModel: DEFAULT_MODEL,
+    credentialRef: CREDENTIAL_REF,
+    retryPolicy: RETRY_POLICY,
+  })
+}
 
 service.subscribe('llm.provider.request', async (payload) => {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
@@ -115,15 +120,16 @@ service.subscribe('llm.models.list', async (payload) => {
       timeoutMs: 5000,
       headers: { 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_VERSION },
     })
-    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: result.models, source: result.source })
+    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: result.models, catalog: result.source })
   } catch {
     // 凭证都拿不到 → 静态兜底（前端仍可用，只是列表可能不全）
-    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: staticModels, source: 'static' })
+    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: staticModels, catalog: 'static' })
   }
 })
 
 async function main(): Promise<void> {
   await service.start()
+  registerCapability()
 }
 
 main().catch((err: unknown) => {

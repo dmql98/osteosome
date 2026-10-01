@@ -265,6 +265,49 @@ body { font-family: var(--font-sans); font-size: var(--text-md); color: var(--co
 .droppable.drop-hover { box-shadow: 0 0 0 2px var(--color-primary); }
 .drop-preview { position: absolute; inset: 4px; border: 2px dashed var(--color-primary); border-radius: var(--radius-md); background: var(--color-primary-soft); opacity: .6; display: grid; place-items: center; color: var(--color-primary); font-size: var(--text-sm); pointer-events: none; z-index: 3; }
 .multi-toolbar { position: fixed; bottom: var(--space-4); left: 50%; transform: translateX(-50%); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-full); box-shadow: var(--shadow-md); padding: var(--space-1) var(--space-2); display: flex; gap: var(--space-1); z-index: 10; }
+
+/* ===== 对话工作台（P4b）：会话列表 + 对话区 ==========================
+   目标形态 = 一个 dockview Panel 内放两个可拖动 widget 盒子：
+   widget.session-list（左栏）+ widget.chat（右侧消息流 + 输入区）。 */
+.cwb { display: grid; grid-template-columns: 210px 1fr; height: 100%; min-height: 0; }
+
+/* 左栏：会话列表 */
+.cwb-rail { display: flex; flex-direction: column; background: var(--color-surface-2); border-right: 1px solid var(--color-border); min-width: 0; }
+.cwb-rail__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.cwb-rail__title { font-size: var(--text-sm); font-weight: 600; }
+.cwb-rail__list { flex: 1; overflow-y: auto; padding: var(--space-2); display: flex; flex-direction: column; gap: 2px; }
+.cwb-session { display: flex; flex-direction: column; gap: 1px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid transparent; cursor: pointer; }
+.cwb-session:hover { background: var(--color-surface-3); }
+.cwb-session[aria-current='true'] { background: var(--color-primary-soft); border-color: var(--color-primary); }
+.cwb-session__name { font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cwb-session[aria-current='true'] .cwb-session__name { color: var(--color-primary); font-weight: 600; }
+.cwb-session__time { font-size: var(--text-xs); color: var(--color-text-muted); }
+.cwb-rail__empty { margin: auto; text-align: center; padding: var(--space-5) var(--space-3); color: var(--color-text-muted); font-size: var(--text-xs); }
+
+/* 右栏：对话区 */
+.cwb-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--color-surface); }
+.cwb-bar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.cwb-bar__picker { display: flex; align-items: center; gap: var(--space-1); }
+.cwb-bar__label { font-size: var(--text-xs); color: var(--color-text-muted); }
+.cwb-bar__meta { margin-left: auto; font-size: var(--text-xs); color: var(--color-text-muted); }
+.cwb-wire { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-warning); border: 1px solid var(--color-warning); border-radius: var(--radius-sm); padding: 1px 6px; }
+
+/* 消息流 */
+.cwb-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+.cwb-empty { margin: auto; text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6) var(--space-4); }
+.cwb-cursor { display: inline-block; width: 7px; height: 13px; background: var(--color-primary); vertical-align: -2px; animation: cwb-blink 1s steps(2) infinite; }
+@keyframes cwb-blink { 50% { opacity: 0; } }
+.msg--agent .msg__bubble--error { background: var(--color-danger-soft); border-color: var(--color-danger); color: var(--color-danger); }
+.msg--agent .msg__bubble--thinking { font-style: italic; color: var(--color-text-muted); }
+
+/* 输入区：多行输入 + 发送/停止 */
+.cwb-composer { border-top: 1px solid var(--color-border); padding: var(--space-2) var(--space-3) var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); background: var(--color-surface); }
+.cwb-composer__row { display: flex; align-items: flex-end; gap: var(--space-2); }
+.cwb-field { flex: 1; resize: none; min-height: 56px; max-height: 168px; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; font-size: var(--text-sm); background: var(--color-surface); color: var(--color-text); }
+.cwb-field:focus { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; border-color: transparent; }
+.cwb-field:disabled { background: var(--color-surface-2); color: var(--color-text-muted); }
+.cwb-composer__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
+.cwb-chain { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
 </style>
 </head>
 <body>
@@ -301,6 +344,11 @@ body { font-family: var(--font-sans); font-size: var(--text-md); color: var(--co
     <button class="demo-nav__item" data-demo="state-empty" onclick="show('state-empty')">I2 · 空状态</button>
     <button class="demo-nav__item" data-demo="state-loading" onclick="show('state-loading')">I3 · 加载态</button>
     <button class="demo-nav__item" data-demo="state-error" onclick="show('state-error')">I4 · 错误态</button>
+    <div class="demo-nav__section">对话工作台（P4b）</div>
+    <button class="demo-nav__item" data-demo="cwb-history" onclick="show('cwb-history')">J1 · 有历史</button>
+    <button class="demo-nav__item" data-demo="cwb-empty" onclick="show('cwb-empty')">J2 · 空会话</button>
+    <button class="demo-nav__item" data-demo="cwb-streaming" onclick="show('cwb-streaming')">J3 · 流式中</button>
+    <button class="demo-nav__item" data-demo="cwb-error" onclick="show('cwb-error')">J4 · 缺凭证失败</button>
   </nav>
   <div class="demo-stage">
     <div class="demo-stage__toolbar"><span id="stageTitle">选择左侧界面查看 Demo</span><span style="margin-left:auto">每个界面可交互 · 右上角可切深/浅色</span></div>
@@ -857,6 +905,190 @@ with open('data.csv') as f:
           <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-danger);font-weight:600">⚠ 组件加载失败</div>
           <div style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--color-text-muted)">comp.chat-attach</div>
           <div style="display:flex;gap:var(--space-2)"><button class="btn btn--sm">重试</button><button class="btn btn--danger btn--sm">移除</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ========== P4b 对话工作台：J1~J4 四态 ========== -->
+
+<template id="cwb-history" data-title="J1 · 对话工作台（已有历史）">
+  <div class="frame frame--window">
+    <span class="frame__label">J1 · 会话列表 + 对话区（已有历史）</span>
+    <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body">
+        <div class="cwb">
+          <aside class="cwb-rail">
+            <div class="cwb-rail__head">
+              <span class="cwb-rail__title">会话</span>
+              <button class="btn btn--sm btn--primary">新建</button>
+            </div>
+            <div class="cwb-rail__list">
+              <div class="cwb-session" aria-current="true"><span class="cwb-session__name">plugin registry 收口</span><span class="cwb-session__time">19:04</span></div>
+              <div class="cwb-session"><span class="cwb-session__name">retry 执行器排查</span><span class="cwb-session__time">昨天</span></div>
+              <div class="cwb-session"><span class="cwb-session__name">P4 收尾清单</span><span class="cwb-session__time">周一</span></div>
+            </div>
+          </aside>
+          <section class="cwb-main">
+            <div class="cwb-bar">
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">模型</span>
+                <select class="select"><optgroup label="deepseek"><option>deepseek-chat</option><option>deepseek-reasoner</option></optgroup><optgroup label="openai"><option>gpt-4o-mini</option><option>gpt-4o</option><option>o4-mini</option></optgroup><optgroup label="anthropic"><option>claude-sonnet-4-5</option></optgroup></select>
+              </label>
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">思考强度</span>
+                <select class="select"><option>关闭</option><option>低</option><option selected>中</option><option>高</option></select>
+              </label>
+              <span class="cwb-wire">reasoning_effort=medium</span>
+              <span class="cwb-bar__meta">deepseek · 2 条消息</span>
+            </div>
+            <div class="cwb-msgs">
+              <div class="msg msg--user"><span class="msg__who">我</span><span class="msg__bubble">plugin registry 和 widget registry 现在是两套来源，怎么收口？</span></div>
+              <div class="msg msg--agent"><span class="msg__who">助手</span><span class="msg__bubble">widgets 靠 <code>import.meta.glob</code> 自动发现，plugins 靠常量手写 <code>widgets</code> 字段。命名对不上时组件就静默不进工作台 —— 建议单一真源。</span></div>
+            </div>
+            <div class="cwb-composer">
+              <div class="cwb-composer__row">
+                <textarea class="cwb-field" placeholder="输入消息，Enter 发送 / Shift+Enter 换行"></textarea>
+                <button class="btn btn--primary">发送</button>
+              </div>
+              <div class="cwb-composer__foot"><span>Enter 发送 · Shift+Enter 换行</span><span class="cwb-chain">loop.run → session.get → llm.request → provider</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="cwb-empty" data-title="J2 · 对话工作台（空会话）">
+  <div class="frame frame--window">
+    <span class="frame__label">J2 · 新建会话后的空态</span>
+    <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body">
+        <div class="cwb">
+          <aside class="cwb-rail">
+            <div class="cwb-rail__head">
+              <span class="cwb-rail__title">会话</span>
+              <button class="btn btn--sm btn--primary">新建</button>
+            </div>
+            <div class="cwb-rail__list">
+              <div class="cwb-session" aria-current="true"><span class="cwb-session__name">新会话</span><span class="cwb-session__time">刚刚</span></div>
+              <div class="cwb-session"><span class="cwb-session__name">plugin registry 收口</span><span class="cwb-session__time">19:04</span></div>
+            </div>
+          </aside>
+          <section class="cwb-main">
+            <div class="cwb-bar">
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">模型</span>
+                <select class="select"><option>gpt-4o-mini ▾</option></select>
+              </label>
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">思考强度</span>
+                <select class="select"><option selected>关闭</option><option>低</option><option>中</option><option>高</option></select>
+              </label>
+              <span class="cwb-bar__meta">新会话 · 0 条消息</span>
+            </div>
+            <div class="cwb-msgs">
+              <div class="cwb-empty">还没有消息。<br>在下方输入框发问，会话会自动保存历史。</div>
+            </div>
+            <div class="cwb-composer">
+              <div class="cwb-composer__row">
+                <textarea class="cwb-field" placeholder="开始一段新对话…"></textarea>
+                <button class="btn btn--primary" disabled>发送</button>
+              </div>
+              <div class="cwb-composer__foot"><span>空输入时发送按钮禁用</span><span class="cwb-chain">loop.run → session.get → llm.request → provider</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="cwb-streaming" data-title="J3 · 对话工作台（流式生成中）">
+  <div class="frame frame--window">
+    <span class="frame__label">J3 · 在途：停止按钮生效、输入框禁用、尾部光标</span>
+    <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body">
+        <div class="cwb">
+          <aside class="cwb-rail">
+            <div class="cwb-rail__head">
+              <span class="cwb-rail__title">会话</span>
+              <button class="btn btn--sm" disabled>新建</button>
+            </div>
+            <div class="cwb-rail__list">
+              <div class="cwb-session" aria-current="true"><span class="cwb-session__name">plugin registry 收口</span><span class="cwb-session__time">19:04</span></div>
+              <div class="cwb-session"><span class="cwb-session__name">retry 执行器排查</span><span class="cwb-session__time">昨天</span></div>
+            </div>
+          </aside>
+          <section class="cwb-main">
+            <div class="cwb-bar">
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">模型</span>
+                <select class="select" disabled><option>o4-mini ▾</option></select>
+              </label>
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">思考强度</span>
+                <select class="select" disabled><option selected>高</option></select>
+              </label>
+              <span class="cwb-wire">reasoning_effort=high</span>
+              <span class="cwb-bar__meta">生成中…</span>
+            </div>
+            <div class="cwb-msgs">
+              <div class="msg msg--user"><span class="msg__who">我</span><span class="msg__bubble">把思考强度接到 wire 上，最小改动是什么？</span></div>
+              <div class="msg msg--agent"><span class="msg__who">助手 · 推理</span><span class="msg__bubble msg__bubble--thinking">先确认 wire 上有没有中立枚举位……</span></div>
+              <div class="msg msg--agent"><span class="msg__who">助手</span><span class="msg__bubble">中立枚举加在 CommandMap，provider 各自翻译：openai 系用 reasoning_effort，anthropic 用 thinking.budget_tokens。<span class="cwb-cursor"></span></span></div>
+            </div>
+            <div class="cwb-composer">
+              <div class="cwb-composer__row">
+                <textarea class="cwb-field" disabled placeholder="生成中，可点击「停止」中断"></textarea>
+                <button class="btn btn--danger">停止</button>
+              </div>
+              <div class="cwb-composer__foot"><span>停止 → loop.cancel { requestId: A }</span><span class="cwb-chain">loop.token.streamed → 累积 → message.append</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="cwb-error" data-title="J4 · 对话工作台（失败占位）">
+  <div class="frame frame--window">
+    <span class="frame__label">J4 · 失败：错误占位 + 输入恢复，不留幽灵 assistant</span>
+    <div class="panel panel--hoverbar" style="height:100%">
+      <div class="panel__hoverbar"><span>对话</span><div class="panel__header-actions"><button class="icon-btn" title="独立窗口">⤢</button><button class="icon-btn" title="关闭">×</button></div></div>
+      <div class="panel__body">
+        <div class="cwb">
+          <aside class="cwb-rail">
+            <div class="cwb-rail__head">
+              <span class="cwb-rail__title">会话</span>
+              <button class="btn btn--sm btn--primary">新建</button>
+            </div>
+            <div class="cwb-rail__list">
+              <div class="cwb-session" aria-current="true"><span class="cwb-session__name">plugin registry 收口</span><span class="cwb-session__time">19:04</span></div>
+            </div>
+          </aside>
+          <section class="cwb-main">
+            <div class="cwb-bar">
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">模型</span>
+                <select class="select"><option>deepseek-chat ▾</option></select>
+              </label>
+              <label class="cwb-bar__picker"><span class="cwb-bar__label">思考强度</span>
+                <select class="select"><option>关闭</option><option>低</option><option selected>中</option><option>高</option></select>
+              </label>
+              <span class="cwb-bar__meta">回到 idle，可重发</span>
+            </div>
+            <div class="cwb-msgs">
+              <div class="msg msg--user"><span class="msg__who">我</span><span class="msg__bubble">帮我发一句话</span></div>
+              <div class="msg msg--agent"><span class="msg__who">错误</span><span class="msg__bubble msg__bubble--error">缺少 API Key —— 请在「设置 → LLM」绑定凭证</span></div>
+            </div>
+            <div class="cwb-composer">
+              <div class="cwb-composer__row">
+                <textarea class="cwb-field" placeholder="输入框已恢复，可直接重试"></textarea>
+                <button class="btn btn--primary">发送</button>
+              </div>
+              <div class="cwb-composer__foot"><span>空 in-flight 已移除，不留半截气泡</span><span class="cwb-chain">loop.run.failed → 占位 + state idle</span></div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

@@ -40,7 +40,7 @@
             @update:model-value="onSelectModel"
           />
           <span
-            v-if="modelsResult.source === 'static'"
+            v-if="modelsResult.catalog === 'static'"
             class="llm-settings__badge"
             :title="t('llm.staticListHint')"
           >
@@ -106,7 +106,7 @@ interface ModelsResult {
   requestId: string
   provider: string
   models: string[]
-  source: 'remote' | 'static'
+  catalog: 'remote' | 'static'
 }
 
 const { t } = useI18n()
@@ -164,7 +164,7 @@ function applyModelsResult(payload: unknown): void {
     requestId: typeof p.requestId === 'string' ? p.requestId : '',
     provider: String(p.provider),
     models: Array.isArray(p.models) ? (p.models as unknown[]).filter((m): m is string => typeof m === 'string') : [],
-    source: p.source === 'remote' ? 'remote' : 'static',
+    catalog: p.catalog === 'remote' ? 'remote' : 'static',
   }
   if (modelsResult.value.models.length > 0) selectedModel.value = modelsResult.value.models[0]
 }
