@@ -12,6 +12,10 @@ export const CREDENTIAL_REF = 'env:DEEPSEEK_API_KEY'
 export const BASE_URL = 'https://api.deepseek.com/chat/completions'
 
 /** P2 只声明不执行；429/503 视为瞬态（对齐 §3.3 retryableCodes） */
+/** 模型目录（P4 WS-3）：上游 /models 根 + 静态兜底列表（拉取失败时降级用） */
+export const MODELS_BASE_URL = 'https://api.deepseek.com'
+export const STATIC_MODELS = ['deepseek-chat', 'deepseek-reasoner']
+
 export const RETRY_POLICY: RetryPolicy = {
   maxAttempts: 3,
   baseDelayMs: 500,

@@ -7,8 +7,8 @@
  */
 import { Service } from '@osteosome/service-sdk'
 import { attachCredentialClient, CredentialClientError } from '@osteosome/service-sdk'
-import { isFinishBlock, type StreamChunk } from '@osteosome/shared'
-import { CREDENTIAL_REF, DEFAULT_MODEL, PROVIDER, RETRY_POLICY, streamCompletions } from './provider'
+import { isFinishBlock, listModels, type StreamChunk } from '@osteosome/shared'
+import { CREDENTIAL_REF, DEFAULT_MODEL, PROVIDER, RETRY_POLICY, streamCompletions, STATIC_MODELS, MODELS_BASE_URL } from './provider'
 
 const service = new Service({ id: 'llm-provider-openrouter', version: '1.0.0' })
 const credentials = attachCredentialClient(service)
@@ -91,6 +91,30 @@ service.subscribe('llm.provider.cancel', (payload) => {
     }
   }, 1000)
   timer.unref?.()
+})
+
+/**
+ * 模型目录（P4 WS-3）—— 能力位：provider 自己知道有哪些模型。
+ * 拉上游 /models；失败/超时 → 静态兜底（source:'static'，前端提示列表可能不全）。
+ */
+service.subscribe('llm.models.list', async (payload) => {
+  const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
+  const target = typeof payload.provider === 'string' ? payload.provider : ''
+  if (!requestId || target !== PROVIDER) return // 只回自己那份
+  const staticModels = STATIC_MODELS
+  try {
+    const { apiKey } = await credentials.resolve(CREDENTIAL_REF, requestId)
+    const result = await listModels({
+      baseURL: MODELS_BASE_URL,
+      apiKey,
+      staticModels,
+      timeoutMs: 5000,
+    })
+    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: result.models, source: result.source })
+  } catch {
+    // 凭证都拿不到 → 静态兜底（前端仍可用，只是列表可能不全）
+    service.publish('llm.models.list.result', { requestId, provider: PROVIDER, models: staticModels, source: 'static' })
+  }
 })
 
 async function main(): Promise<void> {

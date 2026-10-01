@@ -55,6 +55,9 @@ export const DEFAULT_MODEL = resolveDefaultModel()
 export const BASE_URL = resolveBaseURL()
 export const EXTRA_HEADERS = resolveExtraHeaders()
 
+/** 模型目录静态兜底（P4 WS-3） */
+export const STATIC_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'o4-mini']
+
 /** P2 只声明不执行；429/503 视为瞬态（对齐 §3.3 retryableCodes） */
 export const RETRY_POLICY: RetryPolicy = {
   maxAttempts: 3,

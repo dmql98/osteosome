@@ -108,6 +108,16 @@ export interface EventMap {
   }
   /** llm-retry 记账输出（P2 只声明消费 + 记账，P4 执行器） */
   'llm.metrics.usage': EventBase & { requestId: string; provider: string; usage: Usage }
+  /**
+   * 模型目录结果（P4 WS-3）—— 由**对应 provider 服务**发布（能力位：谁知道自己有哪些模型）。
+   * `source:'remote'` = 上游 /models 拉取成功；`'static'` = 拉取失败/超时 → 降级静态列表（可能不全）。
+   */
+  'llm.models.list.result': EventBase & {
+    requestId: string
+    provider: string
+    models: string[]
+    source: 'remote' | 'static'
+  }
   // ── credential（P4 §3.4，只增不改；**值永不入 payload**）──
   /** 凭证写入（只带 { id, name, provider }；明文值不出 Core） */
   'credential.saved': EventBase & { id: string; name: string; provider: string }
@@ -173,6 +183,11 @@ export interface CommandMap {
   'llm.provider.cancel': { requestId: string }
   /** provider → credentials：解析凭证引用（ref 如 `env:DEEPSEEK_API_KEY`；P4 支持 `core:<id>`） */
   'credentials.resolve': { requestId: string; ref: string }
+  /**
+   * 模型目录命令（P4 WS-3）—— 前端/主位发，**对应 provider 服务**订阅并回复 `llm.models.list.result`。
+   * （能力位设计：模型列表属于 provider 自身知识，主位不查上游）
+   */
+  'llm.models.list': { requestId: string; provider: string }
   // ── session 命令（P3 §3.3，只增不改；响应走 <cmd>.result 事件）──
   'session.list': { requestId: string }
   'session.get': { requestId: string; sessionId: string }
@@ -221,6 +236,7 @@ export const EVENT_TOPICS = [
   'llm.provider.chunk',
   'credentials.resolved',
   'llm.metrics.usage',
+  'llm.models.list.result',
   'credential.saved',
   'credential.deleted',
   'session.list.result',
@@ -251,6 +267,7 @@ export const COMMAND_TOPICS = [
   'llm.provider.request',
   'llm.provider.cancel',
   'credentials.resolve',
+  'llm.models.list',
   'session.list',
   'session.get',
   'session.create',

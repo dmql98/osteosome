@@ -3,6 +3,7 @@
  *
  * provider 服务只依赖本目录导出，不相互 import。
  */
+export * from './catalog'
 export * from './chunk'
 export * from './stream'
 export * from './types'

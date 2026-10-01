@@ -7,11 +7,13 @@
     "llm.provider.registered",
     "llm.provider.chunk",
     "llm.provider.unregistered",
-    "credentials.resolve"
+    "credentials.resolve",
+    "llm.models.list.result"
   ],
   "subscribes": [
     "llm.provider.request",
     "llm.provider.cancel",
-    "credentials.resolved"
+    "credentials.resolved",
+    "llm.models.list"
   ]
 }

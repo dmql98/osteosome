@@ -47,6 +47,9 @@ export function resolveDefaultModel(env: NodeJS.ProcessEnv = process.env): strin
 export const DEFAULT_MODEL = resolveDefaultModel()
 export const BASE_URL = resolveBaseURL()
 
+/** 模型目录静态兜底（P4 WS-3） */
+export const STATIC_MODELS = ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5']
+
 /** P2 声明（与 openai 系同构）；P4 可被 config.json 覆盖 */
 export const RETRY_POLICY: RetryPolicy = {
   maxAttempts: 3,

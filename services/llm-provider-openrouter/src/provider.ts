@@ -12,6 +12,10 @@ export const CREDENTIAL_REF = 'env:OPENROUTER_API_KEY'
 export const BASE_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 /** P2 只声明不执行；429/503 视为瞬态（对齐 §3.3 retryableCodes） */
+/** 模型目录（P4 WS-3）：上游 /models 根 + 静态兜底列表（拉取失败时降级用） */
+export const MODELS_BASE_URL = 'https://openrouter.ai/api/v1'
+export const STATIC_MODELS = ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash']
+
 export const RETRY_POLICY: RetryPolicy = {
   maxAttempts: 3,
   baseDelayMs: 500,
