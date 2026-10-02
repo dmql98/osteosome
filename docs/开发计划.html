@@ -147,7 +147,7 @@
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
       <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">9ba9052</span> · <span class="commit">16ddba2</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      进行中：<b>S7 插件聚合</b>（6 子步）· S7-1 契约已定并推送，下一步 <b>S7-2 Core 扫盘与拓扑启停</b>。
+      进行中：<b>S7 插件聚合</b>（8 子步 · 原 6 步按依赖重排）· S7-1 契约已定并推送，下一步 <b>S7-2a 只读扫盘</b>。
     </div>
   </div>
 
@@ -159,7 +159,7 @@
       <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
       <div><b class="big">0</b><span>未提交改动</span></div>
       <div><b class="big">12</b><span>测试包全绿</span></div>
-      <div><b>≈2</b><span>剩余计划天数（S7-2 起 + S8 0.5 天）</span></div>
+      <div><b>≈2</b><span>剩余计划天数（S7 余 7 子步 + S8 0.5 天）</span></div>
     </div>
     <table>
       <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
@@ -228,7 +228,7 @@
       <div class="lane-row">
         <span class="lane-name">插件线</span>
         <div class="lane-flow">
-          <span class="step-chip">S7 插件聚合</span><span class="arw">→</span>
+          <span class="step-chip">S7 插件聚合（8 子步）</span><span class="arw">→</span>
           <span class="step-chip">S8 收尾</span>
         </div>
       </div>
@@ -589,7 +589,7 @@
     <div class="step">
       <div class="hd"><span class="sid">S7</span><span class="lane plug">插件线</span>
         <span class="stitle">插件 = 聚合</span>
-        <span class="done-badge" style="background:var(--warning)">进行中 1/6</span><span class="dur">2 天</span></div>
+        <span class="done-badge" style="background:var(--warning)">进行中 1/8</span><span class="dur">2 天</span></div>
       <div class="bd">
         <div class="lbl">为什么它还是「假的」—— 三处不实（2026-10-02 复核）</div>
         <table style="margin-top:0">
@@ -628,34 +628,81 @@
                 <br><span class="mono" style="font-size:var(--text-xs)">fields: id / name / version / icon? / description? /
                 services[] / components[] / capabilities[]? / dependencies[{pluginId, optional?}] / autoStart</span></td>
                 <td class="mono">shared/src/{plugin-manifest,events}.ts；core/src/config/config.ts</td></tr>
-            <tr><td>S7-2</td><td>Core 扫 <code>plugins/*/plugin.json</code>，按 <code>dependencies</code> <b>拓扑排序</b>后启停
-                + 状态聚合（ready / degraded / stopped）+ <code>GET /api/plugins</code></td>
-                <td class="mono">新增 service-manager/plugin-manifest.ts；manager.ts；sse-bridge/server.ts</td></tr>
+            <tr><td>S7-2a</td><td><b>只读</b>：Core 扫 <code>plugins/*/plugin.json</code> → zod 校验 → <b>先跑环检测</b> →
+                拓扑排序 → 状态聚合 → <code>GET /api/plugins</code> + 发 <code>plugin.state.changed</code>
+                <br><span style="font-size:var(--text-xs);color:var(--success)"><b>启动行为完全不变</b>（照旧全启）→ 零风险，可独立回归</span></td>
+                <td class="mono">新增 service-manager/plugin-registry.ts；sse-bridge/server.ts</td></tr>
+            <tr><td>S7-5</td><td>落 <b>5 个真实</b> <code>plugin.json</code>，把 <b>6 个服务 + 10 个组件</b>归组
+                （划法见架构文档 §5.3）
+                <br><span style="font-size:var(--text-xs)">必须在 S7-2b 之前 —— 见下方「B 语义的最大风险」</span></td>
+                <td class="mono">plugins/*/plugin.json</td></tr>
+            <tr><td>S7-2b</td><td><b>切启动语义</b>：把「只启已安装插件声明的服务」接进 <code>manager.start()</code>
+                + 三态降级保护
+                <br><span style="font-size:var(--text-xs);color:var(--danger)"><b>本轮唯一改变 Core 启动行为的一步</b>，
+                夹具与真实清单都在，测得住</span></td>
+                <td class="mono">service-manager/manager.ts；config/config.ts</td></tr>
             <tr><td>S7-3</td><td>前端插件清单<b>改从 Core 拉</b>，删掉 <code>plugins/registry.ts</code> 的硬编码 <code>PLUGINS</code>
                 <br><span style="font-size:var(--text-xs)">registry.ts 只留 <code>pluginForWidget</code> 等纯函数</span></td>
                 <td class="mono">plugins/registry.ts；新增 core-sdk/usePlugins.ts</td></tr>
             <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）
                 <br><span style="font-size:var(--text-xs)">停前先发 <code>loop.cancel</code> 正常收尾，超时才强杀</span></td>
                 <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start</td></tr>
-            <tr><td>S7-5</td><td>迁移：写 <b>5 个</b> <code>plugin.json</code>，把 <b>6 个服务 + 9 个组件</b>归组
-                （划法见架构文档 §5.3）</td>
-                <td class="mono">plugins/*/plugin.json</td></tr>
             <tr><td>S7-6</td><td>插件详情窗显示「N 组件 / M 服务 / 依赖 / degraded 明细」</td>
                 <td class="mono">PluginListWindow.vue / PluginDetailWindow.vue</td></tr>
           </tbody>
         </table>
+        <div class="lbl" style="color:var(--danger)">B 语义的最大风险：把「没有插件」变成一场灾难</div>
+        <p>这是把 S7-2 拆两半、把 S7-5 提前的<b>唯一理由</b>，所以必须写下来：</p>
+        <p>现在 Core 无条件全启，所以 <code>plugins/</code> 目录不存在<b>完全无害</b>。
+          但 B 的语义是「只启已安装插件声明的服务」，于是：</p>
+        <pre class="code" style="font-size:var(--text-xs)"><span class="cm">plugins/ 目录不存在（或里面一个 plugin.json 都没有）</span>
+  ↓
+已安装插件集合 = 空
+  ↓
+没有任何服务被声明 → 一个都不 spawn
+  ↓
+Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</pre>
+        <p><b>这不是「降级」，是应用不可用</b>。而它恰好是 S7-2b 落地那一刻的状态 ——
+          仓库里还没有 <code>plugins/</code>。所以「先切语义、后写清单」这个顺序会直接
+          <b>bricking 掉 app 和 smoke</b>（smoke 报「core 起来了」但一个服务都不 ready）。</p>
+        <p><b>因此定序：</b>S7-2a（只读，不碰启动）→ <b>S7-5（真实清单落盘）</b> → S7-2b（切语义）。
+          子步数从 6 变 8，但这三步之间有<b>真实的依赖顺序</b>，原来的 6 步把它压平了 ——
+          压平的后果就是上面这个会 bricking 的顺序。</p>
+        <div class="lbl">三态降级保护（S7-2b 必须实现，与选哪个顺序无关）</div>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:44%">情形</th><th>行为</th><th>为什么这样区分</th></tr></thead>
+          <tbody>
+            <tr><td><code>pluginsDir</code> 未配置（<code>--plugins none</code>）</td>
+                <td>关掉插件层，<b>全启</b>，不告警</td>
+                <td>这是<b>有意为之</b>（测试与显式意图），不该 nag</td></tr>
+            <tr><td><code>pluginsDir</code> 配了，但<b>目录不存在</b></td>
+                <td><b>告警</b> + 全启</td>
+                <td>疑似配置错误（路径写错 / 没部署）—— 必须让人看见</td></tr>
+            <tr><td>目录在，但<b>零个清单</b></td>
+                <td><b>告警</b> + 全启 + 提示「插件层未初始化，是否漏了 S7-5」</td>
+                <td>同上，且这正是提交顺序出错时的现场特征</td></tr>
+          </tbody>
+        </table>
+        <p class="note"><b>关键是把「显式关掉」与「看起来是漏了」分开</b>：<code>none</code> 是有意为之，不告警；
+          空目录 / 目录不存在是大概率手滑，必须告警。这与仓库既有纪律一致 ——
+          偏好文件损坏时 HTTP 路径回 500、RPC 路径容错 + warn，都是
+          <b>标记出来让调用方决定严不严</b>，而不是静默兜底。</p>
         <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
         <ul>
           <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
               先把 <code>services[]</code> / <code>components[]</code> / <code>dependencies</code> 三个字段的
               语义与校验规则钉死（尤其<b>依赖缺失怎么处理</b>）</li>
-          <li><b>S7-2 是唯一动 Core 启停语义的一步</b>，风险最高，所以单独一步、可独立回归。
-              前端此时还读静态数组，所以它坏了界面也不会白屏（渐进替换）</li>
-          <li><b>S7-3 才换数据源</b>：Core 侧清单可用之后，前端才有东西可拉。
+          <li><b>S7-2a 只读</b>：先把「扫盘 → 校验 → 环检测 → 拓扑 → 聚合 → 暴露清单」这条纯读链路
+              在真 Core 里跑通并用夹具验住，<b>启动行为一行不改</b>。
+              这样真正危险的那一步（S7-2b）到来时，剩下的只有「把过滤接进 spawn」，
+              而不是「扫盘 + 启停 + 状态」三件事一起首次上线</li>
+          <li><b>S7-5 必须在 S7-2b 之前</b>：B 语义下「没有清单」= 零服务 = 应用不可用（见上节）</li>
+          <li><b>S7-2b 是唯一的「行为切换」</b>：夹具与真实清单都在场，测得住；
+              同时实现三态降级保护，保证它炸不到 app</li>
+          <li><b>S7-3 才换前端数据源</b>：Core 侧清单可用之后前端才有东西可拉。
               反过来做（先删静态数组）会出现「Core 还没好、界面先空了」的窗口</li>
-          <li><b>S7-4 必须晚于 S7-3</b>：<code>plugin.stop</code> 命令由 S7-1 定义、由 S7-2 实现，
+          <li><b>S7-4 必须晚于 S7-3</b>：<code>plugin.stop</code> 命令由 S7-1 定义、由 S7-2b 实现，
               前端得有清单才知道自己能停哪个</li>
-          <li><b>S7-5 最后迁</b>：等前面四步都通了，迁移才是「把已验证的东西摆上去」而不是「边写边迁」</li>
         </ul>
         <div class="lbl">已定案：启动策略选 B（2026-10-02 讨论）</div>
         <p>问的是「<b>Core 刚启动时启哪些服务</b>」。运行期的「停用插件真停进程」两边都做（S7-4）。</p>
@@ -888,6 +935,12 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
                 <b>后果</b>：client 打包坏了两个提交没人发现；client 失败又中断了 <code>pnpm -r run build</code>
                 → services 的 dist 全没更新 → S4 集成测跑旧 dist，出现「改了没生效」的假象。<br>
                 <b>规矩：判定成败只看 <code>$LASTEXITCODE</code>，grep 只用来定位、不用来判成败。</b></td></tr>
+        <tr><td style="color:var(--danger)">压平子步会丢掉子步之间的依赖顺序</td>
+            <td>⚠️ S7 原计划 6 子步，把「S7-2 扫盘+启停+状态」压成一步、「S7-5 写清单」排在最后。
+            选 B 之后这个顺序会 <b>bricking app</b>：B 语义下没有清单 = 零服务 = 界面全空，
+            而那恰好是切语义那一刻的现场。压平不是简洁，是<b>把依赖关系藏起来了</b>。<br>
+            <b>规矩：拆子步时先问「这几步之间有没有「必须先做」的关系」，有就别压。</b>
+            已重排为 8 子步（S7-2a 只读 → S7-5 落清单 → S7-2b 切语义）</td></tr>
         <tr><td style="color:var(--danger)">集成测试跑的是 dist，dist 可能是旧的</td>
             <td>⚠️ S4 实际踩了（同上那次中断的后果）。<b>建议</b>：core 的集成测在 <code>beforeAll</code> 里断言
                 关键 dist 比 src 新，或让 <code>scripts/smoke.mjs</code> 顺带检查一次 ——
