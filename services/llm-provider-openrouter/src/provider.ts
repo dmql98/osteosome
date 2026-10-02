@@ -4,7 +4,7 @@
  * 与 Service 装配解耦：`streamCompletions()` 消费 openai 兼容 wire → yield StreamChunk，
  * 错误码化 / usage 归一全部在此层（对齐旧 adapter 语义，迁移后不变）。
  */
-import { normalizeFinishReason, normalizeUsage, readSseJson, type StreamChunk, type StreamError, type RetryPolicy } from '@osteosome/shared'
+import { normalizeFinishReason, normalizeUsage, readSseJson, type StreamChunk, type StreamError, type RetryPolicy, type ThinkingEffort } from '@osteosome/shared'
 
 export const PROVIDER = 'openrouter'
 export const DEFAULT_MODEL = 'openai/gpt-4o-mini'
@@ -28,6 +28,8 @@ export interface StreamRequest {
   model?: string
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
   temperature?: number
+  /** 思考强度（P4 WS-2）→ openrouter 透传 `reasoning_effort`（openai 兼容） */
+  thinking?: ThinkingEffort
   signal?: AbortSignal
   apiKey: string
 }
@@ -62,6 +64,7 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
         model: req.model ?? DEFAULT_MODEL,
         messages: req.messages,
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        ...(req.thinking && req.thinking !== 'off' ? { reasoning_effort: req.thinking } : {}),
         stream: true,
       }),
       signal: req.signal,

@@ -27,7 +27,15 @@ interface ManagerCtx {
   cleanup: () => Promise<void>
 }
 
-function makeManager(options: { maxRestarts?: number; extraEnv?: Record<string, string> } = {}): ManagerCtx {
+/**
+ * `handshakeTimeoutMs` 默认 800ms 是**刻意压低**的（让「握手超时 → kill → 重启」用例跑得快）。
+ * 但它同时成了其它用例的隐含时限：崩溃重启用例要 `node service.mjs` 冷启动 + 崩 + 再握手一次，
+ * 机器负载高（集成冒烟并行拉起 9 服务）时会超过 800ms → 被判 failed 而不是 ready → 假红。
+ * 故开放成可覆盖项：只有真正测超时的用例保持 800ms。
+ */
+function makeManager(
+  options: { maxRestarts?: number; extraEnv?: Record<string, string>; handshakeTimeoutMs?: number } = {},
+): ManagerCtx {
   const dir = mkdtempSync(path.join(tmpdir(), 'ost-manager-'))
   const svcDir = path.join(dir, SERVICE_ID)
   mkdirSync(svcDir, { recursive: true })
@@ -58,7 +66,7 @@ function makeManager(options: { maxRestarts?: number; extraEnv?: Record<string, 
     dataDir: path.join(dir, 'data'),
     sessionId: 'test-session',
     bus,
-    handshakeTimeoutMs: 800,
+    handshakeTimeoutMs: options.handshakeTimeoutMs ?? 800,
     stopGraceMs: 800,
     maxRestarts: options.maxRestarts ?? 2,
     backoffBaseMs: 50,
@@ -171,6 +179,8 @@ describe('ServiceManager', () => {
       const marker = path.join(tmpdir(), `ost-crash-${Date.now()}.flag`)
       const ctx = makeManager({
         extraEnv: { FAKE_CRASH_ONCE: '1', FAKE_CRASH_MARKER: marker },
+        // 崩溃重启要连过两次握手，给足机器抖动余量（见 makeManager 注释）
+        handshakeTimeoutMs: 3000,
       })
       try {
         await ctx.manager.start()

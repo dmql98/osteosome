@@ -40,6 +40,32 @@ export interface ChatMessage {
   content: string
 }
 
+/**
+ * 思考强度（中立枚举，P4 WS-2）—— 前端只认这四个值，各家 wire 词汇由 provider 内部翻译：
+ *
+ * | 中立 | openai `reasoning_effort` | anthropic `thinking.budget_tokens` |
+ * |---|---|---|
+ * | `off` | 不下发（用模型默认） | 不下发 |
+ * | `low` | `low` | 2048 |
+ * | `medium` | `medium` | 8192 |
+ * | `high` | `high` | 16384 |
+ *
+ * 纪律同 `StreamErrorCode`：**provider 不互相 import，wire 差异不出 provider 边界**。
+ */
+export type ThinkingEffort = 'off' | 'low' | 'medium' | 'high'
+
+/** anthropic 等 token 预算制 provider 的思考预算映射（anthropic 要求 budget ≥ 1024） */
+export const THINKING_BUDGETS: Record<Exclude<ThinkingEffort, 'off'>, number> = {
+  low: 2048,
+  medium: 8192,
+  high: 16384,
+}
+
+/** 宽松解析（前端/总线来值不可信；非法 → undefined = 不下发） */
+export function normalizeThinking(value: unknown): ThinkingEffort | undefined {
+  return value === 'off' || value === 'low' || value === 'medium' || value === 'high' ? value : undefined
+}
+
 /** 声明式重试策略（P2 只声明不执行；执行器 P4 落 `services/llm-retry`） */
 export type BackoffStrategy = 'exponential' | 'fixed'
 

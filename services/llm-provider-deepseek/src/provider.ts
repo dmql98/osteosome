@@ -28,6 +28,12 @@ export interface StreamRequest {
   model?: string
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
   temperature?: number
+  /**
+   * 思考强度（P4 WS-2）—— **本 provider 显式忽略**。
+   * deepseek 的思考由模型决定（`deepseek-reasoner` 恒思考、`deepseek-chat` 不思考），
+   * wire 不接受 `reasoning_effort`，硬传会被上游 400。故中立枚举到此为止（provider 边界内消化差异）。
+   */
+  thinking?: import('@osteosome/shared').ThinkingEffort
   signal?: AbortSignal
   apiKey: string
 }

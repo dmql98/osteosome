@@ -31,7 +31,7 @@
           aria-label="model-provider"
           @update:model-value="onSelectProvider"
         />
-        <div v-if="modelsResult" class="llm-settings__models">
+        <div v-if="catalogModels.length" class="llm-settings__models">
           <Select
             :model-value="selectedModel"
             :options="modelOptions"
@@ -40,7 +40,7 @@
             @update:model-value="onSelectModel"
           />
           <span
-            v-if="modelsResult.catalog === 'static'"
+            v-if="catalogKind === 'static'"
             class="llm-settings__badge"
             :title="t('llm.staticListHint')"
           >
@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import IconButton from '@/components/ui/IconButton.vue'
@@ -92,6 +92,7 @@ import Modal from '@/components/ui/Modal.vue'
 import Select from '@/components/ui/Select.vue'
 import Switch from '@/components/ui/Switch.vue'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
+import { useModelCatalog } from '@/core-sdk/useModelCatalog'
 import { useCommand } from '@/core-sdk/useCommand'
 import { sse } from '@/core-sdk/sse'
 
@@ -102,16 +103,11 @@ interface MaskedCredential {
   kind: string
   masked: string
 }
-interface ModelsResult {
-  requestId: string
-  provider: string
-  models: string[]
-  catalog: 'remote' | 'static'
-}
 
 const { t } = useI18n()
 const { list: providerList, providers } = useLlmProviders()
 const { send } = useCommand()
+const { models: catalogModels, catalog: catalogKind, options: modelOptions, load: loadCatalog } = useModelCatalog()
 
 const credentials = ref<MaskedCredential[]>([])
 const credentialOpen = ref(false)
@@ -120,17 +116,18 @@ const credentialValue = ref('')
 
 const selectedProvider = ref('')
 const selectedModel = ref('')
-const modelsResult = ref<ModelsResult | null>(null)
 
 const providerOptions = computed(() =>
   providerList.value.map((p) => ({ label: p.provider, value: p.provider })),
 )
-const modelOptions = computed(() =>
-  (modelsResult.value?.models ?? []).map((m) => ({ label: m, value: m })),
-)
 const credentialOptions = computed(() =>
   credentials.value.map((c) => ({ value: c.id, label: `${c.name}（${c.provider}）`, masked: c.masked })),
 )
+
+// 目录到达后默认选第一个模型（未选过时）
+watch(catalogModels, (list) => {
+  if (list.length > 0 && !selectedModel.value) selectedModel.value = list[0]
+})
 
 function isEnabled(provider: string): boolean {
   return !!providers.value?.[provider]
@@ -148,25 +145,11 @@ function providerServiceId(provider: string): string {
 async function onSelectProvider(value: string | number): Promise<void> {
   selectedProvider.value = String(value)
   selectedModel.value = ''
-  modelsResult.value = null
-  await send('llm.models.list', { requestId: `models-${Date.now()}`, provider: selectedProvider.value })
+  await loadCatalog(selectedProvider.value)
 }
 
 function onSelectModel(value: string | number): void {
   selectedModel.value = String(value)
-}
-
-function applyModelsResult(payload: unknown): void {
-  if (!payload || typeof payload !== 'object') return
-  const p = payload as Record<string, unknown>
-  if (p.provider !== selectedProvider.value) return
-  modelsResult.value = {
-    requestId: typeof p.requestId === 'string' ? p.requestId : '',
-    provider: String(p.provider),
-    models: Array.isArray(p.models) ? (p.models as unknown[]).filter((m): m is string => typeof m === 'string') : [],
-    catalog: p.catalog === 'remote' ? 'remote' : 'static',
-  }
-  if (modelsResult.value.models.length > 0) selectedModel.value = modelsResult.value.models[0]
 }
 
 async function onDeleteCredential(id: string): Promise<void> {
@@ -207,19 +190,15 @@ function onCredentialEvent(): void {
   void loadCredentials()
 }
 
-let disposeModels: (() => void) | null = null
 let disposeSaved: (() => void) | null = null
 let disposeDeleted: (() => void) | null = null
 
 onMounted(() => {
   void loadCredentials()
-  disposeModels = sse.subscribe('llm.models.list.result', applyModelsResult)
   disposeSaved = sse.subscribe('credential.saved', onCredentialEvent)
   disposeDeleted = sse.subscribe('credential.deleted', onCredentialEvent)
 })
 onUnmounted(() => {
-  disposeModels?.()
-  disposeModels = null
   disposeSaved?.()
   disposeSaved = null
   disposeDeleted?.()

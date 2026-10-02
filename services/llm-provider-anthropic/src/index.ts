@@ -6,7 +6,7 @@
  */
 import { Service } from '@osteosome/service-sdk'
 import { attachCredentialClient, CredentialClientError } from '@osteosome/service-sdk'
-import { isFinishBlock, listModels, type StreamChunk } from '@osteosome/shared'
+import { isFinishBlock, listModels, normalizeThinking, type StreamChunk } from '@osteosome/shared'
 import {
   STATIC_MODELS,
   ANTHROPIC_VERSION,
@@ -68,6 +68,7 @@ service.subscribe('llm.provider.request', async (payload) => {
       model: typeof payload.model === 'string' ? payload.model : undefined,
       messages: (payload.messages as { role: 'system' | 'user' | 'assistant'; content: string }[]) ?? [],
       ...(typeof payload.temperature === 'number' ? { temperature: payload.temperature } : {}),
+      ...(normalizeThinking(payload.thinking) ? { thinking: normalizeThinking(payload.thinking)! } : {}),
       signal: controller.signal,
       apiKey,
       baseURL: BASE_URL,

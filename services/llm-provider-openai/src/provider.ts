@@ -14,6 +14,7 @@ import {
   type StreamChunk,
   type StreamError,
   type RetryPolicy,
+  type ThinkingEffort,
 } from '@osteosome/shared'
 
 export const PROVIDER = 'openai'
@@ -80,6 +81,8 @@ export interface StreamRequest {
   baseURL?: string
   /** 合并到默认 EXTRA_HEADERS 之上的附加 header */
   extraHeaders?: Record<string, string>
+  /** 思考强度（P4 WS-2 中立枚举）→ wire `reasoning_effort`（`off` 不下发，用模型默认） */
+  thinking?: ThinkingEffort
   /** 工具定义（非空即上送，让模型可发起 tool_calls —— P7 agent 循环的前提） */
   tools?: ToolSpec[]
 }
@@ -137,6 +140,8 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
         model: req.model ?? DEFAULT_MODEL,
         messages: req.messages,
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        // 思考强度 → openai wire（`off` 不下发，避免覆盖模型默认档）
+        ...(req.thinking && req.thinking !== 'off' ? { reasoning_effort: req.thinking } : {}),
         ...(req.tools && req.tools.length > 0 ? { tools: req.tools } : {}),
         stream: true,
       }),

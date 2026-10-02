@@ -9,7 +9,7 @@
  */
 import { Service } from '@osteosome/service-sdk'
 import { attachCredentialClient, CredentialClientError } from '@osteosome/service-sdk'
-import { isFinishBlock, listModels, type StreamChunk } from '@osteosome/shared'
+import { isFinishBlock, listModels, normalizeThinking, type StreamChunk } from '@osteosome/shared'
 import { CREDENTIAL_REF, DEFAULT_MODEL, PROVIDER, RETRY_POLICY, streamCompletions, STATIC_MODELS, BASE_URL } from './provider'
 
 const service = new Service({ id: 'llm-provider-openai', version: '1.0.0' })
@@ -61,6 +61,7 @@ service.subscribe('llm.provider.request', async (payload) => {
       model: typeof payload.model === 'string' ? payload.model : undefined,
       messages: (payload.messages as { role: 'system' | 'user' | 'assistant'; content: string }[]) ?? [],
       ...(typeof payload.temperature === 'number' ? { temperature: payload.temperature } : {}),
+      ...(normalizeThinking(payload.thinking) ? { thinking: normalizeThinking(payload.thinking)! } : {}),
       signal: controller.signal,
       apiKey,
     })) {

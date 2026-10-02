@@ -4,8 +4,10 @@
  * - **唯一写者**：assistant 消息只经 loop（in-flight 累积、finish 时 append）；user 消息先落库再发 llm.request。
  * - **requestId 分层**：A = loop.run（前端只见 A），B = llm.request 内部 id；映射只活在 loop 进程。
  * - **只吃总线**：不直读 session 文件，经 `session.*` 命令 + `*.result` 拿历史（服务间唯一通道 = 总线）。
+ * - **参数透传**（P4 WS-2）：`loop.run` 的 `provider` / `model` / `thinking` 一路带进 `llm.request`。
  */
 import { Service } from '@osteosome/service-sdk'
+import { normalizeThinking, type ThinkingEffort } from '@osteosome/shared'
 import { randomUUID } from 'node:crypto'
 import { LoopCore } from './core'
 import { buildMessages, DEFAULT_MAX_MESSAGES } from './history'
@@ -20,14 +22,29 @@ const sessionsByA = new Map<string, string>()
 const historyReqByRun = new Map<string, string>()
 
 /**
- * 目标 provider（P3 简化：常量经 env 可配，默认 deepseek；P4 接设置 Pane 后由前端传）。
+ * 目标 provider（P4 WS-2：`loop.run` 可逐次指定；缺省回落 env → deepseek）。
  * 测试与冒烟经 LLM_PROVIDER 指向本地假上游（openai 位）。
  */
-const PROVIDER = process.env.LLM_PROVIDER?.trim() || 'deepseek'
+const DEFAULT_PROVIDER = process.env.LLM_PROVIDER?.trim() || 'deepseek'
+
+/**
+ * 本次 run 的请求参数（P4 WS-2）。
+ *
+ * loop 同时只跑一轮（`core.isBusy()` 重入守卫），所以装配层用模块级「当前 run 参数」即可，
+ * 不必把参数穿进 LoopCore 状态机（LoopCore 只认 model —— 它 P3 就有 `start(b, msgs, model?)` 形参）。
+ * accept 时写，start（拿到历史后）时读。
+ */
+let currentParams: { provider?: string; model?: string; thinking?: ThinkingEffort } = {}
 
 const core = new LoopCore({
-  sendLlmRequest(b, sessionId, messages) {
-    service.publish('llm.request', { requestId: b, provider: PROVIDER, messages })
+  sendLlmRequest(b, sessionId, messages, model) {
+    service.publish('llm.request', {
+      requestId: b,
+      provider: currentParams.provider ?? DEFAULT_PROVIDER,
+      messages,
+      ...(model ? { model } : {}),
+      ...(currentParams.thinking ? { thinking: currentParams.thinking } : {}),
+    })
   },
   sendLlmCancel(b) {
     service.publish('llm.cancel', { requestId: b })
@@ -42,6 +59,12 @@ service.subscribe('loop.run', (payload) => {
   const a = typeof payload.requestId === 'string' ? payload.requestId : ''
   const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
   const text = typeof payload.text === 'string' ? payload.text.trim() : ''
+  // P4 WS-2：本次 run 的 provider / model / thinking（非法 thinking 静默丢弃 = 用模型默认）
+  const runParams = {
+    ...(typeof payload.provider === 'string' && payload.provider ? { provider: payload.provider } : {}),
+    ...(typeof payload.model === 'string' && payload.model ? { model: payload.model } : {}),
+    ...(normalizeThinking(payload.thinking) ? { thinking: normalizeThinking(payload.thinking) as ThinkingEffort } : {}),
+  }
 
   const fail = (code: string, message: string) => {
     service.publish('loop.run.failed', { requestId: a, sessionId, error: { code, message } })
@@ -68,6 +91,7 @@ service.subscribe('loop.run', (payload) => {
     fail('busy', 'loop is running')
     return
   }
+  currentParams = runParams
   sessionsByA.set(a, sessionId)
   service.publish('session.get', { requestId: historyReq, sessionId })
 
@@ -84,9 +108,8 @@ service.subscribe('session.get.result', (payload) => {
 
   // 兜底1：session.get 报错（会话不存在等）→ 用本轮 text 跑一问一答，不卡在 running
   if (p?.error) {
-    const sessionId = sessionsByA.get(a) ?? ''
     const messages = buildMessages([{ role: 'user', content: core.awaitingRun()?.text ?? '' }], DEFAULT_SYSTEM_PROMPT, DEFAULT_MAX_MESSAGES)
-    core.start(newB(), messages)
+    core.start(newB(), messages, currentParams.model)
     return
   }
 
@@ -95,7 +118,7 @@ service.subscribe('session.get.result', (payload) => {
   const history = (p?.session?.messages ?? []) as HistoryMessage[]
   const messages = buildMessages(history, DEFAULT_SYSTEM_PROMPT, DEFAULT_MAX_MESSAGES)
 
-  core.start(newB(), messages)
+  core.start(newB(), messages, currentParams.model)
 })
 
 // llm.token.streamed（B）→ 累积 + 换发 A（P3 §3.4：B 不泄前端）

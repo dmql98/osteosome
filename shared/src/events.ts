@@ -12,6 +12,7 @@ import type {
   RetryPolicy,
   StreamChunk,
   StreamError,
+  ThinkingEffort,
   Usage,
 } from './llm'
 
@@ -110,13 +111,18 @@ export interface EventMap {
   'llm.metrics.usage': EventBase & { requestId: string; provider: string; usage: Usage }
   /**
    * 模型目录结果（P4 WS-3）—— 由**对应 provider 服务**发布（能力位：谁知道自己有哪些模型）。
-   * `source:'remote'` = 上游 /models 拉取成功；`'static'` = 拉取失败/超时 → 降级静态列表（可能不全）。
+   * `catalog:'remote'` = 上游 /models 拉取成功；`'static'` = 拉取失败/超时 → 降级静态列表（可能不全）。
+   *
+   * **字段名是 `catalog` 不是 `source`（勿回退）**：`source` 是 {@link EventBase} 的保留字段
+   * ——ServiceManager 对每条服务消息做权威盖章 `source = serviceId`（`manager.ts:334`），
+   * 任何叫 `source` 的业务字段都会被覆盖成服务名（P4 WS-5 集成冒烟实证：
+   * 断言拿到 `'llm-provider-openai'`）。这是总线级保留字，不是命名风格问题。
    */
   'llm.models.list.result': EventBase & {
     requestId: string
     provider: string
     models: string[]
-    source: 'remote' | 'static'
+    catalog: 'remote' | 'static'
   }
   // ── credential（P4 §3.4，只增不改；**值永不入 payload**）──
   /** 凭证写入（只带 { id, name, provider }；明文值不出 Core） */
@@ -164,6 +170,8 @@ export interface CommandMap {
     model?: string
     messages: ChatMessage[]
     temperature?: number
+    /** 思考强度（P4 WS-2，只增不改；provider 内部翻各家 wire） */
+    thinking?: ThinkingEffort
     meta?: Record<string, unknown>
   }
   'llm.cancel': { requestId: string }
@@ -175,6 +183,7 @@ export interface CommandMap {
     model: string
     messages: ChatMessage[]
     temperature?: number
+    thinking?: ThinkingEffort
     credentialRef: string
     retryPolicy: RetryPolicy
     meta?: Record<string, unknown>
@@ -197,7 +206,18 @@ export interface CommandMap {
   'session.clear': { requestId: string }
   'message.append': { requestId: string; sessionId: string; message: { role: 'system' | 'user' | 'assistant'; content: string; id?: string } }
   // ── loop 命令（P3 §3.4；requestId = A，对外可见）──
-  'loop.run': { requestId: string; sessionId: string; text: string }
+  /**
+   * 发起一次对话（P4 WS-2 起带参：`provider`/`model`/`thinking` 缺省时由 loop 回落 env/默认）。
+   * 只增不改：P3 时期只有 requestId/sessionId/text。
+   */
+  'loop.run': {
+    requestId: string
+    sessionId: string
+    text: string
+    provider?: string
+    model?: string
+    thinking?: ThinkingEffort
+  }
   /** 取消在途 run（fire-and-forget，无 <cmd>.result；结果由 loop.run.cancelled / loop.run.failed 体现） */
   'loop.cancel': { requestId: string }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defineWidget, getWidget, listWidgets, widgetComponents } from '../../src/widgets/registry'
+import { PLUGINS } from '../../src/plugins/registry'
 
 describe('widget registry', () => {
   it('自动发现内置组件', () => {
@@ -9,6 +10,21 @@ describe('widget registry', () => {
     expect(getWidget('widget.event-stream')?.title).toBe('事件流')
     expect(getWidget('widget.service-manager')?.title).toBe('服务管理')
     expect(listWidgets().length).toBeGreaterThanOrEqual(6)
+  })
+
+  /**
+   * 断层回归（P4 WS-1）：插件表声明了 widget、注册表却扫不到 → 默认工作台开不出来。
+   * 曾真实发生：`widget.session-list` 定义在 `features/session/session-list-pane.vue`、
+   * `widget.settings` 在 `widgets/settings/settings-pane.vue`，两者都不匹配注册表的 glob
+   * （只扫 `widgets/` 下以 `-widget.vue` 结尾的二级目录文件）。单测只断言「≥6 个 + 点名 5 个旧组件」时抓不到。
+   */
+  it('插件声明的每个 widget 都能被 getWidget 取到（注册单一真源）', () => {
+    const declared = PLUGINS.flatMap((p) => p.widgets)
+    expect(declared.length).toBeGreaterThan(0)
+    for (const id of declared) {
+      expect(getWidget(id), `widget 未注册：${id}`).toBeDefined()
+      expect(widgetComponents()[id], `组件未挂载：${id}`).toBeTruthy()
+    }
   })
 
   it('widgetComponents 以 widget id 为键注册组件', () => {

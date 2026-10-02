@@ -18,10 +18,12 @@
  */
 import {
   readSseJson,
+  THINKING_BUDGETS,
   type FinishReason,
   type StreamChunk,
   type StreamError,
   type RetryPolicy,
+  type ThinkingEffort,
   type Usage,
 } from '@osteosome/shared'
 
@@ -63,10 +65,33 @@ export interface StreamRequest {
   model?: string
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
   temperature?: number
+  /** 思考强度（P4 WS-2 中立枚举）→ wire `thinking.budget_tokens`（`off` 不下发） */
+  thinking?: ThinkingEffort
   signal?: AbortSignal
   apiKey: string
   /** 覆盖默认 baseURL（测试 / 运行期自定义） */
   baseURL?: string
+}
+
+/** 默认输出上限（非思考模式） */
+const DEFAULT_MAX_TOKENS = 4096
+
+/**
+ * 思考强度 → anthropic wire `thinking`（P4 WS-2）。
+ *
+ * 两个 anthropic 侧的硬约束（踩了就是 400）：
+ * 1. `budget_tokens` 必须 ≥ 1024 —— 用 shared 的 `THINKING_BUDGETS`（low 2048 起）；
+ * 2. **开启 thinking 时 `temperature` 必须为 1**（anthropic 拒绝其它值）——
+ *    故 `temperature` 在思考模式下整体不下发（走默认 1），而不是硬写 1。
+ *
+ * @returns wire 片段；`off`/未指定 → 空对象
+ */
+export function buildThinking(thinking: ThinkingEffort | undefined): {
+  thinking?: { type: 'enabled'; budget_tokens: number }
+  dropTemperature?: true
+} {
+  if (!thinking || thinking === 'off') return {}
+  return { thinking: { type: 'enabled', budget_tokens: THINKING_BUDGETS[thinking] }, dropTemperature: true }
 }
 
 interface AnthropicBlockStart {
@@ -161,6 +186,11 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
   const url = `${base}/v1/messages`
   const system = req.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
   const turns = req.messages.filter((m) => m.role !== 'system')
+  const thinking = buildThinking(req.thinking)
+  // 思考模式下 max_tokens 必须大于 budget_tokens，否则预算吃满即截断
+  const maxTokens = thinking.thinking
+    ? thinking.thinking.budget_tokens + DEFAULT_MAX_TOKENS
+    : DEFAULT_MAX_TOKENS
 
   let res: Response
   try {
@@ -173,10 +203,14 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
       },
       body: JSON.stringify({
         model: req.model ?? DEFAULT_MODEL,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         ...(system ? { system } : {}),
         messages: turns.map((m) => ({ role: m.role, content: m.content })),
-        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        // 思考模式丢弃 temperature（anthropic 要求恒为 1，见 buildThinking）
+        ...(req.temperature !== undefined && !thinking.dropTemperature
+          ? { temperature: req.temperature }
+          : {}),
+        ...(thinking.thinking ? { thinking: thinking.thinking } : {}),
         stream: true,
       }),
       signal: req.signal,

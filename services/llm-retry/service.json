@@ -10,6 +10,7 @@
   "subscribes": [
     "llm.provider.registered",
     "llm.provider.unregistered",
+    "llm.provider.request",
     "llm.request",
     "llm.request.failed",
     "llm.request.finished",

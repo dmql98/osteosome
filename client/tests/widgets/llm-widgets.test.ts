@@ -47,6 +47,14 @@ function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<stri
   })
 }
 
+/** Select 的 options 是 prop，直接改 value + change 触发（对齐 settings.test.ts 手法） */
+async function setSelect(wrapper: ReturnType<typeof mount>, testid: string, value: string): Promise<void> {
+  const el = wrapper.get(`[data-testid="${testid}"] select`)
+  const element = el.element as HTMLSelectElement
+  element.value = value
+  await el.trigger('change')
+}
+
 beforeEach(() => {
   sseHandlers.clear()
   setActivePinia(createPinia())
@@ -215,6 +223,111 @@ describe('llm-chat widget（P3 会话化）', () => {
     await wrapper.vm.$nextTick()
     // in-flight 清掉、可再次发送
     expect(wrapper.find('[data-testid="llm-chat-send"]').exists()).toBe(true)
+    fetchMock.mockRestore()
+  })
+})
+
+/**
+ * P4 WS-2：模型选择 + 思考强度 + provider 真正进 `loop.run`。
+ *
+ * 断层回归：P3 时这三处是「装饰」——provider 下拉选了不生效（loop 硬编码 env），
+ * 模型是只读 Input，思考强度在线上不存在。现由 `llm.models.list` + `loop.run` 新字段兑现。
+ */
+describe('llm-chat widget · 参数链路（P4 WS-2）', () => {
+  async function mountChat(sessionId = 's1') {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 202 }))
+    const wrapper = mount(LlmChatWidget)
+    await wrapper.vm.$nextTick()
+    emit('llm.provider.registered', DESCRIPTOR)
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+    useSessionStore().select(sessionId)
+    await flushPromises()
+    return { wrapper, fetchMock }
+  }
+
+  it('provider 注册 → 拉该家模型目录；result 到达 → 模型下拉出选项', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    expect(commandBodies(fetchMock).some((b) => b.topic === 'llm.models.list')).toBe(true)
+
+    emit('llm.models.list.result', {
+      requestId: 'models-1',
+      provider: 'deepseek',
+      models: ['deepseek-chat', 'deepseek-reasoner'],
+      catalog: 'remote',
+    })
+    await wrapper.vm.$nextTick()
+    const options = wrapper.get('[data-testid="llm-chat-model"] select').findAll('option')
+    expect(options.map((o) => o.text())).toEqual(['deepseek-chat', 'deepseek-reasoner'])
+    // remote → 无静态角标
+    expect(wrapper.find('[data-testid="llm-chat-static-badge"]').exists()).toBe(false)
+    fetchMock.mockRestore()
+  })
+
+  it('目录降级 static → 挂角标', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    emit('llm.models.list.result', {
+      requestId: 'models-1',
+      provider: 'deepseek',
+      models: ['deepseek-chat'],
+      catalog: 'static',
+    })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-testid="llm-chat-static-badge"]').text()).toContain('静态')
+    fetchMock.mockRestore()
+  })
+
+  it('目录不含当前模型 → 回落到声明默认模型，否则取第一项', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    // 目录里没有 deepseek-chat（声明默认），也没有其它匹配 → 取第一项
+    emit('llm.models.list.result', {
+      requestId: 'models-1',
+      provider: 'deepseek',
+      models: ['deepseek-reasoner'],
+      catalog: 'remote',
+    })
+    await wrapper.vm.$nextTick()
+    const el = wrapper.get('[data-testid="llm-chat-model"] select').element as HTMLSelectElement
+    expect(el.value).toBe('deepseek-reasoner')
+    fetchMock.mockRestore()
+  })
+
+  it('发问 → loop.run 带 provider / model / thinking', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    emit('llm.models.list.result', {
+      requestId: 'models-1',
+      provider: 'deepseek',
+      models: ['deepseek-chat', 'deepseek-reasoner'],
+      catalog: 'remote',
+    })
+    await wrapper.vm.$nextTick()
+    await setSelect(wrapper, 'llm-chat-model', 'deepseek-reasoner')
+    await setSelect(wrapper, 'llm-chat-thinking', 'high')
+
+    await wrapper.get('[data-testid="llm-chat-input"]').setValue('你好')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const run = commandBodies(fetchMock).find((b) => b.topic === 'loop.run')!
+    expect(run.payload).toMatchObject({
+      sessionId: 's1',
+      text: '你好',
+      provider: 'deepseek',
+      model: 'deepseek-reasoner',
+      thinking: 'high',
+    })
+    fetchMock.mockRestore()
+  })
+
+  it('思考强度默认 off → loop.run 不带 thinking（用模型默认档）', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    await wrapper.get('[data-testid="llm-chat-input"]').setValue('你好')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    const run = commandBodies(fetchMock).find((b) => b.topic === 'loop.run')!
+    expect((run.payload as { thinking?: string }).thinking).toBeUndefined()
+    // provider / model 仍带上（默认值）
+    expect(run.payload).toMatchObject({ provider: 'deepseek', model: 'deepseek-chat' })
     fetchMock.mockRestore()
   })
 })

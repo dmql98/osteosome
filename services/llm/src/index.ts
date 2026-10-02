@@ -13,7 +13,7 @@
  * 不注册 → 直接 `llm.request.failed { error.code: 'unsupported_provider' }`（存在性由插件决定）。
  */
 import { Service } from '@osteosome/service-sdk'
-import { isFinishBlock, isDelta, type StreamChunk } from '@osteosome/shared'
+import { isFinishBlock, isDelta, normalizeThinking, type StreamChunk, type ThinkingEffort } from '@osteosome/shared'
 import { clearRoutes, resolve, upsert, remove } from './routes'
 
 const service = new Service({ id: 'llm', version: '1.0.0' })
@@ -27,6 +27,7 @@ function parseLlmRequest(
   model?: string
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
   temperature?: number
+  thinking?: ThinkingEffort
   meta?: Record<string, unknown>
 } {
   const requestId = typeof payload.requestId === 'string' && payload.requestId ? payload.requestId : ''
@@ -46,6 +47,8 @@ function parseLlmRequest(
     ...(typeof payload.model === 'string' && payload.model ? { model: payload.model } : {}),
     messages,
     ...(typeof payload.temperature === 'number' ? { temperature: payload.temperature } : {}),
+    // 思考强度：宽松归一（非法值静默丢弃 = 不下发，模型走默认）
+    ...(normalizeThinking(payload.thinking) ? { thinking: normalizeThinking(payload.thinking) as ThinkingEffort } : {}),
     ...(payload.meta && typeof payload.meta === 'object' && !Array.isArray(payload.meta)
       ? { meta: payload.meta as Record<string, unknown> }
       : {}),
@@ -105,6 +108,7 @@ service.subscribe('llm.request', (payload) => {
     model: parsed.model ?? route.defaultModel,
     messages: parsed.messages,
     ...(parsed.temperature !== undefined ? { temperature: parsed.temperature } : {}),
+    ...(parsed.thinking !== undefined ? { thinking: parsed.thinking } : {}),
     credentialRef: route.credentialRef,
     retryPolicy: route.retryPolicy,
     meta: { ...(parsed.meta ?? {}), requestId },

@@ -7,12 +7,14 @@
  *  2) anthropic provider（第一个非 openai 兼容 wire）：/v1/messages 具名事件 → StreamChunk
  *  3) 错误码化：401 → unauthorized（非瞬态，retry 立即失败不重试）；
  *     429 → rate_limited（瞬态，llm-retry 执行器按退避重发 → 重试成功）
+ *  4) 参数链路（P4 WS-2）：`loop.run` 的 provider/model/thinking 一路落到上游请求体
+ *     （openai 收 `reasoning_effort`；anthropic 收 `thinking.budget_tokens` 且不下发 temperature）
  *
  * 假上游：OPENAI_BASE_URL / ANTHROPIC_BASE_URL 均可配（WS-6 / WS-3 设计），指向本测试
  * 起的本地 HTTP server——openai 兼容 /v1/chat/completions + anthropic /v1/messages +
- * 模型目录 /models，按需注入 401/429。无需真实 API key / 外网。
+ * 模型目录 /models，按需注入 401/429，并留证最后一次请求体。无需真实 API key / 外网。
  */
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
@@ -93,6 +95,8 @@ async function post(base: string, topic: string, payload: Record<string, unknown
  * - `/models`：模型目录（openai 与 anthropic 都指向它；默认 200 返回 data）
  *   - `state.modelsStatus`: 'ok' | 'not-found' | 'bad-json' 控制远端/静态降级
  * - 注入开关：`state.openaiStatus` / `state.anthropicStatus` 设 HTTP 状态（401/429）模拟错误
+ * - **请求体留证**：`state.openaiBody` / `state.anthropicBody` 记最后一次请求体
+ *   （P4 WS-2 用来实证 loop.run 的 model/thinking 真的落到上游 wire）
  */
 interface UpstreamState {
   text: string
@@ -104,6 +108,25 @@ interface UpstreamState {
   anthropicStatus: number
   openaiHits: number
   anthropicHits: number
+  /** 最后一次 openai 兼容请求体（JSON 解析失败则留原文） */
+  openaiBody: Record<string, unknown> | null
+  /** 最后一次 anthropic 请求体 */
+  anthropicBody: Record<string, unknown> | null
+}
+
+async function readBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of req) chunks.push(chunk as Buffer)
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+function parseBody(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
 }
 
 function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: UpstreamState }> {
@@ -116,10 +139,14 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
     anthropicStatus: 200,
     openaiHits: 0,
     anthropicHits: 0,
+    openaiBody: null,
+    anthropicBody: null,
   }
   const server = createServer((req, res) => {
     const url = req.url ?? ''
-
+    void handle(req, res, url)
+  })
+  async function handle(req: IncomingMessage, res: ServerResponse, url: string): Promise<void> {
     // 模型目录（两家共用；anthropic 的 BASE_URL 无 /v1 后缀，openai 带 /v1）
     if (url.endsWith('/models') || url.endsWith('/v1/models')) {
       if (state.modelsStatus === 'not-found') {
@@ -139,6 +166,7 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
     // anthropic /v1/messages：具名事件流
     if (url.includes('/v1/messages')) {
       state.anthropicHits += 1
+      state.anthropicBody = parseBody(await readBody(req))
       if (state.anthropicStatus !== 200) {
         res.writeHead(state.anthropicStatus).end()
         return
@@ -164,6 +192,7 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
     // openai 兼容 /v1/chat/completions
     if (url.includes('/chat/completions')) {
       state.openaiHits += 1
+      state.openaiBody = parseBody(await readBody(req))
       if (state.openai429Once && state.openaiHits === 1) {
         res.writeHead(429).end()
         return
@@ -184,7 +213,7 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
     }
 
     res.writeHead(404).end()
-  })
+  }
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address()
@@ -424,5 +453,93 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
       }
     },
     20_000,
+  )
+
+  /**
+   * P4 WS-2 参数链路端到端：前端发的 `loop.run { provider, model, thinking }`
+   * 必须一路落到上游请求体 —— 这是「UI 上能选的参数真的有效果」的最终证据
+   * （P3 时这三项全是装饰：provider 被 loop 硬编码成 env、model 不带、思考强度不存在）。
+   */
+  it(
+    '参数链路：loop.run(provider/model/thinking) → 上游 body 收到 model + reasoning_effort',
+    async () => {
+      const sse = await openSse(base(), '?topics=session.**,loop.**')
+      try {
+        // 1) 建会话
+        const createId = `sess-${Date.now()}`
+        await post(base(), 'session.create', { requestId: createId, title: '参数链路' })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => e.topic === 'session.create.result' && e.payload.requestId === createId),
+          10_000,
+          'session.create.result',
+        )
+        const created = parseSseEvents(sse.text()).find(
+          (e) => e.topic === 'session.create.result' && e.payload.requestId === createId,
+        )!
+        const sessionId = created.payload.sessionId as string
+        expect(sessionId).toBeTruthy()
+
+        // 2) 带参发问
+        const a = `run-${Date.now()}`
+        await post(base(), 'loop.run', {
+          requestId: a,
+          sessionId,
+          text: '带参发问',
+          provider: 'openai',
+          model: 'gpt-4o',
+          thinking: 'high',
+        })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => e.topic === 'loop.state.changed' && e.payload.requestId === a && e.payload.state === 'idle'),
+          15_000,
+          `loop.state.changed(idle) topics: ${parseSseEvents(sse.text()).map((e) => e.topic).join(',')}`,
+        )
+
+        // 3) 上游真的收到了
+        const body = upstream!.state.openaiBody
+        expect(body, '上游未收到 openai 请求').toBeTruthy()
+        expect(body!.model).toBe('gpt-4o')
+        expect(body!.reasoning_effort).toBe('high')
+        // 多轮上下文仍在（system + user）
+        expect(Array.isArray(body!.messages)).toBe(true)
+        expect((body!.messages as unknown[]).length).toBeGreaterThanOrEqual(2)
+      } finally {
+        sse.close()
+      }
+    },
+    30_000,
+  )
+
+  it(
+    '参数链路：思考强度（anthropic）→ thinking.budget_tokens 落 wire 且不下发 temperature',
+    async () => {
+      const sse = await openSse(base(), '?topics=llm.request.finished,llm.request.failed')
+      try {
+        const requestId = `anth-think-${Date.now()}`
+        await post(base(), 'llm.request', {
+          requestId,
+          provider: 'anthropic',
+          messages: [{ role: 'user', content: '想一下' }],
+          thinking: 'medium',
+          temperature: 0.7,
+        })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => (e.topic === 'llm.request.finished' || e.topic === 'llm.request.failed') && e.payload.requestId === requestId),
+          20_000,
+          'anthropic thinking 请求收尾',
+        )
+        const body = upstream!.state.anthropicBody
+        expect(body, '上游未收到 anthropic 请求').toBeTruthy()
+        // 中立 medium → anthropic budget 8192
+        expect(body!.thinking).toMatchObject({ type: 'enabled', budget_tokens: 8192 })
+        // anthropic 开启 thinking 时 temperature 必须为 1 → 整体不下发
+        expect(body!.temperature).toBeUndefined()
+        // max_tokens 必须大于 budget，否则预算吃满即截断
+        expect(body!.max_tokens as number).toBeGreaterThan(8192)
+      } finally {
+        sse.close()
+      }
+    },
+    30_000,
   )
 })
