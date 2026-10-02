@@ -8,6 +8,7 @@
  * - 崩溃 / 协议错误 / 心跳超时 → 重启（backoff，超 maxRestarts → failed）
  */
 import type { Bus } from '../bus/bus'
+import { readPreferences } from '../preferences'
 import {
   DEFAULT_HEALTH_CHECK,
   DEFAULT_RESTART_POLICY,
@@ -360,6 +361,11 @@ export class ServiceManager {
         case 'credentials.delete':
         case 'credentials.list':
           return this.handleCredentialRpc(method, params)
+        // ── preferences.get（S3）：只给服务进程；读回自己的配置（如用户自填的端点）──
+        // 与 credentials.* 同为「点对点特权读」，不经总线、不落事件：
+        // 偏好里没有凭证原值（那在 credentials.json），所以这条通道不破「凭证值不过总线」。
+        case 'preferences.get':
+          return this.handlePreferencesGet()
         default:
           throw jsonRpcError(-32601, `method not found: ${method}`)
       }
@@ -438,6 +444,21 @@ export class ServiceManager {
       }
       throw err
     }
+  }
+
+  /**
+   * `preferences.get` —— 服务读回自己的配置。
+   *
+   * 为什么容错而不报错：偏好文件坏了不该让服务起不来（与 `credentials.*` 的
+   * 「操作报错但 store 可用」同一纪律）。但**不能静默** —— 记一条 warn，
+   * 否则「我的自填端点没生效」会变成一件查不出原因的事。
+   */
+  private handlePreferencesGet(): { preferences: Record<string, unknown>; corrupted: boolean } {
+    const { value, corrupted } = readPreferences(this.options.dataDir)
+    if (corrupted) {
+      logger.warn('service-manager: preferences.json corrupted — services read it as {}')
+    }
+    return { preferences: value, corrupted }
   }
 
   private async handleInitialize(

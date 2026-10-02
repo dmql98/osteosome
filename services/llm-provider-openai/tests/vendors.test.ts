@@ -21,6 +21,7 @@ import {
 import {
   buildVendorInstances,
   parseVendorOverrides,
+  resolveCredentialRef,
   SERVED_WIRE,
   toRegisteredPayload,
   type VendorInstance,
@@ -244,5 +245,79 @@ describe('本进程只服务自己的 wire（不注册兑现不了的 provider�
 
   it('SERVED_WIRE 与服务 id 对得上（约定 llm-provider-<wire>）', () => {
     expect(providerServiceIdForWire(SERVED_WIRE)).toBe('llm-provider-openai')
+  })
+})
+
+describe('凭证来源：env 优先，Core 凭证库兜底（S3）', () => {
+  const deepseek = VENDOR_PRESETS.find((v) => v.id === 'deepseek')!
+
+  it('只有 Core 凭证库里有 → 注册，credentialRef 用 core:<id>', () => {
+    const instances = buildVendorInstances({ byProvider: new Map([['deepseek', 'cred-7']]) })
+    const ds = instances.find((i) => i.id === 'deepseek')
+    expect(ds).toMatchObject({ credentialRef: 'core:cred-7' })
+  })
+
+  it('env 与凭证库都有 → env 优先（部署者的显式注入胜过用户填的）', () => {
+    const instances = buildVendorInstances({
+      env: { DEEPSEEK_API_KEY: 'from-env' },
+      byProvider: new Map([['deepseek', 'cred-7']]),
+    })
+    expect(instances.find((i) => i.id === 'deepseek')).toMatchObject({ credentialRef: 'env:DEEPSEEK_API_KEY' })
+  })
+
+  it('两边都没有 → 不注册（存在性由配置决定）', () => {
+    const instances = buildVendorInstances({ byProvider: new Map([['openai', 'cred-9']]) })
+    expect(instances.find((i) => i.id === 'deepseek')).toBeUndefined()
+    expect(instances.find((i) => i.id === 'openai')).toBeDefined()
+  })
+
+  it('免凭证端点恒注册，不受影响', () => {
+    const instances = buildVendorInstances({ byProvider: new Map() })
+    expect(instances.map((i) => i.id)).toEqual(expect.arrayContaining(['ollama', 'vllm', 'lm-studio']))
+  })
+
+  it('resolveCredentialRef 是这条规则的单点真源', () => {
+    expect(resolveCredentialRef(deepseek, { env: {} })).toBeNull()
+    expect(resolveCredentialRef(deepseek, { env: {}, byProvider: new Map([['deepseek', 'c1']]) })).toBe('core:c1')
+    expect(resolveCredentialRef(deepseek, { env: { DEEPSEEK_API_KEY: 'k' }, byProvider: new Map([['deepseek', 'c1']]) })).toBe(
+      'env:DEEPSEEK_API_KEY',
+    )
+  })
+})
+
+describe('自填端点：来源优先级与凭证解析（S3）', () => {
+  const raw = JSON.stringify([{ id: 'my-proxy', label: '我的代理', baseUrl: 'http://127.0.0.1:8080/v1' }])
+
+  it('设置窗写的（preferences）优先于 env', () => {
+    const instances = buildVendorInstances({
+      env: { UI_KEY: 'k', MY_PROXY_API_KEY: 'k', LLM_VENDORS_EXTRA: raw },
+      preferences: {
+        vendorOverrides: [{ id: 'from-ui', baseUrl: 'http://127.0.0.1:9999/v1', credentialRef: 'env:UI_KEY' }],
+      },
+    })
+    expect(instances.find((i) => i.id === 'from-ui')).toBeDefined()
+    expect(instances.find((i) => i.id === 'my-proxy')).toBeUndefined()
+  })
+
+  it('preferences 为空数组时回退 env（不能把脚本注入的端点一起抹掉）', () => {
+    const instances = buildVendorInstances({ env: { MY_PROXY_API_KEY: 'k', LLM_VENDORS_EXTRA: raw } })
+    expect(instances.find((i) => i.id === 'my-proxy')).toBeDefined()
+  })
+
+  it('自填端点也能用 Core 凭证库里的密钥（用户在设置窗为它存的那条）', () => {
+    const instances = buildVendorInstances({
+      env: {},
+      byProvider: new Map([['my-proxy', 'cred-3']]),
+      preferences: { vendorOverrides: [{ id: 'my-proxy', baseUrl: 'http://127.0.0.1:8080/v1' }] },
+    })
+    expect(instances.find((i) => i.id === 'my-proxy')).toMatchObject({ credentialRef: 'core:cred-3' })
+  })
+
+  it('自填端点既没 env 也没库里密钥 → 不注册', () => {
+    const instances = buildVendorInstances({
+      env: {},
+      preferences: { vendorOverrides: [{ id: 'my-proxy', baseUrl: 'http://127.0.0.1:8080/v1' }] },
+    })
+    expect(instances.find((i) => i.id === 'my-proxy')).toBeUndefined()
   })
 })

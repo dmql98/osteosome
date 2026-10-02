@@ -131,7 +131,7 @@
 <header class="bar">
   <div class="wrap">
     <h1>开发计划 · 对话界面重构</h1>
-    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S2（3/9）</span>
+    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S3（4/9）</span>
     <span class="sp"></span>
     <button id="theme">切换深色</button>
   </div>
@@ -146,7 +146,7 @@
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      下一步 <b>S3 设置 Pane「新增服务商」</b>。
+      下一步 <b>S4 修思考流泄漏</b>。
     </div>
   </div>
 
@@ -204,7 +204,8 @@
           <span class="step-chip done">S0 落袋 ✓</span><span class="arw">→</span>
           <span class="step-chip done">S1 多实例 provider ✓</span><span class="arw">→</span>
           <span class="step-chip done">S2 删 4 服务 ✓</span><span class="arw">→</span>
-          <span class="step-chip">S3 新增服务商 ← 下一步</span>
+          <span class="step-chip done">S3 新增服务商 ✓</span><span class="arw">→</span>
+          <span class="step-chip">S4 修思考流 ← 下一步</span>
         </div>
       </div>
       <div class="lane-row">
@@ -229,7 +230,7 @@
       <div class="row filled"><span class="lbl">S0 落袋 ✓</span><div class="track"><span class="bar filled" style="left:0;width:3%">0.5h</span></div></div>
       <div class="row filled"><span class="lbl">S1 provider ✓</span><div class="track"><span class="bar filled" style="left:3%;width:19%">1.5d</span></div></div>
       <div class="row filled"><span class="lbl">S2 删服务 ✓</span><div class="track"><span class="bar filled" style="left:22%;width:6%">0.5d</span></div></div>
-      <div class="row"><span class="lbl">S3 新增服务商</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--danger)">0.5d</span></div></div>
+      <div class="row filled"><span class="lbl">S3 新增服务商 ✓</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--danger)">0.5d</span></div></div>
       <div class="row"><span class="lbl">S4 思考流</span><div class="track"><span class="bar" style="left:3%;width:6%;background:var(--success)">0.5d</span></div></div>
       <div class="row"><span class="lbl">S5 拆组件</span><div class="track"><span class="bar" style="left:9%;width:19%;background:var(--success)">1.5d</span></div></div>
       <div class="row"><span class="lbl">S6 布局预设</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--success)">0.5d</span></div></div>
@@ -342,26 +343,57 @@
       </div>
     </div>
 
-    <div class="step">
+    <div class="step done">
       <div class="hd"><span class="sid">S3</span><span class="lane reduce">减法线</span>
         <span class="stitle">设置 Pane「新增服务商」</span>
-        <span class="done-badge" style="background:var(--danger)">下一步</span><span class="dur">0.5 天</span></div>
+        <span class="done-badge">已完成</span><span class="dur">计划 0.5 天</span></div>
       <div class="bd">
-        <div class="lbl">S1 已铺好的路</div>
+        <p class="note" style="margin-top:0"><b>计划偏低估了</b>：原以为「把写入路径从 env 换成 preferences」是改个地方就行。
+          实际上它要求<b>凭证变化能在运行期触发重新注册</b> —— 否则用户在设置窗加了密钥，对话窗下拉不会出现，
+          还得重启进程，那不算做完。</p>
+        <div class="lbl">实际落地</div>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:32%">落点</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">core/src/preferences.ts</td>
+                <td>抽出偏好读写。<b>返回 <code>corrupted</code> 标记而不是静默容错</b> —— HTTP 路径回 500（让人看见）、
+                    RPC 路径回 <code>{}</code> + warn（不让服务起不来），与 <code>CredentialStore.isCorrupted()</code> 同一纪律</td></tr>
+            <tr><td class="mono">core/…/manager.ts</td>
+                <td>新��� <code>preferences.get</code> 子服务 RPC，照 <code>credentials.get</code> 先例：点对点、不经总线、不落事件。
+                    偏好里没有凭证原值（那在 credentials.json），所以不破「凭证值不过总线」</td></tr>
+            <tr><td class="mono">…/llm-provider-openai/src/instances.ts</td>
+                <td><code>resolveCredentialRef</code> 三级来源：<b>env → Core 凭证库 → 不可用</b>。
+                    env 优先的理由：env 是部署者的显式注入，凭证库是用户填的，冲突时听部署者的</td></tr>
+            <tr><td class="mono">…/llm-provider-openai/src/index.ts</td>
+                <td>启动读 <code>credentials.list</code> + <code>preferences.get</code>；订阅
+                    <code>credential.saved</code> / <code>credential.deleted</code> → <code>reconcile()</code>
+                    <b>增注册 + 发 unregistered</b>（只增不减的话，删掉密钥后下拉里还挂着一家永远 401 的）</td></tr>
+            <tr><td class="mono">client/…/settings/llm/LlmSettings.vue</td>
+                <td>数据源从「已注册的」改成<b>预设表全量 12 家</b>（原来只能看到已经能用的那几家，用户无处可新增）；
+                    展开行显示 baseUrl / 密钥 env 名 / 默认模型；配置密钥 → <code>PUT /api/credentials</code>；
+                    自定义端点 → <code>preferences.llm.vendorOverrides</code></td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">顺手修掉一个坏东西</div>
         <ul>
-          <li>预设表已是单一真源（<code>shared</code> 的 <code>VENDOR_PRESETS</code>）→ 下拉选厂商可自动填 baseUrl / key env 名 / 默认模型</li>
-          <li>自填端点解析已实现（<code>parseVendorOverrides</code>，同 id 覆盖预设）→ <b>只剩写入路径</b>：从 <code>LLM_VENDORS_EXTRA</code> env 改成 <code>preferences</code>，再由 S3-1 的 UI 写入</li>
+          <li>原来每行一个「启用」开关发的是 <code>service.stop {serviceId:'llm-provider-deepseek'}</code> ——
+              <b>那个服务在 S2 已被删除</b>，这个开关点下去只会 404。它谎称能停 provider 进程。
+              现在换成它真正能做的事：<b>配置 / 删除该厂商的密钥</b>（厂商级粒度）。要停进程走服务管理组件，那条路是真的</li>
         </ul>
-        <div class="lbl">做什么</div>
-        <ol>
-          <li>数据源换成 <code>shared</code> 的预设表（下拉选厂商 → 自动填 baseUrl / key env 名 / 默认模型）</li>
-          <li>「自定义端点」：用户填 <code>label / baseUrl / credentialRef / defaultModel</code> → 写入配置 → S1 的 provider 运行时注册</li>
-          <li><b>不配置凭证 → 该 provider 不注册</b> → 前端下拉里没有它；指定它发问得 <code>unsupported_provider</code></li>
-        </ol>
-        <div class="lbl">验收</div>
-        <ul><li>设置窗新增 deepseek 后，对话窗下拉出现 deepseek 且能选中；删掉凭证后消失</li></ul>
-        <div class="lbl">收益</div>
-        <ul><li>P4 那条没勾的绿灯「新增服务商不再手改单函数」真正达成 —— S1 让它成了数据，S3 让它可点</li></ul>
+        <div class="lbl">验收（计划原句，已达成）</div>
+        <ul>
+          <li>「设置窗新增 deepseek 后，对话窗下拉出现 deepseek 且能选中；删掉凭证后消失」→
+              <code>core/tests/s3-provider-onboarding.test.ts</code>：真 Core + 假上游 + <b>不设任何 <code>*_API_KEY</code></b>，
+              六步行为断言（存密钥前 unsupported → 存后打通且请求到达该端点 → 删后回 unsupported），
+              外加免凭证端点作对照组确认不受影响。<b>全程不重启任何进程</b></li>
+          <li>组件侧 4 条新用例：目录 12 家、展开显示三项、状态徽章三态、存密钥的 payload 与「不再发 service.stop」</li>
+        </ul>
+        <div class="lbl">遗留（诚实记录）</div>
+        <ul>
+          <li><b>自定义端点要重启 provider 才生效</b>：偏好只在启动时读一次，<code>preferences</code> 变更没有事件。
+              存密钥是即时的（走 <code>credential.saved</code>），端点不是 —— 两者体验不一致，已在 i18n 文案里说明。
+              要即时得让 Core 在偏好变更时广播事件（S7 顺带做）</li>
+        </ul>
       </div>
     </div>
 

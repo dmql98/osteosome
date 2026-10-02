@@ -92,16 +92,23 @@ export function parseVendorOverrides(raw: string | undefined): VendorOverride[] 
   }
 }
 
-/** 自填项 → 实例（凭证引用缺省按 `env:<ID_UPPER>_API_KEY` 推断；未配置凭证则不返回） */
-function instanceFromOverride(o: VendorOverride, env: NodeJS.ProcessEnv): VendorInstance | null {
+/**
+ * 自填项 → 实例。
+ *
+ * 凭证解析顺序：`credentialRef` 缺省按 `env:<ID_UPPER>_API_KEY` 推断；该 env 没值时，
+ * 退到 Core 凭证库里 `provider === 该 id` 的那条（用户在设置窗为自填端点存的密钥）。
+ * 两条都没有 → 不返回（不注册）。
+ */
+function instanceFromOverride(
+  o: VendorOverride,
+  env: NodeJS.ProcessEnv,
+  byProvider: ReadonlyMap<string, string>,
+): VendorInstance | null {
   const suffix = o.id.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()
-  const credentialRef = o.credentialRef ?? `env:${suffix}_API_KEY`
-  // 免凭证（credentialRef 为空串）或该引用对应的 env 有值才注册
-  if (credentialRef) {
-    const envName = credentialRef.startsWith('env:') ? credentialRef.slice(4) : ''
-    const value = envName ? env[envName] : undefined
-    if (typeof value !== 'string' || value.trim().length === 0) return null
-  }
+  const explicitRef = o.credentialRef
+  // 用户显式给了 credentialRef 就按它走；没给才走「env 推断 → 凭证库」
+  const credentialRef = explicitRef ?? pickOverrideCredentialRef(o.id, suffix, env, byProvider)
+  if (credentialRef === null) return null
   return {
     id: o.id,
     label: o.label ?? o.id,
@@ -113,12 +120,67 @@ function instanceFromOverride(o: VendorOverride, env: NodeJS.ProcessEnv): Vendor
   }
 }
 
+function pickOverrideCredentialRef(
+  id: string,
+  suffix: string,
+  env: NodeJS.ProcessEnv,
+  byProvider: ReadonlyMap<string, string>,
+): string | null {
+  const envRef = `env:${suffix}_API_KEY`
+  if (typeof env[envRef.slice(4)] === 'string' && env[envRef.slice(4)]!.trim().length > 0) return envRef
+  const coreId = byProvider.get(id)
+  if (coreId) return `core:${coreId}`
+  // 自填端点可以显式声明免凭证：`credentialRef: ''`
+  return null
+}
+
+/**
+ * 凭证来源的真相。
+ *
+ * S3 之前只有 env（`credentialRef = env:<NAME>`）；S3 起用户在设置窗存密钥到 Core 凭证库，
+ * 于是同一份「这家能不能用」有两个来源：
+ *
+ * | 来源 | credentialRef | 谁写的 | 优先级 |
+ * |---|---|---|---|
+ * | 进程 env | `env:<VAR>` | 脚本 / CI / 自建端点 | **高** —— 显式注入优先于库里那份 |
+ * | Core 凭证库 | `core:<id>` | 用户在设置窗 | 低（env 没有时兜底） |
+ * | 无 | 不注册 | — | 该厂商不出现 |
+ *
+ * env 优先的理由：env 是**部署者**的显式意图，凭证库是**用户**填的。冲突时听部署者的。
+ */
+export interface CredentialSources {
+  /** Core 凭证库：`厂商 id → 凭证 id`（`credential.saved` 带 `provider` 字段，据此归类） */
+  byProvider?: ReadonlyMap<string, string>
+  /** env 判定沿用 `hasVendorCredential`（免凭证端点恒真） */
+  env?: NodeJS.ProcessEnv
+  /**
+   * Core 偏好（`preferences.get` 的返回值）—— 用户在设置窗写的自填端点。
+   * 键：`llm.vendorOverrides`。
+   */
+  preferences?: { vendorOverrides?: unknown }
+}
+
+/** 某个厂商该用哪个 credentialRef；`null` = 不可用（不注册） */
+export function resolveCredentialRef(preset: VendorPreset, sources: CredentialSources = {}): string | null {
+  const env = sources.env ?? process.env
+  const envRef = vendorCredentialRef(preset)
+  // 免凭证端点（credentialEnv 为空）→ 无需凭证即可用
+  if (!envRef) return ''
+  // ① env 注入优先：存在就用它，不看凭证库（部署者的显式意图）
+  if (hasVendorCredential(preset, env)) return envRef
+  // ② 退到 Core 凭证库：用户在设置窗为这家存的密钥
+  const coreId = sources.byProvider?.get(preset.id)
+  if (coreId) return `core:${coreId}`
+  // ③ 两边都没有 → 不可用
+  return null
+}
+
 /**
  * 构建本进程要注册的实例列表。
  *
  * 规则：
  * 1. 只看**本进程实现的 wire**（`SERVED_WIRE`）的预设 —— 别的 wire 归别的进程；
- * 2. 遍历这些预设，**已配置凭证**（或免凭证）的才注册；
+ * 2. 遍历这些预设，**有可用凭证**（env / Core 凭证库 / 免凭证）的才注册；
  * 3. 叠加用户自填项（同 id 时自填覆盖预设），其中 wire 不是本进程实现的那批**拒绝并告警**；
  * 4. 自填项同样要求凭证已配置；
  * 5. 结果按 id 排序，保证注册顺序稳定（冒烟断言可预期）。
@@ -126,38 +188,59 @@ function instanceFromOverride(o: VendorOverride, env: NodeJS.ProcessEnv): Vendor
  * @param rejected 收集被拒绝的自填项（装配层用来告警，测试用来断言）
  */
 export function buildVendorInstances(
-  env: NodeJS.ProcessEnv = process.env,
+  envOrSources: NodeJS.ProcessEnv | CredentialSources = process.env,
   presets: readonly VendorPreset[] = presetsForWire(SERVED_WIRE),
   rejected: Array<{ id: string; api: string }> = [],
 ): VendorInstance[] {
+  // 兼容旧签名：第一个参数传纯 env 对象时按 env 处理
+  const sources: CredentialSources =
+    envOrSources && 'env' in envOrSources || envOrSources && 'byProvider' in envOrSources
+      ? (envOrSources as CredentialSources)
+      : { env: envOrSources as NodeJS.ProcessEnv }
+  const env = sources.env ?? process.env
+  const byProvider = sources.byProvider ?? new Map<string, string>()
   const byId = new Map<string, VendorInstance>()
 
   for (const preset of presets) {
     if (preset.api !== SERVED_WIRE) continue
-    if (!hasVendorCredential(preset, env)) continue
+    const credentialRef = resolveCredentialRef(preset, { env, byProvider })
+    if (credentialRef === null) continue
     byId.set(preset.id, {
       id: preset.id,
       label: preset.label,
       baseUrl: resolveVendorBaseUrl(preset, env),
-      credentialRef: vendorCredentialRef(preset),
+      credentialRef,
       defaultModel: resolveVendorModel(preset, env),
       staticModels: [...preset.models],
       preset,
     })
   }
 
-  for (const override of parseVendorOverrides(env.LLM_VENDORS_EXTRA)) {
+  for (const override of parseVendorOverrides(readOverridesFrom(sources))) {
     const wire = override.api ?? WIRE_OPENAI
     if (wire !== SERVED_WIRE) {
       // 不静默丢弃：用户以为自己装上了，得让他看见为什么没生效
       rejected.push({ id: override.id, api: wire })
       continue
     }
-    const instance = instanceFromOverride(override, env)
+    const instance = instanceFromOverride(override, env, byProvider)
     if (instance) byId.set(instance.id, instance)
   }
 
   return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
+}
+
+/**
+ * 自填端点的来源。
+ *
+ * 优先级：**Core 偏好（用户在设置窗写的）> env `LLM_VENDORS_EXTRA`（脚本 / 测试注入）**。
+ * 两者都没有 → 无自填端点。只有真的取到了非空数组才用偏好，否则回退 env ——
+ * 否则「设置窗里没填过」会把脚本注入的端点也一起抹掉。
+ */
+function readOverridesFrom(sources: CredentialSources): string | undefined {
+  const fromPrefs = sources.preferences?.vendorOverrides
+  if (Array.isArray(fromPrefs) && fromPrefs.length > 0) return JSON.stringify(fromPrefs)
+  return (sources.env ?? process.env).LLM_VENDORS_EXTRA
 }
 
 /** 实例 → `llm.provider.registered` 的 payload */

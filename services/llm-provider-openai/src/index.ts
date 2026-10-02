@@ -10,8 +10,16 @@
  * - 免凭证的本地端点（ollama / vllm / lm-studio）恒注册；其余厂商**未配置凭证即不注册** ——
  *   语义等价于「没装」，前端下拉里不会出现它。
  *
- * env 覆盖：`<ID_UPPER>_BASE_URL` / `<ID_UPPER>_MODEL`；用户自填端点走 `LLM_VENDORS_EXTRA`
- * （JSON 数组，S3 由设置窗写入后改为 preferences）。
+ * env 覆盖：`<ID_UPPER>_BASE_URL` / `<ID_UPPER>_MODEL`。
+ *
+ * 凭证与自填端点有三个来源，优先级从高到低：
+ * 1. **env**：`<ID_UPPER>_API_KEY`（部署者显式注入，脚本 / CI 用）
+ * 2. **Core 凭证库**：用户在设置窗存的密钥（`credential.saved` 带 `provider` 字段，据此归类）
+ * 3. **Core 偏好** `llm.vendorOverrides`：用户在设置窗填的自填端点
+ *
+ * 且**运行期会重算**：收到 `credential.saved` / `credential.deleted` 就重算实例列表并增删注册 ——
+ * 「存在性由配置决定」必须当场生效，否则用户在设置窗加了密钥还得重启进程才能看到下拉里多一家。
+ * 读取走 Core 的点对点特权 RPC（`preferences.get` / `credentials.list`），不经总线。
  */
 import { Service } from '@osteosome/service-sdk'
 import { attachCredentialClient, CredentialClientError } from '@osteosome/service-sdk'
@@ -23,7 +31,13 @@ import {
   type StreamError,
   type ToolSpec,
 } from '@osteosome/shared'
-import { buildVendorInstances, SERVED_WIRE, toRegisteredPayload, type VendorInstance } from './instances'
+import {
+  buildVendorInstances,
+  SERVED_WIRE,
+  toRegisteredPayload,
+  type CredentialSources,
+  type VendorInstance,
+} from './instances'
 import { streamCompletions } from './provider'
 
 const service = new Service({ id: 'llm-provider-openai', version: '1.1.0' })
@@ -40,21 +54,84 @@ const inflight = new Map<string, AbortController>()
  */
 const instances = new Map<string, VendorInstance>()
 
-/** 注册本进程所有「已配置」的厂商实例 —— 握手完成、订阅生效后再调用 */
-function registerCapabilities(): void {
-  const rejected: Array<{ id: string; api: string }> = []
-  const built = buildVendorInstances(process.env, undefined, rejected)
-  for (const inst of built) {
-    instances.set(inst.id, inst)
-    service.publish('llm.provider.registered', toRegisteredPayload(inst))
+/** Core 凭证库快照：`厂商 id → 凭证 id`（启动时读一次，之后由事件增量维护） */
+const credentialIdByProvider = new Map<string, string>()
+
+/** Core 偏好快照（`llm.vendorOverrides`）；设置窗写入后需要重启或事件触发才刷新 */
+let preferences: { vendorOverrides?: unknown } = {}
+
+/**
+ * 从 Core 的两个特权通道读配置。
+ *
+ * 为什么走 RPC 而不是读文件 / 上总线：
+ * - 与 `credentials.get` 同一套「点对点特权读」纪律，**不经总线、不落事件**；
+ * - 服务不知道也不该知道 Core 的 dataDir 布局。
+ *
+ * 读不到就退化成「只有 env」—— 宁可少几家可见，也不要因为配置通道故障而起不来。
+ */
+async function loadConfigFromCore(): Promise<void> {
+  try {
+    const listed = await service.call<{ credentials?: Array<{ id?: string; provider?: string }> }>(
+      'credentials.list',
+    )
+    credentialIdByProvider.clear()
+    for (const item of listed?.credentials ?? []) {
+      if (typeof item?.id === 'string' && typeof item?.provider === 'string' && item.provider) {
+        credentialIdByProvider.set(item.provider, item.id)
+      }
+    }
+  } catch (err) {
+    console.warn(`llm-provider-openai: credentials.list unavailable (${String(err)}) — env-only`)
   }
-  if (built.length === 0) {
-    // 一家都没有 → 不是崩溃，但要说清楚原因（多半是没配任何 *_API_KEY）
+  try {
+    const read = await service.call<{ preferences?: { llm?: { vendorOverrides?: unknown } } }>('preferences.get')
+    preferences = read?.preferences?.llm ?? {}
+  } catch (err) {
+    console.warn(`llm-provider-openai: preferences.get unavailable (${String(err)}) — env-only`)
+  }
+}
+
+function currentSources(): CredentialSources {
+  return { env: process.env, byProvider: new Map(credentialIdByProvider), preferences }
+}
+
+/**
+ * 重算实例列表并把差异反映到总线：新增的注册、消失的注销。
+ *
+ * 「消失」也要发 `llm.provider.unregistered` —— 主位据此摘路由，前端据此摘状态行。
+ * 只增不减的话，删掉密钥后下拉里还挂着一家永远会 401 的 provider。
+ */
+function reconcile(): { added: string[]; removed: string[] } {
+  const rejected: Array<{ id: string; api: string }> = []
+  const built = buildVendorInstances(currentSources(), undefined, rejected)
+  const next = new Map(built.map((i) => [i.id, i]))
+
+  const added: string[] = []
+  for (const [id, inst] of next) {
+    const prev = instances.get(id)
+    // 凭证来源或端点变了也要重发（前端展示的 credentialRef / defaultModel 会变）
+    if (!prev || prev.credentialRef !== inst.credentialRef || prev.baseUrl !== inst.baseUrl) {
+      instances.set(id, inst)
+      service.publish('llm.provider.registered', toRegisteredPayload(inst))
+      added.push(id)
+    } else {
+      instances.set(id, inst)
+    }
+  }
+
+  const removed: string[] = []
+  for (const id of [...instances.keys()]) {
+    if (next.has(id)) continue
+    instances.delete(id)
+    service.publish('llm.provider.unregistered', { provider: id })
+    removed.push(id)
+  }
+
+  if (instances.size === 0) {
     console.warn(
-      `llm-provider-openai: no vendor configured (set one of *_API_KEY, or LLM_VENDORS_EXTRA for a custom endpoint)`,
+      `llm-provider-openai: no vendor configured (set one of *_API_KEY, or add a provider in Settings)`,
     )
   }
-  // 自填端点声明了本进程不实现的 wire → 明确告警，不静默丢弃（否则用户以为装上了）
   for (const item of rejected) {
     console.warn(
       `llm-provider-openai: custom endpoint '${item.id}' declares wire '${item.api}', ` +
@@ -62,7 +139,40 @@ function registerCapabilities(): void {
         `Install the matching llm-provider-${item.api} plugin, or set "api": "${SERVED_WIRE}".`,
     )
   }
+  return { added, removed }
 }
+
+/** 注册本进程所有「已配置」的厂商实例 —— 握手完成、订阅生效后再调用 */
+async function registerCapabilities(): Promise<void> {
+  await loadConfigFromCore()
+  reconcile()
+}
+
+// 「存在性由配置决定」要当场生效：用户在设置窗存/删密钥后立刻重算，不用重启进程。
+service.subscribe('credential.saved', (payload) => {
+  const id = typeof payload.id === 'string' ? payload.id : ''
+  const provider = typeof payload.provider === 'string' ? payload.provider : ''
+  if (!id || !provider) return
+  credentialIdByProvider.set(provider, id)
+  const { added } = reconcile()
+  if (added.length > 0) console.log(`llm-provider-openai: registered via credential: ${added.join(', ')}`)
+})
+
+service.subscribe('credential.deleted', (payload) => {
+  const id = typeof payload.id === 'string' ? payload.id : ''
+  if (!id) return
+  // 只有当被删的正是「这家当前在用的那条」才摘掉；删了另一条不该影响已注册的厂商
+  let hit = false
+  for (const [provider, cid] of [...credentialIdByProvider]) {
+    if (cid !== id) continue
+    credentialIdByProvider.delete(provider)
+    hit = true
+  }
+  if (!hit) return
+  // env 兜底：env 还在的话这一家仍然可用，不该注销
+  const { removed } = reconcile()
+  if (removed.length > 0) console.log(`llm-provider-openai: unregistered (credential removed): ${removed.join(', ')}`)
+})
 
 service.subscribe('llm.provider.request', async (payload) => {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
@@ -176,7 +286,7 @@ service.subscribe('llm.models.list', async (payload) => {
 async function main(): Promise<void> {
   await service.start()
   // 握手完成、订阅已生效后再注册能力（否则 publish 被丢弃，主位拿不到路由）
-  registerCapabilities()
+  await registerCapabilities()
 }
 
 main().catch((err: unknown) => {

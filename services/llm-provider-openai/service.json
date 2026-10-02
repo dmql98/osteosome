@@ -14,6 +14,8 @@
     "llm.provider.request",
     "llm.provider.cancel",
     "credentials.resolved",
-    "llm.models.list"
+    "llm.models.list",
+    "credential.saved",
+    "credential.deleted"
   ]
 }

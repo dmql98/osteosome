@@ -111,21 +111,112 @@ describe('SettingsPaneView 壳', () => {
   })
 })
 
-describe('LlmSettings LLM 设置', () => {
-  it('provider registered → 列表行 + 启停开关发 service.stop', async () => {
-    const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
-    const wrapper = mount(LlmSettings, { global: { plugins: [createPinia(), i18n, UiPlugin] } })
-    emit('llm.provider.registered', DESCRIPTOR)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('openai')
-    const switches = wrapper.findAll('.ui-switch')
-    expect(switches.length).toBeGreaterThan(0)
-    await switches[0].trigger('click')
-    const bodies = fetchMock.mock.calls
-      .filter((c) => String(c[0]).includes('/api/command'))
-      .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
-    expect(bodies.some((b) => b.topic === 'service.stop')).toBe(true)
-  })
+  describe('LlmSettings LLM 设置', () => {
+    it('厂商目录来自预设表全量 12 家（不是「已注册的」——否则无处可新增）', async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mount(LlmSettings, { global: { plugins: [createPinia(), i18n, UiPlugin] } })
+      await wrapper.vm.$nextTick()
+      const rows = wrapper.findAll('[data-testid^="vendor-"]').filter((w) =>
+        w.attributes('data-testid')?.startsWith('vendor-') &&
+        !w.attributes('data-testid')?.startsWith('vendor-state-') &&
+        !w.attributes('data-testid')?.startsWith('vendor-setkey-') &&
+        !w.attributes('data-testid')?.startsWith('vendor-dropkey-'),
+      )
+      expect(rows.length).toBe(12)
+      // 没注册任何东西时也要能看到 deepseek（能看见才能去配置它）
+      expect(wrapper.find('[data-testid="vendor-deepseek"]').exists()).toBe(true)
+    })
+
+    it('展开厂商详情 → 自动显示 baseUrl / 密钥 env 名 / 默认模型', async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mount(LlmSettings, { global: { plugins: [createPinia(), i18n, UiPlugin] } })
+      await wrapper.vm.$nextTick()
+      await wrapper.find('[data-testid="vendor-deepseek"] button').trigger('click')
+      await wrapper.vm.$nextTick()
+      const text = wrapper.text()
+      expect(text).toContain('https://api.deepseek.com')
+      expect(text).toContain('DEEPSEEK_API_KEY')
+      expect(text).toContain('deepseek-chat')
+    })
+
+    it('状态徽章：已注册=已配置 / 免密钥端点单独一类 / 其余未配置', async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mount(LlmSettings, { global: { plugins: [createPinia(), i18n, UiPlugin] } })
+      emit('llm.provider.registered', DESCRIPTOR) // openai
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="vendor-state-openai"]').classes()).toContain('llm-settings__state--on')
+      // 免凭证端点：不需要任何密钥也算能用
+      expect(wrapper.find('[data-testid="vendor-state-ollama"]').classes()).toContain('llm-settings__state--free')
+      expect(wrapper.find('[data-testid="vendor-state-deepseek"]').classes()).toContain('llm-settings__state--off')
+    })
+
+    it('配置密钥 → PUT /api/credentials 且 provider 字段=厂商 id（不发 service.stop）', async () => {
+      const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
+      // Modal 用 Teleport 传送到 body，所以要 attachTo 才查得到弹窗里的输入框
+      const wrapper = mount(LlmSettings, {
+        global: { plugins: [createPinia(), i18n, UiPlugin] },
+        attachTo: document.body,
+      })
+      await wrapper.vm.$nextTick()
+      await wrapper.find('[data-testid="vendor-deepseek"] button').trigger('click')
+      await wrapper.find('[data-testid="vendor-setkey-deepseek"]').trigger('click')
+      await wrapper.vm.$nextTick()
+      const input = document.body.querySelector<HTMLInputElement>('input[aria-label="vendor-key"]')
+      expect(input, '密钥输入框没渲染').not.toBeNull()
+      input!.value = 'sk-user'
+      input!.dispatchEvent(new Event('input'))
+      await wrapper.vm.$nextTick()
+      const saveBtn = Array.from(document.body.querySelectorAll('button')).find(
+        (b) => b.getAttribute('data-testid') === 'vendor-key-save',
+      )
+      expect(saveBtn, '保存按钮没渲染').toBeDefined()
+      saveBtn!.click()
+      await flushPromises()
+      const put = fetchMock.mock.calls
+        .filter((c) => String(c[0]).includes('/api/credentials') && (c[1] as { method?: string })?.method === 'PUT')
+        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+      expect(put).toHaveLength(1)
+      expect(put[0]).toMatchObject({ provider: 'deepseek', value: 'sk-user' })
+      // 关键：不再有指向已删服务的假开关
+      const commands = fetchMock.mock.calls
+        .filter((c) => String(c[0]).includes('/api/command'))
+        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+      expect(commands.some((b) => b.topic === 'service.stop' || b.topic === 'service.start')).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('自定义端点 → 写入 preferences 的 llm.vendorOverrides', async () => {
+      const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mount(LlmSettings, {
+        global: { plugins: [createPinia(), i18n, UiPlugin] },
+        attachTo: document.body,
+      })
+      await wrapper.vm.$nextTick()
+      await wrapper.find('[data-testid="endpoint-new"]').trigger('click')
+      await wrapper.vm.$nextTick()
+      const idInput = document.body.querySelector<HTMLInputElement>('input[aria-label="endpoint-id"]')!
+      const urlInput = document.body.querySelector<HTMLInputElement>('input[aria-label="endpoint-baseurl"]')!
+      expect(idInput, '端点 id 输入框没渲染').not.toBeNull()
+      idInput.value = 'my-proxy'
+      idInput.dispatchEvent(new Event('input'))
+      urlInput.value = 'http://127.0.0.1:8080/v1'
+      urlInput.dispatchEvent(new Event('input'))
+      await wrapper.vm.$nextTick()
+      const saveBtn = Array.from(document.body.querySelectorAll('button')).find(
+        (b) => b.getAttribute('data-testid') === 'endpoint-save',
+      )
+      saveBtn!.click()
+      await flushPromises()
+      const put = fetchMock.mock.calls
+        .filter((c) => String(c[0]).includes('/api/preferences') && (c[1] as { method?: string })?.method === 'PUT')
+        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+      expect(put.length).toBeGreaterThan(0)
+      expect(put.at(-1).llm.vendorOverrides).toEqual([
+        { id: 'my-proxy', baseUrl: 'http://127.0.0.1:8080/v1', credentialRef: '' },
+      ])
+      wrapper.unmount()
+    })
+
 
   it('模型下拉：选 provider → 发 llm.models.list；result static → 角标 + 模型填充', async () => {
     const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
