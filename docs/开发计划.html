@@ -131,7 +131,7 @@
 <header class="bar">
   <div class="wrap">
     <h1>开发计划 · 对话界面重构</h1>
-    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S5（6/9）</span>
+    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S6（7/9）· 界面线全通</span>
     <span class="sp"></span>
     <button id="theme">切换深色</button>
   </div>
@@ -146,8 +146,8 @@
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
-      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      下一步 <b>S6 对话布局预设</b>。
+      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">9ba9052</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
+      下一步 <b>S7 插件聚合</b>（2 天，本轮最大的一步）。
     </div>
   </div>
 
@@ -214,7 +214,7 @@
           <span class="step-chip done">S3 新增服务商 ✓</span><span class="arw">→</span>
           <span class="step-chip done">S4 修思考流 ✓</span><span class="arw">→</span>
           <span class="step-chip done">S5 拆三组件 ✓</span><span class="arw">→</span>
-          <span class="step-chip">S6 布局预设 ← 下一步</span>
+          <span class="step-chip done">S6 布局预设 ✓</span>
         </div>
       </div>
       <div class="lane-row">
@@ -242,7 +242,7 @@
       <div class="row filled"><span class="lbl">S3 新增服务商 ✓</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--danger)">0.5d</span></div></div>
       <div class="row filled"><span class="lbl">S4 思考流 ✓</span><div class="track"><span class="bar" style="left:3%;width:6%;background:var(--success)">0.5d</span></div></div>
       <div class="row filled"><span class="lbl">S5 拆组件 ✓</span><div class="track"><span class="bar" style="left:9%;width:19%;background:var(--success)">1.5d</span></div></div>
-      <div class="row"><span class="lbl">S6 布局预设</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--success)">0.5d</span></div></div>
+      <div class="row filled"><span class="lbl">S6 布局预设 ✓</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--success)">0.5d</span></div></div>
       <div class="row"><span class="lbl">S7 插件聚合</span><div class="track"><span class="bar" style="left:34%;width:25%;background:var(--primary)">2d</span></div></div>
       <div class="row"><span class="lbl">S8 收尾</span><div class="track"><span class="bar" style="left:59%;width:7%;background:var(--muted)">0.5d</span></div></div>
       <div class="axis"><span class="lbl">天</span><div class="ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div></div>
@@ -531,32 +531,93 @@
       </div>
     </div>
 
-    <div class="step">
+    <div class="step done">
       <div class="hd"><span class="sid">S6</span><span class="lane ui">界面线</span>
-        <span class="stitle">对话布局预设</span>
-        <span class="done-badge" style="background:var(--danger)">下一步</span><span class="dur">0.5 天</span></div>
+        <span class="stitle">对话布局预设</span><span class="done-badge">已完成</span><span class="dur">计划 0.5 天</span></div>
       <div class="bd">
-        <div class="lbl">S5 已经把三个盒子备齐了</div>
+        <div class="lbl">关键判断：不改成 CSS grid，而是给 MovableBox 预设初始 rect</div>
+        <p>面板容器 <code>PanelContainer</code> 用的是 <b>MovableBox 自由浮动盒子</b>（绝对定位 + 保存的 rect）。
+          所以「三盒几何」的正确做法是给这三个 widget <b>预设初始值</b>，而不是换布局引擎 ——
+          这样「三个盒子可各自拖动」的能力天然保留，改动面也只在初始值。</p>
+        <pre class="code" style="font-size:var(--text-xs)"><span class="cm">┌────────┬──────────────────┐</span>
+<span class="cm">│        │                  │</span>
+<span class="cm">│ ①会话  │ ② 对话（flex）   │   满高 − 输入区</span>
+<span class="cm">│  240px │                  │</span>
+<span class="cm">├────────┴──────────────────┤</span>
+<span class="cm">│ ③ 输入（120px）            │</span>
+<span class="cm">└───────────────────────────┘</span></pre>
+        <div class="lbl">「flex」怎么在绝对定位下实现</div>
+        <p>会话列 240px 与输入区 120px 是计划定的固定值，对话区是 <b>flex</b>（占满剩余）。
+          绝对定位没有 flex，所以 flex 那部分<b>在首次渲染时按当前画布尺寸换算成像素</b> ——
+          画布变宽，吃掉剩余的两栏跟着变宽，会话列不动。
+          量不到尺寸（jsdom / 隐藏容器）时用兜底值，否则盒子会全叠在左上角。</p>
+        <div class="lbl">优先级：保存的 rect &gt; 三盒预设 &gt; 通用网格</div>
+        <p>用户拖过之后保存的 rect 说了算 —— 那是用户的选择，不该被预设覆盖；预设只负责「第一次打开时的样子」。
+          这正是<b>「一键复位」能成立的前提</b>：复位清掉保存的 rect，预设重新生效。</p>
+        <div class="lbl">面板头加快捷复位入口</div>
         <ul>
-          <li>① <code>widget.session-list</code>（会话列表）、② <code>widget.chat-timeline</code>、
-              ③ <code>widget.chat-composer</code> —— 三个都是<b>独立 widget</b>，各有 id，
-              所以「拼成三盒布局」不需要再改组件，只要摆位置</li>
-          <li>②③ 零通信（共享 <code>chat.store</code>），所以拆分面板窗口也不会坏</li>
+          <li><code>PanelHeaderActions</code> 加「↺ 重置为对话布局」，走 <code>layout.resetLayout()</code>
+              （高级设置里已有同一入口，这次是把它提到面板头）</li>
+          <li>走<b>全局</b>复位而不是只复位当前面板：布局快照是全局的，只复位一个面板会造成
+              「一个面板是三盒、另一个还是乱的」</li>
+          <li><code>resetLayout()</code> 顺手补了 <code>updateLayout(api.toJSON())</code>：原来只靠
+              <code>api.clear()</code> 触发的 onDidLayoutChange 异步回写，<b>紧接着退出/刷新复位会丢</b>，
+              重启后又看到拖乱的旧布局</li>
         </ul>
-        <div class="lbl">做什么</div>
-        <ul>
-          <li><code>client/src/panes/default-layout.ts</code> 写死三盒几何（会话 <code>240px</code> / 对话 <code>flex × 满高−120</code> / 输入 <code>flex × 120</code>）</li>
-          <li>面板头加「重置为对话布局」接 <code>layout.store.resetLayout</code></li>
-        </ul>
+        <div class="lbl">写测试时抓到一个真 bug</div>
+        <p>第一版为「量到 0」加了宽度下限（<code>Math.max(width, 540)</code>），结果<b>窄画布下右栏超出画布右边</b>
+          （320px 画布算出 532px 宽的右栏）。被「窄画布不溢出」那条用例当场抓到。0 的情况本来就由
+          兜底值处理，下限守卫纯属多余 —— 已改为只防非正数，并在注释里写明为什么不能设下限。</p>
         <div class="lbl">验收</div>
-        <ul><li>打开即是《对话界面架构》§1.4 的样子；三个盒子可各自拖动；拖完能一键复位</li></ul>
+        <ul>
+          <li>测试 12 组：几何 9 组（固定宽占满高 / 吃掉剩余 / 紧贴下方 / 不溢出 /
+              画布变宽则②变宽而①不变 / 窄画布不为负不溢出 / 兜底值 / 用给定尺寸）
+              + 优先级 3 组（拖过的不被覆盖 / 没拖过的用预设 / 复位后预设重新生效）</li>
+          <li>优先级那三条用<b>纯函数复刻同一顺序</b>来守，而不是挂载整个 PanelContainer
+              （要 mock dockview + movable-box 的指针交互，成本高于收益）</li>
+        </ul>
+        <div class="lbl">诚实说明</div>
+        <ul>
+          <li>本轮<b>不做窄窗降级</b>（§不做清单）。窄画布下只是「可用但不好看」：会话列按比例收窄、
+              输入区固定 120px 可能把对话区压得很矮。已断言「不溢出、不出负」这条底线</li>
+          <li>「三个盒子可各自拖动」靠的是 MovableBox 本来的能力 + 优先级约定，<b>没写组件级测试</b>。
+              真正兜住的是「复位后预设重新生效」</li>
+        </ul>
       </div>
     </div>
 
     <div class="step">
       <div class="hd"><span class="sid">S7</span><span class="lane plug">插件线</span>
-        <span class="stitle">插件 = 聚合</span><span class="dur">2 天</span></div>
+        <span class="stitle">插件 = 聚合</span>
+        <span class="done-badge" style="background:var(--danger)">下一步 · 本轮最大</span><span class="dur">2 天</span></div>
       <div class="bd">
+        <div class="lbl">为什么它还是「假的」—— 三处不实（2026-10-02 复核）</div>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:30%">不实之处</th><th>后果</th></tr></thead>
+          <tbody>
+            <tr><td>插件表<b>硬编码在前端</b> <code>plugins/registry.ts</code></td>
+                <td>磁盘上没有 <code>plugins/</code> 目录。Core 装的与前端知道的<b>可能对不上</b>，
+                    且新增插件必须改前端代码</td></tr>
+            <tr><td>元数据是编的</td>
+                <td><code>version / author / license / capabilities</code> 全部虚构；
+                    <code>capabilities</code> <b>没有任何代码读它</b></td></tr>
+            <tr><td>「停用 / 卸载」只写 prefs</td>
+                <td><b>一个进程都不停</b>。点「卸载 LLM Providers」，列表里它消失了，
+                    <code>llm-provider-openai</code> 还在跑 —— 这是<b>可交互的谎言</b>。<br>
+                    （对照：服务状态组件是<b>真的</b>，被 SSE <code>service.*</code> 喂养，
+                    于是同一套系统有两份互相矛盾的清单）</td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">归属原则（已定案）</div>
+        <p><b>协同才能工作的 → 聚合成插件；可独立取舍的 → 独立插件。</b>
+          据此 6 个服务 + 9 个组件划成 <b>5 个插件</b>：
+          工作台基础（无服务，只碰 Core 的内置组件）／对话工作台（<code>session+loop+llm</code> + 3 组件）／
+          模型接入（<code>llm-provider-openai</code>）／凭证（<code>credentials</code>）／
+          可靠性（<code>llm-retry</code>）。</p>
+        <p class="note"><b>关键区分：归属是意图，状态是事实。</b>
+          「哪些服务/组件属于哪个插件」是<b>人写的设计决定</b>，磁盘上读不出来 → 必须落盘（<code>plugin.json</code>）；
+          「这个插件现在几分健康」是它那些服务的真实 status 聚合 → 可派生。
+          所以<b>不能靠「从服务派生一份清单」来消除硬编码</b> —— 那会得到一份服务列表的镜像，不是插件。</p>
         <table style="margin-top:0">
           <thead><tr><th>子步</th><th>内容</th><th>落点</th></tr></thead>
           <tbody>
@@ -726,7 +787,7 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
 
   <footer>
     Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） · 更新于 S2 完成后（2026-10-02）·
-    进度 S0–S5 已推（<span class="commit">0962d41</span>）·
+    进度 S0–S6 已推（<span class="commit">9ba9052</span>）·
     配套：<code>docs/开发进度/S-对话界面与插件重构-计划.md</code> ·
     架构：<code>docs/对话界面架构.html</code>
   </footer>
