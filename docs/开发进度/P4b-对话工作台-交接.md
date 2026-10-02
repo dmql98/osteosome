@@ -1,8 +1,34 @@
 # P4b · 对话工作台 — 交接与计划
 
-> 交接日期：2026-10-01 ｜ 状态：**规划完成，代码未动**（本次只出界面 demo + 归属方案 + 参数链路设计）
+> 交接日期：2026-10-01 ｜ 状态：**已执行完毕（并入 P4 收口，2026-10-02）**
 > 界面 demo：[`../wireframes/demo/index.html`](../wireframes/demo/index.html) 左侧导航最下组「对话工作台（P4b）」→ J1~J4（浏览器直接打开，无构建）
 > 前置阅读：[`P4-详细计划.md`](./P4-详细计划.md)、[`阶段追踪.md`](./阶段追踪.md)、[`前端工作台-现行实现.md`](../前端工作台-现行实现.md)
+
+---
+
+## 0.1 结论落地情况（2026-10-02 收尾后回填）
+
+§8 的 5 项待拍板，**已按下列裁决执行**（产出见 `阶段追踪.md` P4 区块 WS-5/WS-6 与修订记录）：
+
+| # | 待拍板项 | 裁决 |
+|---|---|---|
+| 1 | 组件拆分粒度（单盒子 vs 两盒子） | **保持现状两件**：`widget.session-list` + `widget.chat` 各自独立 movable box，符合「组件=最小单元」约定；两者都必须在默认面板 |
+| 2 | `plugin.chat` 新增 / `plugin.workbench` 改名 | **都不做**（纯命名，无功能收益）。`widget.llm-chat` 仍归 `plugin.llm`，`plugin.workbench` 保持原名 |
+| 3 | 429 重试红怎么修 | **按请求取策略**：llm-retry 从 `llm.provider.request` 记 retryPolicy，声明表退化为兜底。理由：该事件必然晚于 llm-retry 订阅（请求由前端/loop 发起），与启动顺序彻底解耦；不像 `inject` 那样把 provider 绑死在旁路服务上，也不像 Bus 回放那样改动 P1a 语义 |
+| 4 | `source` vs `catalog` | **`catalog` 正确，契约改名**。真因：`EventBase.source` 是总线保留字，ServiceManager 对每条服务消息盖章 `source=serviceId`（`manager.ts:334`）——叫 `source` 的业务字段必被覆盖。**§1.3 建议回退是错的**，已在 `shared/src/events.ts` 写明勿回退 |
+| 5 | P4b 与 P7 边界 | **确认**：本轮只做「对话雏形」（多轮 + provider/model/思考强度可控）；工具调用循环、`tool_call` 出 wire、`role:'tool'` 扩展三项仍为 P7 前置项 |
+
+**§2.1 的 429 根因推断已证实**，并顺带暴露第二个同源问题：`llm-retry` 重启后声明表恒空 → usage 记账 provider 会退化成 `unknown`。按请求取策略同时修掉了这一类。
+
+### 外部参照评估（用户 2026-10-02 提出：要不要直接用 pi）
+
+| 项目 | 是什么 | 对 ost 的可用性 |
+|---|---|---|
+| [pi](https://github.com/earendil-works/pi) 官方 | agent toolkit：`pi-ai`（30+ provider 统一 API + 模型目录 + thinking 统一枚举）、`pi-agent-core`（工具循环 + 事件流）、`pi-mcp`、`pi-durable`、`chord`（≈ost core） | **只有 core 可嵌**。官方**无 web 前端**（`pi-tui` 是终端差分渲染，coding-agent 依赖 chalk） |
+| [pi-gui](https://github.com/minghinmatthewlam/pi-gui) | 第三方 Electron 桌面壳，MIT，`packages/pi-sdk-driver` 是 over pi-coding-agent 的适配器 | 组件**不可 import**（React + Electron IPC，无组件包导出）。价值＝交互规格参考（timeline / composer / 每线程模型与思考强度 / tool 渲染 / fork-rewind）＋适配器层参考 |
+| [Paseo](https://paseo.sh/) | agent 控制平面：把本机 40+ agent CLI（Claude Code/Codex/OpenCode/Pi…）当子进程拉起，统一 UI + worktree + 调度 + 审批 | **不是库**，是产品。可抄「agent 适配器接口 + daemon↔客户端会话协议」 |
+
+**裁决**：不整体转 pi。引入 pi 的收益集中在 agent loop，而 ost 的 `Message` 契约（`role: system|user|assistant` + `content: string`）存不下 pi transcript 的 `toolResult` 与多 block 结构——转 pi 等于提前做 P7 前置项①并改动 P3 的 session 层与前端渲染，净额接近零。**pi 的正确位置是 P7**：届时按 P7 三前置项扩完 `Message` 契约，只替换 loop 的内部实现为 `pi-agent-core`，前端 widget / session 服务 / 参数链路全部复用。若只想白拿 pi-ai 的 provider 层（30+ 家 + 模型目录 + thinking 翻译），可在任意时刻落一个 `llm-provider-pi`（StreamChunk 翻译层），架构零破坏。
 
 ---
 
