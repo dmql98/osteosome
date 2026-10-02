@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>对话界面架构 · 三组件 / 功能拆分服务 / Core</title>
+<style>
+  /* 令牌取自 client/src/styles/tokens.css —— 预览与真机同一套取值 */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-2:#0b3f74; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --warning:#9a6700;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 12px rgba(16,22,26,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-2:#093460; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --warning:#d29922;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .topic, .svc-name { font-family: var(--mono); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 var(--s5) var(--s6); }
+
+  header.bar { position: sticky; top:0; z-index:10; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding-top:10px; padding-bottom:10px; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  header.bar button:hover { filter:brightness(1.08); }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+
+  section { margin: var(--s6) 0 0; }
+  h2 { font-size: var(--lg); margin: 0 0 var(--s3); display:flex; align-items:center; gap:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size: var(--md); margin: var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin: 0 0 var(--s3); }
+  ul { margin: 0 0 var(--s3); padding-left: 1.2em; }
+  li { margin: 2px 0; }
+
+  table { width:100%; border-collapse: collapse; margin: var(--s3) 0 var(--s4); font-size: var(--sm); }
+  th, td { text-align:left; padding: 8px 10px; border-bottom:1px solid var(--border); vertical-align: top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background: var(--surface); }
+  td.topic, .topic { color: var(--primary); }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.ok { border-left-color: var(--success); }
+  .fix { background:var(--success); color:#fff; border-radius:var(--r-sm); padding:0 5px; font-size:var(--xs);
+    font-weight:700; margin-right:5px; }
+  .wrong { background:var(--danger); color:#fff; border-radius:var(--r-sm); padding:0 5px; font-size:var(--xs);
+    font-weight:700; margin-right:5px; }
+
+  /* ── 目标界面 mock ─────────────────────────────── */
+  .frame { border:1px solid var(--border-strong); border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--shadow-md); background:var(--bg); }
+  .frame .panel-tab { display:flex; align-items:center; gap:var(--s2); padding:6px var(--s3);
+    background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--xs); color:var(--muted); }
+  .frame .panel-tab b { color:var(--text); font-weight:600; }
+  .panel { display:grid; grid-template-columns:240px 1fr; grid-template-rows:1fr auto; height:520px; }
+  .box { position:relative; display:flex; flex-direction:column; min-height:0; }
+  .box > .tag { position:absolute; top:-9px; left:8px; display:none; align-items:center; gap:4px;
+    font-size:10px; background:var(--primary); color:#fff; padding:1px 6px; border-radius:var(--r-full); }
+  .frame:hover .box > .tag, .solo:hover .box > .tag { display:inline-flex; }
+  .box.sessions { grid-row:1 / span 2; border-right:1px solid var(--border); background:var(--surface); }
+  .box.timeline { overflow-y:auto; padding:var(--s4) var(--s5); gap:var(--s3); }
+  .box.composer { border-top:1px solid var(--border); background:var(--surface); padding:var(--s3) var(--s5) var(--s4); gap:var(--s2); }
+
+  .sess-head { display:flex; justify-content:space-between; align-items:center; padding:var(--s3); font-size:var(--sm); }
+  .sess-head button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:4px 10px; font:inherit; font-size:var(--xs); cursor:pointer; }
+  .sess-group { padding: var(--s2) var(--s3) var(--s1); font-size:var(--xs); color:var(--muted); }
+  .sess { padding:6px var(--s3); font-size:var(--sm); cursor:pointer; border-left:2px solid transparent; }
+  .sess:hover { background:var(--surface-2); }
+  .sess.on { background:var(--primary-soft); border-left-color:var(--primary); font-weight:600; }
+
+  .title-row { display:flex; align-items:center; gap:var(--s2); font-size:var(--sm); font-weight:600; padding-bottom:var(--s2);
+    border-bottom:1px solid var(--border); margin-bottom:var(--s2); }
+  .title-row .muted { margin-left:auto; font-weight:400; color:var(--muted); }
+  .msg { max-width:78%; padding:8px 12px; border-radius:var(--r-md); font-size:var(--sm); white-space:pre-wrap; }
+  .msg.user { margin-left:auto; background:var(--primary); color:#fff; border-bottom-right-radius:0; }
+  .msg.bot { background:var(--surface); border:1px solid var(--border); border-bottom-left-radius:0; }
+  .think { border:1px solid var(--border); border-left:3px solid var(--warning); border-radius:var(--r-sm);
+    background:var(--surface); font-size:var(--xs); color:var(--muted); max-width:78%; }
+  .think summary { cursor:pointer; padding:5px 10px; }
+  .think .body { padding: 0 10px 8px; }
+  .tool { border:1px solid var(--border); border-left:3px solid var(--success); border-radius:var(--r-sm);
+    background:var(--surface); font-family:var(--mono); font-size:var(--xs); max-width:92%; }
+  .tool .hd { display:flex; gap:var(--s2); padding:5px 10px; align-items:center; }
+  .tool .hd b { font-weight:600; }
+  .tool .hd .args { color:var(--muted); }
+  .tool .hd .st { margin-left:auto; color:var(--success); }
+  .tool .out { padding:0 10px 6px; color:var(--muted); white-space:pre-wrap; }
+  .cursor { display:inline-block; width:7px; height:14px; background:var(--primary); vertical-align:-2px; }
+
+  .composer-row { display:flex; gap:var(--s2); align-items:flex-end; }
+  .composer-row textarea { flex:1; resize:none; height:56px; padding:8px 10px; font:inherit; font-size:var(--sm);
+    color:var(--text); background:var(--bg); border:1px solid var(--border-strong); border-radius:var(--r-md); }
+  .btn { border:0; border-radius:var(--r-md); padding:8px 14px; font:inherit; font-size:var(--sm); cursor:pointer;
+    background:var(--primary); color:#fff; }
+  .btn.stop { background:var(--danger); }
+  .params { display:flex; gap:var(--s3); align-items:center; font-size:var(--xs); color:var(--muted); }
+  .params select { font:inherit; font-size:var(--xs); padding:3px 6px; background:var(--bg); color:var(--text);
+    border:1px solid var(--border); border-radius:var(--r-sm); }
+
+  /* ── 单盒预览 ──────────────────────────────────── */
+  .solo { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    padding:var(--s4); margin:0 0 var(--s4); }
+  .solo-hd { display:flex; align-items:center; gap:var(--s2); margin-bottom:var(--s3); font-size:var(--sm); }
+  .badge { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  .solo-hd .geo { margin-left:auto; font-family:var(--mono); font-size:var(--xs); color:var(--muted); }
+  .solo-body { display:flex; gap:var(--s4); align-items:flex-start; }
+  .solo-box { border:1px solid var(--border-strong); border-radius:var(--r-md); overflow:hidden;
+    background:var(--bg); flex:none; display:flex; flex-direction:column; }
+  .solo-meta { font-size:var(--sm); min-width:0; }
+  .solo-meta dl { margin:0; display:grid; grid-template-columns:76px 1fr; gap:2px var(--s2); }
+  .solo-meta dt { color:var(--muted); font-size:var(--xs); }
+  .solo-meta dd { margin:0; font-size:var(--xs); }
+  .states { display:flex; gap:var(--s2); margin-top:var(--s3); flex-wrap:wrap; }
+  .state { border:1px dashed var(--border-strong); border-radius:var(--r-md); padding:var(--s2) var(--s3);
+    font-size:var(--xs); color:var(--muted); }
+  .state b { display:block; color:var(--text); font-size:var(--xs); margin-bottom:2px; }
+
+  /* ── 架构图 ────────────────────────────────────── */
+  .arch { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); padding:var(--s5); }
+  .tier { text-align:center; }
+  .tier-label { font-size:var(--xs); color:var(--muted); margin-bottom:var(--s2); letter-spacing:.04em; }
+  .nodes { display:flex; gap:var(--s2); justify-content:center; flex-wrap:wrap; }
+  .node { border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--bg);
+    padding:6px 12px; font-size:var(--sm); }
+  .node.hit { border-color:var(--primary); background:var(--primary-soft); color:var(--primary); font-weight:600; }
+  .node.core { border-width:2px; border-color:var(--topbar); background:var(--topbar); color:#fff; font-weight:600; }
+  .node.side { border-style:dashed; color:var(--muted); }
+  .link { text-align:center; color:var(--muted); font-size:var(--xs); margin:var(--s2) 0; font-family:var(--mono); }
+  .core-tiers { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--s2);
+    border:2px solid var(--topbar); border-radius:var(--r-md); padding:var(--s3); background:var(--topbar); }
+  .core-tiers div { color:var(--topbar-text); font-size:var(--xs); text-align:center; }
+  .core-tiers div b { display:block; font-size:var(--sm); margin-bottom:2px; }
+
+  .svc-table td.svc-name { white-space:nowrap; }
+
+  /* ── 插件（聚合）图 ─────────────────────────────── */
+  .pstruct { border:2px solid var(--primary); border-radius:var(--r-lg); background:var(--primary-soft); padding:var(--s4); }
+  .pstruct > .ph { font-family:var(--mono); font-size:var(--sm); font-weight:700; color:var(--primary);
+    margin-bottom:var(--s3); padding-bottom:var(--s2); border-bottom:1px dashed var(--primary); }
+  .cols3 { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s4); }
+  .cols3 .grp { font-size:10px; color:var(--muted); letter-spacing:.04em; margin-bottom:4px; }
+  .mini { display:block; font-family:var(--mono); font-size:11px; padding:3px 7px; border-radius:var(--r-sm);
+    margin:3px 0; border:1px solid var(--border-strong); background:var(--surface); }
+  .mini.c { border-color:var(--primary); color:var(--primary); }
+  .mini.req::after { content:" 必需"; font-size:9px; color:var(--danger); }
+  .mini.opt::after { content:" 可选"; font-size:9px; color:var(--muted); }
+
+  .plugwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:var(--s2); }
+  .plug { border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--surface); padding:var(--s3); }
+  .plug.main { border-color:var(--primary); }
+  .plug .ph { font-size:var(--sm); font-weight:600; padding-bottom:5px; margin-bottom:6px;
+    border-bottom:1px dashed var(--border); }
+  .plug .grp { font-size:10px; color:var(--muted); margin:7px 0 3px; letter-spacing:.04em; }
+  .plug .mini { background:var(--bg); margin:2px 0; }
+
+  .corebar { border:2px solid var(--topbar); background:var(--topbar); color:#fff; border-radius:var(--r-md);
+    padding:var(--s3); text-align:center; }
+  .corebar b { display:block; font-size:var(--sm); }
+  .corebar span { font-size:var(--xs); opacity:.85; }
+  .procs { display:flex; gap:var(--s2); flex-wrap:wrap; justify-content:center; }
+  .proc { font-family:var(--mono); font-size:11px; border:1px solid var(--success); color:var(--success);
+    border-radius:var(--r-full); padding:3px 10px; background:color-mix(in srgb, var(--success) 8%, transparent); }
+  .proc.off { border-color:var(--border-strong); color:var(--muted); background:none; }
+
+  pre.code { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); font-size:var(--xs); line-height:1.7; overflow-x:auto; margin:0; }
+  .pill { display:inline-block; font-size:10px; padding:1px 6px; border-radius:var(--r-full);
+    background:var(--surface-2); color:var(--muted); border:1px solid var(--border); margin-left:4px; }
+  .pill.p0 { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .pill.p1 { background:var(--primary-soft); color:var(--primary); border-color:var(--primary); }
+
+  pre.code { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); font-size:var(--xs); line-height:1.7; overflow-x:auto; margin:0; }  pre.trace { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); font-size:var(--xs); line-height:1.8; overflow-x:auto; margin:0; }
+  pre.trace .c { color:var(--primary); font-weight:600; }
+  pre.code .k { color:var(--primary); }
+  pre.code .cm { color:var(--muted); }
+
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); }
+  @media (max-width: 900px) { .cols { grid-template-columns:1fr; } .solo-body { flex-direction:column; } }
+  footer { margin-top:var(--s6); padding-top:var(--s4); border-top:1px solid var(--border); color:var(--muted); font-size:var(--xs); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>对话界面架构</h1>
+    <span class="sub">三组件 · 功能拆分服务 · Core 作为总线与桥 · 插件=聚合</span>
+    <span class="sp"></span>
+    <button id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="lead" style="margin-top:var(--s5)">
+    <b>一句话：</b>界面 3 个组件（会话列表 / 对话 / 输入）；后端按功能拆成 <code>session</code>、<code>agent</code>、<code>models</code>
+    三个必需服务 + 若干能力位；<b>Core 是进程管理 + 总线 + HTTP/SSE 桥，且零业务知识</b>。
+    前端与服务之间只有两条通道：<code>POST /api/command</code> 发命令、<code>GET /events</code> 收事件。
+  </div>
+
+  <!-- 1 盒子 -->
+  <section>
+    <h2><span class="n">1</span>三个盒子（各自独立）</h2>
+    <p>三个组件彼此独立：各自是一个盒子、独立渲染、独立可拖动 / 可拉出独立窗。下面逐个看；<b>组合后的默认预设见 §1.4</b>。</p>
+
+    <div class="solo">
+      <div class="solo-hd"><span class="badge">①</span><code>widget.session-list</code><span class="geo">默认 240 × 满高</span></div>
+      <div class="solo-body">
+        <div class="solo-box" style="width:240px;height:290px">
+          <div class="box sessions" style="border-right:0">
+            <span class="tag">①</span>
+            <div class="sess-head"><button>＋ 新建对话</button><span style="color:var(--muted);font-size:var(--xs)">4</span></div>
+            <div class="sess-group">今天</div>
+            <div class="sess on">目录里有什么</div>
+            <div class="sess">脚本重构方案</div>
+            <div class="sess-group">昨天</div>
+            <div class="sess">排查 429 重试</div>
+            <div class="sess">上下文压缩</div>
+            <div class="sess-group">上周</div>
+            <div class="sess">角色设定初稿</div>
+          </div>
+        </div>
+        <div class="solo-meta">
+          <dl>
+            <dt>职责</dt><dd>新建 / 切换 / 重命名 / 删除会话；按时间分组；跨窗实时同步</dd>
+            <dt>服务</dt><dd><code>session</code>；当前会话 <code>curId</code> 是本地态（不跨窗）</dd>
+            <dt>状态</dt><dd>已有，<b>本轮只改视觉与密度</b></dd>
+          </dl>
+          <div class="states"><div class="state"><b>空态</b>「还没有会话 · 点击新建」</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="solo">
+      <div class="solo-hd"><span class="badge">②</span><code>widget.chat-timeline</code><span class="geo">默认 flex × (满高 − 120)</span></div>
+      <div class="solo-body">
+        <div class="solo-box" style="width:560px;height:330px">
+          <div class="box timeline" style="padding:var(--s4)">
+            <span class="tag">②</span>
+            <div class="title-row">目录里有什么 <span class="muted">deepseek · 4 轮 ⋯</span></div>
+            <div class="msg user">帮我看看项目目录</div>
+            <details class="think" open><summary>⌃ 思考 14s</summary>
+              <div class="body">模型先确认要读哪些文件，再决定是否需要列目录…</div>
+            </details>
+            <div class="msg bot">我先看一下目录结构。</div>
+            <div class="tool">
+              <div class="hd"><b>🔧 list_dir</b><span class="args">{"path":""}</span><span class="st">✓</span></div>
+              <div class="out">a.txt   b.txt   sub/</div>
+            </div>
+            <div class="msg bot">目录里有 3 个条目：a.txt、b.txt，以及一个子目录 sub。<br>要我继续读 a.txt 吗？</div>
+          </div>
+        </div>
+        <div class="solo-meta">
+          <dl>
+            <dt>职责</dt><dd>消息时间线：user / assistant 气泡、<b>折叠思考块</b>、<b>工具卡</b>、错误内联、流式尾光标</dd>
+            <dt>服务</dt><dd><code>agent</code>（本轮进度）+ <code>session</code>（历史与落库）</dd>
+            <dt>状态</dt><dd><b>新增</b>，从 <code>widget.llm-chat</code> 拆出消息区</dd>
+            <dt>要点</dt><dd>它只<b>订阅事件</b>，不发业务命令（切换会话时发一次 <code>session.get</code>）</dd>
+          </dl>
+          <div class="states">
+            <div class="state"><b>生成中</b>尾部 ▍ 光标</div>
+            <div class="state"><b>工具执行中</b>卡片内联 ⏳</div>
+            <div class="state"><b>失败</b>内联错误条 + [重试]</div>
+            <div class="state"><b>空会话</b>引导 + 示例问题</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="solo">
+      <div class="solo-hd"><span class="badge">③</span><code>widget.chat-composer</code><span class="geo">默认 flex × 120</span></div>
+      <div class="solo-body">
+        <div class="solo-box" style="width:560px">
+          <div class="box composer">
+            <span class="tag">③</span>
+            <div class="composer-row">
+              <textarea placeholder="发消息…  Enter 发送 · Shift+Enter 换行"></textarea>
+              <button class="btn">发送 ↑</button>
+            </div>
+            <div class="params">
+              <select><option>deepseek-chat ▾</option></select>
+              <select><option>思考 中 ▾</option></select>
+              <span>上下文 12% · 4 轮</span>
+            </div>
+          </div>
+        </div>
+        <div class="solo-meta">
+          <dl>
+            <dt>职责</dt><dd>输入框 + 发送/停止 + 模型选择 + 思考强度选择</dd>
+            <dt>服务</dt><dd><code>agent</code>（发命令）；model/thinking 存 <code>chat.store</code>（②③ 共享）</dd>
+            <dt>状态</dt><dd><b>新增</b>，从 <code>widget.llm-chat</code> 拆出输入区</dd>
+            <dt>要点</dt><dd>只发 <code>agent.run</code>；<b>不直接发 models</b>（见 §3.2 纠正）</dd>
+          </dl>
+          <div class="states">
+            <div class="state"><b>空闲</b>发送可用</div>
+            <div class="state"><b>生成中</b>停止键高亮 + 输入禁用</div>
+            <div class="state"><b>工具轮中</b>仍显示停止键</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>1.4 组合后（默认预设）</h3>
+    <p>默认布局预设把三个盒子摆成下面这样；三个盒子仍可各自拖动，面板头提供「重置为对话布局」复位。</p>
+    <div class="frame">
+      <div class="panel-tab"><b>对话</b><span>面板 · 三个盒子</span></div>
+      <div class="panel">
+        <div class="box sessions">
+          <span class="tag">① widget.session-list</span>
+          <div class="sess-head"><button>＋ 新建对话</button><span style="color:var(--muted);font-size:var(--xs)">4</span></div>
+          <div class="sess-group">今天</div>
+          <div class="sess on">目录里有什么</div>
+          <div class="sess">脚本重构方案</div>
+          <div class="sess-group">昨天</div>
+          <div class="sess">排查 429 重试</div>
+          <div class="sess">上下文压缩</div>
+        </div>
+        <div class="box timeline">
+          <span class="tag">② widget.chat-timeline</span>
+          <div class="title-row">目录里有什么 <span class="muted">deepseek · 4 轮 ⋯</span></div>
+          <div class="msg user">帮我看看项目目录</div>
+          <details class="think"><summary>⌄ 思考 14s</summary>
+            <div class="body">模型先确认要读哪些文件，再决定是否需要列目录…</div>
+          </details>
+          <div class="msg bot">我先看一下目录结构。</div>
+          <div class="tool">
+            <div class="hd"><b>🔧 list_dir</b><span class="args">{"path":""}</span><span class="st">✓</span></div>
+            <div class="out">a.txt   b.txt   sub/</div>
+          </div>
+          <div class="msg bot">目录里有 3 个条目：a.txt、b.txt，以及一个子目录 sub。</div>
+        </div>
+        <div class="box composer">
+          <span class="tag">③ widget.chat-composer</span>
+          <div class="composer-row">
+            <textarea placeholder="发消息…  Enter 发送 · Shift+Enter 换行"></textarea>
+            <button class="btn stop">⏹ 停止</button>
+          </div>
+          <div class="params">
+            <select><option>deepseek-chat ▾</option></select>
+            <select><option>思考 中 ▾</option></select>
+            <span class="stop">⏹ 停止</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 组件↔服务 -->
+  <section>
+    <h2><span class="n">2</span>组件 ↔ 服务</h2>
+    <table>
+      <thead><tr><th>组件</th><th>对应服务</th><th>读写方向</th></tr></thead>
+      <tbody>
+        <tr><td>① 会话列表</td><td class="svc-name">session</td><td>发命令 + 收事件</td></tr>
+        <tr><td>② 对话</td><td class="svc-name">agent<span class="pill p1">主</span> · session</td><td><b>只收事件</b>（+ 一次 <code>session.get</code>）</td></tr>
+        <tr><td>③ 输入</td><td class="svc-name">agent</td><td><b>只发命令</b></td></tr>
+      </tbody>
+    </table>
+    <p class="note ok">②③ 之间<b>不直接通信</b>，共享 <code>stores/chat.store.ts</code>：本轮的 <code>requestId</code>、in-flight 行、model、thinking。
+      服务侧对应的事件都带同一个 <code>requestId</code>，前端按它过滤不串轮。</p>
+  </section>
+
+  <!-- 3 服务拆分 -->
+  <section>
+    <h2><span class="n">3</span>按功能拆分的服务</h2>
+    <p>参照 <a href="https://pi-doc.com/docs/latest/source/architecture" style="color:var(--primary)">pi 的架构文档</a>：
+      <code>pi-ai</code> 不跑工具循环也不存会话，<code>pi-agent-core</code> 不认识 Provider，
+      TUI 不了解 Agent 业务 —— 「循环不知道 API key，TUI 不知道 Provider」。同样的关注点分离：</p>
+    <table class="svc-table">
+      <thead><tr><th>服务</th><th>优先级</th><th>职责（只做这一件）</th><th>明确不做</th></tr></thead>
+      <tbody>
+        <tr><td class="svc-name">session</td><td><span class="pill p0">必需</span></td>
+            <td>会话 CRUD、消息读写、历史查询、按时间分组、落库</td><td>不跑对话循环</td></tr>
+        <tr><td class="svc-name">agent</td><td><span class="pill p0">必需</span></td>
+            <td><b>一轮对话的状态机</b>：收输入 → 拉历史 → 调模型 → 工具循环 → 落库 → 取消/停止</td>
+            <td>不认识 provider、不知道 API key</td></tr>
+        <tr><td class="svc-name">models</td><td><span class="pill p0">必需</span></td>
+            <td>provider 路由、wire 翻译、流归一、模型目录、思考强度翻译</td><td>不跑循环、不存会话</td></tr>
+        <tr><td class="svc-name">provider:*</td><td><span class="pill p1">能力位</span></td>
+            <td>各家 wire（openai 兼容 / anthropic / …），独立进程</td><td>—</td></tr>
+        <tr><td class="svc-name">credentials</td><td><span class="pill p1">能力位</span></td>
+            <td>凭证解析（<b>值永不过总线</b>）</td><td>—</td></tr>
+        <tr><td class="svc-name">tools</td><td><span class="pill p1">能力位</span></td>
+            <td>工具注册与执行、审批</td><td>—</td></tr>
+        <tr><td class="svc-name">retry / usage</td><td><span class="pill">旁路</span></td>
+            <td>重试、记账（不在成功路径上）</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 对最初三个判断的纠正</h3>
+    <table>
+      <thead><tr><th>最初判断</th><th>结论</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>会话列表需要「管理会话的服务」</td><td><span class="fix">对</span></td>
+            <td>pi 里 session 文件是唯一真相源，UI 直接读 transcript + 监听 <code>entry_appended</code>，不维护第二份状态</td></tr>
+        <tr><td>对话框要「接收流式输出 + 输入」</td><td><span class="fix">半对</span></td>
+            <td>流是对的，但它<b>不是一个服务</b>，是 agent 发的事件投影；「接收输入」反了 —— ③ 才是命令来源（写），② 是投影（读），UI 上相邻只是布局</td></tr>
+        <tr><td>输入框「发送给 llm」</td><td><span class="wrong">错</span></td>
+            <td>pi 主路径是 <code>AgentSession → Agent → runAgentLoop → streamFn</code>：输入先进 agent，models 是最末端</td></tr>
+        <tr><td>（漏掉的）</td><td><span class="wrong">缺</span></td>
+            <td><b>agent 服务</b> —— 持有「这一轮对话」的全部状态：轮次、in-flight、工具轮数、取消句柄</td></tr>
+      </tbody>
+    </table>
+    <p><b>如果 ③ 直发 models</b>，后果都是具体的：</p>
+    <table>
+      <thead><tr><th>后果</th><th>现象</th></tr></thead>
+      <tbody>
+        <tr><td>工具调用哑掉</td><td>收到 <code>finishReason:'tool_calls'</code> 没人执行、没人发第二轮</td></tr>
+        <tr><td>退化成单轮问答</td><td>没人拉历史、没人拼多轮 messages</td></tr>
+        <tr><td>停止按钮无状态源</td><td>不知道该禁用输入还是该发 cancel</td></tr>
+        <tr><td>渲染组件被塞进写职责</td><td>每条消息都要 ② 或 ③ 自己 append 一次</td></tr>
+        <tr><td>②③ 长得一样重</td><td>模型 / 思考 / 工具目录每个入口都要实现一遍</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4 Core -->
+  <section>
+    <h2><span class="n">4</span>Core：进程 + 总线 + 桥</h2>
+    <div class="arch">
+      <div class="tier">
+        <div class="tier-label">前端组件</div>
+        <div class="nodes">
+          <span class="node hit">① 会话列表</span>
+          <span class="node hit">② 对话</span>
+          <span class="node hit">③ 输入</span>
+        </div>
+      </div>
+      <div class="link">↓ POST /api/command（发命令）　　↑ GET /events（收事件）</div>
+      <div class="tier">
+        <div class="core-tiers">
+          <div><b>进程管理</b>拉起 / 健康检查 / 重启 / 崩溃恢复</div>
+          <div><b>总线 Bus</b>事件路由 + pattern 匹配</div>
+          <div><b>HTTP / SSE 桥</b>前端唯一入口</div>
+          <div><b>凭证 store</b>值永不过总线</div>
+        </div>
+      </div>
+      <div class="link">↓ bus.publish　　↑ bus.subscribe</div>
+      <div class="tier">
+        <div class="tier-label">业务服务（零业务知识的是 Core，反之）</div>
+        <div class="nodes">
+          <span class="node">session</span>
+          <span class="node">agent</span>
+          <span class="node">models</span>
+          <span class="node side">provider:*</span>
+          <span class="node side">credentials</span>
+          <span class="node side">tools</span>
+          <span class="node side">retry</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols" style="margin-top:var(--s4)">
+      <div class="note ok">
+        <b>纪律：Core 零业务知识</b><br>
+        Core 里不许出现任何业务词汇 —— 不能有 <code>sessionId</code>、不能有 <code>message</code>、不能知道什么是 provider。
+        业务全在服务里，Core 只提供「进程 + 路由 + 桥」。有了这条，Core 就足够薄。
+      </div>
+      <div class="note bad">
+        <b>Core 不只是「拉起服务的服务」</b><br>
+        按字面只做拉起会更复杂：服务之间要各自一套传输、前端要知道每个服务地址、一个服务重启上游引用全失效、事件回放无从谈起。
+        这四件事（进程 / 总线 / 桥 / 凭证）是一套东西，拆开反而多。
+      </div>
+    </div>
+
+    <h3>4.1 模块清单（文件级）</h3>
+    <table>
+      <thead><tr><th>模块</th><th>文件</th><th>对外接口</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="3"><b>进程管理</b></td>
+            <td class="svc-name">service-manager/manifest.ts</td><td><code>loadServices(dir)</code> / <code>validateManifest()</code></td>
+            <td>扫 <code>services/*/service.json</code>；校验 schema、protocolVersion、publishes/subscribes 是否命中契约</td></tr>
+        <tr><td class="svc-name">service-manager/topology.ts</td><td><code>topologicalOrder(manifests)</code></td>
+            <td>按 <code>inject</code> 排启动序（有依赖的先起）</td></tr>
+        <tr><td class="svc-name">service-manager/manager.ts</td>
+            <td><code>start()</code> <code>stop()</code> <code>restart(id)</code> <code>startService()</code> <code>list()</code> <code>status(id)</code></td>
+            <td>spawn / 健康检查 / 重启 / 崩溃恢复；<b>给每条服务消息盖章 <code>source=serviceId</code></b></td></tr>
+        <tr><td rowspan="2"><b>总线</b></td>
+            <td class="svc-name">bus/bus.ts</td><td><code>publish(topic,payload)</code> <code>subscribe(topic,fn)→dispose</code> <code>replay(from,to)</code> <code>statsSnapshot()</code></td>
+            <td>同步入队 → 微任务 drain → 按 pattern 分发；错误隔离；背压；<code>persist</code> 落库</td></tr>
+        <tr><td class="svc-name">bus/pattern.ts</td><td><code>matchPattern(pattern, topic)</code></td>
+            <td>订阅语法：<code>*</code> 单层 / <code>**</code> 多层 / 裸 <code>*</code> 全量</td></tr>
+        <tr><td rowspan="3"><b>HTTP / SSE 桥</b></td>
+            <td class="svc-name">sse-bridge/server.ts</td><td>路由表（见 §4.2）</td>
+            <td>唯一 HTTP 入口；<code>/api/*</code> 与 <code>/events</code> 都要过 Origin 白名单</td></tr>
+        <tr><td class="svc-name">sse-bridge/command.ts</td><td><code>handleCommand()</code></td>
+            <td>把 <code>{topic,payload}</code> 投递到总线；<b>只接受 <code>COMMAND_TOPICS</code></b>；三个 <code>service.*</code> 命令由 Core 直接执行</td></tr>
+        <tr><td class="svc-name">sse-bridge/sse.ts</td><td><code>parseTopics()</code> <code>SseSession</code></td>
+            <td>把总线事件按 <code>?topics=</code> 过滤后推给前端；心跳 30s / 僵尸 90s 回收</td></tr>
+        <tr><td><b>凭证</b></td>
+            <td class="svc-name">credentials/store.ts</code> + <code>credentials/api.ts</code></td><td><code>/api/credentials</code> 路由 + <code>core:</code> kind 解析</td>
+            <td>明文存 dataDir；<b>GET 只回掩码；值永不过总线</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 HTTP 接口（前端唯一能碰到 Core 的地方）</h3>
+    <table>
+      <thead><tr><th>方法</th><th>路径</th><th>请求</th><th>Core 内部</th><th>谁在用</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET</code></td><td class="topic">/events?topics=a,b.**</td>
+            <td>query：<code>topics</code>（逗号分隔 pattern，缺省=不过滤）</td>
+            <td>建 SSE 连接 → 订阅总线 → 按 pattern 过滤后 <code>data: {topic,payload}</code> 逐条推</td>
+            <td><b>所有组件</b>（② 订 <code>agent.**,message.**</code>；① 订 <code>session.**</code>）</td></tr>
+        <tr><td><code>POST</code></td><td class="topic">/api/command</td>
+            <td><code>{topic, payload}</code>，<code>topic</code> 必须在 <code>COMMAND_TOPICS</code></td>
+            <td><code>bus.publish(topic, payload)</code> → 订阅该命令的服务</td>
+            <td>① 建/改名/删会话；③ <code>agent.run</code>；② <code>session.get</code></td></tr>
+        <tr><td><code>GET</code></td><td class="topic">/api/preferences</td><td>—</td><td>读 dataDir 的 preferences.json</td><td>设置窗（主题 / 语言 / 插件启用状态）</td></tr>
+        <tr><td><code>PUT</code></td><td class="topic">/api/preferences</td><td>任意键值 patch</td><td>合并写盘</td><td>同上</td></tr>
+        <tr><td><code>GET</code></td><td class="topic">/api/credentials</td><td><code>?id=</code> 可选</td><td>返回<b>掩码</b>列表（<code>sk-…</code>），无明文</td><td>设置窗 · 凭证区</td></tr>
+        <tr><td><code>PUT</code> / <code>DELETE</code></td><td class="topic">/api/credentials</td>
+            <td><code>{name, provider, value}</code> / <code>?id=</code></td>
+            <td>写/删 dataDir 明文；发 <code>credential.saved/deleted</code></td><td>设置窗 · 凭证区</td></tr>
+        <tr><td><code>GET</code></td><td class="topic">/api/info</td><td>—</td><td><code>{dataDir}</code></td><td>诊断 / 关于面板</td></tr>
+        <tr><td><code>GET</code></td><td class="topic">/health</td><td>—</td><td><code>{ok, uptime, services:[{id,status}]}</code></td><td>服务状态组件 · 集成冒烟</td></tr>
+        <tr><td colspan="5" style="background:var(--primary-soft)">
+          <b>规划中（插件模型）</b>：<code>GET /api/plugins</code> 插件清单 · <code>POST /api/command</code> 增加 <code>plugin.start</code> / <code>plugin.stop</code>
+        </td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.3 服务侧接口：JSON-RPC over stdio</h3>
+    <p>组件看不到这一层 —— 它是 Core 与每个服务进程之间的私有通道。</p>
+    <table>
+      <thead><tr><th>方向</th><th>方法</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>服务 → Core</td><td class="topic">initialize</td><td>握手。Core 下发 <code>dataDir</code>、<code>heartbeatInterval</code>、<code>writableDirs</code>；服务回 <code>panes</code>。<b>握手完成前服务 publish 的消息会被丢弃</b>（P2 WS-9 踩过：provider 注册能力必须在握手后）</td></tr>
+        <tr><td>服务 → Core</td><td class="topic">event（通知）</td><td>服务发事件/命令到总线（<code>bus.publish</code> 的出口）</td></tr>
+        <tr><td>服务 → Core</td><td class="topic">heartbeat</td><td>健康检查（<code>healthCheck.interval</code>）</td></tr>
+        <tr><td>Core → 服务</td><td class="topic">credentials.get</td><td><code>core:&lt;id&gt;</code> kind 的凭证解析（P4 通道定案）</td></tr>
+        <tr><td>Core → 服务</td><td class="topic">shutdown</td><td>优雅停机（<code>stopGraceMs</code> 内退出，超时强杀）</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:var(--xs);color:var(--muted)">编解码在 <code>service-manager/jsonrpc/{framing,protocol,client}.ts</code>：<code>Content-Length</code> 头分帧，非法头关连接并标记 failed 后重启。</p>
+
+    <h3>4.4 一次 <code>agent.run</code> 穿过 Core 的完整路径</h3>
+    <pre class="trace"><span class="c">③ 输入组件</span>
+  │ POST /api/command {topic:"agent.run", payload:{requestId:A, sessionId, text, provider, model, thinking}}
+  ▼
+<span class="k">Core · sse-bridge/command.ts</span>  校验 topic ∈ COMMAND_TOPICS → bus.publish("agent.run", …)
+  │                                    ← 注意：Core 不认识 agent.run 的语义，只当 topic 路由
+  ▼
+<span class="k">Bus</span>（queueMicrotask drain → matchPattern → 投给 agent 服务）
+  │
+  ▼
+<span class="k">agent 服务</span>（SDK 收到 publish → JSON-RPC event 帧 → Core）
+  │
+  ├─ 发 session.get ──▶ Core /api/command？<span class="cm">不</span> ──▶ agent 直接 bus.publish ──▶ session 服务
+  │                                          （服务间也是同一条总线，Core 只是中转）
+  ▼
+<span class="k">session 服务</span> → bus.publish("session.get.result") → Core → SSE → ② 对话组件</pre>
+
+    <h3>4.5 一次 publish，多方订阅（不存在「发两份」）</h3>
+    <pre class="code"><span class="cm">// session 服务里只有这一句：</span>
+service.publish(<span class="k">'message.appended'</span>, { sessionId, message })
+
+<span class="cm">// Core 的总线自动扇出给：</span>
+<span class="cm">//   ① 前端所有订阅了 message.** 的组件（经 SSE 桥）</span>
+<span class="cm">//   ② 任何 service.json 里 declares subscribes 含 message.appended 的服务</span></pre>
+    <p style="margin-top:var(--s3)">没有「复制一份给 Core」这个动作 —— 服务发布的就是进 Core 的总线，Core 扇出。
+      若做成「发两份」（一份给列表、一份给 Core 转发），就会出现两个真相源，那才叫复杂度高。</p>
+
+    <h3>4.6 命令 vs 订阅：判断标准</h3>
+    <table>
+      <thead><tr><th>你要什么</th><th>用什麼</th><th>例子</th></tr></thead>
+      <tbody>
+        <tr><td><b>拿数据</b>（要一份当前状态）</td><td>发命令 + 等 <code>&lt;cmd&gt;.result</code>（请求/应答，requestId 关联）</td>
+            <td>agent 要历史 → <code>session.get</code> → <code>session.get.result</code></td></tr>
+        <tr><td><b>关心变化</b>（状态变了要知道）</td><td>订阅事件（广播）</td>
+            <td>会话列表跨窗同步 → 订阅 <code>session.created/updated/deleted</code></td></tr>
+      </tbody>
+    </table>
+    <p>这两条不要混。<code>agent</code> 不需要「订阅所有 session 事件来攒历史」—— 它要历史就发一次 <code>session.get</code>；
+       会话列表也不需要轮询 —— 变化是广播过来的。agent 只在<b>一个边缘场景</b>订阅 session 事件：会话在它跑动途中被删（<code>session.deleted</code>）→ 提前收尾。</p>
+
+    <h3>4.7 归属：谁的能力谁存</h3>
+    <table>
+      <thead><tr><th>数据</th><th>归谁</th><th>为什么</th></tr></thead>
+      <tbody>
+        <tr><td>会话与消息</td><td class="svc-name">session 服务</td><td>谁的能力谁存。Core 存 = session 服务变多余，且 Core 重启会丢</td></tr>
+        <tr><td>「这一轮对话」的进度</td><td class="svc-name">agent 服务</td><td>进程内态，重启归零（崩溃恢复 = 发 <code>agent.run.failed</code>）</td></tr>
+        <tr><td>provider 路由表</td><td class="svc-name">models 服务</td><td>能力位注册驱动</td></tr>
+        <tr><td>凭证</td><td>Core 的 credentials store</td><td>值永不过总线；这是 Core 唯一碰业务数据的地方</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 5 插件 -->
+  <section>
+    <h2><span class="n">5</span>插件 = 聚合（一件能用的东西）</h2>
+    <p class="lead" style="margin:0 0 var(--s4)">
+      <b>插件不是「一个进程」，而是一件能用的东西：</b>一组协同的<b>服务</b> + 一组协同的<b>组件</b> + 明确的<b>依赖</b>。
+      装它 = 拉起 N 个进程 + 出现 M 个组件；卸它 = 全部消失。这与 pi 的形态一致 ——
+      <code>pi-coding-agent</code> 正是把 <code>pi-agent-core</code> + <code>pi-ai</code> + <code>pi-tui</code> 聚合成产品。
+    </p>
+
+    <h3>5.1 一个插件的内部结构</h3>
+    <div class="pstruct">
+      <div class="ph">plugin.chat-workbench</div>
+      <div class="cols3">
+        <div>
+          <div class="grp">组件 × 3</div>
+          <span class="mini c">① widget.session-list</span>
+          <span class="mini c">② widget.chat-timeline</span>
+          <span class="mini c">③ widget.chat-composer</span>
+        </div>
+        <div>
+          <div class="grp">服务 × 3</div>
+          <span class="mini">session</span>
+          <span class="mini">agent</span>
+          <span class="mini">models</span>
+        </div>
+        <div>
+          <div class="grp">依赖 × 2</div>
+          <span class="mini req">providers-openai</span>
+          <span class="mini opt">credentials</span>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:var(--s3);font-size:var(--sm)">缺任何一个服务，这个插件都没意义；缺必需依赖则状态为 <code>degraded</code> 并明确提示「缺 provider:X」，而不是启动失败。</p>
+
+    <h3>5.2 多个插件 → Core 拓扑启停</h3>
+    <div class="arch" style="padding:var(--s4)">
+      <div class="tier">
+        <div class="tier-label">plugins/ 目录 —— Core 扫描 plugin.json，按 dependencies 做拓扑排序</div>
+        <div class="plugwrap">
+          <div class="plug main">
+            <div class="ph">chat-workbench</div>
+            <div class="grp">组件</div>
+            <span class="mini c">session-list</span><span class="mini c">chat-timeline</span><span class="mini c">chat-composer</span>
+            <div class="grp">服务</div>
+            <span class="mini">session</span><span class="mini">agent</span><span class="mini">models</span>
+          </div>
+          <div class="plug">
+            <div class="ph">providers-openai</div>
+            <div class="grp">服务</div>
+            <span class="mini">provider-openai</span>
+          </div>
+          <div class="plug">
+            <div class="ph">providers-anthropic</div>
+            <div class="grp">服务</div>
+            <span class="mini">provider-anthropic</span>
+          </div>
+          <div class="plug">
+            <div class="ph">credentials</div>
+            <div class="grp">服务</div>
+            <span class="mini">credentials</span>
+          </div>
+          <div class="plug">
+            <div class="ph">tools-fs</div>
+            <div class="grp">服务 / 组件</div>
+            <span class="mini">tools</span><span class="mini c">tool-permissions</span>
+          </div>
+        </div>
+      </div>
+      <div class="link">↓ plugin.start / plugin.stop　　依赖在前，被依赖者先起</div>
+      <div class="corebar">
+        <b>Core</b>
+        <span>进程管理 · 总线 Bus · HTTP/SSE 桥 · 凭证 store　｜　状态聚合：ready / degraded / stopped</span>
+      </div>
+      <div class="link">↓ 拉起进程</div>
+      <div class="tier">
+        <div class="tier-label">运行时（8 个进程）</div>
+        <div class="procs">
+          <span class="proc">session ✓</span>
+          <span class="proc">agent ✓</span>
+          <span class="proc">models ✓</span>
+          <span class="proc">provider-openai ✓</span>
+          <span class="proc">provider-anthropic ✓</span>
+          <span class="proc">credentials ✓</span>
+          <span class="proc">tools ✓</span>
+          <span class="proc off">retry ○ 未装</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>5.3 什么该聚合、什么该保持独立</h3>
+    <table>
+      <thead><tr><th>能力</th><th>归属</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td><code>session</code> + <code>agent</code> + <code>models</code> + 3 组件</td><td><b>同一个插件</b></td>
+            <td>缺任何一个这个插件都没意义，拆开装没有价值</td></tr>
+        <tr><td>每家 <code>provider:*</code></td><td><b>各自独立插件</b></td>
+            <td>用户可能只要 openai 不要 claude；塞进主插件会导致「卸插件连带卸掉所有 provider」</td></tr>
+        <tr><td><code>credentials</code></td><td>独立插件（可选依赖）</td>
+            <td>免凭证的本地端点不该被强塞</td></tr>
+        <tr><td><code>tools</code> / 工具包</td><td>每包一个独立插件</td>
+            <td>工具生态本身可插拔，一个工具集一个插件</td></tr>
+      </tbody>
+    </table>
+    <p class="note ok"><b>规律：协同才能工作的 → 聚合成插件；可独立取舍的 → 独立插件。</b>
+      这样既保证「装一件能用的东西」，又不牺牲「存在性由插件决定」。</p>
+
+    <h3>5.4 schema 与目录</h3>
+    <pre class="code"><span class="cm">// plugins/chat-workbench/plugin.json</span>
+{
+  <span class="k">"id"</span>: <span class="k">"chat-workbench"</span>,
+  <span class="k">"name"</span>: <span class="k">"对话工作台"</span>,
+  <span class="k">"version"</span>: <span class="k">"1.0.0"</span>,
+  <span class="k">"services"</span>:   [<span class="k">"session"</span>, <span class="k">"agent"</span>, <span class="k">"models"</span>],     <span class="cm">// ← 新增</span>
+  <span class="k">"components"</span>: [<span class="k">"widget.session-list"</span>, <span class="k">"widget.chat-timeline"</span>, <span class="k">"widget.chat-composer"</span>],
+  <span class="k">"capabilities"</span>: [{ <span class="k">"name"</span>: <span class="k">"chat.run"</span>, <span class="k">"detail"</span>: <span class="k">"发问 / 流式 / 工具循环"</span> }],
+  <span class="k">"dependencies"</span>: [{ <span class="k">"pluginId"</span>: <span class="k">"providers-openai"</span> }, { <span class="k">"pluginId"</span>: <span class="k">"credentials"</span>, <span class="k">"optional"</span>: <span class="k">true</span> }]
+}
+
+<span class="cm">// plugins/  —— 每个插件一个目录，可打包成一个 zip 分发</span>
+plugins/
+  chat-workbench/plugin.json
+  providers-openai/plugin.json
+  providers-anthropic/plugin.json
+  credentials/plugin.json
+  tools-fs/plugin.json</pre>
+    <p style="margin-top:var(--s3)">对比现在：<code>PluginDefinition</code> 已有 <code>components</code>（原 <code>widgets</code>）、<code>capabilities</code>、<code>dependencies</code>，
+      只需加 <code>services[]</code>；真正的问题是<b>插件表现在硬编码在前端</b> <code>client/src/plugins/registry.ts</code> —— 那才是「插件系统」最大的破绽（Core 装的插件与前端知道的可能对不上）。</p>
+
+    <h3>5.5 Core 与前端各要做什么</h3>
+    <table>
+      <thead><tr><th>层</th><th>新增能力</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td>Core</td><td><b>插件发现</b>：扫 <code>plugins/*/plugin.json</code>，按 <code>dependencies</code> 拓扑排序后启停</td>
+            <td>服务发现已有（<code>services/*/service.json</code>），插件层是新的</td></tr>
+        <tr><td>Core</td><td><b>批量启停</b>：<code>plugin.start</code> / <code>plugin.stop</code> 展开成 N 个 service 启停</td>
+            <td>现在只有 <code>service.start/stop</code></td></tr>
+        <tr><td>Core</td><td><b>状态聚合</b>：插件状态 = 其服务状态聚合（<code>ready</code> / <code>degraded</code> / <code>stopped</code>）</td><td>新的</td></tr>
+        <tr><td>Core</td><td><code>GET /api/plugins</code> 供前端拉清单</td><td>新的</td></tr>
+        <tr><td>前端</td><td>插件清单<b>改从 Core 拉</b>，删掉硬编码数据</td><td>顺手修债</td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.6 代价与风险</h3>
+    <table>
+      <thead><tr><th>风险</th><th>严重度</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr><td>停插件要停多个进程，其中一个正在跑工具</td><td>中</td>
+            <td>停前先发 <code>agent.cancel</code> 走正常收尾，超时才强杀</td></tr>
+        <tr><td>一个服务挂了，插件状态怎么算</td><td>低</td>
+            <td>定义为 <code>degraded</code>，插件详情窗列出哪个服务异常</td></tr>
+        <tr><td>依赖缺失（装了对话插件但没 provider）</td><td>中</td>
+            <td><code>degraded</code> + 明确提示「缺 provider:X」，不启动失败</td></tr>
+        <tr><td>现有 6 个插件条目 + 10 个服务要重写为 <code>plugin.json</code></td><td>低</td>
+            <td>机械工作，顺手修掉插件表硬编码</td></tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:var(--s3)"><b>工作量</b>：Core 插件发现 + 拓扑启停 + 状态聚合 + <code>/api/plugins</code> ≈ 1 天；
+      前端清单改拉 ≈ 0.5 天；迁移重写 <code>plugin.json</code> ≈ 0.5 天。<b>值得做</b> —— 让插件名副其实，且让依赖在用户层面可见。</p>
+  </section>
+
+  <!-- 6 通讯 -->
+  <section>
+    <h2><span class="n">6</span>两个通道</h2>
+    <div class="cols">
+      <div>
+        <h3>前端 → 服务</h3>
+        <table><tbody>
+          <tr><th>发命令</th><td><code>POST /api/command</code><br>一条命令一个 topic；结果用 <code>&lt;cmd&gt;.result</code> 事件异步回来</td></tr>
+          <tr><th>收事件</th><td><code>GET /events</code>（SSE），支持 topic 过滤</td></tr>
+        </tbody></table>
+      </div>
+      <div>
+        <h3>服务 → 服务</h3>
+        <table><tbody>
+          <tr><th>通道</th><td>同一条总线（Core 的 Bus），命令与事件都走它</td></tr>
+          <tr><th>纪律</th><td>服务之间<b>不互相 import</b>；topic 由 <code>shared/src/events.ts</code> 唯一定义</td></tr>
+          <tr><th>校验</th><td>服务 <code>service.json</code> 声明 <code>publishes</code>/<code>subscribes</code>，Core 启动时校验 —— 发未声明的 topic 直接拒</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <h3>6.1 每个组件的命令 / 事件</h3>
+    <table>
+      <thead><tr><th>组件</th><th>发命令</th><th>收事件</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>① 会话</b><br><span style="color:var(--muted);font-size:var(--xs)">session</span></td>
+          <td class="topic">session.list<br>session.create<br>session.rename<br>session.delete</td>
+          <td class="topic">session.created<br>session.updated<br>session.deleted</td>
+        </tr>
+        <tr>
+          <td><b>② 对话</b><br><span style="color:var(--muted);font-size:var(--xs)">agent + session</span></td>
+          <td class="topic">session.get<br>agent.cancel</td>
+          <td class="topic">message.appended<br>agent.token<br>agent.thinking<br>agent.tool.executed<br>agent.state.changed<br>agent.run.failed<br>agent.run.cancelled</td>
+        </tr>
+        <tr>
+          <td><b>③ 输入</b><br><span style="color:var(--muted);font-size:var(--xs)">agent</span></td>
+          <td class="topic">agent.run { provider, model, thinking }<br>agent.cancel</td>
+          <td class="topic">agent.state.changed</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:var(--xs);color:var(--muted)">注：事件名沿用「领域前缀」便于按 topic 过滤（<code>agent.**</code> 一次订阅拿到本轮全部进度）；
+      组件<b>不需要</b>订阅 <code>models.*</code> 或 <code>provider.*</code> —— 那是 agent 与 models 之间的事。</p>
+  </section>
+
+  <!-- 6 走线 -->
+  <section>
+    <h2><span class="n">7</span>一次发问的走线</h2>
+    <pre class="trace"><span class="c">③</span> agent.run ──► agent ──► session.get ──► session ──► (session.get.result 回 agent)
+                       └─► models.stream ──► models ──► provider ──► 上游
+                                             ▲                        │
+                        credentials ◄───────┴── credentials.resolved ─┘
+
+provider.chunk ──► models 归一 ──► agent 编排/执行
+                                   ├─► agent.token / agent.thinking ──► ②
+                                   ├─► agent.tool.executed ────────────► ②
+                                   └─ 工具结果 role:tool 回填 → 下一轮 models.stream
+
+最终 models.finished ──► agent ──► message.append(assistant) ──► session
+                                        + agent.state.changed(settled) ──► ②③</pre>
+    <p style="margin-top:var(--s3)"><code>retry / usage</code> 旁路消费失败与完成事件，按 <code>models.stream</code> 里带的 retryPolicy 退避重发。</p>
+  </section>
+
+  <!-- 7 缺口与决策 -->
+  <section>
+    <h2><span class="n">8</span>缺口与待定</h2>
+    <p class="note bad">
+      <b>思考流（必修）：</b>当前实现里主位的 <code>isDelta(chunk)</code> 不看 <code>blockType</code>，
+      于是 <code>reasoning</code> 块也被当成正文 token 发 —— 用 deepseek-reasoner 一类模型，<b>思维链会混进回答正文</b>。
+      修法：给流事件加可选字段 <code>blockType?: 'text' | 'reasoning'</code>（契约纪律「只增不改」允许加可选字段），
+      由 models 层标注、agent 转发、前端分流 → ② 的折叠思考块才有数据。<b>不加服务、不加 topic。</b>
+    </p>
+    <table>
+      <thead><tr><th>待定</th><th>选项</th><th>倾向</th></tr></thead>
+      <tbody>
+        <tr><td><code>models</code> 要不要把 provider 拆成独立进程？</td><td>进程内注册表（pi 的做法）／独立进程</td>
+            <td><b>独立进程</b> —— 「存在性由插件决定」是 ost 相对 pi 的差异，别丢</td></tr>
+        <tr><td><code>credentials</code> 内含进 models 还是独立？</td><td>内含（pi）／独立能力位</td>
+            <td><b>独立</b> —— 「凭证值不过总线」是威胁模型红线</td></tr>
+        <tr><td><code>tools</code> 独立服务还是 agent 进程内？</td><td>进程内 execute（pi）／独立能力位</td>
+            <td><b>独立</b>，但最贵（跨进程调用 + 审批流），可后置</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 8 开工顺序 -->
+  <section>
+    <h2><span class="n">9</span>开工顺序</h2>
+    <table>
+      <thead><tr><th>步</th><th>内容</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>修思考流泄漏（流事件加 <code>blockType</code>）+ 新增 <code>chat.store</code></td>
+            <td>端到端用例：思考不进正文；<code>{blockType:'reasoning'}</code> 可见</td></tr>
+        <tr><td>2</td><td>拆 <code>widget.llm-chat</code> → ② <code>chat-timeline</code> + ③ <code>chat-composer</code>；思考折叠块 / 工具卡 / 错误内联 / 尾光标</td>
+            <td>组件用例：②③ 各自独立渲染、共用 requestId 不串轮</td></tr>
+        <tr><td>3</td><td>对话布局预设（<code>default-layout.ts</code> 写死 ①②③ 几何）+ 面板头「重置为对话布局」接 <code>layout.store.resetLayout</code></td>
+            <td>打开即是 §1.4 的样子；拖动后能一键复位</td></tr>
+      </tbody>
+    </table>
+    <p class="note ok" style="margin-top:var(--s4)"><b>本轮不做：</b>窄窗降级、代码语法高亮库、工具跨进程化、审批 listener、MCP 接入、上下文压缩。</p>
+  </section>
+
+  <footer>
+    Osteosome · 对话界面架构（三组件 / 功能拆分服务 / Core） · 2026-10-02 ·
+    参照：<a href="https://pi-doc.com/docs/latest/source/architecture" style="color:var(--primary)">pi 核心架构与设计哲学</a> ·
+    配套：<code>docs/开发进度/阶段追踪.md</code>
+  </footer>
+</div>
+
+<script>
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+</script>
+</body>
+</html>

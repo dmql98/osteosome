@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>开发计划 · 对话界面重构 + 减法 + 插件聚合</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --warning:#9a6700;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 12px rgba(16,22,26,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --warning:#d29922;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .topic, .mono { font-family: var(--mono); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 var(--s5) var(--s6); }
+
+  header.bar { position: sticky; top:0; z-index:10; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding-top:10px; padding-bottom:10px; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  header.bar .sp { flex:1; }
+  header.bar button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  header.bar button:hover { filter:brightness(1.08); }
+
+  section { margin: var(--s6) 0 0; }
+  h2 { font-size: var(--lg); margin: 0 0 var(--s3); display:flex; align-items:center; gap:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size: var(--md); margin: var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin: 0 0 var(--s3); }
+  ul { margin: 0 0 var(--s3); padding-left: 1.2em; }
+  li { margin: 2px 0; }
+
+  table { width:100%; border-collapse: collapse; margin: var(--s3) 0 var(--s4); font-size: var(--sm); }
+  th, td { text-align:left; padding: 8px 10px; border-bottom:1px solid var(--border); vertical-align: top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  td.topic, .topic { color: var(--primary); }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.ok { border-left-color: var(--success); }
+
+  /* 步骤卡 */
+  .step { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    margin-bottom:var(--s3); overflow:hidden; }
+  .step > .hd { display:flex; align-items:center; gap:var(--s3); padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .step .sid { font-family:var(--mono); font-weight:700; color:var(--primary); font-size:var(--md); min-width:34px; }
+  .step .stitle { font-weight:600; font-size:var(--sm); }
+  .step .stars { color:var(--warning); font-size:var(--xs); }
+  .step .dur { margin-left:auto; font-family:var(--mono); font-size:var(--xs); color:var(--muted); white-space:nowrap; }
+  .step .bd { padding:var(--s3) var(--s4); font-size:var(--sm); }
+  .step .bd > ol, .step .bd > ul { margin:0 0 var(--s2); }
+  .step .lbl { font-size:10px; color:var(--muted); letter-spacing:.04em; margin:var(--s3) 0 3px; }
+  .step .lbl:first-child { margin-top:0; }
+  .step pre { margin:0; }
+  .lane { display:inline-block; font-size:10px; padding:1px 7px; border-radius:var(--r-full);
+    border:1px solid var(--border-strong); color:var(--muted); }
+  .lane.reduce { border-color:var(--danger); color:var(--danger); }
+  .lane.ui { border-color:var(--success); color:var(--success); }
+  .lane.plug { border-color:var(--primary); color:var(--primary); }
+
+  pre.code { background:var(--bg); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); font-size:var(--xs); line-height:1.7; overflow-x:auto; margin:0; }
+  pre.code .k { color:var(--primary); }
+  pre.code .cm { color:var(--muted); }
+
+  /* 依赖图 */
+  .lanes { display:grid; gap:var(--s3); }
+  .lane-row { display:grid; grid-template-columns:82px 1fr; gap:var(--s3); align-items:center; }
+  .lane-name { font-size:var(--xs); color:var(--muted); text-align:right; }
+  .lane-flow { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; }
+  .step-chip { font-family:var(--mono); font-size:var(--xs); border:1px solid var(--border-strong);
+    background:var(--surface); border-radius:var(--r-md); padding:4px 9px; }
+  .step-chip.key { border-color:var(--primary); background:var(--primary-soft); color:var(--primary); font-weight:700; }
+  .arw { color:var(--muted); font-size:var(--xs); }
+
+  /* 甘特 */
+  .gantt { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+    padding:var(--s3) var(--s4); font-family:var(--mono); font-size:11px; overflow-x:auto; }
+  .gantt .row { display:grid; grid-template-columns:96px 1fr; gap:var(--s2); align-items:center; margin:3px 0; }
+  .gantt .lbl { color:var(--muted); }
+  .gantt .track { position:relative; height:16px; background:var(--surface-2); border-radius:3px; }
+  .gantt .bar { position:absolute; top:0; height:16px; border-radius:3px; display:flex; align-items:center;
+    padding:0 5px; color:#fff; font-size:10px; white-space:nowrap; overflow:hidden; }
+  .gantt .axis { display:grid; grid-template-columns:96px 1fr; gap:var(--s2); margin-top:var(--s2);
+    border-top:1px dashed var(--border-strong); padding-top:4px; color:var(--muted); font-size:10px; }
+  .gantt .axis .ticks { display:flex; justify-content:space-between; }
+
+  .stat { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--s2); }
+  .stat > div { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+    padding:var(--s3); text-align:center; }
+  .stat b { display:block; font-size:var(--lg); font-family:var(--mono); }
+  .stat span { font-size:var(--xs); color:var(--muted); }
+  .stat .big { color:var(--success); }
+
+  footer { margin-top:var(--s6); padding-top:var(--s4); border-top:1px solid var(--border); color:var(--muted); font-size:var(--xs); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>开发计划 · 对话界面重构</h1>
+    <span class="sub">减法 · 插件聚合 · 8 步</span>
+    <span class="sp"></span>
+    <button id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="lead" style="margin-top:var(--s5)">
+    <b>一句话：</b>先减法（10 个服务 → 5），再修缺陷与拆组件（3 个盒子），最后做插件聚合。
+    <b>前 2 天就有可见收益</b>：进程数减半、启动变快、provider 一个不少。总计 <b>8 天</b>。
+  </div>
+
+  <!-- 0 -->
+  <section>
+    <h2><span class="n">0</span>起点（实测）</h2>
+    <div class="stat">
+      <div><b class="big">10</b><span>服务进程（S2 后 → 5）</span></div>
+      <div><b>10</b><span>组件（S5 后对话区 → 3 盒）</span></div>
+      <div><b>1</b><span>未提交改动（P7 工具循环）</span></div>
+      <div><b>8</b><span>计划天数</span></div>
+    </div>
+    <table>
+      <tbody>
+        <tr><th>分支 / HEAD</th><td class="mono">P2-llm / ec03717（P4 收尾已推）</td></tr>
+        <tr><th>服务</th><td class="mono">hello · session · loop · llm · llm-provider-{openai, openrouter, deepseek, anthropic} · credentials · llm-retry</td></tr>
+        <tr><th>组件</th><td>10 个，其中 <code>widget.llm-chat</code> = 消息区 + 输入框<b>焊在一起</b></td></tr>
+        <tr><th>已知缺陷</th>
+            <td>① 思考流泄漏进正文（主位 <code>isDelta</code> 不看 <code>blockType</code>）
+                ② 插件表硬编码在前端 ③ <code>setEnabled</code> 不真停服务 ④ <code>hello</code> 是纯演示</td></tr>
+      </tbody>
+    </table>
+
+    <h3>目标（定案）</h3>
+    <table>
+      <tbody>
+        <tr><th>界面</th><td>3 个组件：<code>session-list</code> / <code>chat-timeline</code> / <code>chat-composer</code>，默认预设拼成正常 agent 对话界面</td></tr>
+        <tr><th>服务</th><td>按功能：<code>session</code> / <code>loop</code>（编排）/ <code>llm</code>（模型接入）+ 能力位</td></tr>
+        <tr><th>provider</th><td><b>一个通用 openai 兼容实现 + 厂商预设表（数据）</b>；加厂商 = 加一行，不加代码不加进程</td></tr>
+        <tr><th>Core</th><td>进程 + 总线 + 桥 + 凭证 store，<b>零业务知识</b></td></tr>
+        <tr><th>插件</th><td><b>聚合</b>：一组服务 + 一组组件 + 依赖；Core 扫 <code>plugins/*/plugin.json</code></td></tr>
+      </tbody>
+    </table>
+    <p class="note ok"><b>明确不做：</b>窄窗降级、代码语法高亮库、工具跨进程化、审批 listener、MCP 接入、上下文压缩、整体转 pi。</p>
+  </section>
+
+  <!-- 1 甘特 -->
+  <section>
+    <h2><span class="n">1</span>工期与依赖</h2>
+    <div class="lanes">
+      <div class="lane-row">
+        <span class="lane-name">减法线</span>
+        <div class="lane-flow">
+          <span class="step-chip">S1 多实例 provider ★</span><span class="arw">→</span>
+          <span class="step-chip">S2 删 4 服务</span><span class="arw">→</span>
+          <span class="step-chip">S3 新增服务商</span>
+        </div>
+      </div>
+      <div class="lane-row">
+        <span class="lane-name">界面线</span>
+        <div class="lane-flow">
+          <span class="step-chip">S4 修思考流</span><span class="arw">→</span>
+          <span class="step-chip">S5 拆三组件 ★</span><span class="arw">→</span>
+          <span class="step-chip">S6 布局预设</span>
+        </div>
+      </div>
+      <div class="lane-row">
+        <span class="lane-name">插件线</span>
+        <div class="lane-flow">
+          <span class="step-chip">S7 插件聚合</span><span class="arw">→</span>
+          <span class="step-chip">S8 收尾</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>甘特（两条线可并行）</h3>
+    <div class="gantt">
+      <div class="row"><span class="lbl">S0 落袋</span><div class="track"><span class="bar" style="left:0;width:3%;background:var(--muted)"></span></div></div>
+      <div class="row"><span class="lbl">S1 provider</span><div class="track"><span class="bar" style="left:3%;width:19%;background:var(--danger)">1.5d</span></div></div>
+      <div class="row"><span class="lbl">S2 删服务</span><div class="track"><span class="bar" style="left:22%;width:6%;background:var(--danger)">0.5d</span></div></div>
+      <div class="row"><span class="lbl">S3 新增服务商</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--danger)">0.5d</span></div></div>
+      <div class="row"><span class="lbl">S4 思考流</span><div class="track"><span class="bar" style="left:3%;width:6%;background:var(--success)">0.5d</span></div></div>
+      <div class="row"><span class="lbl">S5 拆组件</span><div class="track"><span class="bar" style="left:9%;width:19%;background:var(--success)">1.5d</span></div></div>
+      <div class="row"><span class="lbl">S6 布局预设</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--success)">0.5d</span></div></div>
+      <div class="row"><span class="lbl">S7 插件聚合</span><div class="track"><span class="bar" style="left:34%;width:25%;background:var(--primary)">2d</span></div></div>
+      <div class="row"><span class="lbl">S8 收尾</span><div class="track"><span class="bar" style="left:59%;width:7%;background:var(--muted)">0.5d</span></div></div>
+      <div class="axis"><span class="lbl">天</span><div class="ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div></div>
+    </div>
+    <p style="margin-top:var(--s3);font-size:var(--sm)">
+      <b>三个排序判断</b>：① S1 在删包<b>之前</b> —— 做完再删，用户不掉任何 provider；
+      ② S4 必须在 S5 之前 —— 思考块要有数据才能验证；
+      ③ S7 放最后 —— 它动 Core 启停语义，前面的组件与布局都是它要声明归属的对象。
+    </p>
+  </section>
+
+  <!-- 2 步骤 -->
+  <section>
+    <h2><span class="n">2</span>步骤详情</h2>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S0</span><span class="stitle">落袋 P7 WS-1 最小工具循环</span>
+        <span class="stars">未提交</span><span class="dur">0.5 h</span></div>
+      <div class="bd">
+        <div class="lbl">做什么</div>
+        <ul><li>把当前 24 个文件的未提交改动提交（独立 commit）—— 工具循环、思考字段预留、session 透传、<code>core/vitest.config.ts</code> 串行化</li></ul>
+        <div class="lbl">验收</div>
+        <ul><li><code>pnpm -r typecheck</code> 零错 + <code>pnpm -r test</code> 全绿（当前已达成）</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S1</span><span class="lane reduce">减法线</span>
+        <span class="stitle">通用 provider：多实例 + 厂商预设表</span>
+        <span class="stars">★核心</span><span class="dur">1.5 天</span></div>
+      <div class="bd">
+        <div class="lbl">为什么先做</div>
+        <ul><li>做完才能删包，且删包前用户不掉任何 provider</li></ul>
+        <div class="lbl">做什么</div>
+        <ol>
+          <li><code>shared/src/llm/vendors.ts</code> 预设表（<b>数据</b>）：
+              <code>id / label / baseUrl / api / credentialEnv / defaultModel / models[]</code><br>
+              内置 openai、deepseek、openrouter、moonshot、siliconflow、groq、together、xai、mistral、ollama、vllm、lm-studio</li>
+          <li><code>llm-provider-openai</code> 改<b>多实例</b>：启动时读配置（预设表 + 用户自填项），
+              为每家 publish 一条 <code>llm.provider.registered</code>（各自 baseUrl / credentialRef / defaultModel）；
+              请求时按 <code>provider</code> 名路由到对应 baseUrl</li>
+          <li>装配层把 baseUrl 从模块常量改成按实例传入（<code>req.baseURL</code> 已支持）</li>
+        </ol>
+        <div class="lbl">验收</div>
+        <ul>
+          <li>单测：预设表 12 条 id 唯一、baseUrl 合法、credentialEnv 命名一致</li>
+          <li>单测：同一进程两个实例（openai + deepseek）各自打自己的 baseURL（假 fetch 断言 URL）</li>
+          <li>端到端：<code>agent.run{provider:'deepseek'}</code> → 假上游收到 deepseek baseUrl 的请求</li>
+        </ul>
+        <div class="lbl">风险</div>
+        <ul><li>碰 <code>BASE_URL</code> 模块常量 → 单测用假 fetch 断言 URL 兜住</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S2</span><span class="lane reduce">减法线</span>
+        <span class="stitle">减法：删 4 个服务</span><span class="dur">0.5 天</span></div>
+      <div class="bd">
+        <table style="margin-top:0">
+          <thead><tr><th>删</th><th>理由</th><th>连带处理</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">llm-provider-deepseek</td><td>就是 openai 兼容 + 换 baseURL，已被 S1 实例覆盖</td>
+                <td>workspace / 3 个集成测试「9 服务」断言改「5 服务」</td></tr>
+            <tr><td class="mono">llm-provider-openrouter</td><td>同上</td><td>同上</td></tr>
+            <tr><td class="mono">llm-provider-anthropic</td><td>定案不做；claude 走 OpenRouter</td>
+                <td>16 组单测改写成「经 OpenRouter 调 claude 模型」的对照回归</td></tr>
+            <tr><td class="mono">hello</td><td>纯演示，零用户价值</td>
+                <td>删服务 + <code>widget.hello-command</code> + 命令台按钮 + plugin registry 条目 + <code>scripts/smoke.mjs</code> 与 <code>e2e.test.ts</code> 改用 <code>session.create</code></td></tr>
+          </tbody>
+        </table>
+        <p class="note" style="margin:var(--s3) 0"><b>保留</b>：<code>shared/src/events.ts</code> 里的 <code>hello.command.*</code> 契约（只增不改，留着当测试 fixture 词）。</p>
+        <div class="lbl">验收</div>
+        <ul><li>进程数 5；<code>pnpm -r test</code> 全绿；手工启动 Core，<code>/health</code> 只列 5 个服务</li></ul>
+        <div class="lbl">诚实损失</div>
+        <ul><li>ost 从此<b>只有一种 wire</b>。将来接 Bedrock 原生 Converse / Gemini 原生需重做（已进决策门）</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S3</span><span class="lane reduce">减法线</span>
+        <span class="stitle">设置 Pane「新增服务商」</span><span class="dur">0.5 天</span></div>
+      <div class="bd">
+        <div class="lbl">做什么</div>
+        <ol>
+          <li>数据源换成 <code>shared</code> 的预设表（下拉选厂商 → 自动填 baseUrl / key env 名 / 默认模型）</li>
+          <li>「自定义端点」：用户填 <code>label / baseUrl / credentialRef / defaultModel</code> → 写入配置 → S1 的 provider 运行时注册</li>
+          <li><b>不配置凭证 → 该 provider 不注册</b> → 前端下拉里没有它；指定它发问得 <code>unsupported_provider</code></li>
+        </ol>
+        <div class="lbl">验收</div>
+        <ul><li>设置窗新增 deepseek 后，对话窗下拉出现 deepseek 且能选中；删掉凭证后消失</li></ul>
+        <div class="lbl">收益</div>
+        <ul><li>P4 那条没勾的绿灯「新增服务商不再手改单函数」真正达成</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S4</span><span class="lane ui">界面线</span>
+        <span class="stitle">修思考流泄漏</span><span class="stars">★S5 的前置</span><span class="dur">0.5 天</span></div>
+      <div class="bd">
+        <div class="lbl">做什么</div>
+        <ol>
+          <li><code>shared</code>：<code>llm.token.streamed</code> 加可选字段 <code>blockType?: 'text' | 'reasoning'</code>（只增不改）</li>
+          <li><code>services/llm</code>：主位按块类型标注（现在 <code>isDelta</code> 不看 blockType，reasoning 被当正文发）</li>
+          <li><code>services/loop</code>：<code>loop.token.streamed</code> 透传 <code>blockType</code></li>
+        </ol>
+        <div class="lbl">验收</div>
+        <ul><li>端到端：假上游发 reasoning 块 → 断言 <code>{blockType:'reasoning'}</code> 可见 <b>且</b> 正文不含思维链</li></ul>
+        <div class="lbl">风险</div>
+        <ul><li>无（只加可选字段，向后兼容）</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S5</span><span class="lane ui">界面线</span>
+        <span class="stitle">组件拆分：② timeline / ③ composer</span><span class="stars">★</span><span class="dur">1.5 天</span></div>
+      <div class="bd">
+        <div class="lbl">做什么</div>
+        <ol>
+          <li>新增 <code>client/src/stores/chat.store.ts</code>：<code>activeRequestId</code> / <code>sending</code> / in-flight 行 / <code>model</code> / <code>thinking</code> / 工具块状态</li>
+          <li><code>widget.chat-timeline</code>（②）：消息气泡、<b>折叠思考块</b>、<b>工具卡</b>、错误内联、流式尾光标、Markdown <code>&lt;pre&gt;</code></li>
+          <li><code>widget.chat-composer</code>（③）：输入框 + 发送/停止 + 模型下拉 + 思考强度下拉</li>
+          <li>删除 <code>widget.llm-chat</code></li>
+          <li>②③ <b>零直接通信</b>，共享 <code>chat.store</code>；服务端事件都带同一 requestId，按它过滤不串轮</li>
+        </ol>
+        <div class="lbl">验收</div>
+        <ul>
+          <li>组件用例：②③ 各自独立挂载渲染；共用 requestId 不串轮；工具块 执行中→✓/✗；错误内联不清空上文</li>
+          <li>① 切会话 → ② 清空重载 → ③ 输入禁用状态正确</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S6</span><span class="lane ui">界面线</span>
+        <span class="stitle">对话布局预设</span><span class="dur">0.5 天</span></div>
+      <div class="bd">
+        <div class="lbl">做什么</div>
+        <ul>
+          <li><code>client/src/panes/default-layout.ts</code> 写死三盒几何（会话 <code>240px</code> / 对话 <code>flex × 满高−120</code> / 输入 <code>flex × 120</code>）</li>
+          <li>面板头加「重置为对话布局」接 <code>layout.store.resetLayout</code></li>
+        </ul>
+        <div class="lbl">验收</div>
+        <ul><li>打开即是《对话界面架构》§1.4 的样子；三个盒子可各自拖动；拖完能一键复位</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S7</span><span class="lane plug">插件线</span>
+        <span class="stitle">插件 = 聚合</span><span class="dur">2 天</span></div>
+      <div class="bd">
+        <table style="margin-top:0">
+          <thead><tr><th>子步</th><th>内容</th><th>落点</th></tr></thead>
+          <tbody>
+            <tr><td>S7-1</td><td><code>PluginManifest</code> zod schema + <code>plugin.start/stop</code> 命令 + <code>plugin.state.changed</code> 事件</td>
+                <td class="mono">shared/src/{manifest,events}.ts</td></tr>
+            <tr><td>S7-2</td><td>Core 扫 <code>plugins/*/plugin.json</code>，按 <code>dependencies</code> 拓扑启停 + 状态聚合（ready/degraded/stopped）+ <code>GET /api/plugins</code></td>
+                <td class="mono">新增 service-manager/plugin-manifest.ts；manager.ts；sse-bridge/server.ts</td></tr>
+            <tr><td>S7-3</td><td>前端插件清单<b>改从 Core 拉</b>，删掉 <code>plugins/registry.ts</code> 的硬编码 <code>PLUGINS</code></td>
+                <td class="mono">plugins/registry.ts 只留纯函数 + 新增 core-sdk/usePlugins.ts</td></tr>
+            <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）</td>
+                <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start</td></tr>
+            <tr><td>S7-5</td><td>迁移：写 6 个 <code>plugin.json</code>，把 5 个服务 + 3 个组件归组</td>
+                <td class="mono">plugins/*/plugin.json</td></tr>
+            <tr><td>S7-6</td><td>插件详情窗显示「N 组件 / M 服务 / 依赖 / degraded 明细」</td>
+                <td class="mono">PluginListWindow.vue / PluginDetailWindow.vue</td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">验收</div>
+        <ul>
+          <li>装 <code>chat-workbench</code> → 3 个进程起来 + 3 个组件出现；卸掉 → 全消失</li>
+          <li>缺必需依赖（没装 provider）→ 插件 <code>degraded</code> + 提示「缺 provider:X」，<b>不启动失败</b></li>
+          <li>停插件前先发 <code>loop.cancel</code> 正常收尾，超时才强杀</li>
+        </ul>
+        <div class="lbl">测试影响</div>
+        <ul><li><code>client/tests/widgets/registry.test.ts</code> 那条「插件声明的每个 widget 必须 get 得到」断言，数据源从静态 PLUGINS 换成 Core 清单（要加 mock）</li></ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="hd"><span class="sid">S8</span><span class="lane plug">插件线</span>
+        <span class="stitle">收尾</span><span class="dur">0.5 天</span></div>
+      <div class="bd">
+        <ul>
+          <li><code>pnpm -r typecheck</code> 零错 + <code>pnpm -r test</code> 全绿</li>
+          <li>更新 <code>docs/开发进度/阶段追踪.md</code>：P7 WS-1/WS-2 状态、P8 前置项、新的服务/组件清单</li>
+          <li>更新 <code>docs/对话界面架构.html</code>：把「现状 → 目标」落账（服务 5 个、组件 3 个、provider 预设表）</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 预设表 -->
+  <section>
+    <h2><span class="n">3</span>S1 的核心：厂商预设表（数据）</h2>
+    <pre class="code"><span class="cm">// shared/src/llm/vendors.ts —— 加一家 = 加一行，零代码、零进程、零测试改动</span>
+export interface VendorPreset {
+  <span class="k">id</span>: string              <span class="cm">// 'deepseek'</span>
+  <span class="k">label</span>: string           <span class="cm">// 'DeepSeek'</span>
+  <span class="k">baseUrl</span>: string         <span class="cm">// 'https://api.deepseek.com'</span>
+  <span class="k">api</span>: <span class="k">'openai'</span>           <span class="cm">// 预留：将来接原生 wire 用</span>
+  <span class="k">credentialEnv</span>: string   <span class="cm">// 'DEEPSEEK_API_KEY'</span>
+  <span class="k">defaultModel</span>: string    <span class="cm">// 'deepseek-chat'</span>
+  <span class="k">models</span>?: string[]       <span class="cm">// 静态兜底目录（拉不到 /models 时用）</span>
+}</pre>
+    <table>
+      <thead><tr><th>id</th><th>baseUrl</th><th>credentialEnv</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">openai</td><td class="mono">https://api.openai.com/v1</td><td class="mono">OPENAI_API_KEY</td></tr>
+        <tr><td class="mono">deepseek</td><td class="mono">https://api.deepseek.com</td><td class="mono">DEEPSEEK_API_KEY</td></tr>
+        <tr><td class="mono">openrouter</td><td class="mono">https://openrouter.ai/api/v1</td><td class="mono">OPENROUTER_API_KEY</td></tr>
+        <tr><td class="mono">moonshot</td><td class="mono">https://api.moonshot.cn/v1</td><td class="mono">MOONSHOT_API_KEY</td></tr>
+        <tr><td class="mono">siliconflow</td><td class="mono">https://api.siliconflow.cn/v1</td><td class="mono">SILICONFLOW_API_KEY</td></tr>
+        <tr><td class="mono">groq</td><td class="mono">https://api.groq.com/openai/v1</td><td class="mono">GROQ_API_KEY</td></tr>
+        <tr><td class="mono">together</td><td class="mono">https://api.together.xyz/v1</td><td class="mono">TOGETHER_API_KEY</td></tr>
+        <tr><td class="mono">xai</td><td class="mono">https://api.x.ai/v1</td><td class="mono">XAI_API_KEY</td></tr>
+        <tr><td class="mono">mistral</td><td class="mono">https://api.mistral.ai/v1</td><td class="mono">MISTRAL_API_KEY</td></tr>
+        <tr><td class="mono">ollama</td><td class="mono">http://127.0.0.1:11434/v1</td><td>（免 key）</td></tr>
+        <tr><td class="mono">vllm</td><td class="mono">http://127.0.0.1:8000/v1</td><td>（免 key）</td></tr>
+        <tr><td class="mono">lm-studio</td><td class="mono">http://127.0.0.1:1234/v1</td><td>（免 key）</td></tr>
+      </tbody>
+    </table>
+    <p class="note"><b>「新增服务商」的三个来源</b>：内置预设（表里有）／<b>用户自填</b>（设置窗填 baseURL + key + 默认模型，不用改仓库）／插件提供（预留给将来的原生 wire provider）。</p>
+  </section>
+
+  <!-- 4 决策门 -->
+  <section>
+    <h2><span class="n">4</span>决策门与风险</h2>
+    <h3>决策门（触发即重估，别凭感觉反复讨论）</h3>
+    <table>
+      <thead><tr><th>触发条件</th><th>该做什么</th></tr></thead>
+      <tbody>
+        <tr><td>需要上下文压缩 / fork / rewind</td><td>评估 <code>@earendil-works/pi-durable</code> + pi 的 compaction</td></tr>
+        <tr><td>需要多 agent 编排（一个会话 spawn 另一个）</td><td>评估包 <code>pi-agent-core</code> 替换 <code>loop</code> 内部实现（前端/会话/参数链路全部复用）</td></tr>
+        <tr><td>工具 &gt; 20 且依赖 MCP 生态</td><td><code>tools</code> 独立成能力位 + 借 <code>@earendil-works/pi-mcp</code></td></tr>
+        <tr><td>需要 OAuth 登录（Copilot / Bedrock / Vertex）</td><td>同上，走 pi-ai 的 auth 层</td></tr>
+        <tr><td>需要 Bedrock 原生 Converse / Gemini 原生 wire</td><td>新增第二个 provider 实现（<code>api</code> 字段已在预设表预留）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>已识别风险</h3>
+    <table>
+      <thead><tr><th>风险</th><th>处置</th></tr></thead>
+      <tbody>
+        <tr><td>S1 改多实例时碰 <code>BASE_URL</code> 模块常量</td><td><code>req.baseURL</code> 已支持，只需装配层按实例传入；单测用假 fetch 断言 URL</td></tr>
+        <tr><td>S2 删包后 3 个集成测试的「9 服务」断言红</td><td>同一 commit 内改断言；<code>startCore</code> 加 <code>services?: string[]</code> 白名单参数供测试显式开启</td></tr>
+        <tr><td>S5 拆组件后旧 <code>widget.llm-chat</code> 残留引用</td><td>P4 WS-1 那条断言会抓到（插件声明的组件必须 get 得到）</td></tr>
+        <tr><td>S7 停插件时进程正在跑工具</td><td>停前发 <code>loop.cancel</code> 走正常收尾，<code>stopGraceMs</code> 超时才强杀</td></tr>
+        <tr><td>S7 前端改拉清单后离线打不开</td><td>拉取失败时回退到内置最小清单（只有一个 core 插件），不白屏</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） · 2026-10-02 ·
+    配套：<code>docs/开发进度/S-对话界面与插件重构-计划.md</code> ·
+    架构：<code>docs/对话界面架构.html</code>
+  </footer>
+</div>
+
+<script>
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+</script>
+</body>
+</html>
