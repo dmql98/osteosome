@@ -2,7 +2,7 @@
   <div class="cmd">
     <Card title="命令台" padding="sm">
       <div class="cmd__form">
-        <Input v-model="topic" placeholder="topic，如 hello.command" aria-label="命令 topic" />
+        <Input v-model="topic" placeholder="topic，如 session.list" aria-label="命令 topic" />
         <Textarea v-model="payloadText" placeholder="payload（JSON，可空）" aria-label="payload" :rows="3" />
         <div class="cmd__actions">
           <span class="cmd__status" :class="statusClass">{{ statusText }}</span>
@@ -32,7 +32,7 @@ import Textarea from '@/components/ui/Textarea.vue'
 import { useCommand } from '@/core-sdk/useCommand'
 import { useEventBus } from '@/core-sdk/useEventBus'
 
-const topic = ref('hello.command')
+const topic = ref('session.list')
 const payloadText = ref('')
 const sending = ref(false)
 const events = ref<Array<{ topic: string; time: string }>>([])

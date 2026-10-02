@@ -103,14 +103,17 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string }> {
   })
 }
 
-describe('P2 集成冒烟 · 六服务中立流链路', () => {
+describe('P2 集成冒烟 · 四服务中立流链路', () => {
   let core: Core | undefined
   let dataDir = ''
   let upstream: { server: Server; baseUrl: string } | undefined
+  // deepseek/openrouter 的 key 故意留着：它们现在不各自起进程，而是让 llm-provider-openai
+  // 额外注册两个厂商实例（端点用各家真地址，本测试不发请求过去）——顺带证明单进程多注册
+  // 不会妨碍主链路。
   const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY']
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
-  const serviceIds = ['llm', 'credentials', 'llm-provider-deepseek', 'llm-provider-openrouter', 'llm-provider-openai', 'llm-retry']
+  const serviceIds = ['llm', 'credentials', 'llm-provider-openai', 'llm-retry']
 
   beforeAll(async () => {
     upstream = await startFakeUpstream()

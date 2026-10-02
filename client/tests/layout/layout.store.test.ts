@@ -63,8 +63,8 @@ describe('layout.store', () => {
     const store = useLayoutStore()
     const panel = { id: 'panel.main', params: { widgets: ['widget.service-status'] }, api: { setActive: vi.fn(), updateParameters: vi.fn() } }
     store.attachApi(fakeApi(panel) as never)
-    store.addWidget('widget.hello-command')
-    expect(panel.api.updateParameters).toHaveBeenCalledWith({ widgets: ['widget.service-status', 'widget.hello-command'] })
+    store.addWidget('widget.session-list')
+    expect(panel.api.updateParameters).toHaveBeenCalledWith({ widgets: ['widget.service-status', 'widget.session-list'] })
   })
 
   it('addWidget 无面板时新建承载该组件的面板', () => {

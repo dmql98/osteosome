@@ -1,18 +1,21 @@
 /**
- * P4 集成冒烟（WS-5）—— 真 Core + 全部 9 服务，验证 P4 三块新增能力。
+ * P4 集成冒烟（WS-5）—— 真 Core + 6 服务，验证 P4 三块新增能力。
  *
  * 在 P3（四服务会话编排）基础上，本文件聚焦 P4 独有的链路：
  *  1) 模型目录：`llm.models.list` → provider 拉上游 /models → `llm.models.list.result`
  *     （remote：上游有 data；static：上游 404/失败 → 静态兜底）
- *  2) anthropic provider（第一个非 openai 兼容 wire）：/v1/messages 具名事件 → StreamChunk
+ *  2) 第二个厂商实例：openrouter 走同一个 provider 进程，claude 经网关转成 openai 形状的 SSE
+ *     → StreamChunk（验证「加厂商 = 加一行预设」，且网关路径与直连 openai 行为一致）
  *  3) 错误码化：401 → unauthorized（非瞬态，retry 立即失败不重试）；
  *     429 → rate_limited（瞬态，llm-retry 执行器按退避重发 → 重试成功）
  *  4) 参数链路（P4 WS-2）：`loop.run` 的 provider/model/thinking 一路落到上游请求体
- *     （openai 收 `reasoning_effort`；anthropic 收 `thinking.budget_tokens` 且不下发 temperature）
+ *     （统一走 openai wire 的 `reasoning_effort`；原先 anthropic 的 thinking.budget_tokens
+ *      已随原生 wire 下线，网关侧由 openrouter 负责映射）
  *
- * 假上游：OPENAI_BASE_URL / ANTHROPIC_BASE_URL 均可配（WS-6 / WS-3 设计），指向本测试
- * 起的本地 HTTP server——openai 兼容 /v1/chat/completions + anthropic /v1/messages +
- * 模型目录 /models，按需注入 401/429，并留证最后一次请求体。无需真实 API key / 外网。
+ * 假上游：OPENAI_BASE_URL / OPENROUTER_BASE_URL 均可配（S1 设计），指向本测试起的本地
+ * HTTP server——/v1/chat/completions 与 /openrouter/chat/completions（两家分路径，才能断言
+ * 「打到的是那一家」）+ 模型目录 /models，按需注入 401/429，并留证最后一次请求体。
+ * 无需真实 API key / 外网。
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -88,15 +91,17 @@ async function post(base: string, topic: string, payload: Record<string, unknown
 }
 
 /**
- * 假上游：一个 HTTP server 同时充当 openai / anthropic 两家上游。
+ * 假上游：一个 HTTP server 同时充当 openai / openrouter 两家上游。
  * - `/v1/chat/completions`：openai 兼容 SSE（`data:` 帧 + `[DONE]`）
- * - `/v1/messages`：anthropic 具名事件（message_start / content_block_start /
- *   content_block_delta / message_delta / message_stop）
- * - `/models`：模型目录（openai 与 anthropic 都指向它；默认 200 返回 data）
+ * - `/openrouter/chat/completions`：网关转译后的形状 —— **与上面同一种**（这正是要验的
+ *   事：claude 经网关回来，翻译层看不出区别）
+ * - `/models`：模型目录（两家都指向它；默认 200 返回 data）
  *   - `state.modelsStatus`: 'ok' | 'not-found' | 'bad-json' 控制远端/静态降级
- * - 注入开关：`state.openaiStatus` / `state.anthropicStatus` 设 HTTP 状态（401/429）模拟错误
- * - **请求体留证**：`state.openaiBody` / `state.anthropicBody` 记最后一次请求体
+ * - 注入开关：`state.openaiStatus` / `state.openrouterStatus` 设 HTTP 状态（401/429）模拟错误
+ * - **请求体留证**：`state.openaiBody` / `state.openrouterBody` 记最后一次请求体
  *   （P4 WS-2 用来实证 loop.run 的 model/thinking 真的落到上游 wire）
+ * - 路径分开而不是靠 model 名分辨：这样「openrouter 那次请求」能被独立计数与留证，
+ *   顺带证明多实例真的按各自 baseUrl 路由（S1）。
  */
 interface UpstreamState {
   text: string
@@ -105,13 +110,13 @@ interface UpstreamState {
   openaiStatus: number
   /** 429Once：openai 首次请求 429（触发 retry），之后自动 200（验证重试成功） */
   openai429Once: boolean
-  anthropicStatus: number
+  openrouterStatus: number
   openaiHits: number
-  anthropicHits: number
+  openrouterHits: number
   /** 最后一次 openai 兼容请求体（JSON 解析失败则留原文） */
   openaiBody: Record<string, unknown> | null
-  /** 最后一次 anthropic 请求体 */
-  anthropicBody: Record<string, unknown> | null
+  /** 最后一次 openrouter（claude 经网关）请求体 */
+  openrouterBody: Record<string, unknown> | null
 }
 
 async function readBody(req: IncomingMessage): Promise<string> {
@@ -136,11 +141,11 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
     modelsStatus: 'ok',
     openaiStatus: 200,
     openai429Once: false,
-    anthropicStatus: 200,
+    openrouterStatus: 200,
     openaiHits: 0,
-    anthropicHits: 0,
+    openrouterHits: 0,
     openaiBody: null,
-    anthropicBody: null,
+    openrouterBody: null,
   }
   const server = createServer((req, res) => {
     const url = req.url ?? ''
@@ -163,34 +168,27 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
       return
     }
 
-    // anthropic /v1/messages：具名事件流
-    if (url.includes('/v1/messages')) {
-      state.anthropicHits += 1
-      state.anthropicBody = parseBody(await readBody(req))
-      if (state.anthropicStatus !== 200) {
-        res.writeHead(state.anthropicStatus).end()
+    // openrouter（claude 经网关）→ 与直连 openai 完全同形状的 SSE
+    if (url.includes('/openrouter/chat/completions')) {
+      state.openrouterHits += 1
+      state.openrouterBody = parseBody(await readBody(req))
+      if (state.openrouterStatus !== 200) {
+        res.writeHead(state.openrouterStatus).end()
         return
       }
       res.writeHead(200, { 'Content-Type': 'text/event-stream' })
-      const send = (type: string, data: unknown) => res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)
-      send('message_start', { type: 'message_start', message: { usage: { input_tokens: 5, output_tokens: 0 } } })
-      send('content_block_start', {
-        type: 'content_block_start',
-        index: 0,
-        content_block: { type: 'text', text: '' },
-      })
+      const send = (o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`)
       for (const c of [...state.text]) {
-        send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: c } })
+        send({ id: 'x', choices: [{ index: 0, delta: { content: c }, finish_reason: null }] })
       }
-      send('content_block_stop', { type: 'content_block_stop', index: 0 })
-      send('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: state.text.length } })
-      send('message_stop', { type: 'message_stop' })
+      send({ id: 'x', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: [...state.text].length } })
+      res.write('data: [DONE]\n\n')
       res.end()
       return
     }
 
-    // openai 兼容 /v1/chat/completions
-    if (url.includes('/chat/completions')) {
+    // openai 兼容 /v1/chat/completions（排除 openrouter 那条路径：不靠分支顺序兜底）
+    if (url.includes('/chat/completions') && !url.includes('/openrouter/')) {
       state.openaiHits += 1
       state.openaiBody = parseBody(await readBody(req))
       if (state.openai429Once && state.openaiHits === 1) {
@@ -223,7 +221,7 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
   })
 }
 
-describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
+describe('P4 集成冒烟 · 模型目录 + 第二厂商实例 + 错误码化', () => {
   let core: Core | undefined
   let dataDir = ''
   let upstream: { server: Server; baseUrl: string; state: UpstreamState } | undefined
@@ -231,34 +229,23 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
   const envKeys = [
     'OPENAI_BASE_URL',
     'OPENAI_API_KEY',
-    'DEEPSEEK_API_KEY',
+    'OPENROUTER_BASE_URL',
     'OPENROUTER_API_KEY',
-    'ANTHROPIC_BASE_URL',
-    'ANTHROPIC_API_KEY',
+    'DEEPSEEK_API_KEY',
     'LLM_PROVIDER',
   ]
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
-  const serviceIds = [
-    'llm',
-    'session',
-    'loop',
-    'credentials',
-    'llm-provider-deepseek',
-    'llm-provider-openrouter',
-    'llm-provider-openai',
-    'llm-provider-anthropic',
-    'llm-retry',
-  ]
+  const serviceIds = ['llm', 'session', 'loop', 'credentials', 'llm-provider-openai', 'llm-retry']
 
   beforeAll(async () => {
     upstream = await startFakeUpstream()
     process.env.OPENAI_BASE_URL = `${upstream.baseUrl}/v1`
-    process.env.ANTHROPIC_BASE_URL = upstream.baseUrl
+    // openrouter 走独立子路径：两家请求能被分别计数/留证
+    process.env.OPENROUTER_BASE_URL = `${upstream.baseUrl}/openrouter`
     process.env.OPENAI_API_KEY = 'test-openai-key'
-    process.env.ANTHROPIC_API_KEY = 'test-anthropic-key'
-    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key'
     process.env.OPENROUTER_API_KEY = 'test-openrouter-key'
+    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key'
     process.env.LLM_PROVIDER = 'openai'
 
     dataDir = mkdtempSync(path.join(tmpdir(), 'ost-p4-smoke-'))
@@ -284,7 +271,7 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
   }, 30_000)
 
   it(
-    '九个服务全部 ready（session + loop + 4×provider + credentials + retry）',
+    '六个服务全部 ready（session + loop + provider + credentials + retry）',
     async () => {
       await waitFor(async () => {
         const res = await fetch(`${base()}/health`)
@@ -311,7 +298,6 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
         const result = parseSseEvents(sse.text()).find(
           (e) => e.topic === 'llm.models.list.result' && e.payload.requestId === requestId,
         )!
-        console.log('MODELS-REMOTE>>>', JSON.stringify(result.payload))
         expect(result.payload.provider).toBe('openai')
         expect(result.payload.catalog).toBe('remote')
         expect(result.payload.models).toEqual(['gpt-4o-mini', 'gpt-4o'])
@@ -329,16 +315,16 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
       const sse = await openSse(base(), '?topics=llm.models.**')
       try {
         const requestId = `models-static-${Date.now()}`
-        await post(base(), 'llm.models.list', { requestId, provider: 'anthropic' })
+        await post(base(), 'llm.models.list', { requestId, provider: 'openrouter' })
         await waitFor(
           () => parseSseEvents(sse.text()).some((e) => e.topic === 'llm.models.list.result' && e.payload.requestId === requestId),
           10_000,
-          'llm.models.list.result(anthropic static)',
+          'llm.models.list.result(openrouter static)',
         )
         const result = parseSseEvents(sse.text()).find(
           (e) => e.topic === 'llm.models.list.result' && e.payload.requestId === requestId,
         )!
-        expect(result.payload.provider).toBe('anthropic')
+        expect(result.payload.provider).toBe('openrouter')
         expect(result.payload.catalog).toBe('static')
         expect((result.payload.models as string[]).length).toBeGreaterThan(0)
       } finally {
@@ -350,32 +336,38 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
   )
 
   it(
-    'anthropic 流式：llm.request(anthropic) → 具名事件 → 逐步 token → finished(usage 归一)',
+    '第二厂商实例流式：llm.request(openrouter) → 网关转译的 openai 形状 SSE → token + usage 归一',
     async () => {
       const sse = await openSse(base(), '?topics=llm.**')
       try {
-        const requestId = `anth-${Date.now()}`
+        const requestId = `or-${Date.now()}`
+        const openaiHitsBefore = upstream!.state.openaiHits
         await post(base(), 'llm.request', {
           requestId,
-          provider: 'anthropic',
+          provider: 'openrouter',
+          model: 'anthropic/claude-3.5-sonnet',
           messages: [{ role: 'user', content: '你好' }],
         })
         await waitFor(
           () => parseSseEvents(sse.text()).some((e) => e.topic === 'llm.request.finished' && e.payload.requestId === requestId),
           20_000,
-          `llm.request.finished(anthropic) topics: ${parseSseEvents(sse.text()).map((e) => e.topic).join(',')}`,
+          `llm.request.finished(openrouter) topics: ${parseSseEvents(sse.text()).map((e) => e.topic).join(',')}`,
         )
         const events = parseSseEvents(sse.text())
-        console.log('ANTH>>>', events.map((e) => e.topic + ':' + JSON.stringify(e.payload)).join(' | '))
         const tokens = events.filter((e) => e.topic === 'llm.token.streamed' && e.payload.requestId === requestId)
         expect(tokens.map((t) => t.payload.token).join('')).toBe('你好')
         const started = events.find((e) => e.topic === 'llm.request.started' && e.payload.requestId === requestId)!
-        expect(started.payload.provider).toBe('anthropic')
+        expect(started.payload.provider).toBe('openrouter')
         const finished = events.find((e) => e.topic === 'llm.request.finished' && e.payload.requestId === requestId)!
         expect((finished.payload as { usage?: { promptTokens: number; completionTokens: number } }).usage).toMatchObject({
-          promptTokens: 5,
+          promptTokens: 3,
           completionTokens: 2,
         })
+        // 路由确实按实例走：打的是 openrouter 那条路径，没碰 openai 的
+        expect(upstream!.state.openrouterHits).toBe(1)
+        expect(upstream!.state.openaiHits).toBe(openaiHitsBefore)
+        // claude 的模型名原样送上网关
+        expect(upstream!.state.openrouterBody!.model).toBe('anthropic/claude-3.5-sonnet')
       } finally {
         sse.close()
       }
@@ -435,7 +427,6 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
           'llm.request.failed(rate_limited)',
         )
         await sleep(2500)
-        console.log('RETRY-EVS>>>', parseSseEvents(sse.text()).map((e) => e.topic + ':' + JSON.stringify(e.payload).slice(0, 80)).join(' | '))
         // retry 重发 → 第二次 200 → token + finished
         await waitFor(
           () => parseSseEvents(sse.text()).some((e) => e.topic === 'llm.request.finished' && e.payload.requestId === requestId),
@@ -511,14 +502,15 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
   )
 
   it(
-    '参数链路：思考强度（anthropic）→ thinking.budget_tokens 落 wire 且不下发 temperature',
+    '参数链路：思考强度对 claude 也只走 reasoning_effort（统一 wire，无 thinking.budget_tokens）',
     async () => {
       const sse = await openSse(base(), '?topics=llm.request.finished,llm.request.failed')
       try {
-        const requestId = `anth-think-${Date.now()}`
+        const requestId = `or-think-${Date.now()}`
         await post(base(), 'llm.request', {
           requestId,
-          provider: 'anthropic',
+          provider: 'openrouter',
+          model: 'anthropic/claude-3.5-sonnet',
           messages: [{ role: 'user', content: '想一下' }],
           thinking: 'medium',
           temperature: 0.7,
@@ -526,16 +518,16 @@ describe('P4 集成冒烟 · 模型目录 + anthropic + 错误码化', () => {
         await waitFor(
           () => parseSseEvents(sse.text()).some((e) => (e.topic === 'llm.request.finished' || e.topic === 'llm.request.failed') && e.payload.requestId === requestId),
           20_000,
-          'anthropic thinking 请求收尾',
+          'openrouter thinking 请求收尾',
         )
-        const body = upstream!.state.anthropicBody
-        expect(body, '上游未收到 anthropic 请求').toBeTruthy()
-        // 中立 medium → anthropic budget 8192
-        expect(body!.thinking).toMatchObject({ type: 'enabled', budget_tokens: 8192 })
-        // anthropic 开启 thinking 时 temperature 必须为 1 → 整体不下发
-        expect(body!.temperature).toBeUndefined()
-        // max_tokens 必须大于 budget，否则预算吃满即截断
-        expect(body!.max_tokens as number).toBeGreaterThan(8192)
+        const body = upstream!.state.openrouterBody
+        expect(body, '上游未收到 openrouter 请求').toBeTruthy()
+        // 中立 medium → wire reasoning_effort（claude 的 thinking 预算由网关侧映射）
+        expect(body!.reasoning_effort).toBe('medium')
+        // 原生 wire 已下线：不得再出现 anthropic 私有字段
+        expect(body!.thinking).toBeUndefined()
+        // 统一 openai 路径照常下发 temperature（原先 anthropic 的「thinking 时不下发」随 wire 一起没了）
+        expect(body!.temperature).toBe(0.7)
       } finally {
         sse.close()
       }

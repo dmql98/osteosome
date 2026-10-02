@@ -28,7 +28,7 @@ describe('widget registry', () => {
   })
 
   it('widgetComponents 以 widget id 为键注册组件', () => {
-    expect(widgetComponents()['widget.hello-command']).toBeTruthy()
+    expect(widgetComponents()['widget.llm-providers']).toBeTruthy()
     expect(widgetComponents()['widget.system-info']).toBeTruthy()
     expect(widgetComponents()['widget.command-palette']).toBeTruthy()
     expect(widgetComponents()['widget.event-stream']).toBeTruthy()

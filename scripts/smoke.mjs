@@ -1,3 +1,13 @@
+/**
+ * 端到端冒烟（手动跑，非测试套件）：真 `core/dist/main.js` 子进程 + 真 `services/`。
+ *
+ * 验的是 Core 的三件事，载体是真实服务 `session`（S2 起替换掉示例服务 hello）：
+ *   1. 进程拉起 → /health 汇报 ready
+ *   2. 命令往返：POST /api/command(session.create) → SSE 收到 session.create.result + 领域事件
+ *   3. 被 kill 后自动重启（pid 变、restartCount ≥ 1），重启后命令仍可用
+ *
+ * 跑法：pnpm -r run build && node scripts/smoke.mjs
+ */
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -7,11 +17,14 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const WATCHDOG_MS = 90_000
 
+/** 载体服务：真业务服务 id（命令往返 + 进程运维都拿它当靶子） */
+const VEHICLE = 'session'
+
 const REQUIRED_ARTIFACTS = [
   path.join(REPO_ROOT, 'core', 'dist', 'main.js'),
   path.join(REPO_ROOT, 'shared', 'dist', 'index.js'),
   path.join(REPO_ROOT, 'sdk', 'ts', 'dist', 'index.js'),
-  path.join(REPO_ROOT, 'services', 'hello', 'dist', 'index.js'),
+  path.join(REPO_ROOT, 'services', 'session', 'dist', 'index.js'),
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -46,9 +59,9 @@ async function getHealth(base) {
   }
 }
 
-function findHello(health) {
+function findVehicle(health) {
   if (!health || !Array.isArray(health.services)) return null
-  return health.services.find((s) => s.id === 'hello') ?? null
+  return health.services.find((s) => s.id === VEHICLE) ?? null
 }
 
 async function waitFor(fn, timeoutMs, label) {
@@ -75,7 +88,9 @@ function killPid(pid) {
 
 async function openSse(base) {
   const controller = new AbortController()
-  const res = await fetch(`${base}/events?topics=hello.command.*`, { signal: controller.signal })
+  // `session.**` 而非 `session.*`：命令回执是两层（session.create.result），
+  // 单层通配只吃得到 session.create / session.created，回执永远等不到
+  const res = await fetch(`${base}/events?topics=session.**`, { signal: controller.signal })
   if (res.status !== 200) throw new Error(`sse open failed: status=${res.status}`)
   let buf = ''
   const reader = res.body.getReader()
@@ -97,32 +112,33 @@ async function openSse(base) {
   }
 }
 
-async function postUntilExecuted(base, sse, requestId, text, timeoutMs) {
+/** 命令往返：POST /api/command → 等 SSE 出现该 requestId 的 `session.create.result` */
+async function postUntilResult(base, sse, requestId, title, timeoutMs) {
   const deadline = Date.now() + timeoutMs
   let lastStatus = 0
   while (Date.now() < deadline) {
     const res = await fetch(`${base}/api/command`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: 'hello.command', payload: { requestId, text } }),
+      body: JSON.stringify({ topic: 'session.create', payload: { requestId, title } }),
     })
     lastStatus = res.status
     await res.text().catch(() => '')
     await sleep(250)
     const events = parseEvents(sse.text())
     const hit = events.find(
-      (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
+      (e) => e.topic === 'session.create.result' && e.payload.requestId === requestId,
     )
     if (hit) return events
   }
   throw new Error(
-    `command '${requestId}' not executed in ${timeoutMs}ms (lastStatus=${lastStatus}); sse=${JSON.stringify(sse.text().slice(0, 800))}`,
+    `command '${requestId}' no result in ${timeoutMs}ms (lastStatus=${lastStatus}); sse=${JSON.stringify(sse.text().slice(0, 800))}`,
   )
 }
 
 let coreProc = null
 let coreExited = null
-let helloPid = null
+let vehiclePid = null
 let dataDir = null
 let sse = null
 
@@ -135,9 +151,9 @@ async function cleanup() {
     }
     sse = null
   }
-  if (helloPid != null) {
-    killPid(helloPid)
-    helloPid = null
+  if (vehiclePid != null) {
+    killPid(vehiclePid)
+    vehiclePid = null
   }
   if (coreProc && coreProc.exitCode === null) {
     const pid = coreProc.pid
@@ -216,58 +232,65 @@ async function main() {
   const base = `http://127.0.0.1:${port}`
   log(`core listening at ${base}`)
 
-  const hello1 = await waitFor(
+  const svc1 = await waitFor(
     async () => {
-      if (coreExited) throw new Error(`core exited while waiting for hello (code=${coreExited.code})`)
-      const h = findHello(await getHealth(base))
+      if (coreExited) throw new Error(`core exited while waiting for service (code=${coreExited.code})`)
+      const h = findVehicle(await getHealth(base))
       return h && h.status === 'ready' ? h : null
     },
     25_000,
-    'hello ready',
+    'session ready',
   )
-  helloPid = hello1.pid
-  log(`hello ready pid=${hello1.pid} restartCount=${hello1.restartCount}`)
+  vehiclePid = svc1.pid
+  log(`session ready pid=${svc1.pid} restartCount=${svc1.restartCount}`)
 
   sse = await openSse(base)
 
   const r1 = `smoke-1-${Date.now()}`
-  const events1 = await postUntilExecuted(base, sse, r1, 'ping-1', 15_000)
-  const started1 = events1.find((e) => e.topic === 'hello.command.started' && e.payload.requestId === r1)
-  const executed1 = events1.find((e) => e.topic === 'hello.command.executed' && e.payload.requestId === r1)
-  if (!started1) throw new Error(`missing started event for ${r1}`)
-  if (!executed1) throw new Error(`missing executed event for ${r1}`)
-  if (started1.payload.source !== 'hello') {
-    throw new Error(`started.source expected 'hello', got ${JSON.stringify(started1.payload.source)}`)
+  const events1 = await postUntilResult(base, sse, r1, 'ping-1', 15_000)
+  const result1 = events1.find((e) => e.topic === 'session.create.result' && e.payload.requestId === r1)
+  const created1 = events1.find((e) => e.topic === 'session.created' && e.payload.title === 'ping-1')
+  if (!result1) throw new Error(`missing result event for ${r1}`)
+  if (!created1) throw new Error(`missing session.created event for ${r1}`)
+  if (result1.payload.title !== 'ping-1') {
+    throw new Error(`result.title expected 'ping-1', got ${JSON.stringify(result1.payload.title)}`)
   }
-  if (executed1.payload.echo !== 'ping-1') {
-    throw new Error(`executed.echo expected 'ping-1', got ${JSON.stringify(executed1.payload.echo)}`)
+  // 领域事件与命令回执指向同一会话：bus 与 SSE 桥都没串味
+  if (created1.payload.sessionId !== result1.payload.sessionId) {
+    throw new Error(
+      `session.created.sessionId ${JSON.stringify(created1.payload.sessionId)} != result.sessionId ${JSON.stringify(result1.payload.sessionId)}`,
+    )
   }
-  log('round 1: POST /api/command → SSE started+executed ok (source=hello)')
+  // source 由 SDK 注入，标明事件来自哪个服务进程
+  if (result1.payload.source !== 'session') {
+    throw new Error(`result.source expected 'session', got ${JSON.stringify(result1.payload.source)}`)
+  }
+  log('round 1: POST /api/command → SSE result + session.created ok (source=session)')
 
-  log(`killing hello pid=${hello1.pid}`)
-  killPid(hello1.pid)
+  log(`killing session pid=${svc1.pid}`)
+  killPid(svc1.pid)
 
-  const hello2 = await waitFor(
+  const svc2 = await waitFor(
     async () => {
       if (coreExited) throw new Error(`core exited while waiting for restart (code=${coreExited.code})`)
-      const h = findHello(await getHealth(base))
+      const h = findVehicle(await getHealth(base))
       if (!h || h.status !== 'ready') return null
       if ((h.restartCount ?? 0) < 1) return null
-      if (h.pid === hello1.pid) return null
+      if (h.pid === svc1.pid) return null
       return h
     },
     25_000,
-    'hello restart',
+    'session restart',
   )
-  helloPid = hello2.pid
-  log(`hello restarted pid=${hello2.pid} restartCount=${hello2.restartCount}`)
+  vehiclePid = svc2.pid
+  log(`session restarted pid=${svc2.pid} restartCount=${svc2.restartCount}`)
 
   const r2 = `smoke-2-${Date.now()}`
-  const events2 = await postUntilExecuted(base, sse, r2, 'ping-2', 15_000)
-  const executed2 = events2.find((e) => e.topic === 'hello.command.executed' && e.payload.requestId === r2)
-  if (!executed2) throw new Error(`missing executed event after restart for ${r2}`)
-  if (executed2.payload.echo !== 'ping-2') {
-    throw new Error(`round 2 echo expected 'ping-2', got ${JSON.stringify(executed2.payload.echo)}`)
+  const events2 = await postUntilResult(base, sse, r2, 'ping-2', 15_000)
+  const result2 = events2.find((e) => e.topic === 'session.create.result' && e.payload.requestId === r2)
+  if (!result2) throw new Error(`missing result event after restart for ${r2}`)
+  if (result2.payload.title !== 'ping-2') {
+    throw new Error(`round 2 title expected 'ping-2', got ${JSON.stringify(result2.payload.title)}`)
   }
   log('round 2: command after restart ok')
 

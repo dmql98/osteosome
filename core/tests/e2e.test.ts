@@ -1,3 +1,13 @@
+/**
+ * e2e：Core 微内核 + 真实服务进程（起真 `services/`，跑真 dist）。
+ *
+ * 被测对象是 **Core**，不是某个业务服务：进程拉起 /health 汇报、命令投递 → 事件总线 →
+ * 进程被 kill 后自动重启、service.stop / start / restart 三条运维命令、SSE 桥转发。
+ *
+ * 载体选 `session`（S2 起）：原先用示例服务 hello，删掉后换成真业务服务 —— 用真服务当
+ * 载体比用假服务更强，命令往返（`session.create` → `session.create.result` + 领域事件
+ * `session.created`）本来就是 Core 该保证的语义。
+ */
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -10,8 +20,11 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const BASE_ARTIFACTS = [
   path.join(REPO_ROOT, 'shared', 'dist', 'index.js'),
   path.join(REPO_ROOT, 'sdk', 'ts', 'dist', 'index.js'),
-  path.join(REPO_ROOT, 'services', 'hello', 'dist', 'index.js'),
+  path.join(REPO_ROOT, 'services', 'session', 'dist', 'index.js'),
 ]
+
+/** e2e 载体：真服务 id（命令往返 + 进程运维都拿它当靶子） */
+const VEHICLE = 'session'
 
 interface HealthService {
   id: string
@@ -114,7 +127,7 @@ async function openSse(
   }
 }
 
-describe('e2e: core + hello', () => {
+describe('e2e: core + session', () => {
   let core: Core | undefined
   let dataDir = ''
   let lifecycle: Array<{ topic: string; payload: Record<string, unknown> }> = []
@@ -122,18 +135,18 @@ describe('e2e: core + hello', () => {
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
 
-  async function getHello(): Promise<HealthService | undefined> {
+  async function getVehicle(): Promise<HealthService | undefined> {
     try {
       const res = await fetch(`${base()}/health`)
       if (!res.ok) return undefined
       const body = (await res.json()) as HealthBody
-      return body.services.find((s) => s.id === 'hello')
+      return body.services.find((s) => s.id === VEHICLE)
     } catch {
       return undefined
     }
   }
 
-  async function waitForHello(
+  async function waitForVehicle(
     predicate: (s: HealthService) => boolean,
     timeoutMs: number,
     label: string,
@@ -141,35 +154,39 @@ describe('e2e: core + hello', () => {
     let last: HealthService | undefined
     await waitFor(
       async () => {
-        const h = await getHello()
+        const h = await getVehicle()
         if (h) last = h
         return h !== undefined && predicate(h)
       },
       timeoutMs,
       label,
     )
-    if (!last) throw new Error(`${label}: no hello entry in /health`)
+    if (!last) throw new Error(`${label}: no ${VEHICLE} entry in /health`)
     return last
   }
 
-  async function postUntilExecuted(
+  /**
+   * 命令往返：POST `/api/command` → 服务处理 → SSE 收到 `session.create.result`。
+   * 顺带把领域事件 `session.created` 也带回来（Core 必须把两类事件都桥给前端）。
+   */
+  async function postUntilResult(
     sse: { text: () => string },
     requestId: string,
-    text: string,
+    title: string,
     timeoutMs = 15_000,
   ): Promise<SseEvent[]> {
     const res = await fetch(`${base()}/api/command`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: 'hello.command', payload: { requestId, text } }),
+      body: JSON.stringify({ topic: 'session.create', payload: { requestId, title } }),
     })
     expect(res.status).toBe(202)
     await res.text().catch(() => '')
     await waitFor(() => {
       return parseSseEvents(sse.text()).some(
-        (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
+        (e) => e.topic === 'session.create.result' && e.payload.requestId === requestId,
       )
-    }, timeoutMs, `command '${requestId}' executed`)
+    }, timeoutMs, `command '${requestId}' result`)
     return parseSseEvents(sse.text())
   }
 
@@ -200,44 +217,40 @@ describe('e2e: core + hello', () => {
   }, 30_000)
 
   it(
-    'spawns hello and reports ready via /health',
+    'spawns session and reports ready via /health',
     async () => {
-      const hello = await waitForHello((s) => s.status === 'ready', 30_000, 'hello ready')
-      expect(hello.id).toBe('hello')
-      expect(hello.pid).toBeTypeOf('number')
-      expect(hello.restartCount).toBe(0)
-      firstPid = hello.pid
+      const svc = await waitForVehicle((s) => s.status === 'ready', 30_000, 'session ready')
+      expect(svc.id).toBe('session')
+      expect(svc.pid).toBeTypeOf('number')
+      expect(svc.restartCount).toBe(0)
+      firstPid = svc.pid
     },
     40_000,
   )
 
   it(
-    'POST hello.command → SSE receives started/executed with source hello',
+    'POST session.create → SSE receives result + domain event, both sourced from session',
     async () => {
-      const sse = await openSse(base(), '?topics=hello.command.*')
+      // `session.**` 而不是 `session.*`：命令回执是两层（session.create.result），
+      // 单层通配只吃到 session.create / session.created，回执永远等不到
+      const sse = await openSse(base(), '?topics=session.**')
       try {
         const requestId = `e2e-${Date.now()}`
-        const events = await postUntilExecuted(sse, requestId, 'ping-e2e')
-        const started = events.find(
-          (e) => e.topic === 'hello.command.started' && e.payload.requestId === requestId,
+        const events = await postUntilResult(sse, requestId, 'ping-e2e')
+        const result = events.find(
+          (e) => e.topic === 'session.create.result' && e.payload.requestId === requestId,
         )
-        const executed = events.find(
-          (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
+        const created = events.find(
+          (e) => e.topic === 'session.created' && e.payload.title === 'ping-e2e',
         )
-        expect(started, `started missing; sse=${sse.text().slice(0, 500)}`).toBeDefined()
-        expect(executed, `executed missing; sse=${sse.text().slice(0, 500)}`).toBeDefined()
-        expect(started!.payload).toMatchObject({
-          requestId,
-          text: 'ping-e2e',
-          source: 'hello',
-        })
-        expect(typeof started!.payload.ts).toBe('number')
-        expect(executed!.payload).toMatchObject({
-          requestId,
-          echo: 'ping-e2e',
-          source: 'hello',
-        })
-        expect(typeof executed!.payload.ts).toBe('number')
+        expect(result, `result missing; sse=${sse.text().slice(0, 500)}`).toBeDefined()
+        expect(created, `session.created missing; sse=${sse.text().slice(0, 500)}`).toBeDefined()
+        expect(result!.payload).toMatchObject({ requestId, title: 'ping-e2e' })
+        expect(typeof result!.payload.sessionId).toBe('string')
+        // 领域事件与命令回执指向同一个会话：证明 bus 与 bridge 都没串味
+        expect(created!.payload.sessionId).toBe(result!.payload.sessionId)
+        // source 由 SDK 注入，标明事件来自哪个服务进程
+        expect(result!.payload.source).toBe('session')
       } finally {
         sse.close()
       }
@@ -246,38 +259,34 @@ describe('e2e: core + hello', () => {
   )
 
   it(
-    'kills hello → auto-restarts → command works again',
+    'kills session → auto-restarts → command works again',
     async () => {
-      const before = await getHello()
+      const before = await getVehicle()
       expect(before?.pid).toBe(firstPid)
-      expect(before?.pid, 'hello pid missing').toBeTypeOf('number')
+      expect(before?.pid, 'session pid missing').toBeTypeOf('number')
       killPid(before!.pid!)
 
-      const restarted = await waitForHello(
+      const restarted = await waitForVehicle(
         (s) =>
           s.status === 'ready' &&
           s.restartCount >= 1 &&
           s.pid !== firstPid,
         30_000,
-        'hello restart',
+        'session restart',
       )
       expect(restarted.pid).not.toBe(firstPid)
       expect(restarted.restartCount).toBe(1)
       expect(lifecycle.some((e) => e.topic === 'service.restarting')).toBe(true)
 
-      const sse = await openSse(base(), '?topics=hello.command.*')
+      const sse = await openSse(base(), '?topics=session.**')
       try {
         const requestId = `e2e-rs-${Date.now()}`
-        const events = await postUntilExecuted(sse, requestId, 'after-restart')
-        const executed = events.find(
-          (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
+        const events = await postUntilResult(sse, requestId, 'after-restart')
+        const result = events.find(
+          (e) => e.topic === 'session.create.result' && e.payload.requestId === requestId,
         )
-        expect(executed).toBeDefined()
-        expect(executed!.payload).toMatchObject({
-          requestId,
-          echo: 'after-restart',
-          source: 'hello',
-        })
+        expect(result).toBeDefined()
+        expect(result!.payload).toMatchObject({ requestId, title: 'after-restart' })
       } finally {
         sse.close()
       }
@@ -286,51 +295,47 @@ describe('e2e: core + hello', () => {
   )
 
   it(
-    'service.stop command → hello stopped → service.start brings it back',
+    'service.stop command → session stopped → service.start brings it back',
     async () => {
       // 停用
       const stopRes = await fetch(`${base()}/api/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: 'service.stop', payload: { serviceId: 'hello' } }),
+        body: JSON.stringify({ topic: 'service.stop', payload: { serviceId: VEHICLE } }),
       })
       expect(stopRes.status).toBe(202)
-      await waitForHello(
+      await waitForVehicle(
         (s) => s.status === 'stopped',
         15_000,
-        'hello stopped via command',
+        'session stopped via command',
       )
 
-      // 停用后命令不再执行：POST 仍是 202（命令被接受），但 hello 不再发布事件
+      // 停用后命令不再执行：POST 仍是 202（命令被接受），但服务不再处理
       // 用 /health 确认 status=stopped 即可（上一步已断言）
 
       // 启用
       const startRes = await fetch(`${base()}/api/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: 'service.start', payload: { serviceId: 'hello' } }),
+        body: JSON.stringify({ topic: 'service.start', payload: { serviceId: VEHICLE } }),
       })
       expect(startRes.status).toBe(202)
-      await waitForHello(
+      await waitForVehicle(
         (s) => s.status === 'ready',
         20_000,
-        'hello started via command',
+        'session started via command',
       )
 
       // 命令可用性恢复
-      const sse = await openSse(base(), '?topics=hello.command.*')
+      const sse = await openSse(base(), '?topics=session.**')
       try {
         const requestId = `e2e-svc-${Date.now()}`
-        const events = await postUntilExecuted(sse, requestId, 'after-control')
-        const executed = events.find(
-          (e) => e.topic === 'hello.command.executed' && e.payload.requestId === requestId,
+        const events = await postUntilResult(sse, requestId, 'after-control')
+        const result = events.find(
+          (e) => e.topic === 'session.create.result' && e.payload.requestId === requestId,
         )
-        expect(executed).toBeDefined()
-        expect(executed!.payload).toMatchObject({
-          requestId,
-          echo: 'after-control',
-          source: 'hello',
-        })
+        expect(result).toBeDefined()
+        expect(result!.payload).toMatchObject({ requestId, title: 'after-control' })
       } finally {
         sse.close()
       }
@@ -341,20 +346,20 @@ describe('e2e: core + hello', () => {
   it(
     'service.restart command → pid changes → ready again',
     async () => {
-      const before = await getHello()
-      expect(before?.pid, 'hello pid missing before restart').toBeTypeOf('number')
+      const before = await getVehicle()
+      expect(before?.pid, 'session pid missing before restart').toBeTypeOf('number')
 
       const res = await fetch(`${base()}/api/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: 'service.restart', payload: { serviceId: 'hello' } }),
+        body: JSON.stringify({ topic: 'service.restart', payload: { serviceId: VEHICLE } }),
       })
       expect(res.status).toBe(202)
 
-      await waitForHello(
+      await waitForVehicle(
         (s) => s.status === 'ready' && s.pid !== before?.pid,
         20_000,
-        'hello restarted via command',
+        'session restarted via command',
       )
       expect(lifecycle.some((e) => e.topic === 'service.restarting')).toBe(true)
     },

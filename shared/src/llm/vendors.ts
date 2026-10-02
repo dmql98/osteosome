@@ -3,9 +3,10 @@
  *
  * ## 为什么是数据不是代码
  *
- * 现状：`llm-provider-deepseek` 与 `llm-provider-openrouter` 的 `provider.ts` 就是
+ * 此前：`llm-provider-deepseek` 与 `llm-provider-openrouter` 的 `provider.ts` 就是
  * `llm-provider-openai` 的**副本**，只差 `BASE_URL` 与 `STATIC_MODELS`。也就是说
- * 「支持 N 家 openai 兼容厂商」的真正成本不是代码，而是**每家一个进程 + 一份副本**。
+ * 「支持 N 家 openai 兼容厂商」的真正成本不是代码，而是**每家一个进程 + 一份副本**
+ * （这两个副本已在 S2 删除）。
  *
  * 本表把那份成本降成一行：所有厂商共用**一个** provider 进程，按本表在进程内建多个
  * 「实例」（各自 baseUrl / 凭证引用 / 默认模型 / 静态目录），逐个注册到 `llm` 主位。

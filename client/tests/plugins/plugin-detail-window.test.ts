@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import PluginDetailWindow from '../../src/plugins/PluginDetailWindow.vue'
+import { getPlugin } from '../../src/plugins/registry'
 
 function mountDetail(pluginId: string) {
   return mount(PluginDetailWindow, { props: { pluginId }, global: { plugins: [createPinia()] } })
@@ -37,7 +38,8 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
     const wrapper = mountDetail('plugin.workbench')
     await flushPromises()
     const addButtons = wrapper.findAll('button').filter((button) => button.text().includes('加入窗口'))
-    expect(addButtons.length).toBe(4)
+    // 按钮数从注册表推导：增删组件时这条断言跟着变，不会变成一个等着被改的魔数
+    expect(addButtons.length).toBe(getPlugin('plugin.workbench')?.widgets.length)
     await addButtons[0].trigger('click')
     expect(wrapper.text()).toContain('已加入')
   })

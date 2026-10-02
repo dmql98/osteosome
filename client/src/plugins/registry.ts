@@ -5,10 +5,13 @@
  * 运行期不再有“添加组件”入口；用户从「插件详情」里按组件加入窗口。
  * 本表同时是插件列表窗 / 详情窗的数据源，也是 widget 归属（widget -> plugin）的反查源。
  *
- * P2（LLM 能力位拆分）追加：`plugin.llm`（主位服务 `llm`）+ 3 个 provider 服务插件。
+ * P2（LLM 能力位拆分）追加：`plugin.llm`（主位服务 `llm`）+ provider 服务插件。
  * 按「能力位 = 独立服务进程」的 OST 思想，**服务插件 = 服务的呈现**：
  * - `plugin.llm`           → `services/llm`（能力主位，组件 `widget.llm-chat`）
- * - `plugin.llm-providers` → 3×`services/llm-provider-*`（provider 位，组件 `widget.llm-providers`）
+ * - `plugin.llm-providers` → `services/llm-provider-openai`（provider 位，组件 `widget.llm-providers`）
+ *   S1 起该进程内建多个厂商实例（openai / deepseek / openrouter / … 全部 openai 兼容），
+ *   每家按「配了凭证才注册」出现在组件里 —— 所以组件呈现的是**厂商**，
+ *   而插件对应的仍只有**一个** provider 进程。
  * - credentials / llm-retry 是旁路服务，无独立组件（见 LLM能力位拆分设计.md §4.5.1），
  *   不在本表列为可管理插件——它们的启停由服务层 manifest 控制，UI 不镜像服务内部结构。
  *
@@ -59,13 +62,12 @@ export const PLUGINS: PluginDefinition[] = [
     author: 'osteosome',
     license: 'Apache-2.0',
     description:
-      '工作台的最小骨架：系统信息、命令台与快速问候。它连接 Core 的命令通道，展示本机与控制进程概况，是龙骨默认携带的基础血肉。',
+      '工作台的最小骨架：系统信息与命令台。它连接 Core 的命令通道，展示本机与控制进程概况，是龙骨默认携带的基础血肉。',
     capabilities: [
       { name: 'system.info', detail: '读取本机与控制进程概况' },
       { name: 'command.execute', detail: '向 Core 投递命令' },
-      { name: 'hello.greet', detail: '示例问候命令' },
     ],
-    widgets: ['widget.system-info', 'widget.command-palette', 'widget.hello-command', 'widget.settings'],
+    widgets: ['widget.system-info', 'widget.command-palette', 'widget.settings'],
     dependencies: [{ id: 'core', label: 'Core 微内核' }],
   },
   {
@@ -145,7 +147,7 @@ export const PLUGINS: PluginDefinition[] = [
     author: 'osteosome',
     license: 'Apache-2.0',
     description:
-      'LLM provider 能力位（services/llm-provider-*）：deepseek / openrouter / openai（通用兼容）独立服务，经 llm.provider.registered 注册自身能力。组件（widget.llm-providers）由 WS-8 提供，渲染 provider 存在性与状态（defaultModel / credentialRef / retry 声明）。',
+      'LLM provider 能力位（单个 services/llm-provider-openai 进程）：进程内按厂商预设表建多个 openai 兼容实例（openai / deepseek / openrouter / moonshot / …），各家经 llm.provider.registered 注册自身能力 —— 配了凭证的才注册。组件（widget.llm-providers）渲染的是**厂商**的存在性与状态（defaultModel / credentialRef / retry 声明）。',
     capabilities: [
       { name: 'llm.provider.registered', detail: 'provider 注册（defaultModel / credentialRef / retryPolicy）' },
       { name: 'llm.provider.unregistered', detail: 'provider 退出（主位摘路由）' },

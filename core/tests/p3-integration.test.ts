@@ -140,7 +140,7 @@ describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
   const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'LLM_PROVIDER']
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
-  const serviceIds = ['llm', 'session', 'loop', 'credentials', 'llm-provider-deepseek', 'llm-provider-openrouter', 'llm-provider-openai', 'llm-retry']
+  const serviceIds = ['llm', 'session', 'loop', 'credentials', 'llm-provider-openai', 'llm-retry']
 
   beforeAll(async () => {
     upstream = await startFakeUpstream()
