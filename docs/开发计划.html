@@ -159,7 +159,7 @@
       <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
       <div><b class="big">0</b><span>未提交改动</span></div>
       <div><b class="big">12</b><span>测试包全绿</span></div>
-      <div><b>6</b><span>剩余计划天数</span></div>
+      <div><b>2.5</b><span>剩余计划天数（S7 2 天 + S8 0.5 天）</span></div>
     </div>
     <table>
       <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
@@ -619,21 +619,83 @@
           「这个插件现在几分健康」是它那些服务的真实 status 聚合 → 可派生。
           所以<b>不能靠「从服务派生一份清单」来消除硬编码</b> —— 那会得到一份服务列表的镜像，不是插件。</p>
         <table style="margin-top:0">
-          <thead><tr><th>子步</th><th>内容</th><th>落点</th></tr></thead>
+          <thead><tr><th style="width:7%">子步</th><th>内容</th><th style="width:30%">落点</th></tr></thead>
           <tbody>
-            <tr><td>S7-1</td><td><code>PluginManifest</code> zod schema + <code>plugin.start/stop</code> 命令 + <code>plugin.state.changed</code> 事件</td>
+            <tr><td>S7-1</td><td><code>PluginManifest</code> schema（<b>zod</b>，与 <code>service.json</code> 同一套校验风格）
+                + <code>plugin.start/stop</code> 命令 + <code>plugin.state.changed</code> 事件
+                <br><span class="mono" style="font-size:var(--text-xs)">fields: id / name / version / icon? / description? /
+                services[] / components[] / capabilities[]? / dependencies[{pluginId, optional?}]</span></td>
                 <td class="mono">shared/src/{manifest,events}.ts</td></tr>
-            <tr><td>S7-2</td><td>Core 扫 <code>plugins/*/plugin.json</code>，按 <code>dependencies</code> 拓扑启停 + 状态聚合（ready/degraded/stopped）+ <code>GET /api/plugins</code></td>
+            <tr><td>S7-2</td><td>Core 扫 <code>plugins/*/plugin.json</code>，按 <code>dependencies</code> <b>拓扑排序</b>后启停
+                + 状态聚合（ready / degraded / stopped）+ <code>GET /api/plugins</code></td>
                 <td class="mono">新增 service-manager/plugin-manifest.ts；manager.ts；sse-bridge/server.ts</td></tr>
-            <tr><td>S7-3</td><td>前端插件清单<b>改从 Core 拉</b>，删掉 <code>plugins/registry.ts</code> 的硬编码 <code>PLUGINS</code></td>
-                <td class="mono">plugins/registry.ts 只留纯函数 + 新增 core-sdk/usePlugins.ts</td></tr>
-            <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）</td>
+            <tr><td>S7-3</td><td>前端插件清单<b>改从 Core 拉</b>，删掉 <code>plugins/registry.ts</code> 的硬编码 <code>PLUGINS</code>
+                <br><span style="font-size:var(--text-xs)">registry.ts 只留 <code>pluginForWidget</code> 等纯函数</span></td>
+                <td class="mono">plugins/registry.ts；新增 core-sdk/usePlugins.ts</td></tr>
+            <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）
+                <br><span style="font-size:var(--text-xs)">停前先发 <code>loop.cancel</code> 正常收尾，超时才强杀</span></td>
                 <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start</td></tr>
             <tr><td>S7-5</td><td>迁移：写 <b>5 个</b> <code>plugin.json</code>，把 <b>6 个服务 + 9 个组件</b>归组
-                （工作台基础 / 对话工作台 / 模型接入 / 凭证 / 可靠性 —— 划法见架构文档 §5.3）</td>
+                （划法见架构文档 §5.3）</td>
                 <td class="mono">plugins/*/plugin.json</td></tr>
             <tr><td>S7-6</td><td>插件详情窗显示「N 组件 / M 服务 / 依赖 / degraded 明细」</td>
                 <td class="mono">PluginListWindow.vue / PluginDetailWindow.vue</td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
+        <ul>
+          <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
+              先把 <code>services[]</code> / <code>components[]</code> / <code>dependencies</code> 三个字段的
+              语义与校验规则钉死（尤其<b>依赖缺失怎么处理</b>）</li>
+          <li><b>S7-2 是唯一动 Core 启停语义的一步</b>，风险最高，所以单独一步、可独立回归。
+              前端此时还读静态数组，所以它坏了界面也不会白屏（渐进替换）</li>
+          <li><b>S7-3 才换数据源</b>：Core 侧清单可用之后，前端才有东西可拉。
+              反过来做（先删静态数组）会出现「Core 还没好、界面先空了」的窗口</li>
+          <li><b>S7-4 必须晚于 S7-3</b>：<code>plugin.stop</code> 命令由 S7-1 定义、由 S7-2 实现，
+              前端得有清单才知道自己能停哪个</li>
+          <li><b>S7-5 最后迁</b>：等前面四步都通了，迁移才是「把已验证的东西摆上去」而不是「边写边迁」</li>
+        </ul>
+        <div class="lbl">plugin.json 的形状（草案，S7-1 定案）</div>
+        <pre class="code"><span class="cm">// plugins/chat-workbench/plugin.json —— 一件能用的东西：一组服务 + 一组组件 + 依赖</span>
+{
+  <span class="k">"id"</span>: <span class="k">"chat-workbench"</span>,          <span class="cm">// 同时是目录名</span>
+  <span class="k">"name"</span>: <span class="k">"对话工作台"</span>,
+  <span class="k">"version"</span>: <span class="k">"1.0.0"</span>,
+  <span class="k">"icon"</span>: <span class="k">"💬"</span>,                      <span class="cm">// 可选</span>
+  <span class="k">"services"</span>:   [<span class="k">"session"</span>, <span class="k">"loop"</span>, <span class="k">"llm"</span>],
+  <span class="k">"components"</span>: [<span class="k">"widget.session-list"</span>, <span class="k">"widget.chat-timeline"</span>, <span class="k">"widget.chat-composer"</span>],
+  <span class="k">"capabilities"</span>: [{ <span class="k">"name"</span>: <span class="k">"chat.run"</span>, <span class="k">"detail"</span>: <span class="k">"发问 / 流式 / 工具循环"</span> }],  <span class="cm">// 可选</span>
+  <span class="k">"dependencies"</span>: [{ <span class="k">"pluginId"</span>: <span class="k">"models"</span> },
+                        { <span class="k">"pluginId"</span>: <span class="k">"credentials"</span>, <span class="k">"optional"</span>: <span class="k">true</span> }]
+}
+
+<span class="cm">// plugins/  —— 每个插件一个目录，可打包成一个 zip 分发（拷目录即装）</span>
+plugins/
+  chat-workbench/plugin.json    <span class="cm">// session + loop + llm + 3 组件</span>
+  models/plugin.json            <span class="cm">// llm-provider-openai（12 家厂商实例在内）</span>
+  credentials/plugin.json       <span class="cm">// 凭证服务</span>
+  reliability/plugin.json       <span class="cm">// llm-retry</span>
+  workbench/plugin.json         <span class="cm">// services: [] —— 只碰 Core 的内置组件</span></pre>
+        <p class="note"><b>与 <code>service.json</code> 的分工</b>：<code>service.json</code> 描述
+          「一个进程怎么被拉起来」（entry / protocolVersion / publishes / subscribes，Core 用它管生命周期）；
+          <code>plugin.json</code> 描述「哪些进程与组件算一件东西」（归属与依赖，<b>Core 不看它来启进程</b>）。
+          两者<b>不重叠</b> —— 所以加插件不需要改 <code>service.json</code>，加能力位不需要改 <code>plugin.json</code>。</p>
+        <div class="lbl">开工前必须先答的三个设计问题</div>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:34%">问题</th><th>为什么必须先答</th></tr></thead>
+          <tbody>
+            <tr><td><b>Core 启动时按什么策略启停？</b>全启，还是按已安装集合启？</td>
+                <td>现在 Core <b>无条件启动 services/ 下所有服务</b>。若插件要接管启停，得先定：
+                    「Core 仍然全启，插件只做额外编排」还是「Core 只启已安装插件声明的服务」。
+                    后者更彻底但会改变现有行为（且 S3 刚做好的 provider 运行期注册依赖进程在跑）</td></tr>
+            <tr><td><b>「已安装」存在哪？</b>preferences？还是 plugins/ 目录本身就是安装态？</td>
+                <td>现在有 <code>preferences.plugins.{enabled,uninstalled}</code>（只写不用）。
+                    要定「目录里有 = 已装」还是「preferences 里标记 = 已装」——
+                    前者天然支持打包分发（拷目录即装），后者需要 Core 落盘</td></tr>
+            <tr><td><b>卸插件时，它带的服务怎么办？</b></td>
+                <td>若某个服务被两个插件声明（当前划法里没有，但将来会有），
+                    卸其中一个不能停掉别人的服务 → 需要<b>引用计数</b>。
+                    现在 5 个插件的服务互不重叠，可以先不做，但要显式记录这个前提</td></tr>
           </tbody>
         </table>
         <div class="lbl">验收</div>
@@ -642,19 +704,33 @@
           <li>缺必需依赖（没装 provider）→ 插件 <code>degraded</code> + 提示「缺 provider:X」，<b>不启动失败</b></li>
           <li>停插件前先发 <code>loop.cancel</code> 正常收尾，超时才强杀</li>
         </ul>
-        <div class="lbl">测试影响</div>
-        <ul><li><code>client/tests/widgets/registry.test.ts</code> 那条「插件声明的每个 widget 必须 get 得到」断言，数据源从静态 PLUGINS 换成 Core 清单（要加 mock）</li></ul>
+        <div class="lbl">测试影响（提前知道，别到时候被红测试吓到）</div>
+        <ul>
+          <li><code>client/tests/widgets/registry.test.ts</code> 那条「插件声明的每个 widget 必须 get 得到」断言，
+              数据源从静态 PLUGINS 换成 Core 清单 → <b>要加 mock</b></li>
+          <li><code>client/tests/plugins/*.test.ts</code> 与 <code>layout.store.test.ts</code> 里凡是构造
+              <code>PLUGINS</code> 的地方都要跟着改</li>
+          <li>core 侧新增集成测：真 Core + 真 <code>plugins/</code> 目录 → 断言拓扑启停顺序与 degraded 判定</li>
+        </ul>
       </div>
     </div>
 
     <div class="step">
       <div class="hd"><span class="sid">S8</span><span class="lane plug">插件线</span>
-        <span class="stitle">收尾</span><span class="dur">0.5 天</span></div>
+        <span class="stitle">收尾</span>
+        <span class="done-badge" style="background:var(--danger)">最后一步</span><span class="dur">0.5 天</span></div>
       <div class="bd">
         <ul>
-          <li><code>pnpm -r typecheck</code> 零错 + <code>pnpm -r test</code> 全绿</li>
-          <li>更新 <code>docs/开发进度/阶段追踪.md</code>：P7 WS-1/WS-2 状态、P8 前置项、新的服务/组件清单</li>
-          <li>更新 <code>docs/对话界面架构.html</code>：把「现状 → 目标」落账（服务 5 个、组件 3 个、provider 预设表）</li>
+          <li><code>pnpm -r run build / typecheck / test</code> 退出码全为 0 + <code>node scripts/smoke.mjs</code> PASS
+              <br><span style="font-size:var(--text-xs);color:var(--muted)">S4 之后的规矩：判定成败只看退出码，
+              grep 只用来定位 —— 前三次「报绿」都是把错误输出过滤掉了</span></li>
+          <li>更新 <code>docs/开发进度/S-对话界面与插件重构-计划.md</code>：P7 状态、S0–S8 落账</li>
+          <li>更新 <code>docs/对话界面架构.html</code>：把「现状 → 目标」落账
+              （服务 <b>6</b> 个、组件 <b>10</b> 个 / 对话区 3 盒、provider 预设表 12 家 + wire 契约）</li>
+          <li>核对本计划与架构文档里是否还有「计划时写的、但已被实现推翻」的表述
+              <br><span style="font-size:var(--text-xs);color:var(--muted)">前 6 步每一步都发现至少一处
+              （provider 进程数、组件数、thinking wire 字段、厂商存在性粒度…）——
+              这个核对不是形式，是这份文档最容易腐烂的地方</span></li>
         </ul>
       </div>
     </div>
