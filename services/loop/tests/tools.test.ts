@@ -34,7 +34,7 @@ describe('LoopCore.nextRound（工具轮续跑）', () => {
     expect(core.currentState()).toBe('running')
 
     const out = core.nextRound('B1', 'B2', [{ role: 'system', content: 'SYS' }])
-    expect(out).toEqual({ a: 'A1', sessionId: 's1', content: '我看' })
+    expect(out).toEqual({ a: 'A1', sessionId: 's1', content: '我看', reasoning: '' })
     // 新 B 已发出，旧 B 不再有效
     expect(sent.map((s) => s.b)).toEqual(['B1', 'B2'])
     expect(core.peekContent('B1')).toBe('')
@@ -139,6 +139,66 @@ describe('tools（内置只读工具）', () => {
       writeFileSync(join(root, 'file.txt'), 'x')
       expect((await executeTool(root, 'read_file', { path: 'dir' })).content).toContain('不是文件')
       expect((await executeTool(root, 'list_dir', { path: 'file.txt' })).content).toContain('不是目录')
+    })
+  })
+})
+describe('LoopCore · 正文与思维链分流（S4）', () => {
+  it('reasoning token 不进正文 buffer', () => {
+    const { core } = makeCore()
+    core.accept('A1', 's1', '想一下')
+    core.start('B1', [{ role: 'user', content: '想一下' }])
+    core.onToken('B1', '先想', 'reasoning')
+    core.onToken('B1', '答案', 'text')
+    const done = core.finish('B1', 'stop')
+    // 关键：正文里不能出现思维链
+    expect(done?.content).toBe('答案')
+    expect(done?.reasoning).toBe('先想')
+  })
+
+  it('缺省 blockType 按 text 处理（老版本节点不发这个字段，不能丢正文）', () => {
+    const { core } = makeCore()
+    core.accept('A1', 's1', 'hi')
+    core.start('B1', [{ role: 'user', content: 'hi' }])
+    core.onToken('B1', 'a')
+    core.onToken('B1', 'b')
+    const done = core.finish('B1', 'stop')
+    expect(done?.content).toBe('ab')
+    expect(done?.reasoning).toBe('')
+  })
+
+  it('peek 同时给出正文与思维链；未知 B 返回空而非崩', () => {
+    const { core } = makeCore()
+    core.accept('A1', 's1', 'hi')
+    core.start('B1', [{ role: 'user', content: 'hi' }])
+    core.onToken('B1', '思', 'reasoning')
+    core.onToken('B1', '答', 'text')
+    expect(core.peek('B1')).toEqual({ content: '答', reasoning: '思' })
+    expect(core.peek('nope')).toEqual({ content: '', reasoning: '' })
+  })
+
+  it('工具轮换轮时思维链跟随本轮一起交出并清零', () => {
+    const { core } = makeCore()
+    core.accept('A1', 's1', '读文件')
+    core.start('B1', [{ role: 'user', content: '读文件' }])
+    core.onToken('B1', '思1', 'reasoning')
+    core.onToken('B1', '正文1', 'text')
+    const out = core.nextRound('B1', 'B2', [{ role: 'system', content: 'S' }])
+    expect(out).toMatchObject({ content: '正文1', reasoning: '思1' })
+    // 新一轮从零累积，不带上一轮的思维链
+    expect(core.peek('B2')).toEqual({ content: '', reasoning: '' })
+  })
+
+  it('finish 带出 finishReason 与 usage（S4 顺带修的落库字段）', () => {
+    const { core } = makeCore()
+    core.accept('A1', 's1', 'hi')
+    core.start('B1', [{ role: 'user', content: 'hi' }])
+    core.onToken('B1', 'ok', 'text')
+    const done = core.finish('B1', 'length', { promptTokens: 3, completionTokens: 7 })
+    expect(done).toMatchObject({
+      content: 'ok',
+      reasoning: '',
+      finishReason: 'length',
+      usage: { promptTokens: 3, completionTokens: 7 },
     })
   })
 })

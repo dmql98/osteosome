@@ -63,6 +63,14 @@ export interface Message {
   content: string
   finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'error'
   usage?: { promptTokens: number; completionTokens: number }
+  /**
+   * `role:'assistant'`：本轮的**思维链**（S4，只增不改）。
+   *
+   * 为什么要单独存而不是丢：主位与 loop 把 `blockType:'reasoning'` 的 token 单独累积到这里，
+   * **`content` 只留正文**。前端据此渲染可折叠的思考块（S5）。
+   * 若只是「不显示」而不存，思维链就被静默扔掉了 —— 用户看不到模型为什么这么想，也无法排查。
+   */
+  reasoning?: string
   /** role:'tool'：对应 assistant.toolCalls[].id */
   toolCallId?: string
   /** role:'tool'：工具名（渲染与排查用） */
@@ -92,7 +100,18 @@ export interface EventMap {
   'hello.command.failed': EventBase & { requestId: string; reason: string }
   // ── llm（P2 §3.4）──
   'llm.request.started': EventBase & { requestId: string; provider: string; model: string }
-  'llm.token.streamed': EventBase & { requestId: string; token: string; index: number }
+  'llm.token.streamed': EventBase & {
+    requestId: string
+    token: string
+    index: number
+    /**
+     * 该 token 属于哪类块（S4，只增不改）—— `reasoning` 是思维链，**不是正文**。
+     *
+     * 缺省视为 `'text'`，这样只发 `data:` 老事件的上游/旧版本节点不会因为缺字段而错分流。
+     * 不标的后果很具体：主位与 loop 都会把思维链当正文 token 累积，思维链混进回答正文。
+     */
+    blockType?: 'text' | 'reasoning'
+  }
   'llm.request.finished': EventBase & {
     requestId: string
     finishReason: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'error'
@@ -167,7 +186,14 @@ export interface EventMap {
   /** 本次跑动被主动取消（成功路径，不留半截 assistant） */
   'loop.run.cancelled': EventBase & { requestId: string; sessionId: string }
   /** loop 转发 llm 的 token（B→A 换发；B 不泄前端，index 保留 llm 原值） */
-  'loop.token.streamed': EventBase & { requestId: string; sessionId: string; token: string; index: number }
+  'loop.token.streamed': EventBase & {
+    requestId: string
+    sessionId: string
+    token: string
+    index: number
+    /** 同 `llm.token.streamed.blockType`：loop 透传，缺省视为 `'text'` */
+    blockType?: 'text' | 'reasoning'
+  }
   /**
    * 一次工具执行的结果（P7，只增不改）—— 前端据此渲染工具块（进行中 → 成功/失败）。
    * `summary` 是给模型与 UI 看的短摘要（长内容截断，完整结果在 role:'tool' 消息里）。

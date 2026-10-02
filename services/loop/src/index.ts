@@ -142,14 +142,17 @@ service.subscribe('session.get.result', (payload) => {
 
 // llm.token.streamed（B）→ 累积 + 换发 A（P3 §3.4：B 不泄前端）
 service.subscribe('llm.token.streamed', (payload) => {
-  const b = typeof payload.requestId === 'string' ? payload.requestId : ''
-  const token = typeof payload.token === 'string' ? payload.token : ''
-  const index = typeof payload.index === 'number' ? payload.index : 0
-  const a = core.onToken(b, token)
-  if (!a) return
-  const sessionId = sessionsByA.get(a) ?? ''
-  // 换发：requestId 换成 A，index 保留 llm 原值（P3 §3.4）
-  service.publish('loop.token.streamed', { requestId: a, sessionId, token, index })
+    const b = typeof payload.requestId === 'string' ? payload.requestId : ''
+    const token = typeof payload.token === 'string' ? payload.token : ''
+    const index = typeof payload.index === 'number' ? payload.index : 0
+    // S4：块类型透传。缺省 'text' —— 老版本 llm 主位不发这个字段，不能因此丢正文
+    const blockType = payload.blockType === 'reasoning' ? 'reasoning' : 'text'
+    // 分流累积：reasoning 进独立缓冲，不进正文
+    const a = core.onToken(b, token, blockType)
+    if (!a) return
+    const sessionId = sessionsByA.get(a) ?? ''
+    // 换发：requestId 换成 A，index 保留 llm 原值（P3 §3.4），blockType 原样带过去
+    service.publish('loop.token.streamed', { requestId: a, sessionId, token, index, blockType })
 })
 
 // llm.request.tool_call（B）→ 累积本轮工具调用（主位已按块拼装完整 name+arguments）
@@ -180,16 +183,18 @@ service.subscribe('llm.request.finished', (payload) => {
   if (!done) return
   const sessionId = sessionsByA.get(done.a) ?? done.sessionId
   // 落 assistant 全文（finishReason/usage 带上）
-  service.publish('message.append', {
-    requestId: `ma-${done.a}`,
-    sessionId,
-    message: {
-      role: 'assistant',
-      content: done.content,
-      finishReason: done.finishReason,
-      ...(done.usage ? { usage: done.usage } : {}),
-    },
-  })
+    service.publish('message.append', {
+      requestId: `ma-${done.a}`,
+      sessionId,
+      message: {
+        role: 'assistant',
+        content: done.content,
+        // S4：思维链单独存，`content` 里没有它（S5 据此渲染可折叠思考块）
+        ...(done.reasoning ? { reasoning: done.reasoning } : {}),
+        finishReason: done.finishReason,
+        ...(done.usage ? { usage: done.usage } : {}),
+      },
+    })
   service.publish('loop.state.changed', { requestId: done.a, sessionId, state: 'idle' })
   releaseRun(done.a)
 })
@@ -213,7 +218,7 @@ async function runToolRound(oldB: string, toolCalls: ToolCall[]): Promise<void> 
   toolRoundsByA.set(a, rounds)
 
   // 本轮 assistant 全文（工具轮通常是空正文，但模型可能同时说了一句）
-  const assistantContent = core.peekContent(oldB)
+    const { content: assistantContent, reasoning: assistantReasoning } = core.peek(oldB)
 
   if (rounds > MAX_TOOL_ROUNDS) {
     // 超限：把已发生的 assistant 落库后失败退出（不静默吞掉，也不无限跑）
@@ -221,7 +226,13 @@ async function runToolRound(oldB: string, toolCalls: ToolCall[]): Promise<void> 
       service.publish('message.append', {
         requestId: `ma-${a}`,
         sessionId,
-        message: { role: 'assistant', content: assistantContent, finishReason: 'tool_calls', toolCalls },
+        message: {
+          role: 'assistant',
+          content: assistantContent,
+          ...(assistantReasoning ? { reasoning: assistantReasoning } : {}),
+          finishReason: 'tool_calls',
+          toolCalls,
+        },
       })
     }
     core.finish(oldB, 'stop')
@@ -242,6 +253,7 @@ async function runToolRound(oldB: string, toolCalls: ToolCall[]): Promise<void> 
     message: {
       role: 'assistant',
       content: assistantContent,
+      ...(assistantReasoning ? { reasoning: assistantReasoning } : {}),
       finishReason: 'tool_calls',
       toolCalls,
     },

@@ -25,8 +25,10 @@ export interface Inflight {
   /** llm.request 的 B（对内） */
   b: string
   sessionId: string
-  /** 累积的 assistant 全文（finish 时落库） */
+  /** 累积的 assistant 正文（finish 时落库）；**不含思维链** */
   buffer: string
+  /** 累积的思维链（S4）。与 `buffer` 分开，正文里不许出现它 */
+  reasoningBuffer: string
 }
 
 export interface LoopCoreDeps {
@@ -92,7 +94,7 @@ export class LoopCore {
     if (!this.awaiting) return false
     const { a, sessionId } = this.awaiting
     this.awaiting = null
-    this.byA.set(a, { a, b, sessionId, buffer: '' })
+    this.byA.set(a, { a, b, sessionId, buffer: '', reasoningBuffer: '' })
     this.aByB.set(b, a)
     this.deps.sendLlmRequest(b, sessionId, messages, model)
     return true
@@ -108,7 +110,7 @@ export class LoopCore {
   ): boolean {
     if (this.isBusy()) return false
     this.state = 'running'
-    this.byA.set(a, { a, b, sessionId, buffer: '' })
+    this.byA.set(a, { a, b, sessionId, buffer: '', reasoningBuffer: '' })
     this.aByB.set(b, a)
     this.deps.sendLlmRequest(b, sessionId, messages, model)
     return true
@@ -121,54 +123,87 @@ export class LoopCore {
 
   /** 读本轮已累积的 assistant 全文（工具轮：发消息前先看一眼，**不清空**） */
   peekContent(b: string): string {
+    return this.peek(b).content
+  }
+
+  /** 本轮正文 + 思维链（工具轮 append 用；S4） */
+  peek(b: string): { content: string; reasoning: string } {
     const a = this.aByB.get(b)
-    if (!a) return ''
-    return this.byA.get(a)?.buffer ?? ''
+    if (!a) return { content: '', reasoning: '' }
+    const inflight = this.byA.get(a)
+    if (!inflight) return { content: '', reasoning: '' }
+    return { content: inflight.buffer, reasoning: inflight.reasoningBuffer }
   }
 
   /**
    * 工具轮续跑（P7）：`llm.request.finished{finishReason:'tool_calls'}` 时**不结束 run**。
    *
-   * - 取回旧 B 对应的 A 与本轮 assistant 全文（由调用方 append 到会话）；
-   * - 把 A↔新 B 的映射换掉、清空 buffer（下一轮从零累积）；
+   * - 取回旧 B 对应的 A 与本轮 assistant 正文 + 思维链（由调用方 append 到会话）；
+   * - 把 A↔新 B 的映射换掉、清空两个 buffer（下一轮从零累积）；
    * - 发出新一轮 `llm.request`；**state 保持 running**（`loop.state.changed` 不发 idle）。
    *
    * 返回 `null` 表示旧 B 未知/已释放（重复事件、取消后迟到）——调用方应静默忽略。
    */
-  nextRound(oldB: string, newB: string, messages: ChatTurn[], model?: string): { a: string; sessionId: string; content: string } | null {
+  nextRound(
+    oldB: string,
+    newB: string,
+    messages: ChatTurn[],
+    model?: string,
+  ): { a: string; sessionId: string; content: string; reasoning: string } | null {
     const a = this.aByB.get(oldB)
     if (!a) return null
     const inflight = this.byA.get(a)
     if (!inflight) return null
     const content = inflight.buffer
+    const reasoning = inflight.reasoningBuffer
     this.aByB.delete(oldB)
     inflight.b = newB
     inflight.buffer = ''
+    inflight.reasoningBuffer = ''
     this.aByB.set(newB, a)
     this.deps.sendLlmRequest(newB, inflight.sessionId, messages, model)
-    return { a, sessionId: inflight.sessionId, content }
+    return { a, sessionId: inflight.sessionId, content, reasoning }
   }
 
-  /** llm.token.streamed（B）→ 累积到 in-flight buffer；返回对外 A（供转发 loop.token.streamed） */
-  onToken(b: string, token: string): string | null {
+  /**
+   * `llm.token.streamed`（B）→ **按块类型分流**累积；返回对外 A（供转发 `loop.token.streamed`）。
+   *
+   * S4：`blockType === 'reasoning'` 的 token 进 `reasoningBuffer`，**不进 `buffer`**。
+   * 缺省按 `'text'` 处理 —— 老版本节点不发这个字段，不能因为缺字段就把正文丢掉。
+   */
+  onToken(b: string, token: string, blockType: 'text' | 'reasoning' = 'text'): string | null {
     const a = this.aByB.get(b)
     if (!a) return null
     const inflight = this.byA.get(a)
     if (!inflight) return null
-    inflight.buffer += token
+    if (blockType === 'reasoning') inflight.reasoningBuffer += token
+    else inflight.buffer += token
     return a
   }
 
   /**
-   * llm.request.finished（B）→ 取 A + 累积全文 + 释放；返回收尾信息（调用方 message.append + state.changed idle）。
+   * `llm.request.finished`（B）→ 取 A + 累积正文 + 释放；返回收尾信息（调用方 message.append + state.changed idle）。
    * 已结束/未知 B → null（不串号）。
+   *
+   * `reasoning` 单独返回（S4）：调用方落库到 `Message.reasoning`，正文 `content` 里不含它。
    */
-  finish(b: string, finishReason: string, usage?: Usage): { a: string; sessionId: string; content: string; finishReason: string; usage?: Usage } | null {
+  finish(
+    b: string,
+    finishReason: string,
+    usage?: Usage,
+  ): { a: string; sessionId: string; content: string; reasoning: string; finishReason: string; usage?: Usage } | null {
     const a = this.aByB.get(b)
     if (!a) return null
     const inflight = this.byA.get(a)
     if (!inflight) return null
-    const out = { a, sessionId: inflight.sessionId, content: inflight.buffer, finishReason, ...(usage ? { usage } : {}) }
+    const out = {
+      a,
+      sessionId: inflight.sessionId,
+      content: inflight.buffer,
+      reasoning: inflight.reasoningBuffer,
+      finishReason,
+      ...(usage ? { usage } : {}),
+    }
     this.release(a)
     return out
   }

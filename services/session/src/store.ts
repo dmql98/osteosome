@@ -57,6 +57,8 @@ export interface NewMessage {
   content: string
   finishReason?: Message['finishReason']
   usage?: Message['usage']
+  /** S4：思维链（与 content 分开；正文里不含它） */
+  reasoning?: string
   toolCallId?: string
   toolName?: string
   toolCalls?: Message['toolCalls']
@@ -243,6 +245,8 @@ export class SessionStore {
       content: input.content,
       ...(input.finishReason ? { finishReason: input.finishReason } : {}),
       ...(input.usage ? { usage: input.usage } : {}),
+      // S4：思维链单独存（正文 content 里没有它）
+      ...(input.reasoning ? { reasoning: input.reasoning } : {}),
       // P7：工具轮字段（role:'tool' 的 toolCallId/toolName、role:'assistant' 的 toolCalls）
       ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
       ...(input.toolName ? { toolName: input.toolName } : {}),

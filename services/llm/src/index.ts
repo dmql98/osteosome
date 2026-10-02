@@ -159,7 +159,9 @@ service.subscribe('llm.provider.chunk', (payload) => {
     // delta 块无 index：主位按 requestId 维护递增序号（对齐 llm.token.streamed.index 递增契约）
     const index = tokenIndexes.get(requestId) ?? 0
     tokenIndexes.set(requestId, index + 1)
-    service.publish('llm.token.streamed', { requestId, token: chunk.text, index })
+    // S4：**带上 blockType**。原来不带，下游无法区分思维链与正文，只能一股脑当正文 ——
+    // 用 deepseek-reasoner 一类模型时思维链会混进回答正文。
+    service.publish('llm.token.streamed', { requestId, token: chunk.text, index, blockType: chunk.blockType })
     return
   }
   if (isToolArgDelta(chunk)) {

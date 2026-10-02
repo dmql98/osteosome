@@ -26,6 +26,24 @@ export interface CommandResult {
 const CODE_INVALID = 'invalid_request'
 const CODE_NOT_FOUND = 'not_found'
 
+/** 中立 finishReason 白名单（与 shared 的 FinishReason 同枚举）；非法值丢弃而非乱存 */
+const FINISH_REASONS: readonly NonNullable<Message['finishReason']>[] = [
+  'stop',
+  'length',
+  'content_filter',
+  'tool_calls',
+  'error',
+]
+
+/** usage 宽容解析：两个字段都得是有限非负数，否则视为没有（不存半截） */
+function parseUsage(raw: unknown): { promptTokens: number; completionTokens: number } | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const u = raw as { promptTokens?: unknown; completionTokens?: unknown }
+  const ok = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+  if (!ok(u.promptTokens) || !ok(u.completionTokens)) return undefined
+  return { promptTokens: u.promptTokens, completionTokens: u.completionTokens }
+}
+
 function err(requestId: string, code: string, message: string): CommandResult {
   return { requestId, error: { code, message } }
 }
@@ -80,7 +98,17 @@ export function dispatch(store: SessionStore, topic: string, payload: Record<str
     case 'message.append': {
       const sessionId = str(payload, 'sessionId')
       const message = payload.message as
-        | { role?: string; content?: string; id?: string; toolCallId?: string; toolName?: string; toolCalls?: unknown }
+        | {
+            role?: string
+            content?: string
+            id?: string
+            finishReason?: string
+            usage?: unknown
+            reasoning?: string
+            toolCallId?: string
+            toolName?: string
+            toolCalls?: unknown
+          }
         | undefined
       if (!sessionId || !message || typeof message.content !== 'string') {
         return err(requestId, CODE_INVALID, 'message.append: sessionId and message.content are required')
@@ -95,10 +123,21 @@ export function dispatch(store: SessionStore, topic: string, payload: Record<str
             (t) => t && typeof t.id === 'string' && typeof t.name === 'string',
           )
         : undefined
+      // S4：finishReason / usage / reasoning 原样透传。
+      // 之前这三项在入参类型里根本没声明，`loop` 明明发了，落库时却被静默丢掉 ——
+      // 表现是「刷新页面后不知道这一轮为什么停、用了多少 token」。
+      const finishReason = FINISH_REASONS.includes(message.finishReason as NonNullable<Message['finishReason']>)
+        ? (message.finishReason as NonNullable<Message['finishReason']>)
+        : undefined
+      const usage = parseUsage(message.usage)
+      const reasoning = typeof message.reasoning === 'string' && message.reasoning ? message.reasoning : undefined
       const appended = store.appendMessage(sessionId, {
         role,
         content: message.content,
         ...(message.id ? { id: message.id } : {}),
+        ...(finishReason ? { finishReason } : {}),
+        ...(usage ? { usage } : {}),
+        ...(reasoning ? { reasoning } : {}),
         ...(typeof message.toolCallId === 'string' && message.toolCallId ? { toolCallId: message.toolCallId } : {}),
         ...(typeof message.toolName === 'string' && message.toolName ? { toolName: message.toolName } : {}),
         ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),

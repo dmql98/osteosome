@@ -105,3 +105,47 @@ describe('session 七命令（IPC 全链）', () => {
     expect(b.requestId).toBe('rid-B')
   })
 })
+
+describe('message.append 透传（S4 修的静默丢字段）', () => {
+  /** 落库后重读，确认字段真的在磁盘上而不只是 result 里 */
+  function appendAndRead(message: Record<string, unknown>): Record<string, unknown> {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'c0', title: 'T' })
+    dispatch(store, 'message.append', { requestId: 'c1', sessionId, message })
+    const got = dispatch(store, 'session.get', { requestId: 'c2', sessionId })
+    const messages = (got.session as { messages: Record<string, unknown>[] }).messages
+    return messages[messages.length - 1]!
+  }
+
+  it('finishReason / usage 原样落库并在重读后仍在', () => {
+    const msg = appendAndRead({
+      role: 'assistant',
+      content: '答',
+      finishReason: 'length',
+      usage: { promptTokens: 11, completionTokens: 5 },
+    })
+    expect(msg.finishReason).toBe('length')
+    expect(msg.usage).toEqual({ promptTokens: 11, completionTokens: 5 })
+  })
+
+  it('reasoning 单独落库，且 content 里没有思维链', () => {
+    const msg = appendAndRead({ role: 'assistant', content: '答', reasoning: '先想…', finishReason: 'stop' })
+    expect(msg.reasoning).toBe('先想…')
+    expect(msg.content).toBe('答')
+  })
+
+  it('非法 finishReason 被丢弃而不是原样存进去', () => {
+    const msg = appendAndRead({ role: 'assistant', content: 'x', finishReason: 'whatever' })
+    expect(msg.finishReason).toBeUndefined()
+  })
+
+  it('半截 usage（缺一个字段 / 非数字）视为没有，不存半截', () => {
+    expect(appendAndRead({ role: 'assistant', content: 'x', usage: { promptTokens: 3 } }).usage).toBeUndefined()
+    expect(
+      appendAndRead({ role: 'assistant', content: 'x', usage: { promptTokens: '3', completionTokens: 2 } }).usage,
+    ).toBeUndefined()
+  })
+
+  it('空 reasoning 不落字段（不产生空串噪音）', () => {
+    expect(appendAndRead({ role: 'assistant', content: 'x', reasoning: '' }).reasoning).toBeUndefined()
+  })
+})
