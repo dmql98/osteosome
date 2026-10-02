@@ -145,7 +145,8 @@
     <div style="margin-top:var(--s2);font-size:var(--sm)">
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
-      <span class="commit">7bfb01a</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
+      <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
+      <span class="commit">9e30297</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
       下一步 <b>S4 修思考流泄漏</b>。
     </div>
   </div>
@@ -161,7 +162,7 @@
       <div><b>6</b><span>剩余计划天数</span></div>
     </div>
     <table>
-      <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S2 已推）</th></tr></thead>
+      <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S3 已推）</th></tr></thead>
       <tbody>
         <tr><th>分支 / HEAD</th><td class="mono">P2-llm / ec03717（P4 收尾）</td>
             <td class="mono">P2-llm / 7bfb01a（S2 删 4 服务）</td></tr>
@@ -175,9 +176,11 @@
             <td>① 思考流泄漏进正文（主位 <code>isDelta</code> 不看 <code>blockType</code>）
                 ② 插件表硬编码在前端 ③ <code>setEnabled</code> 不真停服务 ④ <code>hello</code> 是纯演示</td>
             <td>① ② ③ 仍在（分别由 S4 / S7-3 / S7-4 处理）<br>
-                ④ <b>已删</b><br>
-                ⑤ <b>新增</b>：<code>session</code> 的 <code>message.append</code> 未透传
-                <code>finishReason</code> / <code>usage</code>（S1 调试时发现，建议并入 S4）</td></tr>
+                ④ <b>已删</b>（S2）<br>
+                ⑤ <code>session</code> 的 <code>message.append</code> 未透传
+                <code>finishReason</code> / <code>usage</code>（S1 调试时发现，<b>已并入 S4</b>）<br>
+                ⑥ <b>已修（S3）</b>：设置窗的「启用」开关指向 S2 已删除的 <code>llm-provider-deepseek</code>，
+                点下去只 404；已换成真正生效的「配置 / 删除该厂商密钥」</td></tr>
       </tbody>
     </table>
 
@@ -283,7 +286,8 @@
             <tr><td style="color:var(--success)">计划外加分 ①</td>
                 <td><code>&lt;ID_UPPER&gt;_BASE_URL</code> / <code>_MODEL</code> env 覆盖 —— 集成冒烟与自建端点靠它指到假上游，<b>不用改代码</b></td></tr>
             <tr><td style="color:var(--success)">计划外加分 ②</td>
-                <td><code>LLM_VENDORS_EXTRA</code> 支持 JSON 自填端点（同 id 覆盖预设）—— <b>S3 的写入路径已经通了</b>，S3 只剩 UI 与改走 preferences</td></tr>
+                <td><code>LLM_VENDORS_EXTRA</code> 支持 JSON 自填端点（同 id 覆盖预设）—— <b>S3 已把写入路径换成 preferences</b>，
+                    并做到<b>运行期生效</b>（存密钥免重启）</td></tr>
           </tbody>
         </table>
         <div class="lbl">语义定案</div>
@@ -399,20 +403,28 @@
 
     <div class="step">
       <div class="hd"><span class="sid">S4</span><span class="lane ui">界面线</span>
-        <span class="stitle">修思考流泄漏</span><span class="stars">★S5 的前置</span><span class="dur">0.5 天</span></div>
+        <span class="stitle">修思考流泄漏</span><span class="stars">★S5 的前置</span>
+        <span class="done-badge" style="background:var(--danger)">下一步</span><span class="dur">0.5 天</span></div>
       <div class="bd">
         <div class="lbl">做什么</div>
         <ol>
           <li><code>shared</code>：<code>llm.token.streamed</code> 加可选字段 <code>blockType?: 'text' | 'reasoning'</code>（只增不改）</li>
           <li><code>services/llm</code>：主位按块类型标注（现在 <code>isDelta</code> 不看 blockType，reasoning 被当正文发）</li>
           <li><code>services/loop</code>：<code>loop.token.streamed</code> 透传 <code>blockType</code></li>
-          <li><b>顺带修 S1 期间发现的缺陷</b>：<code>services/session</code> 的 <code>message.append</code> 未透传
-              <code>finishReason</code> / <code>usage</code> —— 否则消息落库后前端拿不到「为什么停」和 token 数</li>
         </ol>
+        <div class="lbl">顺带修一个 S1 期间发现的缺陷</div>
+        <ul>
+          <li><code>services/session</code> 的 <code>message.append</code> <b>未透传 <code>finishReason</code> / <code>usage</code></b> ——
+              消息落库后前端拿不到「这一轮为什么停」和 token 数，刷新页面就永久丢失。
+              S0 预留了字段、S1 调试时确认没接上。字段已在 <code>shared</code> 定义好，这里只需让 store 别丢</li>
+        </ul>
         <div class="lbl">验收</div>
-        <ul><li>端到端：假上游发 reasoning 块 → 断言 <code>{blockType:'reasoning'}</code> 可见 <b>且</b> 正文不含思维链</li></ul>
+        <ul>
+          <li>端到端：假上游发 reasoning 块 → 断言 <code>{blockType:'reasoning'}</code> 可见 <b>且</b> 正文不含思维链</li>
+          <li>落库后重读该消息，<code>finishReason</code> 与 <code>usage</code> 仍在</li>
+        </ul>
         <div class="lbl">风险</div>
-        <ul><li>无（只加可选字段，向后兼容）</li></ul>
+        <ul><li>无（只加可选字段，向后兼容）—— 但<b>别顺手改 <code>normalizeFinishReason</code></b>，它已被 S2 的 claude 对照回归守着</li></ul>
       </div>
     </div>
 
@@ -465,7 +477,8 @@
                 <td class="mono">plugins/registry.ts 只留纯函数 + 新增 core-sdk/usePlugins.ts</td></tr>
             <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）</td>
                 <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start</td></tr>
-            <tr><td>S7-5</td><td>迁移：写 6 个 <code>plugin.json</code>，把 5 个服务 + 3 个组件归组</td>
+            <tr><td>S7-5</td><td>迁移：写 <b>5 个</b> <code>plugin.json</code>，把 <b>6 个服务 + 9 个组件</b>归组
+                （工作台基础 / 对话工作台 / 模型接入 / 凭证 / 可靠性 —— 划法见架构文档 §5.3）</td>
                 <td class="mono">plugins/*/plugin.json</td></tr>
             <tr><td>S7-6</td><td>插件详情窗显示「N 组件 / M 服务 / 依赖 / degraded 明细」</td>
                 <td class="mono">PluginListWindow.vue / PluginDetailWindow.vue</td></tr>
@@ -526,7 +539,41 @@ export interface VendorPreset {
       </tbody>
     </table>
     <p class="note"><b>「新增服务商」的三个来源</b>：内置预设（表里有）／<b>用户自填</b>（设置窗填 baseURL + key + 默认模型，不用改仓库）／插件提供（预留给将来的原生 wire provider）。</p>
-    <p class="note ok"><b>S1 已把前两个来源接通</b>：预设表是数据，自填走 <code>LLM_VENDORS_EXTRA</code>（JSON，同 id 覆盖预设，畸形配置静默忽略）。S3 只把自填的<b>写入路径</b>从 env 换成 preferences 并配上 UI。</p>
+    <p class="note ok"><b>S1 已把前两个来源接通，S3 让它们可点</b>：预设表是数据；
+      自填端点走 <code>preferences.llm.vendorOverrides</code>（env <code>LLM_VENDORS_EXTRA</code> 保留为脚本 / 测试注入口）。
+      「在设置窗挑一家 → 填密钥 → 立刻出现在下拉」已跑通（<code>core/tests/s3-provider-onboarding.test.ts</code>）。</p>
+
+    <h3>3.1 <code>api</code> 字段 = 跨进程 wire 契约（S1 之后补做）</h3>
+    <p>S1 把 4 个 provider 进程合并成 1 个之后，<code>api</code> 这个字段变成一个<b>会说谎</b>的字段：
+      它写着「wire 类型」，但表住在 <code>llm-provider-openai</code> 进程里，只能表达「这一个进程能服务谁」。
+      于是往表里加一行 <code>api:'opencode'</code> 就成了一个无法兑现的声明 —— 本进程要么注册出一个
+      声称支持、实际发 openai 请求体的假 provider，要么悄悄忽略让用户以为装上了。</p>
+    <pre class="code"><span class="cm">// 约定：wire X → 服务 llm-provider-X</span>
+<span class="k">api</span>: <span class="k">string</span>   <span class="cm">// 不再是 'openai' 字面量，而是「由哪个进程实现这个 wire」</span>
+
+<span class="cm">// shared/src/llm/vendors.ts 新增</span>
+WIRE_OPENAI = <span class="k">'openai'</span>
+providerServiceIdForWire(wire) → <span class="k">`llm-provider-`</span> + wire
+presetsForWire(wire)              <span class="cm">// provider 进程只服务属于自己 wire 的预设</span>
+declaredWires(presets)            <span class="cm">// CI 用</span></pre>
+    <table>
+      <thead><tr><th style="width:34%">层</th><th>做法</th></tr></thead>
+      <tbody>
+        <tr><td><b>运行时</b></td>
+            <td><code>buildVendorInstances</code> 只吃 <code>presetsForWire(SERVED_WIRE)</code>，不再全盘接受 ——
+                杜绝注册「声称支持、实际发错 body」的假 provider。自填端点若声明别家 wire → <b>拒绝并告警</b>，不静默丢弃</td></tr>
+        <tr><td><b>CI</b></td>
+            <td><code>shared/tests/vendor-wires.test.ts</code>：断言「表里声明的每个 wire 都有
+                <code>services/llm-provider-&lt;wire&gt;/service.json</code>」。含一条<b>反向验证</b>（塞个
+                <code>ghostwire</code> 断言它确实被判缺实现），证明这条不是永远为真的装饰</td></tr>
+        <tr><td><b>文档</b></td>
+            <td><code>docs/加一家LLM服务商.md</code>：先判断 openai 兼容与否 —— 兼容 → 改 1 个文件加一行；
+                不兼容 → 加进程 + 加插件（4 步），并写清<b>哪些代码不用改</b>（<code>llm</code> 主位、<code>loop</code>、前端零改动）</td></tr>
+      </tbody>
+    </table>
+    <p class="note"><b>为什么校验放 CI 而不是 Core 启动时</b>：Core 的纪律是「零业务知识」，
+      不该知道 LLM 厂商怎么配。前向不变量（声明了就有进程）属于<b>仓库自洽性</b>，在测试里断言最合适；
+      运行时的兜底则由 provider 自己按 wire 过滤完成。</p>
   </section>
 
   <!-- 4 决策门 -->
@@ -544,7 +591,7 @@ export interface VendorPreset {
       </tbody>
     </table>
 
-    <h3>风险台账（前两条已发生，实录处置；后三条待发生）</h3>
+    <h3>风险台账（已发生的实录处置在前，未发生的在后）</h3>
     <table>
       <thead><tr><th style="width:38%">风险</th><th>处置 / 实际发生</th></tr></thead>
       <tbody>
@@ -552,9 +599,16 @@ export interface VendorPreset {
             <td>✅ 如预期发生：<code>req.baseURL</code> 早已支持，只需装配层按实例传入。凭证引用也从模块常量改成按实例（免凭证实例 <code>apiKey</code> 置空）</td></tr>
         <tr><td style="color:var(--success)">S2 删包后 3 个集成测试的「9 服务」断言红</td>
             <td>✅ 如预期发生，同一 commit 内改完。<b>但比预测的多</b>：<code>e2e.test.ts</code> 与 <code>smoke.mjs</code> 整篇建立在 hello 上，是本次最大的连带工作量。<code>startCore</code> 的 <code>services</code> 白名单最终<b>没加</b>（不需要）</td></tr>
-        <tr><td style="color:var(--warning)">PowerShell 处理含模板字符串的文件会毁内容</td>
+        <tr><td style="color:var(--danger)">PowerShell 处理含模板字符串的文件会毁内容</td>
             <td>⚠️ <b>真的踩了两次</b>：反引号被当转义、<code>${}</code> 被当变量插值；另一次 <code>ReadAllText</code> 失败是<b>非终止</b>异常，变量保留旧值 → 在错误路径上凭空造出垃圾文件。
             <b>规矩：改文件一律用编辑器工具，PowerShell 只做只读检查与命令调用</b></td></tr>
+        <tr><td style="color:var(--danger)">S3 「换写入路径」被低估</td>
+            <td>⚠️ 计划 0.5 天，实际远不止。真正的成本不是「换个地方存」，而是<b>让变化在运行期生效</b> ——
+                否则用户加完密钥还得重启进程。补了 <code>preferences.get</code> RPC + 凭证事件驱动重算。
+                <b>下次估工期要先问一句：这件事需要重启才生效吗？</b></td></tr>
+        <tr><td style="color:var(--warning)">manifest 的 <code>subscribes</code> 是白名单</td>
+            <td>⚠️ S3 集成测第一次就红了：provider 订阅了 <code>credential.saved</code> 但没在 <code>service.json</code> 声明 → 收不到事件。
+                <b>新增订阅必须同时改 <code>service.json</code></b>，否则静默不生效（比报错更难查）</td></tr>
         <tr><td>S5 拆组件后旧 <code>widget.llm-chat</code> 残留引用</td><td>P4 WS-1 那条断言会抓到（插件声明的组件必须 get 得到）—— S2 删 <code>widget.hello-command</code> 时已被它抓到一次，有效</td></tr>
         <tr><td>S7 停插件时进程正在跑工具</td><td>停前发 <code>loop.cancel</code> 走正常收尾，<code>stopGraceMs</code> 超时才强杀</td></tr>
         <tr><td>S7 前端改拉清单后离线打不开</td><td>拉取失败时回退到内置最小清单（只有一个 core 插件），不白屏</td></tr>
@@ -564,7 +618,7 @@ export interface VendorPreset {
 
   <footer>
     Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） · 更新于 S2 完成后（2026-10-02）·
-    进度 S0–S2 已推（<span class="commit">7bfb01a</span>）·
+    进度 S0–S3 已推（<span class="commit">9e30297</span>）·
     配套：<code>docs/开发进度/S-对话界面与插件重构-计划.md</code> ·
     架构：<code>docs/对话界面架构.html</code>
   </footer>
