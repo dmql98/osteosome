@@ -79,12 +79,30 @@ export function dispatch(store: SessionStore, topic: string, payload: Record<str
 
     case 'message.append': {
       const sessionId = str(payload, 'sessionId')
-      const message = payload.message as { role?: string; content?: string; id?: string } | undefined
+      const message = payload.message as
+        | { role?: string; content?: string; id?: string; toolCallId?: string; toolName?: string; toolCalls?: unknown }
+        | undefined
       if (!sessionId || !message || typeof message.content !== 'string') {
         return err(requestId, CODE_INVALID, 'message.append: sessionId and message.content are required')
       }
-      const role: MessageRole = message.role === 'assistant' || message.role === 'system' ? message.role : 'user'
-      const appended = store.appendMessage(sessionId, { role, content: message.content, ...(message.id ? { id: message.id } : {}) })
+      // P7：role 增 'tool'（工具结果回填）；其余非法值仍回落 user（宽容解析）
+      const role: MessageRole =
+        message.role === 'assistant' || message.role === 'system' || message.role === 'tool'
+          ? message.role
+          : 'user'
+      const toolCalls = Array.isArray(message.toolCalls)
+        ? (message.toolCalls as { id: string; name: string; arguments: string }[]).filter(
+            (t) => t && typeof t.id === 'string' && typeof t.name === 'string',
+          )
+        : undefined
+      const appended = store.appendMessage(sessionId, {
+        role,
+        content: message.content,
+        ...(message.id ? { id: message.id } : {}),
+        ...(typeof message.toolCallId === 'string' && message.toolCallId ? { toolCallId: message.toolCallId } : {}),
+        ...(typeof message.toolName === 'string' && message.toolName ? { toolName: message.toolName } : {}),
+        ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
+      })
       if (!appended) return err(requestId, CODE_NOT_FOUND, `message.append: no session '${sessionId}'`)
       return { requestId, sessionId, message: appended }
     }

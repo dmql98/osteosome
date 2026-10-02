@@ -10,6 +10,7 @@
     "loop.run.failed",
     "loop.state.changed",
     "loop.token.streamed",
+    "loop.tool.executed",
     "message.append",
     "session.get"
   ],
@@ -19,6 +20,7 @@
     "llm.token.streamed",
     "llm.request.finished",
     "llm.request.failed",
+    "llm.request.tool_call",
     "session.get.result"
   ]
 }

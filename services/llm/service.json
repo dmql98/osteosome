@@ -8,6 +8,7 @@
     "llm.token.streamed",
     "llm.request.finished",
     "llm.request.failed",
+    "llm.request.tool_call",
     "llm.provider.request",
     "llm.provider.cancel"
   ],

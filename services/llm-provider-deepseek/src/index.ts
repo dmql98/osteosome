@@ -57,8 +57,10 @@ service.subscribe('llm.provider.request', async (payload) => {
     for await (const chunk of streamCompletions({
       requestId,
       model: typeof payload.model === 'string' ? payload.model : undefined,
-      messages: (payload.messages as { role: 'system' | 'user' | 'assistant'; content: string }[]) ?? [],
+      messages: (payload.messages as { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; toolCallId?: string; toolCalls?: { id: string; name: string; arguments: string }[] }[]) ?? [],
       ...(typeof payload.temperature === 'number' ? { temperature: payload.temperature } : {}),
+      // 工具定义（P7）：本 provider 忽略 thinking，但**支持工具调用**（deepseek 工具走 openai 兼容 wire）
+      ...(Array.isArray(payload.tools) && payload.tools.length > 0 ? { tools: payload.tools as never } : {}),
       signal: controller.signal,
       apiKey,
     })) {

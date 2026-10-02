@@ -11,6 +11,14 @@ import type { Usage } from '@osteosome/shared'
 
 export type LoopState = 'idle' | 'running'
 
+/** 一轮请求的消息（中立 ChatMessage 形状，`buildMessages` 产出） */
+export type ChatTurn = {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string
+  toolCallId?: string
+  toolCalls?: { id: string; name: string; arguments: string }[]
+}
+
 export interface Inflight {
   /** loop.run 的 A（对外） */
   a: string
@@ -23,7 +31,7 @@ export interface Inflight {
 
 export interface LoopCoreDeps {
   /** 发送 llm.request（B） */
-  sendLlmRequest(b: string, sessionId: string, messages: { role: 'system' | 'user' | 'assistant'; content: string }[], model?: string): void
+  sendLlmRequest(b: string, sessionId: string, messages: ChatTurn[], model?: string): void
   /** 发送 llm.cancel（B） */
   sendLlmCancel(b: string): void
 }
@@ -78,7 +86,7 @@ export class LoopCore {
    */
   start(
     b: string,
-    messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+    messages: ChatTurn[],
     model?: string,
   ): boolean {
     if (!this.awaiting) return false
@@ -95,7 +103,7 @@ export class LoopCore {
     a: string,
     b: string,
     sessionId: string,
-    messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+    messages: ChatTurn[],
     model?: string,
   ): boolean {
     if (this.isBusy()) return false
@@ -104,6 +112,41 @@ export class LoopCore {
     this.aByB.set(b, a)
     this.deps.sendLlmRequest(b, sessionId, messages, model)
     return true
+  }
+
+  /** 当前 B 对应的对外 A（工具轮编排需要先拿 A 才能发 loop.tool.executed；未知返回 null） */
+  currentA(b: string): string | null {
+    return this.aByB.get(b) ?? null
+  }
+
+  /** 读本轮已累积的 assistant 全文（工具轮：发消息前先看一眼，**不清空**） */
+  peekContent(b: string): string {
+    const a = this.aByB.get(b)
+    if (!a) return ''
+    return this.byA.get(a)?.buffer ?? ''
+  }
+
+  /**
+   * 工具轮续跑（P7）：`llm.request.finished{finishReason:'tool_calls'}` 时**不结束 run**。
+   *
+   * - 取回旧 B 对应的 A 与本轮 assistant 全文（由调用方 append 到会话）；
+   * - 把 A↔新 B 的映射换掉、清空 buffer（下一轮从零累积）；
+   * - 发出新一轮 `llm.request`；**state 保持 running**（`loop.state.changed` 不发 idle）。
+   *
+   * 返回 `null` 表示旧 B 未知/已释放（重复事件、取消后迟到）——调用方应静默忽略。
+   */
+  nextRound(oldB: string, newB: string, messages: ChatTurn[], model?: string): { a: string; sessionId: string; content: string } | null {
+    const a = this.aByB.get(oldB)
+    if (!a) return null
+    const inflight = this.byA.get(a)
+    if (!inflight) return null
+    const content = inflight.buffer
+    this.aByB.delete(oldB)
+    inflight.b = newB
+    inflight.buffer = ''
+    this.aByB.set(newB, a)
+    this.deps.sendLlmRequest(newB, inflight.sessionId, messages, model)
+    return { a, sessionId: inflight.sessionId, content }
   }
 
   /** llm.token.streamed（B）→ 累积到 in-flight buffer；返回对外 A（供转发 loop.token.streamed） */

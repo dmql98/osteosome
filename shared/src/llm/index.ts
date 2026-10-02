@@ -5,5 +5,6 @@
  */
 export * from './catalog'
 export * from './chunk'
+export * from './openai-wire'
 export * from './stream'
 export * from './types'

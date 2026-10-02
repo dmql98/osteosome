@@ -331,3 +331,103 @@ describe('llm-chat widget · 参数链路（P4 WS-2）', () => {
     fetchMock.mockRestore()
   })
 })
+
+/**
+ * P7 工具块渲染：模型发起工具调用后，前端要在气泡下画出「工具名 + 参数 + 状态」。
+ * 数据源有两条：执行期间靠 `loop.tool.executed`（即时），落库后靠 assistant 消息的 `toolCalls`（回看）。
+ */
+describe('llm-chat widget · 工具块（P7）', () => {
+  async function mountChat(sessionId = 's1') {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 202 }))
+    const wrapper = mount(LlmChatWidget)
+    await wrapper.vm.$nextTick()
+    emit('llm.provider.registered', DESCRIPTOR)
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+    useSessionStore().select(sessionId)
+    await flushPromises()
+    return { wrapper, fetchMock }
+  }
+
+  async function startRun(wrapper: Awaited<ReturnType<typeof mountChat>>['wrapper']): Promise<string> {
+    await wrapper.get('[data-testid="llm-chat-input"]').setValue('看看目录')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    return (commandBodies(vi.mocked(globalThis.fetch)) .find((b) => b.topic === 'loop.run')!.payload as { requestId: string })
+      .requestId
+  }
+
+  it('loop.tool.executed → 渲染工具名 + 参数 + 成功摘要', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    const a = await startRun(wrapper)
+    emit('loop.tool.executed', {
+      requestId: a,
+      sessionId: 's1',
+      toolCallId: 'c-1',
+      name: 'list_dir',
+      arguments: '{"path":""}',
+      ok: true,
+      summary: 'a.txt',
+    })
+    await wrapper.vm.$nextTick()
+    const block = wrapper.get('[data-testid="llm-chat-tool-list_dir"]')
+    expect(block.text()).toContain('list_dir')
+    expect(block.text()).toContain('{"path":""}')
+    expect(block.text()).toContain('a.txt')
+    fetchMock.mockRestore()
+  })
+
+  it('工具失败 → 块上带失败态与错误摘要', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    const a = await startRun(wrapper)
+    emit('loop.tool.executed', {
+      requestId: a,
+      sessionId: 's1',
+      toolCallId: 'c-2',
+      name: 'read_file',
+      arguments: '{"path":"../x"}',
+      ok: false,
+      summary: '路径非法',
+    })
+    await wrapper.vm.$nextTick()
+    const block = wrapper.get('[data-testid="llm-chat-tool-read_file"]')
+    expect(block.classes()).toContain('llm-chat__tool--failed')
+    expect(block.text()).toContain('路径非法')
+    fetchMock.mockRestore()
+  })
+
+  it('回看历史：assistant 消息带 toolCalls → 渲染工具块', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    const sessions = useSessionStore()
+    sessions.messages = [
+      { id: 'm1', role: 'user', content: '看看目录', createdAt: '2024-01-01' },
+      {
+        id: 'm2',
+        role: 'assistant',
+        content: '',
+        createdAt: '2024-01-01',
+        toolCalls: [{ id: 'c-1', name: 'list_dir', arguments: '{"path":""}' }],
+      },
+    ] as never
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-testid="llm-chat-tool-list_dir"]').text()).toContain('list_dir')
+    fetchMock.mockRestore()
+  })
+
+  it('异 requestId 的工具事件被忽略（不串轮）', async () => {
+    const { wrapper, fetchMock } = await mountChat()
+    await startRun(wrapper)
+    emit('loop.tool.executed', {
+      requestId: 'other',
+      sessionId: 's1',
+      toolCallId: 'c-9',
+      name: 'list_dir',
+      arguments: '{}',
+      ok: true,
+      summary: 'x',
+    })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="llm-chat-tool-list_dir"]').exists()).toBe(false)
+    fetchMock.mockRestore()
+  })
+})

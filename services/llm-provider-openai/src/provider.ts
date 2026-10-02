@@ -11,11 +11,17 @@ import {
   normalizeFinishReason,
   normalizeUsage,
   readSseJson,
+  toWireMessages,
+  toWireTools,
   type StreamChunk,
   type StreamError,
   type RetryPolicy,
   type ThinkingEffort,
+  type ToolSpec,
 } from '@osteosome/shared'
+
+/** openai 兼容工具定义别名（中立 ToolSpec → wire 形状由 shared 的 `toWireTools` 翻） */
+export type { ToolSpec }
 
 export const PROVIDER = 'openai'
 export const CREDENTIAL_REF = 'env:OPENAI_API_KEY'
@@ -67,13 +73,12 @@ export const RETRY_POLICY: RetryPolicy = {
   retryableCodes: ['rate_limited', 'server_error'],
 }
 
-/** openai 兼容工具定义（原样透传上游，不解释语义） */
-export type ToolSpec = Record<string, unknown>
+/** openai 兼容工具定义（中立 ToolSpec → wire 形状由 shared 的 `toWireTools` 翻，见文件头 re-export） */
 
 export interface StreamRequest {
   requestId: string
   model?: string
-  messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_call_id?: string }[]
+  messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; toolCallId?: string; toolCalls?: { id: string; name: string; arguments: string }[] }[]
   temperature?: number
   signal?: AbortSignal
   apiKey: string
@@ -125,6 +130,7 @@ function mapHttpError(status: number, bodyText: string): StreamError {
 /** 消费上游 SSE → yield StreamChunk（block 三段式 / finish；取消走成功路径 finish{stop}） */
 export async function* streamCompletions(req: StreamRequest): AsyncGenerator<StreamChunk, void, void> {
   const baseURL = req.baseURL ?? BASE_URL
+  const wireTools = toWireTools(req.tools)
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${req.apiKey}`,
@@ -138,11 +144,12 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
       headers,
       body: JSON.stringify({
         model: req.model ?? DEFAULT_MODEL,
-        messages: req.messages,
+        messages: toWireMessages(req.messages),
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
         // 思考强度 → openai wire（`off` 不下发，避免覆盖模型默认档）
         ...(req.thinking && req.thinking !== 'off' ? { reasoning_effort: req.thinking } : {}),
-        ...(req.tools && req.tools.length > 0 ? { tools: req.tools } : {}),
+        // 工具定义：非空即上送，让模型可发起 tool_calls（P7 agent 循环的前提）
+        ...(wireTools ? { tools: wireTools } : {}),
         stream: true,
       }),
       signal: req.signal,
@@ -161,7 +168,15 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
 
   let textId: string | null = null
   let reasoningId: string | null = null
-  /** wire tool_calls[].index → 本地块 id（wire 同一 tool_call 分多帧累积 arguments） */
+  /**
+ * wire tool_calls[].index → 本地块 id（wire 同一 tool_call 分多帧累积 arguments）
+   *
+   * **中立 id 而非上游 id（勿"修正"）**：块 id 形如 `c-<requestId>-<index>-<seq>`，主位按它拼装
+   * `{ id, name, arguments }` 发 `llm.request.tool_call`，loop 再把同一个 id 用作
+   * assistant.toolCalls[].id 与 role:'tool' 的 toolCallId → 下一轮 wire 上
+   * `tool_calls[].id` 与 `tool_call_id` 天然一致（openai 只要求两者相等，不要求等于上游原值）。
+   * 要保留上游 id 需给 `tool-arg-delta` 加 wireId 字段（中立协议扩点），当前无收益。
+   */
   const toolIds = new Map<number, string>()
   let seq = 0
   /** 收尾：关掉所有未闭合的块（text / reasoning / tool_call） */

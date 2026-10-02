@@ -4,7 +4,7 @@
  * 与 Service 装配解耦：`streamCompletions()` 消费 openai 兼容 wire → yield StreamChunk，
  * 错误码化 / usage 归一全部在此层（对齐旧 adapter 语义，迁移后不变）。
  */
-import { normalizeFinishReason, normalizeUsage, readSseJson, type StreamChunk, type StreamError, type RetryPolicy } from '@osteosome/shared'
+import { normalizeFinishReason, normalizeUsage, readSseJson, toWireMessages, toWireTools, type ToolSpec, type StreamChunk, type StreamError, type RetryPolicy } from '@osteosome/shared'
 
 export const PROVIDER = 'deepseek'
 export const DEFAULT_MODEL = 'deepseek-chat'
@@ -26,7 +26,9 @@ export const RETRY_POLICY: RetryPolicy = {
 export interface StreamRequest {
   requestId: string
   model?: string
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+  messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; toolCallId?: string; toolCalls?: { id: string; name: string; arguments: string }[] }[]
+  /** 工具定义（P7：非空即上送，让模型可发起 tool_calls；wire 翻译见 shared 	oWireTools） */
+  tools?: ToolSpec[]
   temperature?: number
   /**
    * 思考强度（P4 WS-2）—— **本 provider 显式忽略**。
@@ -56,6 +58,7 @@ function mapHttpError(status: number, bodyText: string): StreamError {
 
 /** 消费上游 SSE → yield StreamChunk（block 三段式 / finish；取消走成功路径 finish{stop}） */
 export async function* streamCompletions(req: StreamRequest): AsyncGenerator<StreamChunk, void, void> {
+  const wireTools = toWireTools(req.tools)
   let res: Response
   try {
     res = await fetch(BASE_URL, {
@@ -66,8 +69,9 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
       },
       body: JSON.stringify({
         model: req.model ?? DEFAULT_MODEL,
-        messages: req.messages,
+        messages: toWireMessages(req.messages),
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+        ...(wireTools ? { tools: wireTools } : {}),
         stream: true,
       }),
       signal: req.signal,

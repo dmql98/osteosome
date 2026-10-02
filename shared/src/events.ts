@@ -13,6 +13,8 @@ import type {
   StreamChunk,
   StreamError,
   ThinkingEffort,
+  ToolCall,
+  ToolSpec,
   Usage,
 } from './llm'
 
@@ -53,14 +55,20 @@ export interface SessionMeta {
   corrupted?: boolean
 }
 
-/** 消息（append-only，不可变） */
+/** 消息（append-only，不可变；P7 起 role 可为 tool，携带 toolCallId / toolCalls） */
 export interface Message {
   id: string
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   createdAt: string
   content: string
   finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'error'
   usage?: { promptTokens: number; completionTokens: number }
+  /** role:'tool'：对应 assistant.toolCalls[].id */
+  toolCallId?: string
+  /** role:'tool'：工具名（渲染与排查用） */
+  toolName?: string
+  /** role:'assistant'：本条发起的工具调用 */
+  toolCalls?: ToolCall[]
 }
 
 /** 单会话全文（session.get.result） */
@@ -94,6 +102,14 @@ export interface EventMap {
     requestId: string
     error: { code: string; message: string }
   }
+  /**
+   * 主位 → 上层：本次请求解析出的工具调用（P7，只增不改）。
+   *
+   * 来源：provider 的 `tool_call` 块（`block-start` + `tool-arg-delta` + `block-end`）
+   * 在主位按块 id 拼装完整 `{ id, name, arguments }` 后**按块闭合即发**（不等 finish），
+   * 于是上层能在模型还在续答时就开始执行/渲染工具。
+   */
+  'llm.request.tool_call': EventBase & { requestId: string; toolCall: ToolCall }
   // ── llm 能力位（P2 六插件 §5，只增不改）──
   /** provider 服务就绪并注册能力（主位据此建路由） */
   'llm.provider.registered': EventBase & ProviderDescriptor
@@ -152,6 +168,19 @@ export interface EventMap {
   'loop.run.cancelled': EventBase & { requestId: string; sessionId: string }
   /** loop 转发 llm 的 token（B→A 换发；B 不泄前端，index 保留 llm 原值） */
   'loop.token.streamed': EventBase & { requestId: string; sessionId: string; token: string; index: number }
+  /**
+   * 一次工具执行的结果（P7，只增不改）—— 前端据此渲染工具块（进行中 → 成功/失败）。
+   * `summary` 是给模型与 UI 看的短摘要（长内容截断，完整结果在 role:'tool' 消息里）。
+   */
+  'loop.tool.executed': EventBase & {
+    requestId: string
+    sessionId: string
+    toolCallId: string
+    name: string
+    arguments: string
+    ok: boolean
+    summary: string
+  }
 }
 
 /**
@@ -172,6 +201,8 @@ export interface CommandMap {
     temperature?: number
     /** 思考强度（P4 WS-2，只增不改；provider 内部翻各家 wire） */
     thinking?: ThinkingEffort
+    /** 工具定义（P7，只增不改；非空即让模型可发起 tool_calls） */
+    tools?: ToolSpec[]
     meta?: Record<string, unknown>
   }
   'llm.cancel': { requestId: string }
@@ -184,6 +215,8 @@ export interface CommandMap {
     messages: ChatMessage[]
     temperature?: number
     thinking?: ThinkingEffort
+    /** 工具定义（P7；主位透传，各 provider 翻自家 wire） */
+    tools?: ToolSpec[]
     credentialRef: string
     retryPolicy: RetryPolicy
     meta?: Record<string, unknown>
@@ -204,7 +237,7 @@ export interface CommandMap {
   'session.rename': { requestId: string; sessionId: string; title: string }
   'session.delete': { requestId: string; sessionId: string }
   'session.clear': { requestId: string }
-  'message.append': { requestId: string; sessionId: string; message: { role: 'system' | 'user' | 'assistant'; content: string; id?: string } }
+  'message.append': { requestId: string; sessionId: string; message: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; id?: string; toolCallId?: string; toolName?: string; toolCalls?: ToolCall[] } }
   // ── loop 命令（P3 §3.4；requestId = A，对外可见）──
   /**
    * 发起一次对话（P4 WS-2 起带参：`provider`/`model`/`thinking` 缺省时由 loop 回落 env/默认）。
@@ -251,6 +284,7 @@ export const EVENT_TOPICS = [
   'llm.token.streamed',
   'llm.request.finished',
   'llm.request.failed',
+  'llm.request.tool_call',
   'llm.provider.registered',
   'llm.provider.unregistered',
   'llm.provider.chunk',
@@ -274,6 +308,7 @@ export const EVENT_TOPICS = [
   'loop.run.failed',
   'loop.run.cancelled',
   'loop.token.streamed',
+  'loop.tool.executed',
 ] as const satisfies readonly EventKey[]
 
 /** 运行时命令 topic 清单 —— 与 {@link CommandMap} 同步；服务 manifest 的 subscribes 可引用命令 */

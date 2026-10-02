@@ -34,10 +34,43 @@ export interface StreamError {
   message: string
 }
 
+/** 模型发起的一次工具调用（P7：assistant 消息携带 → loop 执行 → role:'tool' 回填） */
+export interface ToolCall {
+  /** 块 id（provider wire 的 tool_call id，中立化后） */
+  id: string
+  name: string
+  /** JSON 字符串（wire 原样；解析失败由执行侧兜底） */
+  arguments: string
+}
+
+/** 声明式工具定义（P7：loop 下发给主位 → provider，wire 形状由各自 provider 翻译） */
+export interface ToolSpec {
+  name: string
+  description: string
+  /** JSON Schema 对象 */
+  parameters: Record<string, unknown>
+}
+
 /** 对话消息（llm.request 与 llm.provider.request 共用） */
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  /** role:'tool' 时必带：对应 assistant.toolCalls[].id */
+  toolCallId?: string
+  /** role:'assistant' 且发起工具调用时携带 */
+  toolCalls?: ToolCall[]
+}
+
+/** 宽松解析工具参数（wire 是 JSON 字符串；畸形 → undefined 由调用方兜底） */
+export function parseToolArguments(raw: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**

@@ -13,7 +13,17 @@
  * 不注册 → 直接 `llm.request.failed { error.code: 'unsupported_provider' }`（存在性由插件决定）。
  */
 import { Service } from '@osteosome/service-sdk'
-import { isFinishBlock, isDelta, normalizeThinking, type StreamChunk, type ThinkingEffort } from '@osteosome/shared'
+import {
+  isFinishBlock,
+  isDelta,
+  isToolArgDelta,
+  isBlockEnd,
+  normalizeThinking,
+  type StreamChunk,
+  type ThinkingEffort,
+  type ToolCall,
+  type ToolSpec,
+} from '@osteosome/shared'
 import { clearRoutes, resolve, upsert, remove } from './routes'
 
 const service = new Service({ id: 'llm', version: '1.0.0' })
@@ -25,9 +35,10 @@ function parseLlmRequest(
   requestId: string
   provider: string
   model?: string
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+  messages: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; toolCallId?: string; toolCalls?: ToolCall[] }[]
   temperature?: number
   thinking?: ThinkingEffort
+  tools?: ToolSpec[]
   meta?: Record<string, unknown>
 } {
   const requestId = typeof payload.requestId === 'string' && payload.requestId ? payload.requestId : ''
@@ -37,9 +48,18 @@ function parseLlmRequest(
   const messages = payload.messages.map((m) => {
     const role = (m as { role?: unknown }).role
     const content = (m as { content?: unknown }).content
-    const normalizedRole: 'system' | 'user' | 'assistant' =
-      role === 'system' || role === 'user' || role === 'assistant' ? role : 'user'
-    return { role: normalizedRole, content: typeof content === 'string' ? content : String(content ?? '') }
+    const normalizedRole: 'system' | 'user' | 'assistant' | 'tool' =
+      role === 'system' || role === 'user' || role === 'assistant' || role === 'tool' ? role : 'user'
+    const toolCallId = (m as { toolCallId?: unknown }).toolCallId
+    const toolCalls = (m as { toolCalls?: unknown }).toolCalls
+    return {
+      role: normalizedRole,
+      content: typeof content === 'string' ? content : String(content ?? ''),
+      ...(typeof toolCallId === 'string' && toolCallId ? { toolCallId } : {}),
+      ...(Array.isArray(toolCalls) && toolCalls.length > 0
+        ? { toolCalls: toolCalls as ToolCall[] }
+        : {}),
+    }
   })
   return {
     requestId,
@@ -49,6 +69,10 @@ function parseLlmRequest(
     ...(typeof payload.temperature === 'number' ? { temperature: payload.temperature } : {}),
     // 思考强度：宽松归一（非法值静默丢弃 = 不下发，模型走默认）
     ...(normalizeThinking(payload.thinking) ? { thinking: normalizeThinking(payload.thinking) as ThinkingEffort } : {}),
+    // 工具定义（P7）：非空即让模型可发起 tool_calls，主位只透传（wire 形状 provider 各自翻）
+    ...(Array.isArray(payload.tools) && payload.tools.length > 0
+      ? { tools: payload.tools as ToolSpec[] }
+      : {}),
     ...(payload.meta && typeof payload.meta === 'object' && !Array.isArray(payload.meta)
       ? { meta: payload.meta as Record<string, unknown> }
       : {}),
@@ -109,14 +133,24 @@ service.subscribe('llm.request', (payload) => {
     messages: parsed.messages,
     ...(parsed.temperature !== undefined ? { temperature: parsed.temperature } : {}),
     ...(parsed.thinking !== undefined ? { thinking: parsed.thinking } : {}),
+    ...(parsed.tools !== undefined ? { tools: parsed.tools } : {}),
     credentialRef: route.credentialRef,
     retryPolicy: route.retryPolicy,
     meta: { ...(parsed.meta ?? {}), requestId },
   })
 })
 
-/** 收 provider.chunk：翻译对外事件（delta → token.streamed；finish → finished/failed） */
+/** 收 provider.chunk：翻译对外事件（delta → token.streamed；tool 块 → tool_call；finish → finished/failed） */
 const tokenIndexes = new Map<string, number>()
+/**
+ * requestId → 块 id → 工具调用累加器（P7）。
+ *
+ * provider 按 wire 分帧吐 `tool-arg-delta`（name 只在首帧，arguments 分多帧累积），
+ * 主位按块 id 拼装完整 `{ id, name, arguments }`，**块闭合（block-end）即发**
+ * `llm.request.tool_call` —— 于是 loop 能在模型续答的同时开始执行工具。
+ */
+const toolCallsByRequest = new Map<string, Map<string, ToolCall>>()
+
 service.subscribe('llm.provider.chunk', (payload) => {
   const requestId = typeof payload.requestId === 'string' ? payload.requestId : ''
   const chunk = payload.chunk as StreamChunk | undefined
@@ -128,8 +162,33 @@ service.subscribe('llm.provider.chunk', (payload) => {
     service.publish('llm.token.streamed', { requestId, token: chunk.text, index })
     return
   }
+  if (isToolArgDelta(chunk)) {
+    let blocks = toolCallsByRequest.get(requestId)
+    if (!blocks) {
+      blocks = new Map()
+      toolCallsByRequest.set(requestId, blocks)
+    }
+    const acc = blocks.get(chunk.id) ?? { id: chunk.id, name: '', arguments: '' }
+    // name 只在首帧携带（后续为 null）；空字符串表示「还没拿到名字」
+    if (typeof chunk.name === 'string' && chunk.name.length > 0) acc.name = chunk.name
+    acc.arguments += chunk.arguments
+    blocks.set(chunk.id, acc)
+    return
+  }
+  if (isBlockEnd(chunk) && chunk.blockType === 'tool_call') {
+    const blocks = toolCallsByRequest.get(requestId)
+    const acc = blocks?.get(chunk.id)
+    if (blocks && acc) {
+      blocks.delete(chunk.id)
+      // 没拿到工具名就不透出（残缺调用执行不了；P2 WS-10 记的 wire 坑防御）
+      if (acc.name) service.publish('llm.request.tool_call', { requestId, toolCall: { ...acc } })
+    }
+    return
+  }
   if (isFinishBlock(chunk)) {
     tokenIndexes.delete(requestId)
+    // 未闭合的块（上游异常断开）不补发 —— 宁可少一次工具执行，也不要半个参数
+    toolCallsByRequest.delete(requestId)
     if (chunk.error) {
       service.publish('llm.request.failed', { requestId, error: chunk.error })
       return
@@ -140,7 +199,7 @@ service.subscribe('llm.provider.chunk', (payload) => {
       ...(chunk.usage ? { usage: chunk.usage } : {}),
     })
   }
-  // block-start / block-end / tool-arg-delta：识别降级，不渲染不报错（P2 §0.3）
+  // block-start：识别降级，不渲染不报错（P2 §0.3）；tool 块的名字/参数走 tool-arg-delta
 })
 
 /** 收 llm.cancel：转发 provider.cancel（provider 侧 abort → finish{stop} 成功路径） */

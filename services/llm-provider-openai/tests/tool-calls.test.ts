@@ -186,11 +186,47 @@ describe('tool_calls 贯通（agent 可行性验证）', () => {
       seenBody = JSON.parse(init?.body as string)
       return new Response(sseBody([{ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }]), { status: 200 })
     })
-    const tools = [{ type: 'function', function: { name: 'get_weather', parameters: { type: 'object' } } }]
+    // P7：入参是**中立** ToolSpec（{name,description,parameters}），wire 形状由 shared 的
+    // toWireTools 翻成 openai 的 `{type:'function', function:{...}}` —— provider 边界内消化差异
+    const tools = [{ name: 'get_weather', description: '查天气', parameters: { type: 'object', properties: {} } }]
     await drain(streamCompletions({ requestId: 'a4', messages: [], apiKey: 'k', tools }))
     restore()
-    expect(seenBody.tools).toEqual(tools)
+    expect(seenBody.tools).toEqual([
+      {
+        type: 'function',
+        function: { name: 'get_weather', description: '查天气', parameters: { type: 'object', properties: {} } },
+      },
+    ])
     expect(seenBody.stream).toBe(true)
+  })
+
+  it('中立消息翻 wire：assistant 携 tool_calls、role:tool 携 tool_call_id（P7 关键）', async () => {
+    let seenBody: any = null
+    const restore = withFetch(async (_input: any, init?: any) => {
+      seenBody = JSON.parse(init?.body as string)
+      return new Response(sseBody([{ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }]), { status: 200 })
+    })
+    await drain(
+      streamCompletions({
+        requestId: 'a6',
+        apiKey: 'k',
+        messages: [
+          { role: 'user', content: '读文件' },
+          { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'read_file', arguments: '{"path":"a.txt"}' }] },
+          { role: 'tool', content: '文件内容', toolCallId: 'c1' },
+        ],
+      }),
+    )
+    restore()
+    expect(seenBody.messages).toEqual([
+      { role: 'user', content: '读文件' },
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.txt"}' } }],
+      },
+      { role: 'tool', content: '文件内容', tool_call_id: 'c1' },
+    ])
   })
 
   it('不传 tools 时请求体不含 tools 字段（普通对话不污染 wire）', async () => {

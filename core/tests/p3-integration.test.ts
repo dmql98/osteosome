@@ -252,6 +252,16 @@ describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
           20_000,
           `loop idle (topics seen: ${parseSseEvents(sse.text()).map((e) => e.topic).join(', ')})`,
         )
+        // assistant 的 message.appended 由 session 异步发（message.append 是命令→结果路径），
+        // 可能晚于 idle —— 显式等它，别赌时序（高负载下曾假红）
+        await waitFor(
+          () =>
+            parseSseEvents(sse.text()).some(
+              (e) => e.topic === 'message.appended' && (e.payload.message as { role: string })?.role === 'assistant',
+            ),
+          10_000,
+          'assistant message appended',
+        )
 
         const events = parseSseEvents(sse.text())
         // 逐步 token（A 可见，累积成 '你好'）

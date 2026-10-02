@@ -57,9 +57,10 @@ service.subscribe('llm.provider.request', async (payload) => {
     for await (const chunk of streamCompletions({
       requestId,
       model: typeof payload.model === 'string' ? payload.model : undefined,
-      messages: (payload.messages as { role: 'system' | 'user' | 'assistant'; content: string }[]) ?? [],
+      messages: (payload.messages as { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; toolCallId?: string; toolCalls?: { id: string; name: string; arguments: string }[] }[]) ?? [],
       ...(typeof payload.temperature === 'number' ? { temperature: payload.temperature } : {}),
       ...(normalizeThinking(payload.thinking) ? { thinking: normalizeThinking(payload.thinking)! } : {}),
+      ...(Array.isArray(payload.tools) && payload.tools.length > 0 ? { tools: payload.tools as never } : {}),
       signal: controller.signal,
       apiKey,
     })) {

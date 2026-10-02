@@ -152,15 +152,33 @@ describe('buildMessages 多轮组装', () => {
     ])
   })
 
-  it('超长截断：保留最近 N 条（system 始终置首）', () => {
+  it('超长截断：保留最近 N 条并把起点对齐到 user 边界（P7 修正）', () => {
     const history = Array.from({ length: 10 }, (_, i) => ({
       role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
       content: `m${i}`,
     }))
     const messages = buildMessages(history, 'SYS', 3)
     expect(messages[0].content).toBe('SYS')
-    expect(messages).toHaveLength(4) // system + 3 条最近
-    expect(messages.map((m) => m.content)).toEqual(['SYS', 'm7', 'm8', 'm9'])
+    // P3 原行为是「system + 最近 3 条」= m7/m8/m9；P7 起截断点必须落在 user 边界
+    // （孤立 assistant/tool 片段会让上游 400），m7 是 assistant → 前进到 m8(user) 再切
+    expect(messages.map((m) => m.content)).toEqual(['SYS', 'm8', 'm9'])
+  })
+
+  it('工具轮不会被截断腰斩：tool 消息只随它的 assistant.tool_calls 一起保留（P7）', () => {
+    const history = [
+      { role: 'user' as const, content: 'u1' },
+      { role: 'assistant' as const, content: '', toolCalls: [{ id: 'c1', name: 'read_file', arguments: '{}' }] },
+      { role: 'tool' as const, content: '内容', toolCallId: 'c1' },
+      { role: 'user' as const, content: 'u2' },
+    ]
+    // maxMessages=2 的朴素切法会从 assistant(tool_calls) 中间切开 → 孤立 tool → 上游 400
+    const messages = buildMessages(history, 'SYS', 2)
+    expect(messages.map((m) => m.content)).toEqual(['SYS', 'u2'])
+    // 完整保留时 tool 消息与 toolCallId、assistant 的 toolCalls 都在
+    // （buildMessages 首位是 system，故历史下标整体 +1）
+    const full = buildMessages(history, 'SYS', 20)
+    expect(full[2].toolCalls).toEqual([{ id: 'c1', name: 'read_file', arguments: '{}' }])
+    expect(full[3]).toMatchObject({ role: 'tool', content: '内容', toolCallId: 'c1' })
   })
 
   it('过滤脏数据：历史里 role 非法 / content 非字符串 → 丢弃', () => {

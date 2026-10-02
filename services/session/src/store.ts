@@ -20,7 +20,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export type MessageRole = 'system' | 'user' | 'assistant'
+export type MessageRole = 'system' | 'user' | 'assistant' | 'tool'
 
 export interface SessionMeta {
   id: string
@@ -39,6 +39,12 @@ export interface Message {
   content: string
   finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls' | 'error'
   usage?: { promptTokens: number; completionTokens: number }
+  /** role:'tool'：对应 assistant.toolCalls[].id */
+  toolCallId?: string
+  /** role:'tool'：工具名（渲染与排查用） */
+  toolName?: string
+  /** role:'assistant'：本条发起的工具调用 */
+  toolCalls?: { id: string; name: string; arguments: string }[]
 }
 
 export interface SessionFile {
@@ -51,6 +57,9 @@ export interface NewMessage {
   content: string
   finishReason?: Message['finishReason']
   usage?: Message['usage']
+  toolCallId?: string
+  toolName?: string
+  toolCalls?: Message['toolCalls']
   /** 调用方自带 id（loop 回填时用；缺省生成） */
   id?: string
 }
@@ -234,6 +243,10 @@ export class SessionStore {
       content: input.content,
       ...(input.finishReason ? { finishReason: input.finishReason } : {}),
       ...(input.usage ? { usage: input.usage } : {}),
+      // P7：工具轮字段（role:'tool' 的 toolCallId/toolName、role:'assistant' 的 toolCalls）
+      ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
+      ...(input.toolName ? { toolName: input.toolName } : {}),
+      ...(input.toolCalls && input.toolCalls.length > 0 ? { toolCalls: input.toolCalls } : {}),
     }
     file.messages.push(message)
     file.meta.updatedAt = message.createdAt

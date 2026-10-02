@@ -57,6 +57,19 @@
             <span v-if="row.pending" class="llm-chat__spinner"><Spinner :size="12" /></span>
             {{ row.text }}
           </div>
+          <div
+            v-for="call in row.toolCalls ?? []"
+            :key="call.id"
+            class="llm-chat__tool"
+            :class="{ 'llm-chat__tool--failed': call.ok === false, 'llm-chat__tool--running': call.ok === undefined }"
+            :data-testid="`llm-chat-tool-${call.name}`"
+          >
+            <span class="llm-chat__tool-name">🔧 {{ call.name }}</span>
+            <span class="llm-chat__tool-args">{{ call.arguments }}</span>
+            <span v-if="call.ok === undefined" class="llm-chat__tool-state">执行中…</span>
+            <span v-else-if="call.ok" class="llm-chat__tool-state llm-chat__tool-state--ok">✓ {{ call.summary }}</span>
+            <span v-else class="llm-chat__tool-state llm-chat__tool-state--err">✗ {{ call.summary }}</span>
+          </div>
         </template>
         <div v-if="failed" class="llm-chat__failed" data-testid="llm-chat-failed">{{ failed }}</div>
       </div>
@@ -96,12 +109,15 @@ import { useEventBus } from '@/core-sdk/useEventBus'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
 import { useModelCatalog } from '@/core-sdk/useModelCatalog'
 import { useSessionStore } from '@/stores/session.store'
+import type { ToolCall } from '@osteosome/shared'
 
 interface ChatRow {
   key: string
   role: 'user' | 'assistant'
   text: string
   pending?: boolean
+  /** P7：assistant 消息发起的工具调用（ok 未定义 = 执行中） */
+  toolCalls?: (ToolCall & { ok?: boolean; summary?: string })[]
 }
 
 const { list } = useLlmProviders()
@@ -178,7 +194,13 @@ watch(catalogModels, (items) => {
 
 /** 历史消息（当前会话）→ rows；in-flight 消息始终挂在末尾 */
 const rowsView = computed<ChatRow[]>(() => {
-  const history = sessions.messages.map((m) => ({ key: m.id, role: m.role === 'user' ? ('user' as const) : ('assistant' as const), text: m.content }))
+  const history = sessions.messages.map((m) => ({
+    key: m.id,
+    role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
+    text: m.content,
+    // P7：assistant 消息的工具调用（tool 消息本身不单独成气泡——它们是工具结果，已并进上面的块）
+    ...(m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0 ? { toolCalls: m.toolCalls } : {}),
+  }))
   return [...history, ...rows.value]
 })
 
@@ -261,6 +283,37 @@ useEventBus('loop.token.streamed', (payload) => {
   if (target && typeof p.token === 'string') target.text += p.token
 })
 
+/**
+ * loop.tool.executed（A）→ 工具块从「执行中」变成功/失败（P7）。
+ *
+ * 注意落库的 assistant 消息（`message.appended`）也带 toolCalls —— 那一刻 in-flight 行会
+ * 被换成服务端 id，工具结果状态随之后从历史里读出；本事件负责**执行期间**的即时反馈，
+ * 两者用 toolCallId 对齐，故按 id 合并而不是覆盖。
+ */
+useEventBus('loop.tool.executed', (payload) => {
+  if (!payload || typeof payload !== 'object') return
+  const p = payload as { requestId?: string; toolCallId?: string; name?: string; arguments?: string; ok?: boolean; summary?: string }
+  if (p.requestId !== activeA.value || !p.toolCallId) return
+  const target = rows.value.find((r) => r.key === `in-flight-${activeA.value}`)
+  if (!target) return
+  target.toolCalls = target.toolCalls ?? []
+  const existing = target.toolCalls.find((c) => c.id === p.toolCallId)
+  if (existing) {
+    existing.ok = p.ok
+    existing.summary = p.summary
+  } else {
+    target.toolCalls.push({
+      id: p.toolCallId,
+      name: p.name ?? 'tool',
+      arguments: p.arguments ?? '',
+      ok: p.ok,
+      summary: p.summary,
+    })
+  }
+})
+
+/** llm.request 侧模型发起工具调用时，loop 还没有 loop.tool.executed —— 工具块由执行事件统一驱动 */
+
 /** message.appended（当前会话 assistant）→ in-flight 换服务端 id（视图 id 切换，不重放 content） */
 useEventBus('message.appended', (payload) => {
   const p = payload as { sessionId?: string; message?: { id?: string; role?: string; content?: string } }
@@ -339,6 +392,14 @@ function cancel(): void {
 .llm-chat__bubble { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
 .llm-chat__bubble--user { justify-self: end; background: var(--color-accent); color: var(--color-text-inverse); }
 .llm-chat__bubble--assistant { justify-self: start; background: var(--color-surface-2); }
+.llm-chat__tool { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: var(--radius-sm); font-size: var(--text-xs); background: var(--color-surface-1); }
+.llm-chat__tool--failed { border-left-color: var(--color-danger); }
+.llm-chat__tool--running { border-left-color: var(--color-warning); }
+.llm-chat__tool-name { font-weight: 600; color: var(--color-text); }
+.llm-chat__tool-args { color: var(--color-text-muted); font-family: var(--font-mono, monospace); word-break: break-all; }
+.llm-chat__tool-state { color: var(--color-text-muted); }
+.llm-chat__tool-state--ok { color: var(--color-success); }
+.llm-chat__tool-state--err { color: var(--color-danger); }
 .llm-chat__spinner { display: inline-flex; margin-right: var(--space-1); vertical-align: middle; }
 .llm-chat__failed { color: var(--color-danger); font-size: var(--text-sm); }
 .llm-chat__composer { display: grid; gap: var(--space-2); }
