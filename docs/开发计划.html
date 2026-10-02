@@ -131,7 +131,7 @@
 <header class="bar">
   <div class="wrap">
     <h1>开发计划 · 对话界面重构</h1>
-    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S4（5/9）</span>
+    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S5（6/9）</span>
     <span class="sp"></span>
     <button id="theme">切换深色</button>
   </div>
@@ -146,8 +146,8 @@
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
-      <span class="commit">9e30297</span> · <span class="commit">adc7728</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      下一步 <b>S5 拆三组件</b>。
+      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
+      下一步 <b>S6 对话布局预设</b>。
     </div>
   </div>
 
@@ -156,13 +156,13 @@
     <h2><span class="n">0</span>起点（实测）与现状</h2>
     <div class="stat">
       <div><b class="big">6</b><span>服务进程（起点 10，S2 已减 4）</span></div>
-      <div><b class="big">9</b><span>组件（起点 10，S5 后对话区 → 3 盒）</span></div>
+      <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
       <div><b class="big">0</b><span>未提交改动</span></div>
       <div><b class="big">12</b><span>测试包全绿</span></div>
       <div><b>6</b><span>剩余计划天数</span></div>
     </div>
     <table>
-      <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S4 已推）</th></tr></thead>
+      <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
       <tbody>
         <tr><th>分支 / HEAD</th><td class="mono">P2-llm / ec03717（P4 收尾）</td>
             <td class="mono">P2-llm / 7bfb01a（S2 删 4 服务）</td></tr>
@@ -171,7 +171,8 @@
             <td class="mono">session · loop · llm · llm-provider-openai · credentials · llm-retry<br>
                 <span style="color:var(--success)">provider 由 4 个进程变 1 个进程内的多厂商实例</span></td></tr>
         <tr><th>组件</th><td>10 个，其中 <code>widget.llm-chat</code> = 消息区 + 输入框<b>焊在一起</b></td>
-            <td>9 个（<code>widget.hello-command</code> 随 hello 服务删除）</td></tr>
+            <td>10 个：<code>widget.hello-command</code> 随 hello 服务删（S2）、<code>widget.llm-chat</code> 拆成
+                <code>widget.chat-timeline</code> + <code>widget.chat-composer</code>（S5）</td></tr>
         <tr><th>已知缺陷</th>
             <td>① 思考流泄漏进正文（主位 <code>isDelta</code> 不看 <code>blockType</code>）
                 ② 插件表硬编码在前端 ③ <code>setEnabled</code> 不真停服务 ④ <code>hello</code> 是纯演示</td>
@@ -212,7 +213,8 @@
           <span class="step-chip done">S2 删 4 服务 ✓</span><span class="arw">→</span>
           <span class="step-chip done">S3 新增服务商 ✓</span><span class="arw">→</span>
           <span class="step-chip done">S4 修思考流 ✓</span><span class="arw">→</span>
-          <span class="step-chip">S5 拆三组件 ← 下一步</span>
+          <span class="step-chip done">S5 拆三组件 ✓</span><span class="arw">→</span>
+          <span class="step-chip">S6 布局预设 ← 下一步</span>
         </div>
       </div>
       <div class="lane-row">
@@ -239,7 +241,7 @@
       <div class="row filled"><span class="lbl">S2 删服务 ✓</span><div class="track"><span class="bar filled" style="left:22%;width:6%">0.5d</span></div></div>
       <div class="row filled"><span class="lbl">S3 新增服务商 ✓</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--danger)">0.5d</span></div></div>
       <div class="row filled"><span class="lbl">S4 思考流 ✓</span><div class="track"><span class="bar" style="left:3%;width:6%;background:var(--success)">0.5d</span></div></div>
-      <div class="row"><span class="lbl">S5 拆组件</span><div class="track"><span class="bar" style="left:9%;width:19%;background:var(--success)">1.5d</span></div></div>
+      <div class="row filled"><span class="lbl">S5 拆组件 ✓</span><div class="track"><span class="bar" style="left:9%;width:19%;background:var(--success)">1.5d</span></div></div>
       <div class="row"><span class="lbl">S6 布局预设</span><div class="track"><span class="bar" style="left:28%;width:6%;background:var(--success)">0.5d</span></div></div>
       <div class="row"><span class="lbl">S7 插件聚合</span><div class="track"><span class="bar" style="left:34%;width:25%;background:var(--primary)">2d</span></div></div>
       <div class="row"><span class="lbl">S8 收尾</span><div class="track"><span class="bar" style="left:59%;width:7%;background:var(--muted)">0.5d</span></div></div>
@@ -467,38 +469,80 @@
       </div>
     </div>
 
-    <div class="step">
+    <div class="step done">
       <div class="hd"><span class="sid">S5</span><span class="lane ui">界面线</span>
         <span class="stitle">组件拆分：② timeline / ③ composer</span><span class="stars">★</span>
-        <span class="done-badge" style="background:var(--danger)">下一步</span><span class="dur">1.5 天</span></div>
+        <span class="done-badge">已完成</span><span class="dur">计划 1.5 天</span></div>
       <div class="bd">
-        <div class="lbl">S4 已经把数据铺好了（不用自己攒）</div>
+        <p class="note" style="margin-top:0"><b>为什么要拆</b>：原来 <code>widget.llm-chat</code> 一个组件 407 行，
+          其中 <b>290 行是逻辑</b>（全部状态 + 8 条 SSE 订阅 + 4 条命令）。代价有两个 ——
+          想做「只读的消息区」得连带输入框；输入框的 <code>disabled</code> 与消息区共享同一份 <code>sending</code>，
+          两个组件要通信就只能互相引用。</p>
+        <div class="lbl">实际落地</div>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:30%">落点</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">client/src/stores/chat.store.ts</td>
+                <td><b>唯一真源</b>：provider / model / thinking / draft / sending / failed / activeA / rows；
+                    getter <code>rowsView</code>（历史+in-flight）与 <code>canSend</code>；
+                    8 条 SSE 幂等绑定 + <code>submit</code> / <code>cancel</code> / <code>onSessionChanged</code></td></tr>
+            <tr><td class="mono">widget.chat-timeline（②）</td>
+                <td><b>纯展示，不发任何命令</b>：气泡 / 折叠思考块 / 工具卡（执行中→✓✗）/ 错误内联 /
+                    流式尾光标 / 停因与用量行</td></tr>
+            <tr><td class="mono">widget.chat-composer（③）</td>
+                <td>输入 + 发送停止 + provider / 模型 / 思考强度下拉</td></tr>
+            <tr><td class="mono">删除 widget.llm-chat</td>
+                <td><code>plugin.llm.widgets</code> 改为 <code>['widget.chat-timeline','widget.chat-composer']</code></td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">踩到一个真实的依赖方向问题（第一版 provider 恒空）</div>
+        <p>第一版把 provider 下拉与模型目录也放进 store，结果 <b>provider 永远为空</b>。原因是
+          <code>useLlmProviders</code> / <code>useModelCatalog</code> 是<b>每次调用新建 ref 的 composable</b>（不是单例），
+          且靠 <code>onMounted</code> 订阅 —— 只在组件 setup 上下文有效：</p>
         <ul>
-          <li><b>折叠思考块</b>：渲染 <code>message.reasoning</code> 即可。流式期间用
-              <code>loop.token.streamed{blockType:'reasoning'}</code> 累积，收尾由落库消息补齐</li>
-          <li><b>「为什么停」提示</b>：<code>message.finishReason</code>（S4 前这个字段被丢，刷新就没了）</li>
-          <li><b>token 数</b>：<code>message.usage</code>（同上）</li>
+          <li>在 store 的 getter 里调它们 → 拿到的是刚建的空实例，永远是空</li>
+          <li>在 store 里订阅 → 订阅挂在随后被丢弃的实例上，等于没绑</li>
         </ul>
-        <div class="lbl">做什么</div>
-        <ol>
-          <li>新增 <code>client/src/stores/chat.store.ts</code>：<code>activeRequestId</code> / <code>sending</code> / in-flight 行 / <code>model</code> / <code>thinking</code> / 工具块状态</li>
-          <li><code>widget.chat-timeline</code>（②）：消息气泡、<b>折叠思考块</b>、<b>工具卡</b>、错误内联、流式尾光标、Markdown <code>&lt;pre&gt;</code></li>
-          <li><code>widget.chat-composer</code>（③）：输入框 + 发送/停止 + 模型下拉 + 思考强度下拉</li>
-          <li>删除 <code>widget.llm-chat</code></li>
-          <li>②③ <b>零直接通信</b>，共享 <code>chat.store</code>；服务端事件都带同一 requestId，按它过滤不串轮</li>
-        </ol>
-        <div class="lbl">验收</div>
+        <p><b>处置</b>：不把这两个 composable 改成单例（那会牵动 settings 等既有调用方），而是把依赖方向摆正 ——
+          <b>store 只管「这一轮对话」的 run 状态</b>；provider 列表与模型目录这类<b>展示派生数据</b>留在 ③ 的 setup 里
+          （那里才是合法调用上下文），选中后写进 store。理由写进了 <code>chat.store</code> 的注释，
+          防止以后有人「顺手」把它挪回 store。</p>
+        <div class="lbl">验收（计划原句，已达成）</div>
         <ul>
-          <li>组件用例：②③ 各自独立挂载渲染；共用 requestId 不串轮；工具块 执行中→✓/✗；错误内联不清空上文</li>
-          <li>① 切会话 → ② 清空重载 → ③ 输入禁用状态正确</li>
+          <li>原 18 条组件用例<b>全部迁完</b>（改挂两个组件、testid 换 <code>timeline-*</code> / <code>composer-*</code>），
+              另加 10 条：<b>拆分契约 4 条</b>（② 单独挂载能渲染且<b>一条命令都不发</b> / ③ 单独挂载也能发问 /
+              共享同一份 sending / 切会话清空 in-flight 并重拉历史）+
+              <b>S4 专项 4 条</b>（reasoning 进折叠块且正文不含 / 缺省 blockType 仍算正文 / 元信息行 / 尾光标）</li>
+          <li><code>registry.test.ts</code> 补断言：<code>plugin.llm.widgets</code> 含两个新组件且
+              <b>不含</b>已删的 <code>widget.llm-chat</code></li>
+          <li>① 切会话 → ② 清空重载 → ③ 输入禁用状态正确：见「切会话」那条用例</li>
+        </ul>
+        <div class="lbl">S4 的数据在这里被用上了</div>
+        <ul>
+          <li>折叠思考块直接渲染 <code>message.reasoning</code>；停因读 <code>finishReason</code>；
+              token 数读 <code>usage</code> —— <b>不用自己攒</b>，这是 S4 把它存下来的回报</li>
+        </ul>
+        <div class="lbl">诚实遗留</div>
+        <ul>
+          <li><code>session.get.result</code> 的处理目前在 <code>chat.store</code> 里往 <code>session.store</code> 写
+              <code>messages</code>（<b>跨 store 写</b>）。逻辑上该归 session.store，但那是另一件事，本步没动</li>
+          <li>我自己手误两回（编辑时误删 <code>describe</code> 收尾括号、误删 store 里的 action），已修</li>
         </ul>
       </div>
     </div>
 
     <div class="step">
       <div class="hd"><span class="sid">S6</span><span class="lane ui">界面线</span>
-        <span class="stitle">对话布局预设</span><span class="dur">0.5 天</span></div>
+        <span class="stitle">对话布局预设</span>
+        <span class="done-badge" style="background:var(--danger)">下一步</span><span class="dur">0.5 天</span></div>
       <div class="bd">
+        <div class="lbl">S5 已经把三个盒子备齐了</div>
+        <ul>
+          <li>① <code>widget.session-list</code>（会话列表）、② <code>widget.chat-timeline</code>、
+              ③ <code>widget.chat-composer</code> —— 三个都是<b>独立 widget</b>，各有 id，
+              所以「拼成三盒布局」不需要再改组件，只要摆位置</li>
+          <li>②③ 零通信（共享 <code>chat.store</code>），所以拆分面板窗口也不会坏</li>
+        </ul>
         <div class="lbl">做什么</div>
         <ul>
           <li><code>client/src/panes/default-layout.ts</code> 写死三盒几何（会话 <code>240px</code> / 对话 <code>flex × 满高−120</code> / 输入 <code>flex × 120</code>）</li>
@@ -667,6 +711,12 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
             <td>⚠️ S4 实际踩了（同上那次中断的后果）。<b>建议</b>：core 的集成测在 <code>beforeAll</code> 里断言
                 关键 dist 比 src 新，或让 <code>scripts/smoke.mjs</code> 顺带检查一次 ——
                 否则「改了没生效」和「代码写错了」在报错上长得一模一样</td></tr>
+        <tr><td style="color:var(--warning)">「每次调用新建 ref」的 composable 不能从 store 里用</td>
+            <td>⚠️ S5 第一版踩了：provider 下拉恒空。<code>useLlmProviders</code> / <code>useModelCatalog</code>
+                是<b>每次调用新建 ref</b>（不是单例）且靠 <code>onMounted</code> 订阅 ——
+                在 Pinia getter 里调只会拿到空实例，在 store 里订阅则挂在一个随即被丢弃的实例上。
+                <b>判据：store 只能依赖「单例或纯数据」，组件私有状态留在组件里。</b>
+                （注意 <code>session.store</code> 是用 <code>sse.subscribe</code> 直接绑的，没踩这条）</td></tr>
         <tr><td>S5 拆组件后旧 <code>widget.llm-chat</code> 残留引用</td><td>P4 WS-1 那条断言会抓到（插件声明的组件必须 get 得到）—— S2 删 <code>widget.hello-command</code> 时已被它抓到一次，有效</td></tr>
         <tr><td>S7 停插件时进程正在跑工具</td><td>停前发 <code>loop.cancel</code> 走正常收尾，<code>stopGraceMs</code> 超时才强杀</td></tr>
         <tr><td>S7 前端改拉清单后离线打不开</td><td>拉取失败时回退到内置最小清单（只有一个 core 插件），不白屏</td></tr>
@@ -676,7 +726,7 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
 
   <footer>
     Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） · 更新于 S2 完成后（2026-10-02）·
-    进度 S0–S4 已推（<span class="commit">adc7728</span>）·
+    进度 S0–S5 已推（<span class="commit">0962d41</span>）·
     配套：<code>docs/开发进度/S-对话界面与插件重构-计划.md</code> ·
     架构：<code>docs/对话界面架构.html</code>
   </footer>
