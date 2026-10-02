@@ -54,6 +54,7 @@ import { MovableBox, MovableGroup, type MovableBoxRect } from 'vue-movable-box'
 import { useLayoutStore } from '../layout/layout.store'
 import { usePluginStore } from '../stores/plugin.store'
 import { getWidget, widgetComponents } from '../widgets/registry'
+import { chatThreeBoxRectsFor } from './default-layout'
 
 type WidgetBox = { id: string; title: string; component: unknown; rect: MovableBoxRect }
 type PanelContainerParams = { widgets?: string[]; title?: string; layout?: Record<string, MovableBoxRect> }
@@ -114,15 +115,21 @@ function defaultRect(index: number): MovableBoxRect {
   }
 }
 
+/**
+ * S6：初始几何在 `rebuild()` 里定 —— 优先级 `保存的 rect > 三盒预设 > 通用网格`。
+ * 用户拖过之后保存的 rect 说了算（那是用户的选择），预设只负责「第一次打开时的样子」。
+ */
 const visible = ref<WidgetBox[]>([])
 
 function rebuild(): void {
+  const presets = chatThreeBoxRectsFor(canvas.value)
   visible.value = widgets.value.flatMap((id, index) => {
     // 停用 / 已卸载插件的组件不渲染（停用仅隐藏，重新启用自动恢复）
     if (!pluginStore.isWidgetEnabled(id)) return []
     const widget = getWidget(id)
     if (!widget) return []
-    return [{ id, title: widget.title, component: markRaw(componentMap[id] as object), rect: saved.value[id] ?? defaultRect(index) }]
+    const rect = saved.value[id] ?? presets[id] ?? defaultRect(index)
+    return [{ id, title: widget.title, component: markRaw(componentMap[id] as object), rect }]
   })
   const alive = new Set(visible.value.map((widget) => widget.id))
   selectedIds.value = selectedIds.value.filter((id) => alive.has(id))

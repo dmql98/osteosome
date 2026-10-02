@@ -115,11 +115,18 @@ export const useLayoutStore = defineStore('layout', {
       if (!api) return
       api.addPanel({ id: `panel.${Date.now()}`, component: PANEL_COMPONENT, title: '工作台', params: { widgets: [] } })
     },
+    /**
+     * 重置布局（S6 面板头「重置为对话布局」也走这里）：清空所有面板 → 重铺默认布局。
+     *
+     * 显式 `updateLayout(api.toJSON())`：不能只依赖 `api.clear()` 触发的 onDidLayoutChange ——
+     * 那条回调是异步的，App 紧接着退出/刷新的话复位就丢了，重启后又看到拖乱的旧布局。
+     */
     resetLayout() {
       const api = this.api as DockviewApi | null
       if (!api) return
       api.clear()
       applyDefaultLayout(api)
+      this.updateLayout(api.toJSON())
     },
     /** 拉出独立窗：把面板从工作台摘除并记住状态，关闭独立窗时再放回原位。
      *  `api.close()` 会触发 onDidLayoutChange，由 DockviewLayout 回写快照，无需在此重复 updateLayout。 */

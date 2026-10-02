@@ -1,7 +1,8 @@
 <template>
   <div v-if="panelId" class="panel-header-actions">
-    <IconButton icon="⤢" size="sm" label="拉出独立窗" @click="detach" />
-    <IconButton icon="×" size="sm" label="关闭面板" @click="close" />
+    <IconButton icon="↺" size="sm" label="重置为对话布局" @click="resetChatLayout" />
+    <IconButton icon="⇱" size="sm" label="拉出独立窗" @click="detach" />
+    <IconButton icon="✕" size="sm" label="关闭面板" @click="close" />
   </div>
 </template>
 
@@ -19,10 +20,21 @@ const props = defineProps<{ params?: HeaderParams }>()
 const layout = useLayoutStore()
 const panelId = computed(() => props.params?.activePanel?.id ?? '')
 
+/**
+ * S6：重置为对话布局。
+ *
+ * 清掉所有面板的已保存几何 + 回到默认组件集，于是三盒预设重新生效。
+ * 走 `resetLayout()` 而不是就地改这个面板 —— 布局是全局的（多个面板共享一份快照），
+ * 只复位当前面板会造成「一个面板是三盒、另一个还是乱的」。
+ */
+function resetChatLayout(): void {
+  layout.resetLayout()
+}
+
 function detach(): void {
   const panel = props.params?.activePanel
   if (!panel?.id) return
-  // 先把面板从工作台摘除，再开独立窗；关闭独立窗时由主窗监听恢复
+  // 先把面板从工作台摘除，再开独立窗；关闭独立窗时由主窗放回原位
   if (!layout.detachPanel(panel.id)) return
   openPanelWindow(panel.id, panel.params?.widgets ?? [])
 }
