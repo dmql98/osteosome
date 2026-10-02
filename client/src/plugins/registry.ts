@@ -7,7 +7,7 @@
  *
  * P2（LLM 能力位拆分）追加：`plugin.llm`（主位服务 `llm`）+ provider 服务插件。
  * 按「能力位 = 独立服务进程」的 OST 思想，**服务插件 = 服务的呈现**：
- * - `plugin.llm`           → `services/llm`（能力主位，组件 `widget.llm-chat`）
+ * - `plugin.llm`           → `services/llm`（能力主位，组件 `widget.chat-timeline` + `widget.chat-composer`，S5 起拆开）
  * - `plugin.llm-providers` → `services/llm-provider-openai`（provider 位，组件 `widget.llm-providers`）
  *   S1 起该进程内建多个厂商实例（openai / deepseek / openrouter / … 全部 openai 兼容），
  *   每家按「配了凭证才注册」出现在组件里 —— 所以组件呈现的是**厂商**，
@@ -15,7 +15,7 @@
  * - credentials / llm-retry 是旁路服务，无独立组件（见 LLM能力位拆分设计.md §4.5.1），
  *   不在本表列为可管理插件——它们的启停由服务层 manifest 控制，UI 不镜像服务内部结构。
  *
- * 注意：插件定义里 `widgets` 指向的 widget 由 WS-8 提供（llm-chat / llm-providers 已落地）。
+ * 注意：插件定义里 `widgets` 指向的 widget 由 WS-8 提供（chat-timeline / chat-composer / llm-providers 已落地）。
  */
 
 export interface PluginCapability {
@@ -130,13 +130,13 @@ export const PLUGINS: PluginDefinition[] = [
     author: 'osteosome',
     license: 'Apache-2.0',
     description:
-      'LLM 能力主位（services/llm）：接收前端 llm.request 命令、按 provider 路由、把流式块翻译成 llm.token.streamed 等对外事件。组件（widget.llm-chat）由 WS-8 提供（发问 / 停止 / 流式累积）。',
+      'LLM 能力主位（services/llm）：接收前端 llm.request 命令、按 provider 路由、把流式块翻译成 llm.token.streamed 等对外事件。S5 起组件拆成三个盒子：widget.session-list（①会话列表）/ widget.chat-timeline（②消息投影，含折叠思考块与工具卡）/ widget.chat-composer（③输入与请求参数）。②③ 零直接通信，共享 stores/chat.store.ts。',
     capabilities: [
       { name: 'llm.request', detail: '发起流式对话' },
       { name: 'llm.cancel', detail: '取消在途请求' },
       { name: 'llm.provider.registered', detail: '感知 provider 注册' },
     ],
-    widgets: ['widget.llm-chat'],
+    widgets: ['widget.chat-timeline', 'widget.chat-composer'],
     dependencies: [{ id: 'llm', label: 'LLM 主位服务' }],
   },
   {

@@ -22,7 +22,9 @@ describe('plugin registry', () => {
 
   it('LLM 能力位插件已登记（依赖对齐服务 id）', () => {
     const llm = getPlugin('plugin.llm')
-    expect(llm?.widgets).toContain('widget.llm-chat')
+    // S5 起对话区拆成 ②③ 两个组件（旧的 widget.llm-chat 已删）
+    expect(llm?.widgets).toEqual(expect.arrayContaining(['widget.chat-timeline', 'widget.chat-composer']))
+    expect(llm?.widgets).not.toContain('widget.llm-chat')
     expect(llm?.dependencies.map((dep) => dep.id)).toContain('llm')
     const providers = getPlugin('plugin.llm-providers')
     expect(providers?.widgets).toContain('widget.llm-providers')
