@@ -30,6 +30,7 @@ export async function openPluginWindowViaTauri(): Promise<boolean> {
     minHeight: 340,
     center: true,
     resizable: true,
+    decorations: false,
   })
   // 窗口吸附（边缘距主窗 ≤ 13px 贴边、并随主窗拖动）由 Rust 壳统一处理。
   return !!win
@@ -64,6 +65,7 @@ export async function openPluginDetailWindowViaTauri(pluginId: string): Promise<
     minHeight: 520,
     center: true,
     resizable: true,
+    decorations: false,
   })
   // 窗口吸附（边缘距主窗 ≤ 13px 贴边、并随主窗拖动）由 Rust 壳统一处理。
   return !!win

@@ -1,9 +1,9 @@
 <template>
   <div class="plugin-detail">
-    <header class="plugin-detail__bar">
-      <span class="plugin-detail__title">插件管理</span>
-      <span class="plugin-detail__spacer"></span>
-      <IconButton icon="×" size="sm" label="关闭窗口" @click="closeCurrentWindow" />
+    <header class="plugin-detail__bar" data-tauri-drag-region>
+      <span class="plugin-detail__title" data-tauri-drag-region>插件管理</span>
+      <span class="plugin-detail__spacer" data-tauri-drag-region></span>
+      <WindowControls />
     </header>
 
     <div v-if="!plugin" class="plugin-detail__body plugin-detail__body--center">
@@ -111,9 +111,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import IconButton from '@/components/ui/IconButton.vue'
 import Modal from '@/components/ui/Modal.vue'
 import Switch from '@/components/ui/Switch.vue'
+import WindowControls from '@/components/layout/WindowControls.vue'
 import { getWidget } from '@/widgets/registry'
 import { getPlugin, type PluginDependency } from './registry'
 import { usePluginStore } from '@/stores/plugin.store'
@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .plugin-detail { display: flex; flex-direction: column; height: 100%; background: var(--color-surface); }
-.plugin-detail__bar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-3); border-bottom: 1px solid var(--color-border); flex: none; }
+.plugin-detail__bar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 0 0 var(--space-3); border-bottom: 1px solid var(--color-border); flex: none; }
 .plugin-detail__title { font-weight: 700; font-size: var(--text-md); }
 .plugin-detail__spacer { flex: 1; }
 .plugin-detail__body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }

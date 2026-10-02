@@ -16,6 +16,18 @@
       "identifier": "core:window:allow-close"
     },
     {
+      "identifier": "core:window:allow-start-dragging"
+    },
+    {
+      "identifier": "core:window:allow-minimize"
+    },
+    {
+      "identifier": "core:window:allow-toggle-maximize"
+    },
+    {
+      "identifier": "core:window:allow-is-maximized"
+    },
+    {
       "identifier": "core:webview:allow-create-webview-window"
     },
     {
