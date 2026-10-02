@@ -94,7 +94,26 @@ export interface EventMap {
   'service.ready': EventBase & { serviceId: string; version: string; panes?: PaneDescriptor[] }
   'service.restarting': EventBase & { serviceId: string; reason: string }
   'service.failed': EventBase & { serviceId: string; exitCode?: number; reason: string }
-  'service.stopped': EventBase & { serviceId: string }
+    'service.stopped': EventBase & { serviceId: string }
+    // ── 插件（S7-1，只增不改）──
+    /**
+     * 插件状态变化（S7）。`state` 是**派生**的：Core 把它声明的服务真实状态 +
+     * 依赖满足情况聚合出来（见 `shared/src/plugin-manifest.ts` 的 resolvePluginState）。
+     *
+     * 为什么状态是事件而不是让前端自己算：前端算就得复制一份聚合逻辑，
+     * 而那份逻辑的输入（服务真实状态）只有 Core 有 —— 于是又变成第二个真源。
+     */
+    'plugin.state.changed': EventBase & {
+      pluginId: string
+      state: 'ready' | 'degraded' | 'stopped' | 'failed'
+      /** 人话原因（degraded / failed 时有值），直接显示给用户 */
+      reason?: string
+      /** 缺失的必需依赖插件 id */
+      missingDependencies?: string[]
+      /** 该插件的服务里 ready 的个数 / 总数（详情窗「N/M」） */
+      readyServices?: number
+      totalServices?: number
+    }
   'hello.command.started': EventBase & { requestId: string; text: string }
   'hello.command.executed': EventBase & { requestId: string; echo: string }
   'hello.command.failed': EventBase & { requestId: string; reason: string }
@@ -217,7 +236,20 @@ export interface CommandMap {
   'hello.command': { requestId: string; text: string }
   'service.restart': { serviceId: string }
   'service.stop': { serviceId: string }
-  'service.start': { serviceId: string }
+    'service.start': { serviceId: string }
+    // ── 插件（S7-1，只增不改）──
+    /**
+     * 启停一个插件 —— **展开成它声明的服务启停**（S7-2 实现展开，S7-4 接前端）。
+     *
+     * 展开时的两个约定（S7-1 先钉死，实现照做）：
+     * - **停之前先收尾**：若插件的服务里含 `loop`，先发 `loop.cancel` 让在途的一轮
+     *   正常结束，超时才强杀。直接杀会留下半截 assistant 消息。
+     * - **共享服务不误停**：同一个服务若被多个插件声明，只有当**声明它的插件都没装**
+     *   才真的停。当前 5 个插件的服务互不重叠，所以先不做引用计数 ——
+     *   这是个**已知前提**，不是「已处理」。将来出现重叠时必须改成引用计数。
+     */
+    'plugin.start': { pluginId: string }
+    'plugin.stop': { pluginId: string }
   // ── llm（P2 §3.4 命令）──
   'llm.request': {
     requestId: string

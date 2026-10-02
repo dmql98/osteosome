@@ -6,6 +6,8 @@
  * - `--data` / `OST_DATA`         → 数据根目录（缺省 `./.data`）
  * - `--dist` / `OST_DIST`         → 前端静态资源目录（缺省 `./dist/client`）
  * - `--port` / `OST_PORT`         → HTTP 端口（缺省 1420）
+ * - `--plugins` / `OST_PLUGINS`   → 插件目录（缺省 `./plugins`；给 `none` 或空串 = **关掉插件层**，
+ *   于是 Core 照旧无条件启动 services/ 下所有服务 —— 这是给集成测试用的逃生门）
  *
  * 支持 `--key value` 与 `--key=value` 两种写法。
  */
@@ -17,6 +19,16 @@ export interface CoreConfig {
   dataDir: string
   distDir: string
   port: number
+  /**
+   * 插件目录（S7）。**`undefined` = 不启用插件层** → Core 照旧无条件启动 services/ 下所有服务。
+   *
+   * 这个「关掉」的能力不是给产品用的，是给**测试**用的：core/tests 里有 17 个集成测试
+   * 起真 Core 只为拿到某几个服务，若它们都得先「装插件」，测试就从「测 provider」
+   * 变成「测插件装配」，红的理由和被测的东西无关。
+   *
+   * 产品路径永远启用（startCore 默认指向 `<repo>/plugins`，见 main.ts）。
+   */
+  pluginsDir?: string
 }
 
 /** HTTP 默认端口（RFC：本机 SseBridge） */
@@ -26,6 +38,8 @@ const DEFAULTS = {
   services: './services',
   data: './.data',
   dist: './dist/client',
+  /** S7：插件目录缺省 ./plugins（S7-2 起扫盘；目录不存在时按「零插件」处理，不报错） */
+  plugins: './plugins',
 } as const
 
 /** 解析 `--key value` / `--key=value` → map（值缺省时记空串） */
@@ -79,6 +93,8 @@ export function loadConfig(
   const dataRaw = pick('data', 'OST_DATA') ?? DEFAULTS.data
   const distRaw = pick('dist', 'OST_DIST') ?? DEFAULTS.dist
   const portRaw = pick('port', 'OST_PORT') ?? String(DEFAULT_PORT)
+  // S7：--plugins '' / OST_PLUGINS='' 显式关掉插件层（测试用）；未给则用缺省 ./plugins
+  const pluginsRaw = args.get('plugins') ?? env.OST_PLUGINS ?? DEFAULTS.plugins
 
   const port = Number(portRaw)
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -90,5 +106,7 @@ export function loadConfig(
     dataDir: resolvePath(dataRaw, cwd),
     distDir: resolvePath(distRaw, cwd),
     port,
+    // 空串 = 显式关闭；`none` 便于在 shell / 测试里表达「不要插件层」
+    ...(pluginsRaw !== '' && pluginsRaw !== 'none' ? { pluginsDir: resolvePath(pluginsRaw, cwd) } : {}),
   }
 }

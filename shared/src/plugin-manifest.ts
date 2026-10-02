@@ -1,0 +1,215 @@
+/**
+ * 插件清单 `plugin.json` 的 schema 与类型（S7-1）。
+ *
+ * ## 它与 `service.json` 的分工（不重叠）
+ *
+ * | 文件 | 回答的问题 | 谁读 |
+ * |---|---|---|
+ * | `services/<id>/service.json` | **一个进程怎么被拉起来**（entry / protocolVersion / publishes / subscribes） | Core 管生命周期时 |
+ * | `plugins/<id>/plugin.json` | **哪些进程与组件算一件东西**（归属与依赖） | Core 编排 + 前端展示 |
+ *
+ * 所以加一个插件不用改任何 `service.json`，加一个能力位不用改任何 `plugin.json`。
+ *
+ * ## 为什么归属必须落盘，不能派生
+ *
+ * 「这三个服务必须一起用」是**人写的设计决定**，磁盘上读不出来 —— 只能从真实服务状态
+ * 派生出「有哪些服务在跑」，那得到的是服务列表的镜像，不是插件。
+ * 归属是数据（这里），状态是事实（由服务真实 status 聚合，见 {@link PluginState}）。
+ */
+import { z } from 'zod'
+
+/** 插件依赖另一个插件；`optional` = 缺了只降级不阻断 */
+export const PluginDependencySchema = z.object({
+  pluginId: z.string().min(1),
+  /** 缺必需依赖 → 插件 degraded + 提示「缺 X」，**不启动失败** */
+  optional: z.boolean().default(false),
+})
+
+export const PluginManifestSchema = z.object({
+  /** 插件唯一标识，须等于所在目录名（`plugins/<id>/plugin.json`） */
+  id: z.string().min(1),
+  /** 展示名 */
+  name: z.string().min(1),
+  version: z.string().min(1),
+  icon: z.string().optional(),
+  description: z.string().optional(),
+  author: z.string().optional(),
+  license: z.string().optional(),
+  /**
+   * 本插件带来的服务 id（对应 `services/<id>/`）。
+   *
+   * 允许为空（内置的无服务插件，如只碰 Core 的工作台骨架）。
+   * 校验交给编排层：声明了不存在的服务 id 是**编排错误**，不是 schema 错误。
+   */
+  services: z.array(z.string().min(1)).default([]),
+  /** 本插件带来的组件 id（对应 `widget.<name>`） */
+  components: z.array(z.string().min(1)).default([]),
+  /**
+   * 能力声明（纯展示，**不参与任何判定**）。
+   *
+   * 刻意保持"只读给人看"的定位：一旦有代码依赖它做判断，它就会变成第二个真源。
+   */
+  capabilities: z
+    .array(z.object({ name: z.string().min(1), detail: z.string().optional() }))
+    .default([]),
+  dependencies: z.array(PluginDependencySchema).default([]),
+  /**
+   * 是否随 Core 自动启动。
+   *
+   * 缺省 true（装了就跟着起）。false = 「装了但先不启动」，用于用户想手动控制、
+   * 或插件只是提供组件（比如设置面板）不需要进程的情况。
+   */
+  autoStart: z.boolean().default(true),
+})
+
+export type PluginManifest = z.infer<typeof PluginManifestSchema>
+export type PluginDependency = z.infer<typeof PluginDependencySchema>
+
+/**
+ * 插件状态（**派生**，不是声明）。
+ *
+ * - `ready`：它声明的服务全 ready，必需依赖都在
+ * - `degraded`：**还在**，但缺必需依赖或某个服务不 ready —— 用得起一部分，不该报失败
+ * - `stopped`：没装、被卸载，或 autoStart:false 且未启动
+ * - `failed`：它声明的服务里有关键服务 failed（比 degraded 更严重）
+ */
+export type PluginState = 'ready' | 'degraded' | 'stopped' | 'failed'
+
+/** 状态聚合的输入：插件 + 当前真实服务状态 + 已装插件集合 */
+export interface PluginStateInput {
+  manifest: PluginManifest
+  /** 服务 id → 真实生命周期状态（来自 Core 的 ServiceManager，不猜） */
+  serviceStates: ReadonlyMap<string, string>
+  /** 已装插件 id 集合（用于判定依赖是否满足） */
+  installedPluginIds: ReadonlySet<string>
+}
+
+/** 状态聚合的结果；`reason` 给人看，`missing` 供 UI 定位 */
+export interface PluginStateResult {
+  state: PluginState
+  /** 人话原因（degraded / failed 时有值） */
+  reason: string
+  /** 缺失的必需依赖插件 id */
+  missingDependencies: string[]
+  /** 未 ready / failed 的服务 id */
+  unhealthyServices: string[]
+  /** 它声明的服务里，有几个已 ready（详情窗展示「N/M」） */
+  readyServiceCount: number
+}
+
+/**
+ * 插件状态聚合（S7-1 的纯逻辑，Core 与前端都可复用）。
+ *
+ * **判定顺序是有意的**：
+ * 1. 必需依赖缺失 → `degraded`（**不是 failed**）：对话工作台缺 provider 时仍该显示、
+ *    仍该让用户看见缺什么，只是发不出请求。这与计划的验收句一致。
+ * 2. 依赖都在 → 看服务：有 failed → `failed`；有非 ready → `degraded`；全 ready → `ready`
+ * 3. autoStart:false 且一个服务都没起 → `stopped`（不是 degraded —— 它没坏，是没开）
+ */
+export function resolvePluginState(input: PluginStateInput): PluginStateResult {
+  const { manifest, serviceStates, installedPluginIds } = input
+
+  const missingDependencies = manifest.dependencies
+    .filter((dep) => !dep.optional && !installedPluginIds.has(dep.pluginId))
+    .map((dep) => dep.pluginId)
+
+  const serviceIds = manifest.services
+  const unhealthyServices = serviceIds.filter((id) => {
+    const state = serviceStates.get(id)
+    return state !== undefined && state !== 'ready' && state !== 'stopped'
+  })
+  const failedServices = serviceIds.filter((id) => serviceStates.get(id) === 'failed')
+  const readyServiceCount = serviceIds.filter((id) => serviceStates.get(id) === 'ready').length
+  const runningCount = serviceIds.filter((id) => serviceStates.get(id) === 'starting' || serviceStates.get(id) === 'ready').length
+
+  const base = { missingDependencies, unhealthyServices, readyServiceCount }
+
+  // ① 必需依赖缺失 → degraded（缺什么要指名，用户才能去装）
+  if (missingDependencies.length > 0) {
+    return { ...base, state: 'degraded', reason: `缺插件：${missingDependencies.join('、')}` }
+  }
+
+  // ② 有关键服务 failed
+  if (failedServices.length > 0) {
+    return { ...base, state: 'failed', reason: `服务异常：${failedServices.join('、')}` }
+  }
+
+  // ③ 服务在但没全 ready → degraded（还在，可能正在启动）
+  if (unhealthyServices.length > 0) {
+    return { ...base, state: 'degraded', reason: `服务未就绪：${unhealthyServices.join('、')}` }
+  }
+
+  // ④ 没装 / 没开
+  if (!manifest.autoStart && runningCount === 0) {
+    return { ...base, state: 'stopped', reason: '已安装但未启动' }
+  }
+
+  // ⑤ 声明的服务一个都不在（编排层还没起 / 该插件未启用）
+  if (serviceIds.length > 0 && readyServiceCount === 0 && runningCount === 0) {
+    return { ...base, state: 'stopped', reason: '未启动' }
+  }
+
+  return { ...base, state: 'ready', reason: '' }
+}
+
+/**
+ * 按 `dependencies` 拓扑排序（S7-1 的纯逻辑）。
+ *
+ * - 依赖在前、被依赖者先启（与 `service.json` 的 `inject` 拓扑序同一约定）
+ * - **缺失的必需依赖不会让排序失败**：那些插件标 degraded，靠状态聚合告知，不阻断启动
+ * - **循环依赖无法在此检测**（会互相等待）—— 调用方（编排层）必须先跑 `findPluginCycles`
+ *
+ * @returns 排序后的插件；无法解析的插件（id 与目录名不符等）由调用方先过滤掉
+ */
+export function topoSortPlugins(manifests: readonly PluginManifest[]): PluginManifest[] {
+  const byId = new Map(manifests.map((m) => [m.id, m]))
+  const out: PluginManifest[] = []
+  const done = new Set<string>()
+
+  const visit = (manifest: PluginManifest, path: Set<string>): void => {
+    if (done.has(manifest.id)) return
+    if (path.has(manifest.id)) return // 环：交给 findPluginCycles 报，这里不死循环
+    path.add(manifest.id)
+    for (const dep of manifest.dependencies) {
+      const target = byId.get(dep.pluginId)
+      if (target) visit(target, path)
+    }
+    path.delete(manifest.id)
+    done.add(manifest.id)
+    out.push(manifest)
+  }
+
+  // 按 id 排序后再遍历 → 输出稳定（冒烟断言可预期）
+  for (const manifest of [...manifests].sort((a, b) => a.id.localeCompare(b.id))) {
+    visit(manifest, new Set())
+  }
+  return out
+}
+
+/** 找出循环依赖的插件组（S7-2 启动前必须先跑，否则拓扑排序会互相等待） */
+export function findPluginCycles(manifests: readonly PluginManifest[]): string[][] {
+  const byId = new Map(manifests.map((m) => [m.id, m]))
+  const cycles: string[][] = []
+  const state = new Map<string, 'visiting' | 'done'>()
+  const stack: string[] = []
+
+  const visit = (id: string): void => {
+    const current = state.get(id)
+    if (current === 'done') return
+    if (current === 'visiting') {
+      const start = stack.indexOf(id)
+      if (start >= 0) cycles.push([...stack.slice(start), id])
+      return
+    }
+    state.set(id, 'visiting')
+    stack.push(id)
+    for (const dep of byId.get(id)?.dependencies ?? []) {
+      if (byId.has(dep.pluginId)) visit(dep.pluginId)
+    }
+    stack.pop()
+    state.set(id, 'done')
+  }
+
+  for (const manifest of manifests) visit(manifest.id)
+  return cycles
+}

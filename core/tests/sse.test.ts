@@ -152,6 +152,33 @@ describe('loadConfig', () => {
     expect(() => loadConfig(['--port', 'abc'], {}, '/tmp/base')).toThrow(/invalid port/)
     expect(() => loadConfig(['--port', '70000'], {}, '/tmp/base')).toThrow(/invalid port/)
   })
+
+  // ── S7：插件层开关 ──
+  // 「不启用插件层」必须是一条**可用**的路径：core/tests 里有 17 个集成测试起真 Core
+  // 只为拿某几个服务，若都得先装插件，测试就从「测被测物」变成「测插件装配」。
+  it('缺省启用插件层，指向仓库内 ./plugins', () => {
+    expect(loadConfig([], {}, '/tmp/base').pluginsDir).toBe(path.resolve('/tmp/base', './plugins'))
+  })
+
+  it('--plugins <dir> 指定插件目录', () => {
+    expect(loadConfig(['--plugins', 'plg'], {}, '/tmp/base').pluginsDir).toBe(path.resolve('/tmp/base', 'plg'))
+  })
+
+  it('OST_PLUGINS 环境变量生效，CLI 优先', () => {
+    expect(loadConfig([], { OST_PLUGINS: 'env-plg' }, '/tmp/base').pluginsDir).toBe(
+      path.resolve('/tmp/base', 'env-plg'),
+    )
+    expect(loadConfig(['--plugins', 'cli-plg'], { OST_PLUGINS: 'env-plg' }, '/tmp/base').pluginsDir).toBe(
+      path.resolve('/tmp/base', 'cli-plg'),
+    )
+  })
+
+  it('`none` 或空串 = 显式关掉插件层（属性缺省而非 undefined 路径）', () => {
+    // 用 'none' 而不是空串：shell 与测试里都更难误传
+    expect('pluginsDir' in loadConfig(['--plugins', 'none'], {}, '/tmp/base')).toBe(false)
+    expect('pluginsDir' in loadConfig(['--plugins', ''], {}, '/tmp/base')).toBe(false)
+    expect('pluginsDir' in loadConfig([], { OST_PLUGINS: 'none' }, '/tmp/base')).toBe(false)
+  })
 })
 
 describe('SseBridge', () => {
