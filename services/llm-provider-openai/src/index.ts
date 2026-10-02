@@ -23,7 +23,7 @@ import {
   type StreamError,
   type ToolSpec,
 } from '@osteosome/shared'
-import { buildVendorInstances, toRegisteredPayload, type VendorInstance } from './instances'
+import { buildVendorInstances, SERVED_WIRE, toRegisteredPayload, type VendorInstance } from './instances'
 import { streamCompletions } from './provider'
 
 const service = new Service({ id: 'llm-provider-openai', version: '1.1.0' })
@@ -42,7 +42,8 @@ const instances = new Map<string, VendorInstance>()
 
 /** 注册本进程所有「已配置」的厂商实例 —— 握手完成、订阅生效后再调用 */
 function registerCapabilities(): void {
-  const built = buildVendorInstances()
+  const rejected: Array<{ id: string; api: string }> = []
+  const built = buildVendorInstances(process.env, undefined, rejected)
   for (const inst of built) {
     instances.set(inst.id, inst)
     service.publish('llm.provider.registered', toRegisteredPayload(inst))
@@ -51,6 +52,14 @@ function registerCapabilities(): void {
     // 一家都没有 → 不是崩溃，但要说清楚原因（多半是没配任何 *_API_KEY）
     console.warn(
       `llm-provider-openai: no vendor configured (set one of *_API_KEY, or LLM_VENDORS_EXTRA for a custom endpoint)`,
+    )
+  }
+  // 自填端点声明了本进程不实现的 wire → 明确告警，不静默丢弃（否则用户以为装上了）
+  for (const item of rejected) {
+    console.warn(
+      `llm-provider-openai: custom endpoint '${item.id}' declares wire '${item.api}', ` +
+        `which this process does not implement (served wire: '${SERVED_WIRE}') — skipped. ` +
+        `Install the matching llm-provider-${item.api} plugin, or set "api": "${SERVED_WIRE}".`,
     )
   }
 }

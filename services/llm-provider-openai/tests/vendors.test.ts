@@ -15,11 +15,13 @@ import {
   vendorBaseUrlEnvName,
   vendorCredentialRef,
   vendorModelEnvName,
+  providerServiceIdForWire,
   type VendorPreset,
 } from '@osteosome/shared'
 import {
   buildVendorInstances,
   parseVendorOverrides,
+  SERVED_WIRE,
   toRegisteredPayload,
   type VendorInstance,
 } from '../src/instances'
@@ -193,5 +195,54 @@ describe('预设表可扩展性（加一家 = 加一行）', () => {
       credentialRef: 'env:ACME_API_KEY',
       defaultModel: 'acme-1',
     })
+  })
+})
+
+describe('本进程只服务自己的 wire（不注册兑现不了的 provider）', () => {
+  it('预设表里 api 不是 openai 的行，本进程不碰（那是别的 provider 进程的事）', () => {
+    const alien: VendorPreset = {
+      id: 'opencode',
+      label: 'OpenCode',
+      baseUrl: 'https://api.opencode.test',
+      api: 'opencode',
+      credentialEnv: 'OPENCODE_API_KEY',
+      defaultModel: 'oc-1',
+      models: ['oc-1'],
+    }
+    const instances = buildVendorInstances({ OPENCODE_API_KEY: 'k' }, [...VENDOR_PRESETS, alien])
+    // 关键：不能出现 'opencode'。注册它等于对外声称会发 opencode 请求体，实际发的是 openai 的
+    expect(instances.map((i) => i.id)).not.toContain('opencode')
+    // 而默认的 12 家照常在（env 覆盖让免凭证端点可见）
+    expect(instances.length).toBeGreaterThan(0)
+  })
+
+  it('默认参数只喂本 wire 的预设，缺省调用不会越界', () => {
+    // 不传 presets 时用的是 presetsForWire(SERVED_WIRE) 而不是整张表
+    const instances = buildVendorInstances({})
+    expect(instances.every((i) => i.preset === undefined || i.preset.api === SERVED_WIRE)).toBe(true)
+  })
+
+  it('自填端点声明了别家 wire → 拒绝注册并收集原因（不静默丢弃）', () => {
+    const rejected: Array<{ id: string; api: string }> = []
+    const instances = buildVendorInstances(
+      {
+        OPENCODE_API_KEY: 'k',
+        MINE_OK_API_KEY: 'k',
+        LLM_VENDORS_EXTRA: JSON.stringify([
+          { id: 'mine-oc', baseUrl: 'https://x.test/v1', api: 'opencode' },
+          { id: 'mine-ok', baseUrl: 'https://y.test/v1' },
+        ]),
+      },
+      undefined,
+      rejected,
+    )
+    expect(rejected).toEqual([{ id: 'mine-oc', api: 'opencode' }])
+    expect(instances.map((i) => i.id)).not.toContain('mine-oc')
+    // 缺省 api 的自填项照常注册（绝大多数自建端点就是 openai 兼容）
+    expect(instances.find((i) => i.id === 'mine-ok')).toBeDefined()
+  })
+
+  it('SERVED_WIRE 与服务 id 对得上（约定 llm-provider-<wire>）', () => {
+    expect(providerServiceIdForWire(SERVED_WIRE)).toBe('llm-provider-openai')
   })
 })

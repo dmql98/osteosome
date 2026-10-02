@@ -649,17 +649,14 @@ service.publish(<span class="k">'message.appended'</span>, { sessionId, message 
             <div class="grp">组件</div>
             <span class="mini c">session-list</span><span class="mini c">chat-timeline</span><span class="mini c">chat-composer</span>
             <div class="grp">服务</div>
-            <span class="mini">session</span><span class="mini">agent</span><span class="mini">models</span>
+            <span class="mini">session</span><span class="mini">loop</span><span class="mini">llm</span>
           </div>
           <div class="plug">
-            <div class="ph">providers-openai</div>
+            <div class="ph">models</div>
             <div class="grp">服务</div>
-            <span class="mini">provider-openai</span>
-          </div>
-          <div class="plug">
-            <div class="ph">providers-anthropic</div>
-            <div class="grp">服务</div>
-            <span class="mini">provider-anthropic</span>
+            <span class="mini">llm-provider-openai</span>
+            <div class="grp">组件</div>
+            <span class="mini c">llm-providers</span>
           </div>
           <div class="plug">
             <div class="ph">credentials</div>
@@ -667,9 +664,14 @@ service.publish(<span class="k">'message.appended'</span>, { sessionId, message 
             <span class="mini">credentials</span>
           </div>
           <div class="plug">
-            <div class="ph">tools-fs</div>
-            <div class="grp">服务 / 组件</div>
-            <span class="mini">tools</span><span class="mini c">tool-permissions</span>
+            <div class="ph">reliability</div>
+            <div class="grp">服务</div>
+            <span class="mini">llm-retry</span>
+          </div>
+          <div class="plug">
+            <div class="ph">workbench</div>
+            <div class="grp">组件（无服务）</div>
+            <span class="mini c">system-info</span><span class="mini c">command-palette</span><span class="mini c">settings</span>
           </div>
         </div>
       </div>
@@ -680,36 +682,49 @@ service.publish(<span class="k">'message.appended'</span>, { sessionId, message 
       </div>
       <div class="link">↓ 拉起进程</div>
       <div class="tier">
-        <div class="tier-label">运行时（8 个进程）</div>
+        <div class="tier-label">运行时（6 个进程 · S2 后实测）</div>
         <div class="procs">
           <span class="proc">session ✓</span>
-          <span class="proc">agent ✓</span>
-          <span class="proc">models ✓</span>
-          <span class="proc">provider-openai ✓</span>
-          <span class="proc">provider-anthropic ✓</span>
+          <span class="proc">loop ✓</span>
+          <span class="proc">llm ✓</span>
+          <span class="proc">llm-provider-openai ✓</span>
           <span class="proc">credentials ✓</span>
-          <span class="proc">tools ✓</span>
-          <span class="proc off">retry ○ 未装</span>
+          <span class="proc">llm-retry ✓</span>
         </div>
       </div>
+      <p style="margin-top:var(--s2);font-size:var(--sm);color:var(--muted)">
+        <code>llm-provider-openai</code> 一个进程内注册 12 家厂商实例，<b>每家是否存在由凭证决定</b> ——
+        这就是「厂商级存在性」；进程级存在性由插件决定。
+      </p>
     </div>
 
     <h3>5.3 什么该聚合、什么该保持独立</h3>
     <table>
       <thead><tr><th>能力</th><th>归属</th><th>理由</th></tr></thead>
       <tbody>
-        <tr><td><code>session</code> + <code>agent</code> + <code>models</code> + 3 组件</td><td><b>同一个插件</b></td>
+        <tr><td><code>session</code> + <code>loop</code> + <code>llm</code> + 3 组件</td><td><b>同一个插件</b>（对话工作台）</td>
             <td>缺任何一个这个插件都没意义，拆开装没有价值</td></tr>
-        <tr><td>每家 <code>provider:*</code></td><td><b>各自独立插件</b></td>
-            <td>用户可能只要 openai 不要 claude；塞进主插件会导致「卸插件连带卸掉所有 provider」</td></tr>
+        <tr><td><code>llm-provider-openai</code>（内含 12 家 openai 兼容厂商）</td><td><b>独立插件</b>（模型接入）</td>
+            <td><b>已被 S1 修正</b>：原写「每家 <code>provider:*</code> 各自独立插件」，因为「用户可能只要 openai 不要 claude」。<br>
+                现在 12 家共用<b>一个进程</b>，「存在性」改由<b>有没有配凭证</b>决定 —— 粒度更细（按厂商）、进程更少，
+                但<b>按厂商装卸</b>这个概念没有了（provider 插件一停，12 家全停）</td></tr>
+        <tr><td>wire 完全相同的第 13 家（请求体不是 openai 兼容）</td><td><b>独立进程 + 独立插件</b></td>
+            <td><code>VendorPreset.api</code> 是<b>跨进程契约</b>：wire <code>X</code> 约定由 <code>llm-provider-X</code> 实现。
+                <code>llm</code> 主位与前端<b>零改动</b> —— 主位路由表只认 provider 名，不 import 任何实现</td></tr>
         <tr><td><code>credentials</code></td><td>独立插件（可选依赖）</td>
             <td>免凭证的本地端点不该被强塞</td></tr>
-        <tr><td><code>tools</code> / 工具包</td><td>每包一个独立插件</td>
-            <td>工具生态本身可插拔，一个工具集一个插件</td></tr>
+        <tr><td><code>llm-retry</code></td><td>独立插件（旁路）</td>
+            <td>缺了只是没重试/没记账，不影响主链路</td></tr>
+        <tr><td>只碰 Core 的组件（system-info / command-palette / settings / event-stream / service-status / service-manager）</td>
+            <td><b>无服务的内置插件</b></td>
+            <td>它们不与任何服务通信，只经 HTTP/SSE 碰微内核 → <code>services: []</code></td></tr>
       </tbody>
     </table>
     <p class="note ok"><b>规律：协同才能工作的 → 聚合成插件；可独立取舍的 → 独立插件。</b>
       这样既保证「装一件能用的东西」，又不牺牲「存在性由插件决定」。</p>
+    <p class="note"><b>结论：5 个插件</b> —— 工作台基础（无服务）／对话工作台（session+loop+llm+3 组件）／
+      模型接入（llm-provider-openai）／凭证（credentials）／可靠性（llm-retry）。
+      详见 <code>docs/开发计划.html</code> §S7 与 <code>docs/加一家LLM服务商.md</code>。</p>
 
     <h3>5.4 schema 与目录</h3>
     <pre class="code"><span class="cm">// plugins/chat-workbench/plugin.json</span>
@@ -717,21 +732,47 @@ service.publish(<span class="k">'message.appended'</span>, { sessionId, message 
   <span class="k">"id"</span>: <span class="k">"chat-workbench"</span>,
   <span class="k">"name"</span>: <span class="k">"对话工作台"</span>,
   <span class="k">"version"</span>: <span class="k">"1.0.0"</span>,
-  <span class="k">"services"</span>:   [<span class="k">"session"</span>, <span class="k">"agent"</span>, <span class="k">"models"</span>],     <span class="cm">// ← 新增</span>
+  <span class="k">"services"</span>:   [<span class="k">"session"</span>, <span class="k">"loop"</span>, <span class="k">"llm"</span>],          <span class="cm">// ← 新增（文档里的 agent/models 即 loop/llm）</span>
   <span class="k">"components"</span>: [<span class="k">"widget.session-list"</span>, <span class="k">"widget.chat-timeline"</span>, <span class="k">"widget.chat-composer"</span>],
   <span class="k">"capabilities"</span>: [{ <span class="k">"name"</span>: <span class="k">"chat.run"</span>, <span class="k">"detail"</span>: <span class="k">"发问 / 流式 / 工具循环"</span> }],
-  <span class="k">"dependencies"</span>: [{ <span class="k">"pluginId"</span>: <span class="k">"providers-openai"</span> }, { <span class="k">"pluginId"</span>: <span class="k">"credentials"</span>, <span class="k">"optional"</span>: <span class="k">true</span> }]
+  <span class="k">"dependencies"</span>: [{ <span class="k">"pluginId"</span>: <span class="k">"models"</span> }, { <span class="k">"pluginId"</span>: <span class="k">"credentials"</span>, <span class="k">"optional"</span>: <span class="k">true</span> }]
 }
 
 <span class="cm">// plugins/  —— 每个插件一个目录，可打包成一个 zip 分发</span>
 plugins/
-  chat-workbench/plugin.json
-  providers-openai/plugin.json
-  providers-anthropic/plugin.json
-  credentials/plugin.json
-  tools-fs/plugin.json</pre>
+  chat-workbench/plugin.json     <span class="cm">// session + loop + llm + 3 组件</span>
+  models/plugin.json             <span class="cm">// llm-provider-openai（12 家厂商实例在内）</span>
+  credentials/plugin.json        <span class="cm">// 凭证服务（可选依赖）</span>
+  reliability/plugin.json        <span class="cm">// llm-retry（旁路）</span>
+  workbench/plugin.json          <span class="cm">// services: [] —— 只碰 Core 的内置组件</span>
+  <span class="cm">// 将来 wire 不同的 provider 各自一个：llm-provider-opencode/plugin.json</span></pre>
     <p style="margin-top:var(--s3)">对比现在：<code>PluginDefinition</code> 已有 <code>components</code>（原 <code>widgets</code>）、<code>capabilities</code>、<code>dependencies</code>，
       只需加 <code>services[]</code>；真正的问题是<b>插件表现在硬编码在前端</b> <code>client/src/plugins/registry.ts</code> —— 那才是「插件系统」最大的破绽（Core 装的插件与前端知道的可能对不上）。</p>
+    <div class="pstruct" style="margin-top:var(--s3)">
+      <div class="ph">现有硬编码数组的三处不实（2026-10-02 复核）</div>
+      <div class="cols3">
+        <div>
+          <div class="grp">编造的元数据</div>
+          <span class="mini bad">version / author / license</span>
+          <span class="mini bad">capabilities（无任何代码读取）</span>
+        </div>
+        <div>
+          <div class="grp">依赖指向不存在的东西</div>
+          <span class="mini bad">dependencies 写 'core' / 'bus'</span>
+          <span class="mini bad">—— 那不是服务 id</span>
+        </div>
+        <div>
+          <div class="grp">三个真服务没被提及</div>
+          <span class="mini bad">loop</span>
+          <span class="mini bad">llm-retry</span>
+          <span class="mini bad">llm-provider-openai</span>
+        </div>
+      </div>
+    </div>
+    <p class="note bad" style="margin-top:var(--s3)"><b>更要紧的是它会撒谎</b>：「停用 / 卸载」只往 <code>/api/preferences</code> 写两个字段，
+      <b>一个进程都不停</b>。点「卸载 LLM Providers」，列表里它消失了，<code>llm-provider-openai</code> 进程还在跑。<br>
+      相比之下<b>服务状态组件是真的</b>（被 SSE <code>service.*</code> 事件喂养）—— 于是同一套系统存在两份互相矛盾的清单。
+      修法见 <code>docs/开发计划.html</code> §S7。</p>
 
     <h3>5.5 Core 与前端各要做什么</h3>
     <table>
@@ -839,14 +880,19 @@ provider.chunk ──► models 归一 ──► agent 编排/执行
       由 models 层标注、agent 转发、前端分流 → ② 的折叠思考块才有数据。<b>不加服务、不加 topic。</b>
     </p>
     <table>
-      <thead><tr><th>待定</th><th>选项</th><th>倾向</th></tr></thead>
+      <thead><tr><th>待定</th><th>选项</th><th>倾向 / 结论</th></tr></thead>
       <tbody>
         <tr><td><code>models</code> 要不要把 provider 拆成独立进程？</td><td>进程内注册表（pi 的做法）／独立进程</td>
-            <td><b>独立进程</b> —— 「存在性由插件决定」是 ost 相对 pi 的差异，别丢</td></tr>
+            <td><b>已定（S1）</b>：<b>按 wire 拆</b>，不按厂商拆 —— 12 家 openai 兼容的共用一个进程，
+                「存在性由配置（凭证）决定」；wire 不同的（如 opencode）另起进程。
+                「存在性由插件决定」这条<b>降到了进程级</b>，厂商级交给了凭证</td></tr>
         <tr><td><code>credentials</code> 内含进 models 还是独立？</td><td>内含（pi）／独立能力位</td>
             <td><b>独立</b> —— 「凭证值不过总线」是威胁模型红线</td></tr>
         <tr><td><code>tools</code> 独立服务还是 agent 进程内？</td><td>进程内 execute（pi）／独立能力位</td>
             <td><b>独立</b>，但最贵（跨进程调用 + 审批流），可后置</td></tr>
+        <tr><td>12 家共用一个 provider 进程后，「按厂商装卸」没了 —— 可接受吗？</td><td>接受（进程级）／回退到每家独立进程</td>
+            <td><b>接受</b>（2026-10-02 定）：粒度从「进程」细化到「厂商」，
+                少 3 个进程；代价是 provider 插件一停 12 家全停，已在 §5.3 记录</td></tr>
       </tbody>
     </table>
   </section>

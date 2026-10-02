@@ -28,7 +28,7 @@
  * 优先级：**env 覆盖 > 预设值**。这让集成冒烟可以用假上游指任意厂商，无需改代码。
  */
 
-/** 一家厂商的预设（openai 兼容） */
+/** 一家厂商的预设 */
 export interface VendorPreset {
   /** provider id（注册到主位路由表的名字，如 'deepseek'） */
   id: string
@@ -36,8 +36,23 @@ export interface VendorPreset {
   label: string
   /** 上游根（含 `/v1`，不含 `/chat/completions`）；可用 `<ID_UPPER>_BASE_URL` 覆盖 */
   baseUrl: string
-  /** wire 类型。**当前只支持 openai 兼容**；预留将来接原生 wire（bedrock-converse / gemini） */
-  api: 'openai'
+  /**
+   * **wire 实现 id —— 由哪个 provider 进程来实现这家。**
+   *
+   * 这不是「协议名」而是**跨进程契约**：约定 wire `X` 由服务 `llm-provider-X` 实现
+   * （见 {@link providerServiceIdForWire}）。
+   *
+   * - `WIRE_OPENAI`：请求体 / SSE 全是 openai 兼容形状 → 12 家共用 `llm-provider-openai`
+   *   一个进程，**加一家 = 加一行**
+   * - 将来 wire 完全不同的（如请求体结构、鉴权头、连非 SSE 传输都不同的那家）：
+   *   新增一个 wire id + 新建 `llm-provider-<wire>` 进程 + 独立插件，**`llm` 主位与前端零改动**
+   *
+   * 为什么不把新 wire 也塞进本表由本进程处理：那会让本表从「本进程能服务的清单」变成
+   * 「全系统 wire 的声明」，而一个进程**兑现不了自己声明不了的东西** —— 表现是注册出一个
+   * 声称支持、实际会发错请求体的假 provider。`shared/tests/vendor-wires.test.ts`
+   * 断言「表里出现的每个 wire 都有对应服务目录」，缺进程就在 CI 挂掉，不留到运行时静默。
+   */
+  api: string
   /** 凭证所在 env 名（`credentialRef = env:<此值>`）；空串 = 免凭证（本地端点） */
   credentialEnv: string
   /** 默认模型；可用 `<ID_UPPER>_MODEL` 覆盖 */
@@ -46,6 +61,24 @@ export interface VendorPreset {
   models: string[]
   /** 备注（设置窗展示） */
   note?: string
+}
+
+/** openai 兼容 wire（当前唯一内置 wire，由 `llm-provider-openai` 实现） */
+export const WIRE_OPENAI = 'openai'
+
+/** wire id → 实现它的服务 id（约定：wire `X` → 服务 `llm-provider-X`） */
+export function providerServiceIdForWire(wire: string): string {
+  return `llm-provider-${wire}`
+}
+
+/** 本进程只服务属于某个 wire 的预设（provider 进程启动时按自己的 wire 过滤） */
+export function presetsForWire(wire: string, presets: readonly VendorPreset[] = VENDOR_PRESETS): VendorPreset[] {
+  return presets.filter((p) => p.api === wire)
+}
+
+/** 预设表声明过的全部 wire（去重、有序） */
+export function declaredWires(presets: readonly VendorPreset[] = VENDOR_PRESETS): string[] {
+  return [...new Set(presets.map((p) => p.api))].sort()
 }
 
 /**
@@ -59,7 +92,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'openai',
     label: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'OPENAI_API_KEY',
     defaultModel: 'gpt-4o-mini',
     models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'o4-mini'],
@@ -68,7 +101,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'deepseek',
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'DEEPSEEK_API_KEY',
     defaultModel: 'deepseek-chat',
     models: ['deepseek-chat', 'deepseek-reasoner'],
@@ -78,7 +111,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'openrouter',
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'OPENROUTER_API_KEY',
     defaultModel: 'openai/gpt-4o-mini',
     models: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash'],
@@ -88,7 +121,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'moonshot',
     label: 'Moonshot',
     baseUrl: 'https://api.moonshot.cn/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'MOONSHOT_API_KEY',
     defaultModel: 'moonshot-v1-8k',
     models: ['moonshot-v1-8k', 'moonshot-v1-32k'],
@@ -97,7 +130,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'siliconflow',
     label: '硅基流动 SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'SILICONFLOW_API_KEY',
     defaultModel: 'Qwen/Qwen2.5-7B-Instruct',
     models: ['Qwen/Qwen2.5-7B-Instruct', 'deepseek-ai/DeepSeek-V3'],
@@ -106,7 +139,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'groq',
     label: 'Groq',
     baseUrl: 'https://api.groq.com/openai/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'GROQ_API_KEY',
     defaultModel: 'llama-3.3-70b-versatile',
     models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
@@ -115,7 +148,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'together',
     label: 'Together AI',
     baseUrl: 'https://api.together.xyz/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'TOGETHER_API_KEY',
     defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo'],
@@ -124,7 +157,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'xai',
     label: 'xAI',
     baseUrl: 'https://api.x.ai/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'XAI_API_KEY',
     defaultModel: 'grok-2-latest',
     models: ['grok-2-latest'],
@@ -133,7 +166,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'mistral',
     label: 'Mistral',
     baseUrl: 'https://api.mistral.ai/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: 'MISTRAL_API_KEY',
     defaultModel: 'mistral-small-latest',
     models: ['mistral-small-latest', 'mistral-large-latest'],
@@ -142,7 +175,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'ollama',
     label: 'Ollama（本地）',
     baseUrl: 'http://127.0.0.1:11434/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: '',
     defaultModel: 'qwen2.5:7b',
     models: [],
@@ -152,7 +185,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'vllm',
     label: 'vLLM（本地）',
     baseUrl: 'http://127.0.0.1:8000/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: '',
     defaultModel: '',
     models: [],
@@ -162,7 +195,7 @@ export const VENDOR_PRESETS: readonly VendorPreset[] = [
     id: 'lm-studio',
     label: 'LM Studio（本地）',
     baseUrl: 'http://127.0.0.1:1234/v1',
-    api: 'openai',
+    api: WIRE_OPENAI,
     credentialEnv: '',
     defaultModel: '',
     models: [],

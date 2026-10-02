@@ -10,16 +10,24 @@
  * **env 覆盖**（集成冒烟与自建端点靠它，无需改代码）：
  * - `<ID_UPPER>_BASE_URL` 改端点（如 `DEEPSEEK_BASE_URL=http://127.0.0.1:1234/v1`）
  * - `<ID_UPPER>_MODEL` 改默认模型
+ *
+ * **本进程只服务 `WIRE_OPENAI`**：预设表里 `api !== WIRE_OPENAI` 的行由别的
+ * `llm-provider-<wire>` 进程负责（见 `shared/src/llm/vendors.ts` 的 `api` 契约）。
+ * 过滤而不是全盘接受，是为了不注册出「声称支持、实际会发错请求体」的假 provider。
  */
 import {
   hasVendorCredential,
+  presetsForWire,
   resolveVendorBaseUrl,
   resolveVendorModel,
   vendorCredentialRef,
-  VENDOR_PRESETS,
+  WIRE_OPENAI,
   type VendorPreset,
 } from '@osteosome/shared'
 import { RETRY_POLICY } from './provider'
+
+/** 本进程实现的 wire —— 与服务 id `llm-provider-openai` 对应 */
+export const SERVED_WIRE = WIRE_OPENAI
 
 /** 一个已解析好的 provider 实例（= 一条 `llm.provider.registered`） */
 export interface VendorInstance {
@@ -48,6 +56,14 @@ export interface VendorOverride {
   credentialRef?: string
   defaultModel?: string
   models?: string[]
+  /**
+   * wire id；缺省 `openai`。
+   *
+   * 用户自填端点默认就是 openai 兼容（绝大多数自建端点/代理都是），所以缺省值合理。
+   * 若填了本进程**不实现**的 wire，该项被拒绝并告警 —— 宁可不装，也不能装一个会发错
+   * 请求体的 provider。
+   */
+  api?: string
 }
 
 /**
@@ -101,18 +117,23 @@ function instanceFromOverride(o: VendorOverride, env: NodeJS.ProcessEnv): Vendor
  * 构建本进程要注册的实例列表。
  *
  * 规则：
- * 1. 遍历预设表，**已配置凭证**（或免凭证）的才注册；
- * 2. 叠加用户自填项（同 id 时自填覆盖预设）；
- * 3. 自填项同样要求凭证已配置；
- * 4. 结果按 id 排序，保证注册顺序稳定（冒烟断言可预期）。
+ * 1. 只看**本进程实现的 wire**（`SERVED_WIRE`）的预设 —— 别的 wire 归别的进程；
+ * 2. 遍历这些预设，**已配置凭证**（或免凭证）的才注册；
+ * 3. 叠加用户自填项（同 id 时自填覆盖预设），其中 wire 不是本进程实现的那批**拒绝并告警**；
+ * 4. 自填项同样要求凭证已配置；
+ * 5. 结果按 id 排序，保证注册顺序稳定（冒烟断言可预期）。
+ *
+ * @param rejected 收集被拒绝的自填项（装配层用来告警，测试用来断言）
  */
 export function buildVendorInstances(
   env: NodeJS.ProcessEnv = process.env,
-  presets: readonly VendorPreset[] = VENDOR_PRESETS,
+  presets: readonly VendorPreset[] = presetsForWire(SERVED_WIRE),
+  rejected: Array<{ id: string; api: string }> = [],
 ): VendorInstance[] {
   const byId = new Map<string, VendorInstance>()
 
   for (const preset of presets) {
+    if (preset.api !== SERVED_WIRE) continue
     if (!hasVendorCredential(preset, env)) continue
     byId.set(preset.id, {
       id: preset.id,
@@ -126,6 +147,12 @@ export function buildVendorInstances(
   }
 
   for (const override of parseVendorOverrides(env.LLM_VENDORS_EXTRA)) {
+    const wire = override.api ?? WIRE_OPENAI
+    if (wire !== SERVED_WIRE) {
+      // 不静默丢弃：用户以为自己装上了，得让他看见为什么没生效
+      rejected.push({ id: override.id, api: wire })
+      continue
+    }
     const instance = instanceFromOverride(override, env)
     if (instance) byId.set(instance.id, instance)
   }
