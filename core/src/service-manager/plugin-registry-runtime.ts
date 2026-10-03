@@ -89,6 +89,13 @@ export class PluginRegistry {
       listServiceStates: () => ReadonlyMap<string, ServiceStatus>
       /** `preferences.plugins.uninstalled` */
       uninstalledIds?: () => ReadonlySet<string>
+      /**
+       * `preferences.plugins.enabled` 里值为 `false` 的插件 id（S7-4）。
+       *
+       * 与 `uninstalledIds` 分开而不是合成一个集合：两者语义不同 ——
+       * 停用是「我暂时不要」，卸载是「我不要了」，界面要区别对待。
+       */
+      disabledIds?: () => ReadonlySet<string>
       /** 真实服务启停。由 `ServiceManager` 提供（ServiceManager 不知道插件存在） */
       controlService: (command: 'start' | 'stop', serviceId: string) => Promise<void>
     },
@@ -266,6 +273,12 @@ export class PluginRegistry {
    * ① 属于 `uninstalled` 的插件
    * ② 属于 `autoStart:false` 的插件（装了但声明不自动起）
    * ③ 属于环内插件 —— 不在 `installOrder` 里，它的依赖无解
+   * ④ **用户显式停用的插件**（`preferences.plugins.enabled[id] === false`）
+   *
+   * ④ 是 S7-4 补上的，漏掉它会有一个很典型的症状：
+   * 用户禁用某插件 -> 当天一切正常 -> **重启 Core 后它自己回来了**。
+   * 因为运行期的停用是靠 `plugin.stop` 命令完成的，而启动路径只看 `uninstalled`。
+   * 两处不共享同一份判定，就会出现「运行期生效、重启失效」。
    *
    * ## 刻意**不**包含的一条
    *
@@ -283,11 +296,13 @@ export class PluginRegistry {
     }
 
     const uninstalled = this.options.uninstalledIds?.() ?? new Set<string>()
+    const disabled = this.options.disabledIds?.() ?? new Set<string>()
     const cyclic = new Set(this.scan.cycles.flat())
     const allowed = new Set<string>()
 
     for (const { manifest } of this.scan.plugins) {
       if (uninstalled.has(manifest.id)) continue
+      if (disabled.has(manifest.id)) continue
       if (manifest.autoStart === false) continue
       if (cyclic.has(manifest.id)) continue
       for (const sid of manifest.services) allowed.add(sid)

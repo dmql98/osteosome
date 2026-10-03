@@ -8,6 +8,7 @@
       <WindowControls />
     </header>
     <div class="plugin-win__body">
+      <p v-if="actionError" class="plugin-win__error">{{ actionError }}</p>
       <EmptyState
         v-if="!plugins.length"
         icon="📦"
@@ -62,6 +63,8 @@ import type { PluginView } from './registry'
 
 const { store, reload } = usePlugins()
 const query = ref('')
+/** 启停失败提示。命令失败时状态不会变，所以不给提示就等于骗人 */
+const actionError = ref('')
 
 const plugins = computed(() => store.installed)
 const filtered = computed(() => {
@@ -122,8 +125,11 @@ function statusDot(plugin: PluginView): string {
 }
 
 async function toggle(pluginId: string): Promise<void> {
-  await store.toggle(pluginId)
-  notifyPluginsChanged()
+  const ok = await store.toggle(pluginId)
+  // 停用失败必须说出来：否则卡片回到「运行中」，用户以为成功了，
+  // 而进程其实还在跑 —— 这是最难受的一种骗（状态看起来是对的）
+  actionError.value = ok ? '' : `「${store.byId(pluginId)?.name ?? pluginId}」停用失败，Core 未接受该命令`
+  if (ok) notifyPluginsChanged()
 }
 
 function manage(pluginId: string): void {
@@ -142,6 +148,7 @@ function refresh(): void {
 .plugin-win__search { flex: 1; max-width: 240px; padding: 5px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-family: inherit; font-size: var(--text-sm); background: var(--color-surface); color: var(--color-text); }
 .plugin-win__search:focus { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; border-color: transparent; }
 .plugin-win__spacer { flex: 1; }
+.plugin-win__error { margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-danger); border-radius: var(--radius-md); background: var(--color-danger-soft); color: var(--color-danger); font-size: var(--text-xs); }
 .plugin-win__body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-4); }
 .plugin-win__list { display: flex; flex-direction: column; gap: var(--space-3); }
 .plugin-win__section-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-muted); }

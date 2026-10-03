@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { usePreferences } from '@/core-sdk/usePreferences'
+import { useCommand } from '@/core-sdk/useCommand'
 import { toPluginViews, type PluginLayerStatus, type PluginView } from '@/plugins/registry'
 
 interface PluginPrefs {
@@ -149,23 +150,46 @@ export const usePluginStore = defineStore('plugins', {
       this.hydrated = true
       this.revision += 1
     },
-    async setEnabled(pluginId: string, value: boolean): Promise<void> {
-      // 不再问「这个插件存在吗」—— 那是 Core 的事，前端只管把用户意愿记下来
-      if (!this.byId(pluginId)) return
+    /**
+     * 启用 / 停用 / 卸载（S7-4：**真的停进程**）。
+     *
+     * ## 顺序：先停/启，成功了才写偏好
+     *
+     * 反过来写会留下「界面说停了、进程还在跑」的偏差，而且**重启后进程真的没了** ——
+     * 那是「撒谎到重启」的极端版本。所以命令失败时**不改偏好**：
+     * 宁可界面显示「没停成功」，也不要留下一个假的停用状态。
+     *
+     * 实际是三者里最容易出偏差的一个 —— 因为「停用」在 Core 那边有两处生效点
+     * （运行期命令 + 启动路径），任何一处漏了就会出现重启失效。
+     */
+    async setEnabled(pluginId: string, value: boolean): Promise<boolean> {
+      if (!this.byId(pluginId)) return false
+      const ok = await useCommand().send(value ? 'plugin.start' : 'plugin.stop', { pluginId })
+      if (!ok) return false
       this.enabled = { ...this.enabled, [pluginId]: value }
       this.revision += 1
       await this.save()
+      return true
     },
-    async toggle(pluginId: string): Promise<void> {
-      await this.setEnabled(pluginId, !this.isEnabled(pluginId))
+    async toggle(pluginId: string): Promise<boolean> {
+      return this.setEnabled(pluginId, !this.isEnabled(pluginId))
     },
-    async uninstall(pluginId: string): Promise<void> {
-      if (!this.byId(pluginId) || this.uninstalled.includes(pluginId)) return
+    /**
+     * 卸载。
+     *
+     * 也要发 `plugin.stop`：Core 的启动路径已经认 `uninstalled`，
+     * 但**运行期**它还没被通知 —— 不停的话进程会一直跑到 Core 退出。
+     */
+    async uninstall(pluginId: string): Promise<boolean> {
+      if (!this.byId(pluginId) || this.uninstalled.includes(pluginId)) return false
+      const ok = await useCommand().send('plugin.stop', { pluginId })
+      if (!ok) return false
       this.uninstalled = [...this.uninstalled, pluginId]
       const { [pluginId]: _dropped, ...rest } = this.enabled
       this.enabled = rest
       this.revision += 1
       await this.save()
+      return true
     },
     async save(): Promise<void> {
       try {

@@ -18,6 +18,7 @@ function makeRegistry(opts: {
   pluginsDir: string | undefined
   states?: Record<string, ServiceStatus>
   uninstalled?: string[]
+  disabled?: string[]
   bus?: Bus
   controlService?: (command: 'start' | 'stop', serviceId: string) => Promise<void>
 }) {
@@ -26,6 +27,7 @@ function makeRegistry(opts: {
     pluginsDir: opts.pluginsDir,
     listServiceStates: () => new Map(Object.entries(opts.states ?? {})),
     uninstalledIds: () => new Set(opts.uninstalled ?? []),
+    disabledIds: () => new Set(opts.disabled ?? []),
     controlService: opts.controlService ?? (async () => undefined),
   })
   const events: ChangedEvent[] = []
@@ -206,6 +208,35 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
     const allowed = makeRegistry({ pluginsDir: PLUGINS }).registry.allowedServiceIds() as Set<string>
     expect(allowed.has('svc-cyc')).toBe(false)
     expect(allowed.has('svc-a')).toBe(true)
+  })
+
+  test('**用户停用的插件，其服务不被允许**（S7-4：漏这条就是「重启后自己回来」）', () => {
+    // 症状很典型：禁用插件 -> 当天正常 -> 重启 Core 后它自己回来了。
+    // 因为运行期的停用走 plugin.stop 命令，而启动路径只看 uninstalled ——
+    // 两处不共享同一份判定，就会出现「运行期生效、重启失效」。
+    const allowed = real({ disabled: ['models'] }).registry.allowedServiceIds() as Set<string>
+    expect(allowed.has('llm-provider-openai')).toBe(false)
+    expect(allowed.has('credentials')).toBe(true)
+    expect(allowed.has('session')).toBe(true)
+    expect(allowed.size).toBe(5)
+  })
+
+  test('停用与卸载是**两个独立**的判定（界面要区别对待，所以不能合成一个集合）', () => {
+    const onlyDisabled = real({ disabled: ['reliability'] }).registry.allowedServiceIds() as Set<string>
+    const onlyUninstalled = real({ uninstalled: ['reliability'] }).registry.allowedServiceIds() as Set<string>
+    // 对启动集合而言效果一样，但语义不同：
+    // 停用 = 我暂时不要；卸载 = 我不要了。合成一个集合就丢了这份区别。
+    expect(onlyDisabled.has('llm-retry')).toBe(false)
+    expect(onlyUninstalled.has('llm-retry')).toBe(false)
+  })
+
+  test('两者同时命中也只算一次（不会互相抵消）', () => {
+    const allowed = real({
+      disabled: ['models'],
+      uninstalled: ['models'],
+    }).registry.allowedServiceIds() as Set<string>
+    expect(allowed.has('llm-provider-openai')).toBe(false)
+    expect(allowed.size).toBe(5)
   })
 })
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useLayoutStore } from '../../src/layout/layout.store'
 import { usePreferences } from '../../src/core-sdk/usePreferences'
@@ -27,6 +27,14 @@ describe('layout.store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.useRealTimers()
+    // S7-4 起 setEnabled/uninstall 会先发 plugin.stop / plugin.start，
+    // 命令失败就不写偏好。所以凡是依赖「插件被停用/卸载」的用例，
+    // 都必须让命令成功 —— 否则它测到的不是布局逻辑，而是「命令失败时的短路」。
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 202 }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('bootstrap 读取 dockview 序列化布局并标记 hydrated', async () => {

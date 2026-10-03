@@ -46,6 +46,22 @@ function readUninstalled(dataDir: string): Set<string> {
   return new Set(list.filter((x): x is string => typeof x === 'string'))
 }
 
+/**
+ * `preferences.plugins.enabled` 里值为 `false` 的插件 id（S7-4）。
+ *
+ * 只认**显式 false**：`enabled[id]` 缺省即启用，所以 `undefined` / `true` 都不算停用。
+ * 防御式读的原因同 `readUninstalled` —— `Preferences` 是 `Record<string, unknown>`，没有 schema。
+ */
+function readDisabled(dataDir: string): Set<string> {
+  const { value } = readPreferences(dataDir)
+  const plugins = value.plugins
+  if (typeof plugins !== 'object' || plugins === null) return new Set()
+  const enabled = (plugins as Record<string, unknown>).enabled
+  if (typeof enabled !== 'object' || enabled === null) return new Set()
+  const map = enabled as Record<string, unknown>
+  return new Set(Object.keys(map).filter((id) => map[id] === false))
+}
+
 export interface StartCoreOptions {
   argv?: string[]
   env?: NodeJS.ProcessEnv
@@ -93,6 +109,7 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     knownServiceIds: new Set(readDeclaredServiceIds(config.servicesDir)),
     listServiceStates: () => serviceStateMap(managerRef.list()),
     uninstalledIds: () => readUninstalled(config.dataDir),
+    disabledIds: () => readDisabled(config.dataDir),
     // 真实的进程启停只能由 ServiceManager 做（它持有 child 句柄），
     // 而「插件包含哪些服务」只有插件层知道 —— 这里把两者接起来，方向仍是单向的。
     controlService: async (command, serviceId) => {

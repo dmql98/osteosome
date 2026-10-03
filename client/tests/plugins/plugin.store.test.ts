@@ -14,6 +14,16 @@ function mockPrefs(initial: unknown = {}) {
 }
 
 /**
+ * S7-4：启停真的会发命令，所以要能控制命令的成败。
+ * 返回的 `calls` 就是「有没有真去停进程」的直接证据。
+ */
+function mockCommand(ok = true) {
+  const send = vi.fn().mockResolvedValue(ok)
+  globalThis.fetch = vi.fn().mockResolvedValue({ ok, status: ok ? 202 : 400 }) as never
+  return { send, calls: send.mock.calls }
+}
+
+/**
  * S7-3：清单不再由前端自带，所以每个用例都要**先喂一份 Core 快照**。
  *
  * 这不是为了迁就测试，而是把「清单从哪来」显式化了 ——
@@ -94,6 +104,7 @@ describe('plugin.store', () => {
 
   it('setEnabled 写入 preferences.plugins 并停用其组件', async () => {
     const { patch } = mockPrefs()
+    mockCommand()
     seedCatalog()
     const store = usePluginStore()
     await store.setEnabled('workbench', false)
@@ -103,8 +114,65 @@ describe('plugin.store', () => {
     })
   })
 
+  it('**停用会真发 plugin.stop**（S7-4：以前只写 prefs，一个进程都没停）', async () => {
+    mockPrefs()
+    mockCommand()
+    seedCatalog()
+    const store = usePluginStore()
+    await store.setEnabled('models', false)
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)
+    expect(body.topic).toBe('plugin.stop')
+    expect(body.payload).toEqual({ pluginId: 'models' })
+  })
+
+  it('启用发 plugin.start（方向不能反）', async () => {
+    mockPrefs()
+    mockCommand()
+    seedCatalog()
+    const store = usePluginStore()
+    await store.setEnabled('models', true)
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string).topic).toBe('plugin.start')
+  })
+
+  it('**命令失败时不写偏好**（否则界面说停了、进程还在，重启后进程真的没了）', async () => {
+    const { patch } = mockPrefs()
+    mockCommand(false)
+    seedCatalog()
+    const store = usePluginStore()
+    const ok = await store.setEnabled('models', false)
+    expect(ok).toBe(false)
+    // 关键：偏好没被改，所以下次启动它还是启用的 —— 与「运行期其实没停成」一致
+    expect(patch).not.toHaveBeenCalled()
+    expect(store.isEnabled('models')).toBe(true)
+  })
+
+  it('卸载也发 plugin.stop（否则进程会一直跑到 Core 退出）', async () => {
+    mockPrefs()
+    mockCommand()
+    seedCatalog()
+    const store = usePluginStore()
+    await store.uninstall('models')
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string).topic).toBe('plugin.stop')
+    expect(store.isInstalled('models')).toBe(false)
+  })
+
+  it('卸载失败时不改偏好，调用方能据此不关窗口', async () => {
+    const { patch } = mockPrefs()
+    mockCommand(false)
+    seedCatalog()
+    const store = usePluginStore()
+    const ok = await store.uninstall('models')
+    expect(ok).toBe(false)
+    expect(patch).not.toHaveBeenCalled()
+    expect(store.uninstalled).toEqual([])
+  })
+
   it('setEnabled 对不存在的插件是 no-op（清单归 Core 管，前端不自己判存在性）', async () => {
     const { patch } = mockPrefs()
+    mockCommand()
     seedCatalog()
     const store = usePluginStore()
     await store.setEnabled('ghost', false)

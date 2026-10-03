@@ -82,6 +82,7 @@
 
       <section class="danger-zone">
         <div class="danger-zone__title">危险区</div>
+        <p v-if="actionError" class="danger-zone__error">{{ actionError }}</p>
         <div class="danger-zone__actions">
           <Button size="sm" variant="ghost" @click="onToggleEnabled(!isEnabled)">
             {{ isEnabled ? '停用插件' : '启用插件' }}
@@ -124,6 +125,8 @@ const props = defineProps<{ pluginId: string }>()
 const { store } = usePlugins()
 const confirmOpen = ref(false)
 const addedWidgetId = ref('')
+/** 启停/卸载失败提示。命令失败时状态不变，不提示就等于骗人 */
+const actionError = ref('')
 let addedTimer: ReturnType<typeof setTimeout> | null = null
 
 const plugin = computed(() => store.byId(props.pluginId))
@@ -163,13 +166,20 @@ function addWidget(widgetId: string): void {
 }
 
 async function onToggleEnabled(value: boolean): Promise<void> {
-  await store.setEnabled(props.pluginId, value)
-  notifyPluginsChanged()
+  // 失败时状态不变，所以必须说一声 —— 否则开关弹回去了，用户不知道是没点上还是没成功
+  const ok = await store.setEnabled(props.pluginId, value)
+  actionError.value = ok ? '' : '启停命令未被 Core 接受，状态未改变'
+  if (ok) notifyPluginsChanged()
 }
 
 async function doUninstall(): Promise<void> {
   confirmOpen.value = false
-  await store.uninstall(props.pluginId)
+  const ok = await store.uninstall(props.pluginId)
+  if (!ok) {
+    // 别关窗口：卸载没成功还把窗关了，用户会以为已经卸载了
+    actionError.value = '卸载失败：Core 未接受停用命令，插件仍在运行'
+    return
+  }
   notifyPluginsChanged()
   await closeCurrentWindow()
 }
@@ -221,6 +231,7 @@ onBeforeUnmount(() => {
 .danger-zone { border: 1px solid var(--color-danger); border-radius: var(--radius-md); padding: var(--space-3); }
 .danger-zone__title { color: var(--color-danger); font-weight: 700; font-size: var(--text-sm); margin-bottom: var(--space-2); }
 .danger-zone__actions { display: flex; gap: var(--space-2); }
+.danger-zone__error { margin: var(--space-2) 0 0; padding: var(--space-2); border: 1px solid var(--color-danger); border-radius: var(--radius-md); background: var(--color-danger-soft); color: var(--color-danger); font-size: var(--text-xs); }
 
 .uninstall-warn { font-size: var(--text-sm); line-height: 1.6; }
 .uninstall-caps { margin: var(--space-2) 0; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); display: flex; flex-direction: column; gap: 2px; }
