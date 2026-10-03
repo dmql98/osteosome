@@ -146,8 +146,8 @@
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
-      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      进行中：<b>S7 插件聚合</b>（8 子步）· 已完成 S7-1、S7-2a、S7-5、S7-2b，下一步 <b>S7-3 前端改拉清单</b>。
+      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
+      进行中：<b>S7 插件聚合</b>（8 子步）· 已完成 S7-1、S7-2a、S7-5、S7-2b、S7-3，下一步 <b>S7-4 停用真停进程</b>。
     </div>
   </div>
 
@@ -159,7 +159,7 @@
       <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
       <div><b class="big">0</b><span>未提交改动</span></div>
       <div><b class="big">12</b><span>测试包全绿</span></div>
-      <div><b>≈2</b><span>剩余计划天数（S7 余 4 子步 + S8 0.5 天）</span></div>
+      <div><b>≈2</b><span>剩余计划天数（S7 余 3 子步 + S8 0.5 天）</span></div>
     </div>
     <table>
       <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
@@ -589,7 +589,7 @@
     <div class="step">
       <div class="hd"><span class="sid">S7</span><span class="lane plug">插件线</span>
         <span class="stitle">插件 = 聚合</span>
-        <span class="done-badge" style="background:var(--warning)">进行中 4/8</span><span class="dur">2 天</span></div>
+        <span class="done-badge" style="background:var(--warning)">进行中 5/8</span><span class="dur">2 天</span></div>
       <div class="bd">
         <div class="lbl">为什么它还是「假的」—— 三处不实（2026-10-02 复核）</div>
         <table style="margin-top:0">
@@ -647,9 +647,13 @@
                 <code>core: started</code> 照常出现。<b>9 个集成测试零改动</b></span></td>
                 <td class="mono">service-manager/{manager,plugin-registry,plugin-registry-runtime}.ts；
                 sse-bridge/{command,server}.ts；main.ts</td></tr>
-            <tr><td>S7-3</td><td>前端插件清单<b>改从 Core 拉</b>，删掉 <code>plugins/registry.ts</code> 的硬编码 <code>PLUGINS</code>
-                <br><span style="font-size:var(--text-xs)">registry.ts 只留 <code>pluginForWidget</code> 等纯函数</span></td>
-                <td class="mono">plugins/registry.ts；新增 core-sdk/usePlugins.ts</td></tr>
+            <tr><td>S7-3</td><td><b style="color:var(--success)">✓ 已完成</b> 前端插件清单<b>改从 Core 拉</b>，
+                删掉 <code>plugins/registry.ts</code> 里那张 6 条目的硬编码表
+                <br><span style="font-size:var(--text-xs)"><code>registry.ts</code> 只剩纯函数
+                （<code>toPluginViews</code> / <code>pluginForWidgetIn</code>）；
+                <b>顺手修掉两个界面真缺口</b>：degraded 显示「运行中」、空态不区分 layer</span></td>
+                <td class="mono">plugins/{registry.ts,PluginListWindow,PluginDetailWindow}.vue；
+                stores/plugin.store.ts；新增 core-sdk/usePlugins.ts；layout/layout.store.ts</td></tr>
             <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）
                 <br><span style="font-size:var(--text-xs)">停前先发 <code>loop.cancel</code> 正常收尾，超时才强杀</span></td>
                 <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start</td></tr>
@@ -699,7 +703,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           <br>所以三态的落点是唯一的：<code>status !== 'ok'</code> 就传「不限制」，
           <code>status === 'ok'</code> 才传按已安装算出的集合。
           <b>ServiceManager 只看到「一个集合或没有」，看不到三态。</b></p>
-        <div class="lbl">S7-2a 已交付（<span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span>）—— 三个刻意的决定</div>
+        <div class="lbl">S7-2a 已交付（<span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>）—— 三个刻意的决定</div>
         <ul>
           <li><b>扫盘不抛错，与 <code>loadServices</code> 的「全成功或抛」故意相反。</b>
               <code>services/</code> 是<b>代码</b>，坏一个就是部署坏了；插件层是<b>数据</b>，
@@ -733,7 +737,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           都读那份清单 —— 任何 <code>service.json</code> 声明
           <code>subscribes: ["plugin.stop"]</code> 都会被判非法。
           <b>「定义了 Map」不等于「可用了」</b>，清单才是运行时认的那一份。</p>
-        <div class="lbl">S7-5 已交付（<span class="commit">1773917</span> · <span class="commit">dfdef29</span>）—— 划法与依据</div>
+        <div class="lbl">S7-5 已交付（<span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>）—— 划法与依据</div>
         <table style="margin-top:0">
           <thead><tr><th style="width:20%">插件</th><th style="width:26%">服务</th><th>组件</th></tr></thead>
           <tbody>
@@ -849,7 +853,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           「uninstalled 的插件若服务还在跑，仍报 ready」。
           2b 之后被卸插件的服务不会被 spawn，这个不一致世界自然消失 ——
           状态会正确地变成 <code>stopped</code>。这就是当初选择「钉住缺口而不是顺手修 shared」的理由。</p>
-        <div class="lbl">S7-2b 已交付（<span class="commit">dfdef29</span>）—— 六条验收全部实证</div>
+        <div class="lbl">S7-2b 已交付（<span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>）—— 六条验收全部实证</div>
         <p class="note ok"><span class="mono" style="font-size:var(--text-xs)">===== --plugins none =====
           <br>WARN plugin layer: 'disabled' -&gt; 不按插件过滤，全部服务照旧启动
           <br>INFO core: started
@@ -892,6 +896,57 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           接回去只是把编译期错误换成运行期错误，还多一个「到底什么时候安全」的问题要知道。</p>
         <p>顺带修掉一处过时文案：告警里还写着「S7-2b 起这会退回全启」，
           而 S7-2b 已经生效了 —— 这种「描述未来」的注释在功能落地后就是错的。</p>
+        <div class="lbl">S7-3 已交付（<span class="commit">046dbaa</span>）—— 两个真源合成一个的过程</div>
+        <p><b>为什么那张硬编码表非删不可</b>：它和 Core 讲同一件事却是两份数据 ——
+          Core 知道服务真实状态、依赖是否满足、插件装没装；那张表一概不知道，只会说「我存在」。
+          于是状态只能在前端猜，<b>而前端拿不到猜对的输入</b>。</p>
+        <p class="note"><span class="mono" style="font-size:var(--text-xs)">usePlugins()
+          &nbsp;──GET /api/plugins──▶&nbsp; store.applyCatalog()
+          <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;──plugin.state.changed（一条一个插件）──▶&nbsp; store.applyStateChange()</span></p>
+        <ul>
+          <li><b>两类数据必须分清</b>：清单（装了哪些、叫什么、依赖谁、什么状态）是 <b>Core 的事实</b>；
+              用户意愿（我停用了哪个、我卸了哪个）是<b>本地偏好</b>。混在一起就是两个真源。
+              所以 <code>installed</code> 要<b>同时</b>看两处：<code>snapshot.installed</code>
+              （Core 的判断，读的是<b>启动时</b>的 prefs）<b>和</b> <code>uninstalled</code>（用户刚做的动作）</li>
+          <li><b>只信前者会「撒谎到重启」</b>：运行期卸掉一个插件，Core 还没被通知，
+              界面还显示已安装、组件也还能加，而重启之后它真的没了。
+              这不算第二个真源 —— prefs 本来就是用户的意愿，而<b>前端是写它的那一方</b>，
+              Core 只是启动时读了一次</li>
+          <li><b>清单不塞进 SSE 首帧</b>：它是「拉一次就够」的静态形状，
+              而每个连上来的页面（包括只关心一个面板的窗口）都要先收一份全量</li>
+          <li><b><code>pluginForWidgetIn</code> 要求传入列表</b>而不是偷偷读 store ——
+              <code>layout.store.reconcilePlugins</code> 在组件外调它，读 store 会在那里抛错</li>
+        </ul>
+        <div class="lbl">S7-3 顺手修掉的两个界面真缺口</div>
+        <ul>
+          <li><b>状态行只显示用户意愿 → degraded 的插件显示「运行中」</b>。
+              用户看到绿灯却发不出请求，界面上没有任何线索说它坏了。
+              改成两个独立的轴：用户意愿（本地）+ 实际状态（Core 派生），
+              后者非 ready 时显示降级/故障/未运行，并把 <code>reason</code> 一并带出来</li>
+          <li><b>空态不区分 layer</b>：「没启用插件层」「插件层坏了」「真一个都没装」
+              原来全是「还没有插件」—— 用户只会得出「没插件」，于是以为一切正常，
+              那 <code>layer</code> 字段就<b>白做了</b>。现在四种 layer 各有文案，
+              <code>missing-dir</code> 还报出是哪个目录</li>
+        </ul>
+        <div class="lbl">S7-5 记的那个担心可以撤销</div>
+        <p class="note ok">「10 个组件里只有 3 个进了 default-layout，另 7 个只活在 registry.ts」——
+          <b>查清了，不是问题</b>：10 个 widget 组件文件全都在，
+          <code>widgets/registry.ts</code> 用 glob 自动收录全部，
+          <code>default-layout.ts</code> 只放 3 个<b>只是默认选择</b>，用户可手动添加其余。</p>
+        <div class="lbl">测试：改写 4 个 + 新增 2 条，都是往「更严」的方向改</div>
+        <ul>
+          <li><b>断层回归那条把对账两端换对了</b>（P4 WS-1 真实发生过：插件声明了 widget、
+              注册表 glob 扫不到 → 默认工作台开不出来）。左边从「前端常量」改成
+              「真实 <code>plugins/*/plugin.json</code>」：以前两端同源，
+              把 id 写错了也自洽、<b>永远查不出问题</b>；现在才真的能查出断层。
+              并补了<b>反向</b>对账：注册表里不许有孤儿组件（否则就是清单漏声明）</li>
+          <li><b>新增冷启动守卫</b>：<code>reconcilePlugins</code> 在<b>清单还没拉到手时不得动任何面板</b>。
+              这是 S7-3 引入的新风险 —— 以前归属在前端常量里启动即有，现在来自 HTTP，
+              若把「查不到归属」当成「已卸载」，<b>冷启动瞬间就会清空所有面板</b></li>
+          <li>plugin.store 改为<b>先喂 Core 快照再用</b>：于是「忘了拉清单」在测试里是可见的，
+              而不是悄悄表现成「插件都没了」。两个窗口测试的 fetch stub 改为返回真实形状 ——
+              stub 成 <code>{}</code> 的话，「渲染不出来」和「Core 没返回」分不清</li>
+        </ul>
         <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
         <ul>
           <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
