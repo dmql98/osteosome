@@ -1,0 +1,17 @@
+{
+  "id": "reliability",
+  "name": "可靠性",
+  "version": "1.0.0",
+  "icon": "🛟",
+  "author": "osteosome",
+  "license": "Apache-2.0",
+  "description": "可靠性层（services/llm-retry）：订阅 llm.request 并按重试策略重新发布，做在路由主位与 provider 之间；同时汇聚 token 用量（llm.metrics.usage）。无组件，纯服务。",
+  "services": ["llm-retry"],
+  "components": [],
+  "capabilities": [
+    { "name": "llm.retry", "detail": "按 retryPolicy 重试失败请求" },
+    { "name": "llm.metrics.usage", "detail": "汇聚 token 用量指标" }
+  ],
+  "dependencies": [{ "pluginId": "chat-workbench" }],
+  "autoStart": true
+}

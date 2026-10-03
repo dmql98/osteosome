@@ -1,0 +1,24 @@
+{
+  "id": "chat-workbench",
+  "name": "对话工作台",
+  "version": "1.0.0",
+  "icon": "💬",
+  "author": "osteosome",
+  "license": "Apache-2.0",
+  "description": "对话工作台：会话主位（session）+ 工具循环主位（loop）+ LLM 路由主位（llm）三个进程，加上会话列表 / 消息时间线 / 输入框三个组件（S5 拆分：②③ 之间零直接通信，统一走 stores/chat.store.ts）。",
+  "services": ["session", "loop", "llm"],
+  "components": [
+    "widget.session-list",
+    "widget.chat-timeline",
+    "widget.chat-composer"
+  ],
+  "capabilities": [
+    { "name": "session.list", "detail": "会话列表 / 当前会话 / CRUD / 消息追加" },
+    { "name": "loop.run", "detail": "工具循环：发问 → 流式 → 工具调用 → 继续" },
+    { "name": "llm.request", "detail": "向路由主位发问" },
+    { "name": "llm.cancel", "detail": "取消流式生成" },
+    { "name": "message.append", "detail": "消息落库（含 thinking 字段，S4）" }
+  ],
+  "dependencies": [{ "pluginId": "models" }],
+  "autoStart": true
+}

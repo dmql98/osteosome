@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,6 +7,10 @@ import { loadPluginLayer, scanPlugins, snapshotPlugins } from '../src/service-ma
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES = path.join(here, 'fixtures')
+/** 仓库根下的真实 plugins/ 与 services/ —— S7-5 落的就是它 */
+const REPO_ROOT = path.join(here, '..', '..')
+const REAL_PLUGINS = path.join(REPO_ROOT, 'plugins')
+const REAL_SERVICES = path.join(REPO_ROOT, 'services')
 const PLUGINS = path.join(FIXTURES, 'plugins')
 const EMPTY = path.join(FIXTURES, 'plugins-empty')
 
@@ -224,6 +229,114 @@ describe('snapshotPlugins · 状态聚合吃真实服务状态', () => {
   test('无服务、无依赖、autoStart 缺省 -> ready（S7-1「workbench 那种」定案）', () => {
     // twin: services [] / dependencies [] / autoStart 缺省 true
     expect(snap('twin').state).toBe('ready')
+  })
+})
+
+describe('真实 plugins/ 与 services/（S7-5 落的那份划分）', () => {
+  function realServiceIds(): Set<string> {
+    return new Set(
+      readdirSync(REAL_SERVICES, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && existsSync(path.join(REAL_SERVICES, e.name, 'service.json')))
+        .map((e) => e.name),
+    )
+  }
+
+  test('扫得出 5 个插件，且零问题零环', () => {
+    const scan = scanPlugins(REAL_PLUGINS, realServiceIds())
+    expect(scan.status).toBe('ok')
+    expect(scan.ids.sort()).toEqual([
+      'chat-workbench',
+      'credentials',
+      'models',
+      'reliability',
+      'workbench',
+    ])
+    expect(scan.problems).toEqual([])
+    expect(scan.cycles).toEqual([])
+  })
+
+  test('**每个服务都被某个插件认领** —— 漏一个，S7-2b 就会漏 spawn 它', () => {
+    // 这是 B 语义最直接的翻车方式：服务存在于 services/ 但没有任何插件声明它，
+    // 于是切语义之后它静默不启动了。所以拿「认领数 == 服务数」当断言。
+    const scan = scanPlugins(REAL_PLUGINS, realServiceIds())
+    const claimed = new Set(scan.plugins.flatMap((p) => p.manifest.services))
+    const unclaimed = [...realServiceIds()].filter((id) => !claimed.has(id))
+    expect(unclaimed).toEqual([])
+    expect(claimed.size).toBe(realServiceIds().size)
+  })
+
+  test('安装顺序满足依赖：credentials -> models -> chat-workbench -> reliability', () => {
+    const order = scanPlugins(REAL_PLUGINS, realServiceIds()).installOrder
+    expect(order.indexOf('credentials')).toBeLessThan(order.indexOf('models'))
+    expect(order.indexOf('models')).toBeLessThan(order.indexOf('chat-workbench'))
+    expect(order.indexOf('chat-workbench')).toBeLessThan(order.indexOf('reliability'))
+  })
+
+  test('workbench 无服务且无依赖 -> 恒 ready（不会拖累别人）', () => {
+    const scan = scanPlugins(REAL_PLUGINS, realServiceIds())
+    const wb = snapshotPlugins(scan, { serviceStates: new Map() }).find(
+      (p) => p.manifest.id === 'workbench',
+    )!
+    expect(wb.state).toBe('ready')
+    expect(wb.manifest.dependencies).toEqual([])
+  })
+
+  test('全部服务 ready 时，5 个插件全 ready', () => {
+    const states = new Map<string, ServiceStatus>(
+      [...realServiceIds()].map((id) => [id, 'ready' as ServiceStatus]),
+    )
+    const snapshots = snapshotPlugins(scanPlugins(REAL_PLUGINS, realServiceIds()), {
+      serviceStates: states,
+    })
+    expect(snapshots.map((p) => [p.manifest.id, p.state])).toEqual(
+      expect.arrayContaining([
+        ['workbench', 'ready'],
+        ['credentials', 'ready'],
+        ['models', 'ready'],
+        ['chat-workbench', 'ready'],
+        ['reliability', 'ready'],
+      ]),
+    )
+  })
+
+  test('卸掉 models -> 只有 chat-workbench 与 reliability 受影响（依赖图真的分了三层）', () => {
+    const all = [...realServiceIds()]
+    // 按 S7-2b 之后的现实建模：被卸的插件，它的服务也不会在跑
+    const states = new Map<string, ServiceStatus>(
+      all.filter((id) => id !== 'llm-provider-openai').map((id) => [id, 'ready' as ServiceStatus]),
+    )
+    const snapshots = snapshotPlugins(scanPlugins(REAL_PLUGINS, realServiceIds()), {
+      serviceStates: states,
+      uninstalledIds: new Set(['models']),
+    })
+    const byId = new Map(snapshots.map((p) => [p.manifest.id, p]))
+    expect(byId.get('credentials')!.state).toBe('ready')
+    // 依赖它的 chat-workbench degraded —— 这正是 B 语义要展示的「你少装了东西」
+    expect(byId.get('chat-workbench')!.state).toBe('degraded')
+    expect(byId.get('chat-workbench')!.missingDependencies).toEqual(['models'])
+    expect(byId.get('workbench')!.state).toBe('ready')
+    // reliability 仍 ready：它依赖的是 chat-workbench「已安装」，不是「已健康」。
+    // 依赖传播 degraded 是**刻意不做**的 —— 那会让一处故障沿依赖树扩散，
+    // 且让「谁真正缺东西」变得要看整张图。S7-1 定案：依赖满足 = 装了就满足。
+    expect(byId.get('reliability')!.state).toBe('ready')
+  })
+
+  test('已知缺口：S7-2b 之前，uninstalled 的插件若服务还在跑，仍报 ready', () => {
+    // resolvePluginState 只看**服务真实状态**，不看「插件自己被卸了」。
+    // 所以在这个人为造的不一致世界里（服务照跑、插件已卸），它报 ready。
+    //
+    // 刻意把这条钉住而不是「顺手修掉」：S7-2b 之后被卸插件的服务不会被 spawn，
+    // 这个状态就自然不存在了。真正的修法在 2b（把启停与 installed 绑起来），
+    // 而不是现在给 shared 加一个它并不需要的概念。
+    const states = new Map<string, ServiceStatus>(
+      [...realServiceIds()].map((id) => [id, 'ready' as ServiceStatus]),
+    )
+    const models = snapshotPlugins(scanPlugins(REAL_PLUGINS, realServiceIds()), {
+      serviceStates: states,
+      uninstalledIds: new Set(['models']),
+    }).find((p) => p.manifest.id === 'models')!
+    expect(models.installed).toBe(false)
+    expect(models.state).toBe('ready')
   })
 })
 

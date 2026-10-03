@@ -1,0 +1,29 @@
+{
+  "id": "workbench",
+  "name": "工作台外壳",
+  "version": "1.0.0",
+  "icon": "🧭",
+  "author": "osteosome",
+  "license": "Apache-2.0",
+  "description": "工作台外壳与系统可观测性：系统信息面板、命令面板、设置、事件看板、服务与服务管理器。只碰 Core 的内置组件，不带任何服务。",
+  "services": [],
+  "components": [
+    "widget.system-info",
+    "widget.command-palette",
+    "widget.settings",
+    "widget.event-stream",
+    "widget.service-manager",
+    "widget.service-status"
+  ],
+  "capabilities": [
+    { "name": "system.info", "detail": "读取版本与运行平台" },
+    { "name": "command.execute", "detail": "向 Core 投递命令" },
+    { "name": "event.subscribe", "detail": "订阅任意事件（* / 前缀）" },
+    { "name": "event.replay", "detail": "重放历史事件" },
+    { "name": "service.list", "detail": "列出全部注册服务" },
+    { "name": "service.status", "detail": "订阅服务生命周期事件" },
+    { "name": "service.restart", "detail": "重启异常服务" }
+  ],
+  "dependencies": [],
+  "autoStart": true
+}
