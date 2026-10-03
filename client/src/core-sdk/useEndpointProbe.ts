@@ -46,6 +46,18 @@ export function useEndpointProbe() {
   const probing = ref<Record<string, boolean>>({})
   /** requestId → 开始时刻，用于算延迟 */
   const startedAt = new Map<string, number>()
+  /**
+   * provider → 该次探测的结算（回音 / 超时 / 发送失败只结算一次）。
+   *
+   * 键用 **provider 而不是 requestId**：结果本来就按 provider 归档
+   * （见文件头），而回音里 requestId 可能对不上（同一 provider 的并发探测、
+   * 或由 `useModelCatalog` 那一路带回的结果），按 requestId 结算会让
+   * `probe()` 永远等不到收尾。
+   *
+   * 探测要等的是 **SSE 回音**，不是 HTTP 202 —— 两者是两条独立的路。
+   * 兜底计时器必须活到真正结算为止，不能跟着 `send()` 的返回一起清掉。
+   */
+  const pending = new Map<string, () => void>()
 
   function resultOf(provider: string): ProbeResult | undefined {
     return results.value[provider]
@@ -102,39 +114,67 @@ export function useEndpointProbe() {
       },
     }
     setProbing(provider, false)
+    // 结算：让正在 await 的 probe() 返回，并撤掉它的兜底计时器
+    pending.get(provider)?.()
   }
 
-  /** 探测某 provider。返回结果；超时或无响应按「不可达」处理 */
+  /**
+   * 探测某 provider，**拿到回音才返回**。超时或无响应按「不可达」处理。
+   *
+   * ⚠️ 兜底计时器不能跟着 `await send(...)` 一起清掉：`useCommand.send` 只等
+   * HTTP 202，SSE 回音是另一条路 —— 那样计时器会在回音到达之前就被撤掉，
+   * 「没回音时按钮一直转」这个坑原封不动地留着（实现与文件头的注释正好相反）。
+   */
   async function probe(provider: string): Promise<ProbeResult | null> {
     if (!provider) return null
+    // 上一次还在转就别再发一轮：结果按 provider 归档，两轮只会互相踩
+    if (probing.value[provider] === true) return results.value[provider] ?? null
+
     const requestId = `probe-${provider}-${Date.now()}-${Math.random().toString(16).slice(2)}`
     startedAt.set(requestId, Date.now())
     setProbing(provider, true)
 
-    // 超时兜底：provider 只会对**自己负责的**厂商回结果。
-    // 若它压根没注册成实例，就永远不会有回音 —— 不设兜底按钮会一直转。
-    const timer = setTimeout(() => {
-      startedAt.delete(requestId)
-      if (probing.value[provider] !== true) return
-      results.value = {
-        ...results.value,
-        [provider]: {
-          provider,
-          models: [],
-          catalog: 'static',
-          latencyMs: null,
-          at: Date.now(),
-        },
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const settle = (): void => {
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        timer = undefined
       }
-      setProbing(provider, false)
-    }, PROBE_TIMEOUT_MS)
-
-    try {
-      const { send } = useCommand()
-      await send('llm.models.list', { requestId, provider })
-    } finally {
-      clearTimeout(timer)
+      pending.delete(provider)
+      startedAt.delete(requestId)
     }
+
+    await new Promise<void>((resolve) => {
+      const finish = (): void => {
+        settle()
+        resolve()
+      }
+      pending.set(provider, finish)
+
+      // 超时兜底：provider 只会对**自己负责的**厂商回结果。
+      // 若它压根没注册成实例，就永远不会有回音 —— 不设兜底按钮会一直转。
+      timer = setTimeout(() => {
+        if (probing.value[provider] === true) {
+          results.value = {
+            ...results.value,
+            [provider]: {
+              provider,
+              models: [],
+              catalog: 'static',
+              latencyMs: null,
+              at: Date.now(),
+            },
+          }
+          setProbing(provider, false)
+        }
+        finish()
+      }, PROBE_TIMEOUT_MS)
+
+      // 连 202 都没拿到同样算不可达；拿到 202 则由 applyResult 结算
+      const { send } = useCommand()
+      void send('llm.models.list', { requestId, provider }).catch(() => finish())
+    })
+
     return results.value[provider] ?? null
   }
 
@@ -145,6 +185,9 @@ export function useEndpointProbe() {
   onUnmounted(() => {
     dispose?.()
     dispose = null
+    // 撤掉所有在途探测的兜底计时器，别把它们带进组件销毁之后
+    for (const finish of [...pending.values()]) finish()
+    pending.clear()
     startedAt.clear()
   })
 

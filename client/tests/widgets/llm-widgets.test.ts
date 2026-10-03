@@ -43,11 +43,19 @@ function emit(topic: string, payload: unknown): void {
   sseHandlers.get(topic)?.(payload)
 }
 
+/**
+ * 取出每次 POST /api/command 的请求体。
+ *
+ * 必须按 URL 过滤：页面还会发 `GET /api/preferences`（读模型开关）这类**没有 body**
+ * 的请求，`JSON.parse('undefined')` 会直接炸在这里 —— 症状是毫不相关的用例集体失败。
+ */
 function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<string, unknown>[] {
-  return fetchMock.mock.calls.map((c) => {
-    const init = c[1] as { body?: unknown } | undefined
-    return JSON.parse(String(init?.body)) as Record<string, unknown>
-  })
+  return fetchMock.mock.calls
+    .filter((c) => String(c[0]).includes('/api/command'))
+    .map((c) => {
+      const init = c[1] as { body?: unknown } | undefined
+      return JSON.parse(String(init?.body)) as Record<string, unknown>
+    })
 }
 
 /** Select 的 options 是 prop，直接改 value + change 触发（对齐 settings.test.ts 手法） */
@@ -393,6 +401,31 @@ describe('chat-composer（③）· 参数链路（P4 WS-2）', () => {
     expect(cancel).toBeTruthy()
     expect((cancel.payload as { requestId: string }).requestId).toBe(a)
     expect(bodies.find((b) => b.topic === 'llm.cancel')).toBeUndefined()
+    fetchMock.mockRestore()
+  })
+
+  it('设置页关掉的模型，这里选不到（llm.enabledModels 是真的生效，不是假开关）', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown) => {
+      if (String(input).includes('/api/preferences')) {
+        return new Response(JSON.stringify({ llm: { enabledModels: ['deepseek::deepseek-reasoner'] } }), { status: 200 })
+      }
+      return new Response(null, { status: 202 })
+    })
+    const composer = mount(ChatComposerWidget)
+    await flushPromises()
+    emit('llm.provider.registered', DESCRIPTOR)
+    await flushPromises()
+    emit('llm.models.list.result', {
+      requestId: 'x',
+      provider: 'deepseek',
+      models: ['deepseek-chat', 'deepseek-reasoner'],
+      catalog: 'remote',
+    })
+    await flushPromises()
+
+    const options = composer.findAll('[data-testid="composer-model"] option').map((o) => o.text())
+    expect(options, '没被关掉的必须还能选').toContain('deepseek-chat')
+    expect(options, '关掉了却还出现在下拉里 = 设置页的开关是假的').not.toContain('deepseek-reasoner')
     fetchMock.mockRestore()
   })
 

@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import Card from '@/components/ui/Card.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
@@ -72,6 +72,7 @@ import Select from '@/components/ui/Select.vue'
 import Textarea from '@/components/ui/Textarea.vue'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
 import { useModelCatalog } from '@/core-sdk/useModelCatalog'
+import { usePreferences } from '@/core-sdk/usePreferences'
 import { useChatStore } from '@/stores/chat.store'
 import { useSessionStore } from '@/stores/session.store'
 
@@ -90,8 +91,34 @@ import { useSessionStore } from '@/stores/session.store'
  */
 const chat = useChatStore()
 const sessions = useSessionStore()
+const preferences = usePreferences()
 const { list } = useLlmProviders()
 const { models, catalog, load } = useModelCatalog()
+
+/**
+ * 设置页「逐模型开关」写进 `preferences.llm.enabledModels`，这里是它的**消费方**。
+ *
+ * 没有这一层过滤，设置页的开关就是个假开关：关掉了、下拉里还选得到 ——
+ * 用户会以为功能坏了。格式同设置页：`${provider}::${model}`，空数组 = 全启用。
+ *
+ * 为什么只在挂载 + 目录到达时读：Core 没有「偏好已改」的 SSE 广播
+ * （`PUT /api/preferences` 只回 `{ok:true}`），所以拿不到推送。
+ * 目录到达正好是「用户刚可能动过设置」的时机 —— 切 provider、点获取模型列表都会触发。
+ */
+const disabledModels = ref<string[]>([])
+
+function refreshDisabledModels(): void {
+  void preferences
+    .get()
+    .then((prefs) => {
+      const raw = (prefs as { llm?: { enabledModels?: unknown } }).llm?.enabledModels
+      disabledModels.value = Array.isArray(raw) ? (raw as string[]) : []
+    })
+    .catch(() => {
+      // 读不到就当全启用 —— 偏好坏了不该让输入框变成空下拉
+      disabledModels.value = []
+    })
+}
 
 // 直接双向绑 store 的字段（Pinia 的 writable state）
 const draft = computed({
@@ -107,12 +134,21 @@ const sending = computed(() => chat.sending)
 const canSend = computed(() => chat.canSend)
 const catalogKind = computed(() => catalog.value ?? '')
 
+/** 当前 provider 下没被关掉的模型 */
+const visibleModels = computed(() =>
+  models.value.filter((m) => !disabledModels.value.includes(`${provider.value}::${m}`)),
+)
+
 const providerOptions = computed(() => list.value.map((p) => ({ label: p.provider, value: p.provider })))
 
-/** 目录到达前只有「声明默认模型」一项（仍可真发出去）；到达后取全量 */
+/**
+ * 目录到达前只有「声明默认模型」一项（仍可真发出去）；
+ * 到达后取**没被设置页关掉的**那些 —— 一个都不剩时下拉就是空的，
+ * 不该偷偷退回全量，那等于开关没生效。
+ */
 const modelOptions = computed(() => {
-  const items = models.value.length > 0 ? models.value : model.value ? [model.value] : []
-  return items.map((m) => ({ label: m, value: m }))
+  if (models.value.length === 0) return model.value ? [{ label: model.value, value: model.value }] : []
+  return visibleModels.value.map((m) => ({ label: m, value: m }))
 })
 
 const thinkingOptions = [
@@ -147,11 +183,16 @@ watch(
   { immediate: true },
 )
 
-// 目录到达 → 校正当前模型选择（不在目录里才动）
+// 目录到达 → 顺手重读一次开关，并把当前模型校正到「还在的 / 还开着的」
 watch(models, (items) => {
-  if (items.length === 0 || items.includes(chat.model)) return
+  refreshDisabledModels()
+  if (items.length === 0) return
+  const enabled = visibleModels.value
+  if (enabled.includes(chat.model)) return
+  // 一家的模型全被关掉了：保持原选择（还能真发出去），下拉为空是明确的状态
+  if (enabled.length === 0) return
   const fallback = defaultModelOf(chat.provider)
-  chat.setModel(items.includes(fallback) ? fallback : items[0])
+  chat.setModel(enabled.includes(fallback) ? fallback : enabled[0])
 })
 
 // 切会话 → 重置本地 in-flight + 载入历史（② 也读同一个 store，两边自动同步）
@@ -162,6 +203,7 @@ watch(
 )
 
 onMounted(() => {
+  refreshDisabledModels()
   chat.bindEvents()
 })
 </script>

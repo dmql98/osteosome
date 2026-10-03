@@ -11,16 +11,12 @@
  *
  * ## 这一版改了什么，为什么
  *
- * 上一版把 12 家预设**平铺成一个长列表**，展开后是只读的事实表，
- * 而「选模型」被放在第三段。于是：
+ * 去掉「正在使用」块。它回答的是「我此刻发问走哪家」，而选 provider/模型
+ * 本来就是**对话输入框**的职责（`ChatComposerWidget` 的 composer-provider /
+ * composer-model），设置页再放一份下拉等于两处选择互相看不见 ——
+ * 用户在这儿选了、去输入框又是另一个，还查不出谁改的。
  *
- * · 12 家里通常只有 1–2 家连上了，其余 11 行是噪音，用户要滚动着找
- * · 「选厂商 → 选模型」这个**连续动作**被拆到相隔两段
- * · 想改端点 / 默认模型只能去「自定义端点」**另建一条** —— 同一厂商两处出现、两处配置
- * · 展开只看得到「默认模型: (空)」（lm-studio / vLLM 的预设就是这样），
- *   用户无从下手，而 `llm.models.list` 这个能力其实早就存在，只是没有入口
- *
- * 现在拆成四块，职责各自单一：正在使用 / 服务商 / 自定义端点 / 插件提供的接入。
+ * 所以本页只剩两件事：**有哪些端点（连没连上、怎么改）**，以及**每个端点有哪些模型（要不要用）**。
  *
  * ## 「就地改预设」不需要任何 Core 侧新机制
  *
@@ -29,25 +25,32 @@
  *
  * 但**没配凭证的云厂商不能这么改**：`instanceFromOverride` 在 `credentialRef`
  * 解析不出来时返回 `null`，那条 override 压根不会成为实例 —— 填了也白填。
- * 所以这类厂商不给端点编辑框，只给「设置密钥」。
+ * 所以这类端点不给端点编辑框，只给「设置密钥」。
  *
  * ## 探测 = 拉模型列表（同一个动作）
  *
  * `llm.models.list.result` 的 `catalog:'static'` 就意味着走了内置兜底 = 端点连不上，
- * 于是连通性是顺带的，见 `useEndpointProbe`。
+ * 于是连通性是顺带的，见 `useEndpointProbe`。本页只留 probe 一个发送方：
+ * 模型墙 = `probe.results[id].models`，状态 = `catalog === 'remote'`。
+ *
+ * ## 偏好写入为什么必须集中在这里
+ *
+ * `usePreferences.patch` 是**浅合并**：`{...base, ...partial}` —— 写 `llm` 就是把整个
+ * `llm` 键换掉。所以 `vendorOverrides` 和 `enabledModels` 必须**一起写**，
+ * 而且只有这一个地方写。子组件（ProviderCard / ModelWall）只吃 props、只 emit。
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 import Button from '@/components/ui/Button.vue'
 import Input from '@/components/ui/Input.vue'
 import Modal from '@/components/ui/Modal.vue'
 import { useEndpointProbe } from '@/core-sdk/useEndpointProbe'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
 import { usePreferences } from '@/core-sdk/usePreferences'
-import ActiveModelCard from './ActiveModelCard.vue'
 import CustomEndpointSection from './CustomEndpointSection.vue'
 import PluginProviderSection from './PluginProviderSection.vue'
 import VendorListSection from './VendorListSection.vue'
+import type { PendingRow } from './ProviderCatalog.vue'
+import type { ProviderCardData } from './ProviderCard.vue'
 import type { VendorPreset } from '@osteosome/shared'
 import { VENDOR_PRESETS } from '@osteosome/shared'
 
@@ -56,6 +59,7 @@ interface EndpointOverride {
   label?: string
   baseUrl: string
   defaultModel?: string
+  /** `''` = 显式免凭证；**缺省 = 要凭证**（由 provider 去 env / 凭证库按 id 找） */
   credentialRef?: string
   api?: string
 }
@@ -66,7 +70,6 @@ interface MaskedCredential {
   provider: string
 }
 
-const { t } = useI18n()
 const preferences = usePreferences()
 const { list: providerList, providers } = useLlmProviders()
 const probe = useEndpointProbe()
@@ -77,39 +80,49 @@ const probe = useEndpointProbe()
 const catalog = ref<VendorPreset[]>([...VENDOR_PRESETS])
 const credentials = ref<MaskedCredential[]>([])
 const overrides = ref<EndpointOverride[]>([])
-const expanded = ref<string[]>([])
-
-const selectedProvider = ref('')
-const selectedModel = ref('')
+/**
+ * 已禁用的模型，元素是 `${providerId}::${model}`。
+ *
+ * **空数组 = 全启用**，这是默认态 —— 老偏好文件一个字没写也照常工作，不需要迁移。
+ * 反向存「已启用」就得先知道全集，而全集来自探测，探测前是空的，
+ * 那会把所有模型都判成关的。
+ */
+const disabledModels = ref<string[]>([])
+/** 用户手动收起的卡片。**不在这个名单里 = 展开** —— 连上就该看见模型墙 */
+const collapsed = ref<string[]>([])
+/** 未连接的预设目录是否展开。默认收起 —— 12 家里通常只连 1–2 家 */
+const dirOpen = ref(false)
+const query = ref('')
 
 // ── 凭证弹窗 ──
 const credentialOpen = ref(false)
 const credentialId = ref('')
 const credentialName = ref('')
 const credentialValue = ref('')
+/** 「这个密钥弹窗是为谁开的」—— 保存后要按它探测 */
+const keyTargetProvider = ref('')
 
-// ── 自定义端点弹窗 ──
+// ── OpenAI 兼容端点弹窗 ──
 const endpointOpen = ref(false)
 const endpointEditId = ref('')
 const epId = ref('')
 const epLabel = ref('')
 const epBaseUrl = ref('')
 const epModel = ref('')
-const epNoCredential = ref(true)
+/** 要不要密钥。新端点默认不要 —— 本地 vLLM / 内网网关一大半是免密钥的 */
+const epNeedKey = ref(false)
+const epCredId = ref('')
+const epCredName = ref('')
+const epKeyValue = ref('')
 
-// ── 派生：服务商列表（预设） ──
-const vendorRows = computed(() =>
-  catalog.value.map((v) => ({
-    id: v.id,
-    label: v.label,
-    baseUrl: v.baseUrl,
-    credentialEnv: v.credentialEnv,
-    defaultModel: v.defaultModel,
-    note: v.note,
-  })),
-)
+// ── 派生 ──
+const overrideById = computed(() => {
+  const m: Record<string, EndpointOverride> = {}
+  for (const o of overrides.value) m[o.id] = o
+  return m
+})
 
-/** 已注册成实例的 id 集合（= 「连上了」） */
+/** 已注册成实例的 id + 有 override 的 id（后者也会成为实例） */
 const connected = computed(() => {
   const out: Record<string, boolean> = {}
   for (const id of Object.keys(providers.value ?? {})) out[id] = true
@@ -117,92 +130,137 @@ const connected = computed(() => {
   return out
 })
 
-const overrideById = computed(() => {
-  const m: Record<string, EndpointOverride> = {}
-  for (const o of overrides.value) m[o.id] = o
-  return m
-})
-
-const overridden = computed(() => {
-  const out: Record<string, boolean> = {}
-  for (const id of Object.keys(overrideById.value)) out[id] = true
-  return out
-})
-
 /** 生效端点 / 模型：override 优先于预设 */
 const effectiveBaseUrl = computed(() => {
   const out: Record<string, string> = {}
-  for (const v of vendorRows.value) out[v.id] = v.baseUrl
+  for (const v of catalog.value) out[v.id] = v.baseUrl
   for (const [id, o] of Object.entries(overrideById.value)) out[id] = o.baseUrl
   return out
 })
 
 const effectiveModel = computed(() => {
   const out: Record<string, string> = {}
-  for (const v of vendorRows.value) out[v.id] = v.defaultModel
+  for (const v of catalog.value) out[v.id] = v.defaultModel
   for (const [id, o] of Object.entries(overrideById.value)) out[id] = o.defaultModel ?? ''
   return out
 })
 
+const keyword = computed(() => query.value.trim().toLowerCase())
+
+/** 搜索要能跨到模型名 —— 用户记得的是「哪个模型」，不一定记得是哪家的 */
+function matches(id: string, label: string, baseUrl: string, models: string[]): boolean {
+  const k = keyword.value
+  if (!k) return true
+  if (label.toLowerCase().includes(k)) return true
+  if (id.toLowerCase().includes(k)) return true
+  if (baseUrl.toLowerCase().includes(k)) return true
+  return models.some((m) => m.toLowerCase().includes(k))
+}
+
+function modelKey(id: string, model: string): string {
+  return `${id}::${model}`
+}
+
+function disabledFor(id: string): string[] {
+  const prefix = `${id}::`
+  return disabledModels.value.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length))
+}
+
+const credentialFor = (providerId: string): MaskedCredential | undefined =>
+  credentials.value.find((c) => c.provider === providerId)
+
+/** 已连接的服务商卡片（只列预设；自定义端点归它自己那一组，不重复出现） */
+const cards = computed<ProviderCardData[]>(() => {
+  const out: ProviderCardData[] = []
+  for (const v of catalog.value) {
+    if (!connected.value[v.id]) continue
+    const baseUrl = effectiveBaseUrl.value[v.id] ?? v.baseUrl
+    const models = probe.results.value[v.id]?.models ?? []
+    if (!matches(v.id, v.label, baseUrl, models)) continue
+    const result = probe.results.value[v.id]
+    // 搜到模型名时把这张卡顶开：用户要的是那个模型，藏起来等于没搜到
+    const forceOpen = keyword.value !== '' && models.some((m) => m.toLowerCase().includes(keyword.value))
+    out.push({
+      id: v.id,
+      label: v.label,
+      baseUrl,
+      credentialEnv: v.credentialEnv,
+      hasKey: Boolean(credentialFor(v.id)),
+      defaultModel: effectiveModel.value[v.id] ?? '',
+      presetDefaultModel: v.defaultModel,
+      overridden: Boolean(overrideById.value[v.id]),
+      note: v.note,
+      models,
+      probing: probe.probing.value[v.id] === true,
+      reachable: result ? result.catalog === 'remote' : null,
+      latencyMs: result?.latencyMs ?? null,
+      expanded: !collapsed.value.includes(v.id) || forceOpen,
+      disabled: disabledFor(v.id),
+    })
+  }
+  return out
+})
+
+const pendingTotal = computed(() => catalog.value.filter((v) => !connected.value[v.id]).length)
+
+const pendingRows = computed<PendingRow[]>(() =>
+  catalog.value
+    .filter((v) => !connected.value[v.id])
+    .filter((v) => matches(v.id, v.label, effectiveBaseUrl.value[v.id] ?? v.baseUrl, []))
+    .map((v) => ({
+      id: v.id,
+      label: v.label,
+      credentialEnv: v.credentialEnv,
+      hasKey: Boolean(credentialFor(v.id)),
+    })),
+)
+
+/** 搜索时目录自动展开 —— 搜了却什么都不显示，比展开更让人怀疑页面坏了 */
+const dirVisible = computed(() => dirOpen.value || keyword.value !== '')
+
+/** 探测可达性：`null` = 还没探过（与「探过了不行」分开显示） */
+const reachableMap = computed<Record<string, boolean | null>>(() =>
+  Object.fromEntries(
+    Object.entries(probe.results.value).map(([k, v]) => [k, v ? v.catalog === 'remote' : null]),
+  ),
+)
+
 /**
  * 自定义端点区只列**非预设**的 override。
  *
- * 预设 id 的 override 已经在「服务商」里就地编辑了；在这儿再列一遍，
+ * 预设 id 的 override 已经在上面的卡片里就地编辑了；在这儿再列一遍，
  * 同一个端点就会出现在两个地方、两处配置。
  */
 const customEndpoints = computed(() => {
   const presetIds = new Set(catalog.value.map((v) => v.id))
   return overrides.value
     .filter((o) => !presetIds.has(o.id))
-    .map((o) => ({ id: o.id, label: o.label ?? '', baseUrl: o.baseUrl, credentialRef: o.credentialRef ?? '' }))
+    .map((o) => ({
+      id: o.id,
+      label: o.label ?? '',
+      baseUrl: o.baseUrl,
+      needsKey: o.credentialRef !== '',
+    }))
 })
 
 /** 插件提供的接入：目前恒为空 —— 没有插件注册原生 wire provider */
 const pluginProviders = ref<{ id: string; label: string; baseUrl: string }[]>([])
 
-const providerOptions = computed(() =>
-  providerList.value.map((p) => ({ value: p.provider, label: p.provider })),
-)
-
-const activeProvider = computed(() => {
-  const id = selectedProvider.value
-  if (!id) return null
-  const row = vendorRows.value.find((v) => v.id === id)
-  const baseUrl = effectiveBaseUrl.value[id]
-  if (!row && !baseUrl) return null
-  return {
-    provider: id,
-    label: row?.label ?? id,
-    baseUrl: baseUrl ?? '',
-    credentialRef: providers.value?.[id]?.credentialRef ?? overrideById.value[id]?.credentialRef ?? '',
-    defaultModel: effectiveModel.value[id] ?? '',
-  }
-})
-
-/** 探测状态：预设 + 自定义端点一起给子组件 */
-const probeState = computed(() => ({
-  probing: probe.probing.value,
-  reachable: Object.fromEntries(
-    Object.entries(probe.results.value).map(([k, v]) => [k, v ? v.catalog === 'remote' : null]),
-  ),
-}))
-
-// ── 当前 provider 的模型目录 ──
-async function onSelectProvider(value: string | number): Promise<void> {
-  selectedProvider.value = String(value)
-  selectedModel.value = ''
-  // 换 provider：清空旧模型选择，并立刻拉一次新家的列表
-  await probe.probe(selectedProvider.value)
+// ── 展开 / 探测 ──
+function toggleVendor(providerId: string): void {
+  collapsed.value = collapsed.value.includes(providerId)
+    ? collapsed.value.filter((x) => x !== providerId)
+    : [...collapsed.value, providerId]
 }
 
-function onSelectModel(value: string | number): void {
-  selectedModel.value = String(value)
-  void saveModelPick(selectedProvider.value, selectedModel.value)
+function toggleDir(): void {
+  dirOpen.value = !dirOpen.value
 }
 
-async function saveModelPick(providerId: string, model: string): Promise<void> {
+/** 点卡片上的「探测 / 获取模型列表 / 连接」——三处是同一个动作 */
+async function onProbe(providerId: string): Promise<void> {
   if (!providerId) return
-  await upsertOverride(providerId, { defaultModel: model })
+  await probe.probe(providerId)
 }
 
 // ── 就地改预设：写同 id 的 override ──
@@ -212,7 +270,7 @@ async function upsertOverride(id: string, patch: Partial<EndpointOverride>): Pro
   const next: EndpointOverride = { ...base, ...patch, id }
   if (!next.baseUrl) return
   overrides.value = [...overrides.value.filter((o) => o.id !== id), next]
-  await saveOverrides()
+  await saveLlm()
   probe.clear(id)
 }
 
@@ -220,19 +278,42 @@ async function onEditBaseUrl(id: string, value: string): Promise<void> {
   await upsertOverride(id, { baseUrl: value.replace(/\/+$/, '') })
 }
 
-async function onEditModel(id: string, value: string): Promise<void> {
-  await upsertOverride(id, { defaultModel: value.trim() })
-  // 改了模型就把端点探一次：用户填完模型名通常正等着它能用
-  await probe.probe(id)
+function onEditModel(id: string, value: string): void {
+  void upsertOverride(id, { defaultModel: String(value).trim() })
+}
+
+function onSetDefault(id: string, model: string): void {
+  void upsertOverride(id, { defaultModel: model })
+}
+
+// ── 逐模型启用 / 禁用（llm.enabledModels） ──
+async function onToggleModel(id: string, model: string, on: boolean): Promise<void> {
+  const key = modelKey(id, model)
+  const next = new Set(disabledModels.value)
+  if (on) next.delete(key)
+  else next.add(key)
+  disabledModels.value = [...next]
+  await saveLlm()
+}
+
+async function onSetAll(id: string, on: boolean): Promise<void> {
+  const prefix = `${id}::`
+  if (on) {
+    // 全部启用要连「模型已经不在清单里」的陈旧条目一起清掉，否则那家永远差几个
+    disabledModels.value = disabledModels.value.filter((k) => !k.startsWith(prefix))
+  } else {
+    const models = probe.results.value[id]?.models ?? []
+    const next = new Set(disabledModels.value)
+    for (const m of models) next.add(modelKey(id, m))
+    disabledModels.value = [...next]
+  }
+  await saveLlm()
 }
 
 // ── 凭证 ──
-function credentialFor(providerId: string): MaskedCredential | undefined {
-  return credentials.value.find((c) => c.provider === providerId)
-}
-
-function openKeyModal(providerId: string): void {
+function openKey(providerId: string): void {
   const existing = credentialFor(providerId)
+  keyTargetProvider.value = providerId
   credentialId.value = existing?.id ?? `${providerId}-key`
   credentialName.value = existing?.name ?? `${providerId} API Key`
   credentialValue.value = ''
@@ -258,14 +339,6 @@ async function onSaveCredential(): Promise<void> {
   if (keyTargetProvider.value) await probe.probe(keyTargetProvider.value)
 }
 
-/** 记录「这个密钥弹窗是为谁开的」—— 保存后要按它探测 */
-const keyTargetProvider = ref('')
-
-function openKey(providerId: string): void {
-  keyTargetProvider.value = providerId
-  openKeyModal(providerId)
-}
-
 async function onDeleteCredential(id: string): Promise<void> {
   await fetch(`/api/credentials?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
   credentials.value = credentials.value.filter((c) => c.id !== id)
@@ -277,26 +350,34 @@ async function removeKey(providerId: string): Promise<void> {
   probe.clear(providerId)
 }
 
-// ── 自定义端点 ──
+// ── OpenAI 兼容端点 ──
 function openEndpointModal(): void {
   endpointEditId.value = ''
   epId.value = ''
   epLabel.value = ''
   epBaseUrl.value = ''
   epModel.value = ''
-  epNoCredential.value = true
+  epNeedKey.value = false
+  epCredId.value = ''
+  epCredName.value = ''
+  epKeyValue.value = ''
   endpointOpen.value = true
 }
 
 function editEndpoint(id: string): void {
   const o = overrideById.value[id]
   if (!o) return
+  const existing = credentialFor(id)
   endpointEditId.value = id
   epId.value = o.id
   epLabel.value = o.label ?? ''
   epBaseUrl.value = o.baseUrl
   epModel.value = o.defaultModel ?? ''
-  epNoCredential.value = (o.credentialRef ?? '') === ''
+  // credentialRef 显式空串 = 免凭证；缺省 = 要凭证
+  epNeedKey.value = o.credentialRef !== ''
+  epCredId.value = existing?.id ?? `${id}-key`
+  epCredName.value = existing?.name ?? `${id} API Key`
+  epKeyValue.value = ''
   endpointOpen.value = true
 }
 
@@ -308,86 +389,61 @@ async function onSaveEndpoint(): Promise<void> {
   const item: EndpointOverride = {
     id,
     baseUrl: baseUrl.replace(/\/+$/, ''),
-    // 免密钥就写空串 credentialRef；否则按约定推断 env 名，由用户在凭证库补密钥
-    ...(epNoCredential.value ? { credentialRef: '' } : {}),
+    // 要凭证就**不写** credentialRef（provider 去 env / 凭证库按 id 找），
+    // 免凭证才显式写空串 —— 写成 `core:xxx` 反而会把不存在的引用钉死
+    ...(epNeedKey.value ? {} : { credentialRef: '' }),
     ...(epLabel.value.trim() ? { label: epLabel.value.trim() } : {}),
     ...(epModel.value.trim() ? { defaultModel: epModel.value.trim() } : {}),
   }
   overrides.value = [...overrides.value.filter((o) => o.id !== id), item]
-  await saveOverrides()
+  await saveLlm()
+
+  // 凭证跟着端点一起填：一张表单办完，不用让用户再去找一次入口
+  if (epNeedKey.value && epKeyValue.value) {
+    await fetch('/api/credentials', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: epCredId.value.trim() || `${id}-key`,
+        name: epCredName.value.trim() || `${id} API Key`,
+        provider: id,
+        value: epKeyValue.value,
+      }),
+    })
+    await loadCredentials()
+    epKeyValue.value = ''
+  }
+
   endpointOpen.value = false
   // 建完立刻探：新增端点的首要疑问就是「它通不通」，顺便把模型列表填上
-  await refreshOne(id, true)
+  await probe.probe(id)
 }
 
 async function onDeleteOverride(id: string): Promise<void> {
   overrides.value = overrides.value.filter((o) => o.id !== id)
-  await saveOverrides()
+  await saveLlm()
   probe.clear(id)
 }
 
-/**
- * 「正在使用」卡片与厂商区的模型下拉，**都从 probe 结果派生**。
- *
- * 为什么不用 `useModelCatalog`（它也发 `llm.models.list`）：
- * 两个 composable 各发一次同一个命令 = 用户点一下打两次端点、等两遍 ——
- * 这正是这个页面要消除的毛病。
- *
- * 所以本页只留 probe 一个发送方/状态持有者：
- * · 模型列表 = `probe.resultOf(id)?.models`
- * · 「拉取中」 = `probe.isProbing(id)`
- * · 可达性 = `catalog === 'remote'`
- *
- * `useModelCatalog` 仍留给别的组件（如输入框的模型下拉），互不干扰。
- */
-const activeModels = computed<{ value: string; label: string }[]>(() => {
-  const list = probe.results.value[selectedProvider.value]?.models ?? []
-  return list.map((m) => ({ label: m, value: m }))
-})
-const loadingModels = computed(() => probe.probing.value[selectedProvider.value] === true)
-/**
- * 对某个 provider 做一次「拉列表 + 探活」。
- *
- * 无论从「连通性测试」还是「获取模型列表」进来，做的都是同一件事：
- * 一次 `llm.models.list` 既填下拉又给出可达性。两个入口只是问的问题不同。
- */
-async function refreshOne(providerId: string, alsoSelect: boolean): Promise<void> {
-  if (!providerId) return
-  if (alsoSelect) {
-    selectedProvider.value = providerId
-    selectedModel.value = ''
-  }
-  await probe.probe(providerId)
+// ── 偏好读写（唯一写入点 —— 见文件头） ──
+async function saveLlm(): Promise<void> {
+  await preferences.patch({ llm: { vendorOverrides: overrides.value, enabledModels: disabledModels.value } })
 }
 
-async function onProbe(providerId: string): Promise<void> {
-  // 从厂商区点的：顺便把它切成当前服务商，否则「探测的是另一家、下拉还是上一家」
-  await refreshOne(providerId, selectedProvider.value !== providerId)
-}
-
-async function onRefreshModels(): Promise<void> {
-  // 从「正在使用」卡片点的：只刷新当前这家
-  await refreshOne(selectedProvider.value, false)
-}
-
-function toggleVendor(providerId: string): void {
-  expanded.value = expanded.value.includes(providerId)
-    ? expanded.value.filter((x) => x !== providerId)
-    : [...expanded.value, providerId]
-}
-
-// ── 偏好读写 ──
-async function saveOverrides(): Promise<void> {
-  await preferences.patch({ llm: { vendorOverrides: overrides.value } })
-}
-
-async function loadOverrides(): Promise<void> {
+async function loadLlm(): Promise<void> {
   try {
-    const prefs = (await preferences.get()) as { llm?: { vendorOverrides?: unknown } }
-    const raw = prefs.llm?.vendorOverrides
-    overrides.value = Array.isArray(raw) ? (raw as EndpointOverride[]) : []
+    const prefs = (await preferences.get()) as {
+      llm?: { vendorOverrides?: unknown; enabledModels?: unknown }
+    }
+    overrides.value = Array.isArray(prefs.llm?.vendorOverrides)
+      ? (prefs.llm.vendorOverrides as EndpointOverride[])
+      : []
+    disabledModels.value = Array.isArray(prefs.llm?.enabledModels)
+      ? (prefs.llm.enabledModels as string[])
+      : []
   } catch {
     overrides.value = []
+    disabledModels.value = []
   }
 }
 
@@ -403,29 +459,28 @@ async function loadCredentials(): Promise<void> {
 }
 
 /**
- * 挂载后等 provider 列表到位，再挑一个当前服务商。
+ * 新注册的 provider 自动探一次。
  *
- * 为什么必须 watch 而不是只在 onMounted 里挑一次：
- * `onMounted` 那一刻 `providerList` 通常还是**空的** —— provider 是通过
- * `llm.provider.registered` 事件陆续注册上来的，晚一拍。
- * 于是旧写法会让「正在使用」卡片**一直空着**，直到用户手动选一次 ——
- * 而那卡片恰恰是回答「我现在发问走哪家」的地方，空着最伤。
+ * 必须 watch 而不是只在 onMounted 挑一次：`llm.provider.registered` 是服务握手时
+ * 就发完的，页面可能之后才打开 —— 于是「LM Studio 开着却显示未测试」。
+ * 探一次既填模型墙又给出连通性，还不用用户自己去找按钮。
+ *
+ * 已有结果的跳过：这条 watch 会在 providerList 每次变化时再跑，
+ * 无条件重探会让「获取模型列表」的点击计数失控。
  */
 watch(
   providerList,
-  async (list) => {
-    if (selectedProvider.value && list.some((p) => p.provider === selectedProvider.value)) return
-    const first = list[0]
-    if (!first) return
-    selectedProvider.value = first.provider
-    selectedModel.value = ''
-    await probe.probe(first.provider)
+  (list) => {
+    for (const p of list) {
+      if (probe.probing.value[p.provider] || probe.results.value[p.provider]) continue
+      void probe.probe(p.provider)
+    }
   },
   { immediate: true },
 )
 
 onMounted(async () => {
-  await Promise.all([loadOverrides(), loadCredentials()])
+  await Promise.all([loadLlm(), loadCredentials()])
 })
 </script>
 
@@ -433,47 +488,35 @@ onMounted(async () => {
   <div class="llm-settings">
     <header class="llm-settings__bar">
       <h2 class="llm-settings__title">模型接入</h2>
-      <Button size="sm" data-testid="endpoint-new-top" @click="openEndpointModal">＋ 连接新端点</Button>
+      <Input v-model="query" class="llm-settings__search" placeholder="搜索服务商 / 模型…" aria-label="vendor-search" />
     </header>
-    <p class="llm-settings__sub">连上本地或云端模型。改动即时生效，不用重启。</p>
-
-    <ActiveModelCard
-      :provider="activeProvider"
-      :providers="providerOptions"
-      :models="activeModels"
-      :model="selectedModel"
-      :loading-models="loadingModels"
-      :model-count="activeModels.length"
-      :reachable="probeState.reachable[selectedProvider] ?? null"
-      :probe="probe.results.value[selectedProvider]"
-      :probing="probe.probing.value[selectedProvider] === true"
-      @update:provider="onSelectProvider"
-      @update:model="onSelectModel"
-      @probe="onProbe(selectedProvider)"
-      @refresh-models="onRefreshModels"
-    />
+    <p class="llm-settings__sub">连上本地或云端模型。改动即时生效，不用重启。选哪个模型在对话输入框里。</p>
 
     <VendorListSection
-      :vendors="vendorRows"
-      :connected="connected"
-      :effective-base-url="effectiveBaseUrl"
-      :effective-model="effectiveModel"
-      :overridden="overridden"
+      :cards="cards"
+      :rows="pendingRows"
+      :total="pendingTotal"
+      :dir-open="dirVisible"
+      :query="query"
       :probing="probe.probing.value"
-      :reachable="probeState.reachable"
-      :expanded="expanded"
+      :reachable="reachableMap"
       @toggle="toggleVendor"
+      @probe="onProbe"
       @set-key="openKey"
       @remove-key="removeKey"
-      @probe="onProbe"
       @edit-base-url="onEditBaseUrl"
       @edit-model="onEditModel"
+      @set-default="onSetDefault"
+      @toggle-model="onToggleModel"
+      @set-all="onSetAll"
+      @toggle-dir="toggleDir"
+      @connect="onProbe"
     />
 
     <CustomEndpointSection
       :endpoints="customEndpoints"
       :probing="probe.probing.value"
-      :reachable="probeState.reachable"
+      :reachable="reachableMap"
       @create="openEndpointModal"
       @edit="editEndpoint"
       @remove="onDeleteOverride"
@@ -487,7 +530,11 @@ onMounted(async () => {
       vLLM <b class="mono">8000</b>，都要带 <b class="mono">/v1</b>。
     </p>
 
-    <Modal v-model:open="endpointOpen" :title="endpointEditId ? '编辑端点' : '新增端点'" :closable="true">
+    <Modal
+      v-model:open="endpointOpen"
+      :title="endpointEditId ? '编辑 OpenAI 兼容端点' : '新增 OpenAI 兼容端点'"
+      :closable="true"
+    >
       <div class="form">
         <label class="form__row">
           <span class="form__key">端点 id</span>
@@ -505,10 +552,30 @@ onMounted(async () => {
           <span class="form__key">默认模型</span>
           <Input v-model="epModel" placeholder="本地端点由你决定模型名" />
         </label>
-        <label class="form__row">
-          <span class="form__key">免凭证</span>
-          <input v-model="epNoCredential" type="checkbox" />
-        </label>
+
+        <div class="form__row form__row--col">
+          <label class="form__check">
+            <input v-model="epNeedKey" type="checkbox" />
+            <span>需要 API Key（OpenAI 兼容端点通常要）</span>
+          </label>
+          <div v-if="epNeedKey" class="cred">
+            <label class="form__row">
+              <span class="form__key">凭证 id</span>
+              <Input v-model="epCredId" :placeholder="`${epId || '端点 id'}-key`" />
+            </label>
+            <label class="form__row">
+              <span class="form__key">名称</span>
+              <Input v-model="epCredName" placeholder="凭证名称" />
+            </label>
+            <label class="form__row">
+              <span class="form__key">密钥值</span>
+              <Input v-model="epKeyValue" type="password" placeholder="只写入，不回显" />
+            </label>
+            <p class="form__note">
+              密钥明文只进 Core 凭证库，不进日志、不进总线。留空则稍后在卡片上单独设置。
+            </p>
+          </div>
+        </div>
       </div>
       <template #footer>
         <Button size="sm" variant="ghost" @click="endpointOpen = false">取消</Button>
@@ -544,10 +611,23 @@ onMounted(async () => {
 .llm-settings { display: flex; flex-direction: column; gap: var(--space-3); }
 .llm-settings__bar { display: flex; align-items: center; gap: var(--space-2); }
 .llm-settings__title { margin: 0; font-size: var(--text-md); font-weight: 700; flex: 1; }
+.llm-settings__search { max-width: 220px; }
 .llm-settings__sub { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
 .llm-settings__ports { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
+
 .form { display: flex; flex-direction: column; gap: var(--space-2); }
 .form__row { display: flex; align-items: center; gap: var(--space-2); }
+.form__row--col { flex-direction: column; align-items: stretch; gap: var(--space-2); }
 .form__key { flex: none; width: 72px; font-size: var(--text-xs); color: var(--color-text-muted); }
+.form__check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 .form__note { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
+.cred {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
 </style>

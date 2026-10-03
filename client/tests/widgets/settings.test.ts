@@ -2,8 +2,7 @@
  * 设置 Pane 套件单测（P4 WS-4）。
  *
  * 基础设施（useTheme / initTheme / initLocale）直接单测——不依赖组件挂载；
- * 组件级只断言关键渲染（provider 行 / static 角标 / 凭证掩码 / Tab 文案），
- * select 交互用原生 element.value + change 事件触发（Select 的 options 是 prop，setValue 不可靠）。
+ * 组件级只断言关键渲染（provider 行 / static 角标 / 凭证掩码 / Tab 文案）。
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -59,12 +58,11 @@ function emit(topic: string, payload: unknown): void {
   for (const handler of sseHandlers.get(topic) ?? []) handler(payload)
 }
 
-function setSelect(wrapper: ReturnType<typeof mount>, index: number, value: string): Promise<void> {
-  const el = wrapper.findAll('select')[index]
-  if (!el) throw new Error(`no select at index ${index}`)
-  const element = el.element as HTMLSelectElement
-  element.value = value
-  return el.trigger('change')
+/** 取出每次 POST /api/command 的请求体（页面还会发没 body 的 GET，不按 URL 过滤会炸） */
+function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<string, unknown>[] {
+  return fetchMock.mock.calls
+    .filter((c) => String(c[0]).includes('/api/command'))
+    .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)) as Record<string, unknown>)
 }
 
 beforeEach(() => {
@@ -77,6 +75,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  // fake timers 泄漏会把下一个用例的 setTimeout 全吃掉，测试会以诡异的方式挂住
+  vi.useRealTimers()
 })
 
 describe('主题基础设施（useTheme / initTheme）', () => {
@@ -145,7 +145,7 @@ describe('SettingsPaneView 壳', () => {
 
   describe('LlmSettingsView 服务商配置（widget.llm-settings，归 models 插件 · 重做版）', () => {
     /**
-     * 重做版把页面拆成四块（正在使用 / 服务商 / 自定义端点 / 插件提供的接入），
+     * 按 demo 重做后的页面拆成三块（已连接卡片 / 未连接的预设目录 / OpenAI 兼容端点），
      * 所以这些断言按新结构写，但**守的行为一条没少** ——
      * 尤其这三条：预设必须全量可见、配置必须写对地方、不能发出指向已删服务的假开关。
      */
@@ -172,17 +172,16 @@ describe('SettingsPaneView 壳', () => {
       for (const id of ['deepseek', 'openai', 'openrouter', 'mistral', 'ollama', 'lm-studio', 'vllm']) {
         expect(text, id + ' 不在清单里').toContain(id)
       }
-// 没有任何 registered 事件时，「已连接」分组整组不渲染（空分组不占地方），
-      // 12 家全落在「未连接」—— 一个都不能少
+      // 没有任何 registered 事件时，「已连接」分组整组不渲染（空分组不占地方），
+      // 12 家全落在「未连接的预设」—— 一个都不能少
       expect(text).not.toContain('已连接 (')
-      expect(text).toContain('未连接 (' + ALL_PRESETS + ')')
+      expect(text).toContain('未连接的预设 (' + ALL_PRESETS + ')')
 
-      // 收到一个 registered 后，它必须从「未连接」挪到「已连接」，且计数跟着变
+      // 收到一个 registered 后，它必须从「未连接的预设」挪到「已连接」，且计数跟着变
       emit('llm.provider.registered', { provider: 'lm-studio', defaultModel: '', credentialRef: '' })
       await wrapper.vm.$nextTick()
       expect(wrapper.text()).toContain('已连接 (1)')
-      expect(wrapper.text()).toContain('未连接 (' + (ALL_PRESETS - 1) + ')')
-      wrapper.unmount()
+      expect(wrapper.text()).toContain('未连接的预设 (' + (ALL_PRESETS - 1) + ')')
       wrapper.unmount()
     })
 
@@ -220,18 +219,26 @@ const text = wrapper.text()
       wrapper.unmount()
     })
 
-    it('未连接的服务商：一行一家，点开能看到端点/模型并就地探测', async () => {
+    it('未连接的服务商：一行一家 —— 说清「需要什么」并给出下一步点哪', async () => {
       vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
       const wrapper = mountLlm()
       await wrapper.vm.$nextTick()
       expect(wrapper.text()).toContain('需要 DEEPSEEK_API_KEY')
-      // 点一下必须**真的展开** —— 以前这里是个空操作：按钮只改 `expanded`，
-      // 而未连接的行没有可展开的 body，于是「直接连」点了什么都没发生。
-      await wrapper.find('[data-testid="vendor-deepseek"]').trigger('click')
+
+      // 目录默认收起（12 家里通常只连 1–2 家，剩下 11 行是噪音）
+      expect(wrapper.find('[data-testid="vendor-dir"]').attributes('aria-expanded')).toBe('false')
+      await wrapper.find('[data-testid="vendor-dir"]').trigger('click')
       await wrapper.vm.$nextTick()
-      const body = wrapper.findAll('.vendor__body')
-      expect(body.length).toBeGreaterThan(0)
-      expect(body[0]!.text()).toContain('连通性测试')
+      expect(wrapper.find('[data-testid="vendor-dir"]').attributes('aria-expanded')).toBe('true')
+
+      // 一行一家，且两件事都在这一行里答完：这家要什么 + 下一步点哪。
+      // 没给密钥之前「连接」按住不放 —— 点了只会空转到超时，是纯浪费
+      const row = wrapper.find('[data-testid="vendor-deepseek"]')
+      expect(row.exists()).toBe(true)
+      expect(row.text()).toContain('deepseek')
+      expect(row.text()).toContain('需要 DEEPSEEK_API_KEY')
+      expect(wrapper.find('[data-testid="vendor-setkey-deepseek"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="vendor-connect-deepseek"]').attributes('disabled')).toBeDefined()
       wrapper.unmount()
     })
 
@@ -246,6 +253,64 @@ const text = wrapper.text()
         .filter((c) => String(c[0]).includes('/api/command'))
         .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)).topic)
       expect(topics).toContain('llm.provider.reannounce')
+    })
+
+    it('点「连接」立刻有反馈：按钮转「探测中…」，回音后变 ✓可达并复位', async () => {
+      vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mountLlm()
+      await wrapper.vm.$nextTick()
+      await wrapper.find('[data-testid="vendor-dir"]').trigger('click')
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('[data-testid="vendor-probe-lm-studio"]').text()).toContain('未测试')
+      expect(wrapper.find('[data-testid="vendor-connect-lm-studio"]').text()).toContain('连接')
+
+      await wrapper.find('[data-testid="vendor-connect-lm-studio"]').trigger('click')
+      await wrapper.vm.$nextTick()
+      // 点下去必须立刻有反应 —— 只发一个命令、页面纹丝不动，
+      // 用户的结论只会是「点了连接没反应」（这正是报上来的那个 bug）
+      expect(wrapper.find('[data-testid="vendor-probe-lm-studio"]').text()).toContain('探测中')
+      const busy = wrapper.find('[data-testid="vendor-connect-lm-studio"]')
+      expect(busy.text()).toContain('探测中')
+      expect(busy.attributes('disabled')).toBeDefined()
+
+      // 回音：`catalog: remote` = 真的拉到了上游 /models → 判可达，按钮复位
+      emit('llm.models.list.result', {
+        requestId: 'probe-lm-studio-1',
+        provider: 'lm-studio',
+        models: ['qwen3-8b'],
+        catalog: 'remote',
+      })
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('[data-testid="vendor-probe-lm-studio"]').text()).toContain('✓ 可达')
+      const done = wrapper.find('[data-testid="vendor-connect-lm-studio"]')
+      expect(done.text()).toContain('连接')
+      expect(done.attributes('disabled')).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('点了连接却没人回话 → 8 秒兜底判不可达，按钮不会永远转下去', async () => {
+      // 只 fake setTimeout：VTU 的 flushPromises 走 setImmediate，全 fake 会让它永远不 resolve
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mountLlm()
+      await flushPromises()
+      await wrapper.find('[data-testid="vendor-dir"]').trigger('click')
+      await flushPromises()
+
+      await wrapper.find('[data-testid="vendor-connect-lm-studio"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="vendor-probe-lm-studio"]').text()).toContain('探测中')
+
+      // provider 压根没注册成实例时永远不会回音 —— 兜底必须自己收场，
+      // 不能跟着 HTTP 202 一起把计时器撤掉（那正是原实现的错）
+      vi.advanceTimersByTime(8000)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="vendor-probe-lm-studio"]').text()).toContain('✗ 不可达')
+      const connect = wrapper.find('[data-testid="vendor-connect-lm-studio"]')
+      expect(connect.text()).toContain('连接')
+      expect(connect.attributes('disabled')).toBeUndefined()
+      wrapper.unmount()
     })
 
     it('搜索框过滤服务商', async () => {
@@ -265,9 +330,9 @@ const text = wrapper.text()
       const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
       const wrapper = mountLlm(true)
       await wrapper.vm.$nextTick()
-      await wrapper.find('[data-testid="vendor-deepseek"]').trigger('click')
-      await wrapper.vm.$nextTick()
-      await wrapper.findAll('button').find((b) => b.text() === '设置密钥')!.trigger('click')
+      // 用 testid 而不是「第一个 设置密钥 按钮」：卡片与目录里都有这个按钮，
+      // 按顺序取会拿到隔壁厂商的，症状是 PUT 的 provider 字段悄悄变成别家 id
+      await wrapper.find('[data-testid="vendor-setkey-deepseek"]').trigger('click')
       await wrapper.vm.$nextTick()
       const input = document.body.querySelector<HTMLInputElement>('input[type="password"]')
       expect(input, '密钥输入框没渲染').not.toBeNull()
@@ -377,17 +442,58 @@ const wrapper = mountLlm()
       wrapper.unmount()
     })
 
-    it('「正在使用」卡片：选 provider → 发 llm.models.list；result 回来即填充模型', async () => {
+    it('模型墙开关 → 写 preferences.llm.enabledModels（`${provider}::${model}`，空数组=全启用）', async () => {
+      const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const wrapper = mountLlm()
+      await flushPromises()
+      emit('llm.provider.registered', { provider: 'lm-studio', defaultModel: '', credentialRef: '' })
+      await flushPromises()
+      emit('llm.models.list.result', {
+        requestId: 'x',
+        provider: 'lm-studio',
+        models: ['qwen2.5-7b', 'qwen3-4b'],
+        catalog: 'remote',
+      })
+      await flushPromises()
+
+      const sw = wrapper.findAll('[role="switch"]').find((w) => w.attributes('aria-label') === '模型 qwen2.5-7b')
+      expect(sw, '模型开关没渲染').toBeTruthy()
+      // 默认没写过偏好 = 全启用 —— 老配置一个字都不用补
+      expect(sw!.attributes('aria-checked')).toBe('true')
+      await sw!.trigger('click')
+      await flushPromises()
+
+      const put = () =>
+        fetchMock.mock.calls
+          .filter((c) => String(c[0]).includes('/api/preferences') && (c[1] as { method?: string })?.method === 'PUT')
+          .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)) as { llm: { enabledModels: string[] } })
+      expect(put().length).toBeGreaterThan(0)
+      // 用 `::` 分隔：模型名里本来就有冒号（qwen2.5:7b），拿 `:` 一刀两断会切错
+      expect(put().at(-1)!.llm.enabledModels).toEqual(['lm-studio::qwen2.5-7b'])
+      expect(wrapper.text()).toContain('已停用')
+
+      // 全部禁用 → 整家进名单；再全部启用 → 清成空数组（= 全启用，不是留一堆残条目）
+      await wrapper.findAll('button').find((b) => b.text() === '全部禁用')!.trigger('click')
+      await flushPromises()
+      expect(put().at(-1)!.llm.enabledModels).toEqual(['lm-studio::qwen2.5-7b', 'lm-studio::qwen3-4b'])
+      await wrapper.findAll('button').find((b) => b.text() === '全部启用')!.trigger('click')
+      await flushPromises()
+      expect(put().at(-1)!.llm.enabledModels).toEqual([])
+      wrapper.unmount()
+    })
+
+    it('卡片：注册即自动探测（发 llm.models.list）；result 回来即填进模型墙', async () => {
+      // 旧行为是「先选 provider 再拉模型」—— 但选 provider 的那个下拉已经删了：
+      // provider 归对话输入框，设置页只负责「这家什么状态、有哪些模型」。
+      // 所以探测改由注册事件触发，一次到位。
       const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
       const wrapper = mountLlm()
       await wrapper.vm.$nextTick()
       emit('llm.provider.registered', DESCRIPTOR)
-      await wrapper.vm.$nextTick()
-      await setSelect(wrapper, 0, 'openai')
-      const bodies = fetchMock.mock.calls
-        .filter((c) => String(c[0]).includes('/api/command'))
-        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+      await flushPromises()
+      const bodies = commandBodies(fetchMock)
       expect(bodies.some((b) => b.topic === 'llm.models.list')).toBe(true)
+
       emit('llm.models.list.result', {
         requestId: 'models-1',
         provider: 'openai',
@@ -396,6 +502,7 @@ const wrapper = mountLlm()
       })
       await wrapper.vm.$nextTick()
       expect(wrapper.text()).toContain('gpt-4o-mini')
+      expect(wrapper.text()).toContain('可用模型 (2)')
       wrapper.unmount()
     })
 
