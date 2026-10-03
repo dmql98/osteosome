@@ -290,27 +290,17 @@ export function snapshotPlugins(
 }
 
 /**
- * 扫盘 + 告警 + 打快照。
- *
- * 告警只给 `missing-dir` / `empty` —— 这两种是「大概率手滑」；`disabled` 是有意关掉，
- * 不该 nag（有测试在用）。S7-2a 只**报告**不降级；真要退回全启是 S7-2b 的事。
+ * 扫盘期该说的话。**只告警，不改数据** —— 抽出来是为了让「扫一次」与
+ * 「聚合一次」能分开调用（PluginRegistry 构造时只扫盘，不聚合）。
  */
-export function loadPluginLayer(options: {
-  pluginsDir: string | undefined
-  knownServiceIds?: ReadonlySet<string>
-  serviceStates: ReadonlyMap<string, ServiceStatus>
-  uninstalledIds?: ReadonlySet<string>
-}): { scan: PluginScan; snapshots: PluginSnapshot[] } {
-  const scan = scanPlugins(options.pluginsDir, options.knownServiceIds)
-
+export function warnAboutScan(scan: PluginScan): void {
   if (scan.status === 'missing-dir') {
     logger.warn(
-      `plugin layer: dir not found (${scan.pluginsDir}) -> 未安装任何插件；` +
-        `S7-2b 起这会退回全启`,
+      `plugin layer: dir not found (${scan.pluginsDir}) -> 未安装任何插件；已退回全启`,
     )
   } else if (scan.status === 'empty') {
     logger.warn(
-      `plugin layer: ${scan.pluginsDir} 里没有任何 plugin.json -> 未安装任何插件；` +
+      `plugin layer: ${scan.pluginsDir} 里没有任何 plugin.json -> 未安装任何插件；已退回全启。` +
         `如果预期不是这样，是否漏了 S7-5（5 个 plugin.json 尚未落盘）？`,
     )
   }
@@ -323,6 +313,22 @@ export function loadPluginLayer(options: {
         `状态按「必需依赖缺失」聚合为 degraded`,
     )
   }
+}
 
+/**
+ * 扫盘 + 告警 + 打快照（一步到位版）。
+ *
+ * 告警只给 `missing-dir` / `empty` —— 这两种是「大概率手滑」；`disabled` 是有意关掉，
+ * 不该 nag（有测试在用）。S7-2a 只**报告**不降级；真要退回全启由
+ * `PluginRegistry.allowedServiceIds()` 决定（S7-2b）。
+ */
+export function loadPluginLayer(options: {
+  pluginsDir: string | undefined
+  knownServiceIds?: ReadonlySet<string>
+  serviceStates: ReadonlyMap<string, ServiceStatus>
+  uninstalledIds?: ReadonlySet<string>
+}): { scan: PluginScan; snapshots: PluginSnapshot[] } {
+  const scan = scanPlugins(options.pluginsDir, options.knownServiceIds)
+  warnAboutScan(scan)
   return { scan, snapshots: snapshotPlugins(scan, options) }
 }

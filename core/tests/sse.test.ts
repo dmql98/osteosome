@@ -479,6 +479,7 @@ describe('GET /api/plugins（S7-2a）', () => {
     return new PluginRegistry(new Bus(), {
       pluginsDir: dir,
       listServiceStates: () => new Map(),
+      controlService: async () => undefined,
     })
   }
 

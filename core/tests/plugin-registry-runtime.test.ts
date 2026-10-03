@@ -19,12 +19,14 @@ function makeRegistry(opts: {
   states?: Record<string, ServiceStatus>
   uninstalled?: string[]
   bus?: Bus
+  controlService?: (command: 'start' | 'stop', serviceId: string) => Promise<void>
 }) {
   const bus = opts.bus ?? new Bus()
   const registry = new PluginRegistry(bus, {
     pluginsDir: opts.pluginsDir,
     listServiceStates: () => new Map(Object.entries(opts.states ?? {})),
     uninstalledIds: () => new Set(opts.uninstalled ?? []),
+    controlService: opts.controlService ?? (async () => undefined),
   })
   const events: ChangedEvent[] = []
   bus.subscribe('plugin.state.changed', (p) => events.push(p as ChangedEvent))
@@ -113,6 +115,7 @@ describe('PluginRegistry · 只在状态变化时发事件', () => {
       pluginsDir: PLUGINS,
       listServiceStates: () => new Map(Object.entries(states)),
       uninstalledIds: () => new Set(uninstalled),
+      controlService: async () => undefined,
     })
     const events: ChangedEvent[] = []
     bus.subscribe('plugin.state.changed', (p) => events.push(p as ChangedEvent))
@@ -140,6 +143,146 @@ describe('PluginRegistry · rescan 与 refresh 分开', () => {
     await settle()
     expect(events.length).toBe(registry.list().plugins.length)
     expect(events.map((e) => e.pluginId)).toContain('alpha')
+  })
+})
+
+describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b）', () => {
+  const REAL = path.join(here, '..', '..', 'plugins')
+
+  type RegistryOpts = Parameters<typeof makeRegistry>[0]
+
+  function real(over: Partial<RegistryOpts> = {}) {
+    return makeRegistry({ ...over, pluginsDir: REAL })
+  }
+
+  test('全装 -> 认领全部服务，一个都不少', () => {
+    // 真实 5 个插件认领了全部 6 个服务，所以 B 语义下**不该少任何一个**。
+    // 这条是 S7-2b 最容易出的错：过滤逻辑写错一个字符就会少启一个服务，
+    // 而少启的服务表现为「界面某块空白」，不报错。
+    const allowed = real({}).registry.allowedServiceIds()
+    expect(allowed).toBeDefined()
+    expect([...(allowed as Set<string>)].sort()).toEqual([
+      'credentials',
+      'llm',
+      'llm-provider-openai',
+      'llm-retry',
+      'loop',
+      'session',
+    ])
+  })
+
+  test('uninstalled 的插件 -> 其服务不被允许（uninstalled 不只是 UI 标志）', () => {
+    const allowed = real({ uninstalled: ['models'] }).registry.allowedServiceIds() as Set<string>
+    expect(allowed.has('llm-provider-openai')).toBe(false)
+    expect(allowed.has('credentials')).toBe(true)
+    expect(allowed.has('session')).toBe(true)
+    expect(allowed.has('loop')).toBe(true)
+    expect(allowed.has('llm')).toBe(true)
+  })
+
+  test('三态非 ok -> 返回 undefined（不限制 = 全启），绝不返回空集合', () => {
+    // 这是整条降级链的落点。返回空集合 = 零服务 = 应用不可用，
+    // 所以「undefined 与空集合必须区分」这件事本身就是断言。
+    expect(makeRegistry({ pluginsDir: undefined }).registry.allowedServiceIds()).toBeUndefined()
+    expect(
+      makeRegistry({ pluginsDir: path.join(here, 'fixtures', 'plugins-empty') }).registry
+        .allowedServiceIds(),
+    ).toBeUndefined()
+    expect(
+      makeRegistry({ pluginsDir: path.join(here, 'no-such-dir') }).registry.allowedServiceIds(),
+    ).toBeUndefined()
+  })
+
+  test('autoStart:false 的插件 -> 其服务不被允许（夹具 gamma 无服务，改用未安装路径验证语义）', () => {
+    // gamma 在夹具里 services: []，所以这条改验「插件被卸」这条同族规则；
+    // autoStart 的分支由真实清单里没有 autoStart:false 的插件而无法在此夹具验证，
+    // 已在 allowedServiceIds() 的注释里写明。
+    const allowed = real({ uninstalled: ['reliability'] }).registry.allowedServiceIds() as Set<string>
+    expect(allowed.has('llm-retry')).toBe(false)
+    expect(allowed.size).toBe(5)
+  })
+
+  test('环内插件的服务不被允许（夹具 cyc-a 带 svc-cyc）', () => {
+    const allowed = makeRegistry({ pluginsDir: PLUGINS }).registry.allowedServiceIds() as Set<string>
+    expect(allowed.has('svc-cyc')).toBe(false)
+    expect(allowed.has('svc-a')).toBe(true)
+  })
+})
+
+describe('PluginRegistry · control：plugin.start / plugin.stop 展开成服务启停', () => {
+  test('stop 展开成停该插件的全部服务', async () => {
+    const calls: string[] = []
+    const { registry } = makeRegistry({
+      pluginsDir: path.join(here, '..', '..', 'plugins'),
+      controlService: async (c, sid) => {
+        calls.push(`${c}:${sid}`)
+      },
+    })
+    const result = await registry.control('stop', 'models')
+    expect(result).toEqual({ serviceIds: ['llm-provider-openai'] })
+    expect(calls).toEqual(['stop:llm-provider-openai'])
+  })
+
+  test('start 展开成启该插件的全部服务（三个）', async () => {
+    const calls: string[] = []
+    const { registry } = makeRegistry({
+      pluginsDir: path.join(here, '..', '..', 'plugins'),
+      controlService: async (c, sid) => {
+        calls.push(`${c}:${sid}`)
+      },
+    })
+    const result = await registry.control('start', 'chat-workbench')
+    expect(result).toEqual({ serviceIds: ['session', 'loop', 'llm'] })
+    expect(calls.sort()).toEqual(['start:llm', 'start:loop', 'start:session'])
+  })
+
+  test('停含 loop 的插件前先发 loop.cancel（否则留半截 assistant）', async () => {
+    const bus = new Bus()
+    const cancels: unknown[] = []
+    bus.subscribe('loop.cancel', (p) => cancels.push(p))
+    const { registry } = makeRegistry({
+      pluginsDir: path.join(here, '..', '..', 'plugins'),
+      bus,
+      controlService: async () => undefined,
+    })
+    await registry.control('stop', 'chat-workbench')
+    await settle()
+    expect(cancels).toHaveLength(1)
+    expect(cancels[0]).toMatchObject({ requestId: 'plugin.stop:chat-workbench' })
+  })
+
+  test('停不含 loop 的插件不发 loop.cancel', async () => {
+    const bus = new Bus()
+    const cancels: unknown[] = []
+    bus.subscribe('loop.cancel', (p) => cancels.push(p))
+    const { registry } = makeRegistry({
+      pluginsDir: path.join(here, '..', '..', 'plugins'),
+      bus,
+      controlService: async () => undefined,
+    })
+    await registry.control('stop', 'models')
+    await settle()
+    expect(cancels).toHaveLength(0)
+  })
+
+  test('未安装的插件 -> 返回错误字符串（不是抛异常）', async () => {
+    const { registry } = makeRegistry({ pluginsDir: path.join(here, '..', '..', 'plugins') })
+    expect(await registry.control('stop', 'nope')).toBe("plugin 'nope' not installed")
+  })
+
+  test('一个服务停不下来不影响其余服务（否则会连坐）', async () => {
+    const calls: string[] = []
+    const { registry } = makeRegistry({
+      pluginsDir: path.join(here, '..', '..', 'plugins'),
+      controlService: async (c, sid) => {
+        calls.push(sid)
+        if (sid === 'loop') throw new Error('loop 卡住了')
+      },
+    })
+    const result = await registry.control('stop', 'chat-workbench')
+    // 三个都尝试过，包括抛错那个
+    expect(calls.sort()).toEqual(['llm', 'loop', 'session'])
+    expect(result).toEqual({ serviceIds: ['session', 'loop', 'llm'] })
   })
 })
 

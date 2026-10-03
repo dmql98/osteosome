@@ -85,29 +85,43 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
   if (credentialStore.isCorrupted()) {
     logger.warn('core: credentials.json corrupted — credential ops report error state (Core stays up)')
   }
+  let managerRef: ServiceManager
+  // 插件层必须**先于** ServiceManager 构造（B 语义要由它算出「允许启动集合」），
+  // 所以它不能在自己的构造期读服务状态 —— PluginRegistry 因此把首次聚合做成惰性的。
+  const pluginRegistry = new PluginRegistry(bus, {
+    pluginsDir: config.pluginsDir,
+    knownServiceIds: new Set(readDeclaredServiceIds(config.servicesDir)),
+    listServiceStates: () => serviceStateMap(managerRef.list()),
+    uninstalledIds: () => readUninstalled(config.dataDir),
+    // 真实的进程启停只能由 ServiceManager 做（它持有 child 句柄），
+    // 而「插件包含哪些服务」只有插件层知道 —— 这里把两者接起来，方向仍是单向的。
+    controlService: async (command, serviceId) => {
+      if (command === 'start') await managerRef.startRegistered(serviceId)
+      else await managerRef.stopServicePublic(serviceId)
+    },
+  })
+
   const manager = new ServiceManager({
     servicesDir: config.servicesDir,
     dataDir: config.dataDir,
     sessionId: randomUUID(),
     bus,
     credentials,
+    // B 语义（S7-2b）：三态降级后的「允许启动集合」。undefined = 不限制 = 照旧全启。
+    // 这是插件层影响启动行为的**唯一**入口 —— 见 allowedServiceIds() 的说明。
+    allowedServiceIds: pluginRegistry.allowedServiceIds(),
     ...options.manager,
   })
-  // 插件层（S7-2a）：只读扫盘 + 状态聚合。**不碰启动行为** ——
-  // 「未安装插件的服务不 spawn」是 S7-2b。所以这一步无论扫出几个插件，
-  // manager.start() 都照旧全启。
-  const pluginRegistry = new PluginRegistry(bus, {
-    pluginsDir: config.pluginsDir,
-    knownServiceIds: new Set(readDeclaredServiceIds(config.servicesDir)),
-    listServiceStates: () => serviceStateMap(manager.list()),
-    uninstalledIds: () => readUninstalled(config.dataDir),
-  })
+  // PluginRegistry 的 controlService / listServiceStates 是**闭包**，调用发生在
+  // manager 建好之后（构造期 PluginRegistry 不读服务状态），所以这里安全。
+  managerRef = manager
 
   const bridge = new SseBridge({
     bus,
     config,
     credentials,
     plugins: pluginRegistry,
+    controlPlugin: (command, pluginId) => pluginRegistry.control(command, pluginId),
     listServices: () => manager.list(),
     controlService: async (command, serviceId) => {
       try {

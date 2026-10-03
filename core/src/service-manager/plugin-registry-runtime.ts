@@ -18,11 +18,14 @@
  * 轮询只是把同一个信息换个方式取回来，还多一份定时器要清理。
  */
 import type { ServiceStatus } from '@osteosome/shared'
+import type { PluginState } from '@osteosome/shared'
 import type { Bus } from '../bus/bus'
 import { logger } from '../logger'
 import {
   loadPluginLayer,
+  scanPlugins,
   snapshotPlugins,
+  warnAboutScan,
   type PluginLayerStatus,
   type PluginProblem,
   type PluginScan,
@@ -66,7 +69,14 @@ function sameSnapshots(a: PluginSnapshot[], b: PluginSnapshot[]): boolean {
 
 export class PluginRegistry {
   private scan: PluginScan
-  private last: PluginSnapshot[]
+  /**
+   * 上一次聚合结果，`null` = **还没算过**。
+   *
+   * 刻意不在构造函数里算：算聚合需要「服务真实状态」，而那来自 ServiceManager ——
+   * 构造函数跑在 ServiceManager 之前（S7-2b 要先算白名单再建它），所以那时拿不到。
+   * 于是改成首次使用时才算，而不是加一个「构造后再回填」的引用 hack。
+   */
+  private lastCache: PluginSnapshot[] | null = null
   /** 连续多次事件撞在一起时只算一次（比如一次启动会连发 starting + ready） */
   private refreshQueued = false
 
@@ -79,16 +89,18 @@ export class PluginRegistry {
       listServiceStates: () => ReadonlyMap<string, ServiceStatus>
       /** `preferences.plugins.uninstalled` */
       uninstalledIds?: () => ReadonlySet<string>
+      /** 真实服务启停。由 `ServiceManager` 提供（ServiceManager 不知道插件存在） */
+      controlService: (command: 'start' | 'stop', serviceId: string) => Promise<void>
     },
   ) {
-    const { scan, snapshots } = loadPluginLayer({
-      pluginsDir: options.pluginsDir,
-      knownServiceIds: options.knownServiceIds,
-      serviceStates: options.listServiceStates(),
-      uninstalledIds: options.uninstalledIds?.(),
-    })
-    this.scan = scan
-    this.last = snapshots
+    this.scan = scanPlugins(options.pluginsDir, options.knownServiceIds)
+    warnAboutScan(this.scan)
+  }
+
+  /** 上一次聚合结果；没有就算一次并记下 */
+  private last(): PluginSnapshot[] {
+    if (this.lastCache === null) this.lastCache = this.snapshots()
+    return this.lastCache
   }
 
   /** 把插件层挂到服务生命周期上。Core 启动完成后调一次即可 */
@@ -108,13 +120,18 @@ export class PluginRegistry {
   refresh(): void {
     this.refreshQueued = false
     const next = this.snapshots()
-    if (sameSnapshots(this.last, next)) return
-    const before = new Map(this.last.map((p) => [p.manifest.id, p.state]))
-    this.last = next
-    const changed = next.filter((p) => before.get(p.manifest.id) !== p.state)
+    const before = this.lastCache
+    this.lastCache = next
+    // 首次：lastCache 原来是 null。这一轮算作「初始状态」，全部插件都算变了 ——
+    // 这是对的：前端正需要拿到它们的初始状态。
+    const prev: Map<string, PluginState> =
+      before === null ? new Map() : new Map(before.map((p) => [p.manifest.id, p.state]))
+    if (before !== null && sameSnapshots(before, next)) return
+    const changed = next.filter((p) => prev.get(p.manifest.id) !== p.state)
+    if (changed.length === 0) return
     logger.info(
       `plugin layer: state changed ${changed
-        .map((p) => `${p.manifest.id}: ${before.get(p.manifest.id)} -> ${p.state}`)
+        .map((p) => `${p.manifest.id}: ${prev.get(p.manifest.id) ?? '-'} -> ${p.state}`)
         .join(', ')}`,
     )
     // 契约是**一个插件一条**（payload 带 pluginId），不是打包成数组 ——
@@ -170,8 +187,50 @@ export class PluginRegistry {
       uninstalledIds: this.options.uninstalledIds?.(),
     })
     this.scan = scan
-    this.last = snapshots
+    this.lastCache = snapshots
     for (const p of snapshots) this.publishOne(p)
+  }
+
+/**
+   * 插件的运行期控制（S7-2b）：把 `plugin.start` / `plugin.stop` 展开成服务启停。
+   *
+   * ## 为什么放这里而不是 ServiceManager
+   *
+   * 「一个插件包含哪些服务」是**插件层的数据**。ServiceManager 只知道服务 id，
+   * 让它反过来去查插件就破坏了刚定下的依赖方向（S7-2b 设计定案 ①）。
+   *
+   * ## 停之前先 loop.cancel
+   *
+   * 若该插件含 `loop` 进程，先发一次 `loop.cancel` 让它正常收尾再停 ——
+   * 直接杀会留下半截 assistant 消息（消息已经 append 了内容但没有 finishReason）。
+   * 这是**尽力而为**：cancel 是 fire-and-forget，不等它回来。
+   */
+  async control(
+    command: 'start' | 'stop',
+    pluginId: string,
+  ): Promise<{ serviceIds: string[] } | string> {
+    const plugin = this.scan.plugins.find((p) => p.manifest.id === pluginId)
+    if (!plugin) return `plugin '${pluginId}' not installed`
+
+    if (command === 'stop' && plugin.manifest.services.includes('loop')) {
+      // loop.cancel 是命令载荷（只要 requestId），不是事件 —— 不补 ts/source
+      this.bus.publish('loop.cancel', { requestId: `plugin.stop:${pluginId}` })
+    }
+
+    for (const sid of plugin.manifest.services) {
+      try {
+        if (command === 'start') await this.options.controlService('start', sid)
+        else await this.options.controlService('stop', sid)
+      } catch (err) {
+        // 一个服务停不下来不该让整条命令失败 —— 其余服务继续处理，
+        // 否则「停 reliability」会因为 llm-retry 卡住而连 credentials 也不停。
+        logger.warn(`plugin.${command} ${pluginId}: service '${sid}' failed: ${String(err)}`)
+      }
+    }
+
+    // 启停改变了服务真实状态 -> 重算并广播
+    this.refresh()
+    return { serviceIds: [...plugin.manifest.services] }
   }
 
   /** `GET /api/plugins` 的响应体 */
@@ -184,5 +243,59 @@ export class PluginRegistry {
       cycles: this.scan.cycles,
       plugins: this.snapshots(),
     }
+  }
+
+  /**
+   * 允许启动的服务 id 集合 —— **B 语义的唯一决策点**（S7-2b）。
+   *
+   * 返回 `undefined` = **不限制**（照旧全启）。这与返回空集合是两种不同的意思。
+   *
+   * ## 为什么要「唯一决策点」
+   *
+   * 三态降级的判断必须只有一处知道。若把它散进 ServiceManager 或各个命令处理器，
+   * 就会出现「有的路径全启、有的路径过滤」的不一致 —— 而这种不一致只在特定
+   * 组合下才暴露，排查成本极高。所以 ServiceManager 只看到「一个集合或没有」。
+   *
+   * ## 三态
+   * · `disabled`    -> 不限制。有意关掉（逃生门 / 测试），不告警
+   * · `missing-dir` -> 不限制 + 告警。路径写错，此时若照 B 语义就是零服务 = 应用不可用
+   * · `empty`       -> 不限制 + 告警。目录在但没清单，同上
+   * · `ok`          -> 按下面四条规则过滤
+   *
+   * ## 四条不 spawn 规则（或关系）
+   * ① 属于 `uninstalled` 的插件
+   * ② 属于 `autoStart:false` 的插件（装了但声明不自动起）
+   * ③ 属于环内插件 —— 不在 `installOrder` 里，它的依赖无解
+   *
+   * ## 刻意**不**包含的一条
+   *
+   * 「依赖未满足」**不**阻止 spawn。`session` 独立可用：不装 models 时用户仍要能看
+   * 会话列表和历史，仅因缺 provider 就杀掉 session 是真实的功能回退。
+   * 依赖不满足只让状态变 `degraded` —— 这正是 S7-1 把它判成 degraded 而非 failed
+   * 的意义（「仍该显示、仍该让用户看见缺什么，只是发不出请求」）。
+   */
+  allowedServiceIds(): ReadonlySet<string> | undefined {
+    if (this.scan.status !== 'ok') {
+      logger.warn(
+        `plugin layer: '${this.scan.status}' -> 不按插件过滤，全部服务照旧启动`,
+      )
+      return undefined
+    }
+
+    const uninstalled = this.options.uninstalledIds?.() ?? new Set<string>()
+    const cyclic = new Set(this.scan.cycles.flat())
+    const allowed = new Set<string>()
+
+    for (const { manifest } of this.scan.plugins) {
+      if (uninstalled.has(manifest.id)) continue
+      if (manifest.autoStart === false) continue
+      if (cyclic.has(manifest.id)) continue
+      for (const sid of manifest.services) allowed.add(sid)
+    }
+
+    logger.info(
+      `plugin layer: 允许启动 ${allowed.size} 个服务（按 ${this.scan.plugins.length} 个已安装插件计算）`,
+    )
+    return allowed
   }
 }

@@ -9,6 +9,14 @@ import { readJsonBody, sendJson } from './util'
 
 export interface CommandControl {
   controlService?: (command: 'restart' | 'stop' | 'start', serviceId: string) => Promise<string | null>
+  /**
+   * 插件启停（S7-2b）。展开成服务启停由 PluginRegistry 做 ——
+   * 「一个插件包含哪些服务」是插件层的数据，命令层不该知道。
+   */
+  controlPlugin?: (
+    command: 'start' | 'stop',
+    pluginId: string,
+  ) => Promise<{ serviceIds: string[] } | string>
 }
 
 export async function handleCommand(
@@ -16,6 +24,7 @@ export async function handleCommand(
   res: ServerResponse,
   bus: Bus,
   controlService?: CommandControl['controlService'],
+  controlPlugin?: CommandControl['controlPlugin'],
 ): Promise<void> {
   let body: unknown
   try {
@@ -62,6 +71,28 @@ export async function handleCommand(
       return
     }
     sendJson(res, 202, { ok: true, topic })
+    return
+  }
+
+  // 插件启停由 Core 直接执行：插件不是进程，没有自己的句柄，
+  // 必须展开成「停它带的那些服务」（S7-2b）。
+  if (topic === 'plugin.start' || topic === 'plugin.stop') {
+    const pluginId = typeof p.pluginId === 'string' && p.pluginId.trim() ? p.pluginId : ''
+    if (!pluginId) {
+      sendJson(res, 400, { error: 'payload.pluginId (string) is required' })
+      return
+    }
+    if (!controlPlugin) {
+      sendJson(res, 500, { error: `topic '${topic}' not supported (no plugin layer)` })
+      return
+    }
+    const command = topic === 'plugin.start' ? 'start' : 'stop'
+    const result = await controlPlugin(command, pluginId)
+    if (typeof result === 'string') {
+      sendJson(res, 400, { error: `${topic}: ${result}` })
+      return
+    }
+    sendJson(res, 202, { ok: true, topic, pluginId, services: result.serviceIds })
     return
   }
 

@@ -89,6 +89,22 @@ export interface ServiceManagerOptions {
   sleep?: (ms: number) => Promise<void>
   /** 凭证能力（P4 WS-1）：注入后开放 `credentials.*` JSON-RPC 方法（只给服务进程） */
   credentials?: CredentialApi
+  /**
+   * 允许启动的服务 id 集合（S7-2b B 语义）。
+   *
+   * **不传 = 全启**，这是默认且必须保持的默认：它让 ServiceManager 彻底不知道
+   * 插件的存在，也让所有直接构造它的测试（临时 services 目录 + 假服务）零改动。
+   *
+   * 「不传」与「传空集合」是**两种不同的意思**，别混：
+   * · 不传    -> 不限制，照旧全启（逃生门 `none`，以及所有既有测试）
+   * · 传空集合 -> 一个都不启（没有任何插件认领服务）
+   *
+   * 被过滤掉的服务**仍然会被登记**（出现在 `/health` 与 `list()` 里，状态 `stopped`），
+   * 只是不 spawn。这样界面能看出「这个服务存在、但所属插件没装」，
+   * 而不是「这个服务不存在」。心跳与僵尸检测只在 spawn 时挂载，
+   * 所以未 spawn 的服务不会被误判成 failed。
+   */
+  allowedServiceIds?: ReadonlySet<string>
 }
 
 /** 带 ts/source 的生命周期事件发布（source 永远 core） */
@@ -133,8 +149,43 @@ export class ServiceManager {
     }
     for (const manifest of sequence) {
       const svc = this.services.get(manifest.id)!
+      if (!this.mayStart(manifest.id)) {
+        // 登记但不 spawn（见 options.allowedServiceIds 的说明）
+        svc.status = 'stopped'
+        logger.info(
+          `[svc] '${manifest.id}' registered but not started（所属插件未安装/未自动启动/依赖成环）`,
+        )
+        continue
+      }
       await this.spawnAndHandshake(svc)
     }
+  }
+
+  /**
+   * 该服务此刻是否允许启动。
+   *
+   * **每次都重新判断**而不是在 start() 里算一次存起来：运行期插件可以被
+   * `plugin.start` 启、被 `preferences` 卸掉，判定必须跟着变。
+   */
+  private mayStart(serviceId: ServiceId): boolean {
+    const allowed = this.options.allowedServiceIds
+    return allowed === undefined || allowed.has(serviceId)
+  }
+
+  /**
+   * 供 `plugin.start` 用：启动一个已登记但尚未 spawn 的服务。
+   *
+   * 与 `startServicePublic` 分开是因为语义不同 —— 后者是「重启一个已在跑的服务」，
+   * 不知道该怎么处理一个 `stopped` 的、可能从没握过手的条目。
+   */
+  async startRegistered(serviceId: ServiceId): Promise<void> {
+    const svc = this.services.get(serviceId)
+    if (!svc) throw new Error(`start: unknown service '${serviceId}'`)
+    if (!this.mayStart(serviceId)) {
+      throw new Error(`start: '${serviceId}' 不允许启动（所属插件未安装）`)
+    }
+    if (svc.status === 'ready' || svc.status === 'starting') return
+    await this.spawnAndHandshake(svc)
   }
 
   async stop(timeoutMs?: number): Promise<void> {
