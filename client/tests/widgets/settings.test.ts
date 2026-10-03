@@ -172,8 +172,17 @@ describe('SettingsPaneView 壳', () => {
       for (const id of ['deepseek', 'openai', 'openrouter', 'mistral', 'ollama', 'lm-studio', 'vllm']) {
         expect(text, id + ' 不在清单里').toContain(id)
       }
-      expect(text).toContain('未连接 (' + (ALL_PRESETS - connected.length) + ')')
-      expect(connected.length).toBeLessThanOrEqual(1)
+// 没有任何 registered 事件时，「已连接」分组整组不渲染（空分组不占地方），
+      // 12 家全落在「未连接」—— 一个都不能少
+      expect(text).not.toContain('已连接 (')
+      expect(text).toContain('未连接 (' + ALL_PRESETS + ')')
+
+      // 收到一个 registered 后，它必须从「未连接」挪到「已连接」，且计数跟着变
+      emit('llm.provider.registered', { provider: 'lm-studio', defaultModel: '', credentialRef: '' })
+      await wrapper.vm.$nextTick()
+      expect(wrapper.text()).toContain('已连接 (1)')
+      expect(wrapper.text()).toContain('未连接 (' + (ALL_PRESETS - 1) + ')')
+      wrapper.unmount()
       wrapper.unmount()
     })
 
@@ -211,14 +220,32 @@ const text = wrapper.text()
       wrapper.unmount()
     })
 
-    it('未连接的服务商：需要密钥的给「设置密钥」，免凭证的给「直接连」', async () => {
+    it('未连接的服务商：一行一家，点开能看到端点/模型并就地探测', async () => {
       vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
       const wrapper = mountLlm()
       await wrapper.vm.$nextTick()
-      const text = wrapper.text()
-      expect(text).toContain('需要 DEEPSEEK_API_KEY')
-      expect(wrapper.find('[data-testid="vendor-connect-deepseek"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('需要 DEEPSEEK_API_KEY')
+      // 点一下必须**真的展开** —— 以前这里是个空操作：按钮只改 `expanded`，
+      // 而未连接的行没有可展开的 body，于是「直接连」点了什么都没发生。
+      await wrapper.find('[data-testid="vendor-deepseek"]').trigger('click')
+      await wrapper.vm.$nextTick()
+      const body = wrapper.findAll('.vendor__body')
+      expect(body.length).toBeGreaterThan(0)
+      expect(body[0]!.text()).toContain('连通性测试')
       wrapper.unmount()
+    })
+
+    it('挂载时会问一次「现在都有谁」（llm.provider.reannounce）', async () => {
+      // 纯事件驱动的 provider 清单有个致命前提：订阅要早于事件。
+      // 而注册事件在服务进程握手完成时就发完了 —— 页面是之后才打开的，
+      // 于是把已连上的服务显示成「未连接」（用户报的现象：LM Studio 开着却显示未连接）。
+      const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
+      mountLlm()
+      await flushPromises()
+      const topics = fetchMock.mock.calls
+        .filter((c) => String(c[0]).includes('/api/command'))
+        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)).topic)
+      expect(topics).toContain('llm.provider.reannounce')
     })
 
     it('搜索框过滤服务商', async () => {
@@ -238,7 +265,9 @@ const text = wrapper.text()
       const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
       const wrapper = mountLlm(true)
       await wrapper.vm.$nextTick()
-      await wrapper.find('[data-testid="vendor-connect-deepseek"]').trigger('click')
+      await wrapper.find('[data-testid="vendor-deepseek"]').trigger('click')
+      await wrapper.vm.$nextTick()
+      await wrapper.findAll('button').find((b) => b.text() === '设置密钥')!.trigger('click')
       await wrapper.vm.$nextTick()
       const input = document.body.querySelector<HTMLInputElement>('input[type="password"]')
       expect(input, '密钥输入框没渲染').not.toBeNull()

@@ -142,6 +142,22 @@ function reconcile(): { added: string[]; removed: string[] } {
   return { added, removed }
 }
 
+/**
+ * 重播全部注册（S8 之后）：让**后打开的页面**也能拿到当前清单。
+ *
+ * 前端对 provider 清单是纯事件驱动的，而注册事件在握手完成时就发完了。
+ * 没有这条，任何在启动之后才挂载的组件都会把已连上的服务显示成「未连接」——
+ * 症状是「模型配置页里 LM Studio 明明开着，却显示未连接，点「直接连」也没反应」。
+ *
+ * 刻意不新增 HTTP 端点：provider 实例表在**服务进程里**，Core 拿不到，
+ * 而总线本来就是服务之间唯一的通道 —— 所以走命令比造一条 Core 专用查询链更正。
+ */
+service.subscribe('llm.provider.reannounce', () => {
+  for (const inst of instances.values()) {
+    service.publish('llm.provider.registered', toRegisteredPayload(inst))
+  }
+})
+
 /** 注册本进程所有「已配置」的厂商实例 —— 握手完成、订阅生效后再调用 */
 async function registerCapabilities(): Promise<void> {
   await loadConfigFromCore()

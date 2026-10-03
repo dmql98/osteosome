@@ -288,6 +288,16 @@ export interface CommandMap {
    * （能力位设计：模型列表属于 provider 自身知识，主位不查上游）
    */
   'llm.models.list': { requestId: string; provider: string }
+  /**
+   * 请 provider 进程**重播全部** `llm.provider.registered`（空载荷）。
+   *
+   * 为什么需要它：前端对 provider 清单是**纯事件驱动**的，而注册事件在进程启动时就发完了。
+   * 任何在启动之后才打开的页面（模型配置窗、插件详情窗…）都会**永远错过**那批事件，
+   * 于是把已经连上的服务显示成「未连接」。
+   *
+   * 与 `llm.models.list` 的区别：那个要指定 provider、只答一家；这个问「现在都有谁」。
+   */
+  'llm.provider.reannounce': Record<string, never>
   // ── session 命令（P3 §3.3，只增不改；响应走 <cmd>.result 事件）──
   'session.list': { requestId: string }
   'session.get': { requestId: string; sessionId: string }
@@ -382,6 +392,7 @@ export const COMMAND_TOPICS = [
   'llm.provider.cancel',
   'credentials.resolve',
   'llm.models.list',
+  'llm.provider.reannounce',
   'session.list',
   'session.get',
   'session.create',

@@ -179,6 +179,35 @@ watch(() => pluginStore.revision, rebuild)
 .panel-boxes__canvas { position: relative; min-height: 100%; height: 100%; }
 .panel-boxes__item { display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); overflow: hidden; }
 .panel-boxes__item--selected { border-color: var(--color-primary); box-shadow: var(--shadow-md); }
+/*
+ * 运行模式**不是「禁用」，是「不可拖动」**。
+ *
+ * MovableBox 的 `disabled` 会给盒子加 `.is-disabled`，而它的样式是
+ * `cursor: not-allowed !important` + `opacity: .6`，外加 `.auto-draggable` 自带
+ * `user-select: none`。三个副作用在运行模式下全是错的：
+ *
+ * · 盒子铺满整个面板 → **到处都是禁止光标**
+ * · 所有组件被淡化到 60% → 运行模式才是「正常用」的模式，不该看起来像坏了
+ * · 选不中文本 → 对话记录里的报错、模型名都复制不了
+ *
+ * 所以这里覆盖掉这三个副作用，而**保留 `disabled` 本身** ——
+ * 手柄必须继续隐藏（运行时不该出现缩放圆点）。
+ *
+ * 注意要写 `!important`：库那边就是 `!important`，非 important 声明压不过它
+ * （特异性再高也没用）。
+ */
+.panel-boxes--runtime .panel-boxes__item.is-disabled {
+  cursor: auto;
+  opacity: 1;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+.panel-boxes--runtime .panel-boxes__item.is-disabled * {
+  cursor: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
 .panel-boxes--edit .panel-boxes__item { border-style: dashed; cursor: move; }
 .panel-boxes__header { flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-topbar-text); background: linear-gradient(180deg, var(--color-topbar-bg) 0%, var(--color-topbar-bg-2) 100%); border-bottom: 1px solid var(--color-topbar-border); user-select: none; }
 .panel-boxes__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

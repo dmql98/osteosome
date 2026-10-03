@@ -1,5 +1,5 @@
 <template>
-  <div class="dockview-layout" :class="{ 'dockview-layout--hoverbar': store.mode === 'runtime' }">
+  <div class="dockview-layout">
     <div class="dockview-layout__dock">
       <DockviewVue
         :components="components"
@@ -70,8 +70,8 @@ function onReady(event: DockviewReadyEvent): void {
       store.updateLayout(api.toJSON())
     }),
     api.onDidAddGroup((group) => {
+      // 只锁拖放，**不隐藏面板头** —— 见 mode.ts 的说明（用户反馈：运行模式不该藏工作台）
       group.locked = store.mode === 'runtime' ? 'no-drop-target' : false
-      group.model.header.hidden = store.mode === 'runtime'
     }),
   ]
   window.addEventListener('osteosome:panel-layout', onInnerLayoutChange)
@@ -134,25 +134,13 @@ onBeforeUnmount(() => {
   --dv-group-view-background-color: var(--color-surface);
   --dv-floating-titlebar-background-color: var(--color-topbar-bg);
 }
-/* 面板顶栏：默认隐藏，鼠标悬停到面板顶部时毛玻璃浮现（对齐 demo 规范） */
-.dockview-layout--hoverbar :deep(.dv-groupview > .dv-tabs-and-actions-container) {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 5;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--duration-fast) ease;
-  background: color-mix(in srgb, var(--color-topbar-bg) 90%, transparent);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--color-topbar-border);
-}
-.dockview-layout--hoverbar :deep(.dv-tabs-and-actions-container:hover),
-.dockview-layout--hoverbar :deep(.dv-groupview:hover > .dv-tabs-and-actions-container) {
-  opacity: 1;
-  pointer-events: auto;
-}
+/*
+ * 「面板顶栏悬停才浮现」已删除。
+ *
+ * 原来运行模式给顶栏加 `opacity: 0; pointer-events: none`，靠悬停渐显 ——
+ * 用户反馈「运行模式连工作台都会隐藏，面板在运行模式也是不要隐藏的」。
+ * 运行模式是正常使用的模式，顶栏常驻。
+ */
 .dockview-layout__fallback { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; overflow: auto; background: var(--color-bg); color: var(--color-text-muted); font-size: var(--text-sm); }
 .dockview-layout__error { position: absolute; left: var(--space-4); bottom: var(--space-4); margin: 0; padding: var(--space-2) var(--space-3); color: var(--color-danger); background: var(--color-danger-soft); border: 1px solid var(--color-danger); border-radius: var(--radius-md); font-size: var(--text-sm); }
 </style>

@@ -183,17 +183,47 @@ function stateDot(vendorId: string): string {
     <div v-if="pendingList.length" class="vendors__group">
       <div class="vendors__group-title">未连接 ({{ pendingList.length }})</div>
       <div v-for="v in pendingList" :key="v.id" class="vendor vendor--off">
-        <span class="vendor__name">{{ v.label }}</span>
-        <span class="vendor__id mono">{{ v.id }}</span>
-        <span class="vendor__need">{{ v.credentialEnv ? `需要 ${v.credentialEnv}` : '免凭证' }}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          :data-testid="`vendor-connect-${v.id}`"
-          @click="needsKey(v) ? emit('set-key', v.id) : emit('toggle', v.id)"
+        <button
+          type="button"
+          class="vendor__off-head"
+          :data-testid="`vendor-${v.id}`"
+          @click="emit('toggle', v.id)"
         >
-          {{ needsKey(v) ? '设置密钥' : '直接连' }}
-        </Button>
+          <span class="dot" :class="stateDot(v.id)" />
+          <span class="vendor__name">{{ v.label }}</span>
+          <span class="vendor__id mono">{{ v.id }}</span>
+          <span class="vendor__need">{{ v.credentialEnv ? `需要 ${v.credentialEnv}` : '免凭证' }}</span>
+          <span class="vendor__caret">{{ expanded.includes(v.id) ? '▾' : '▸' }}</span>
+        </button>
+
+        <!--
+          未连接的行也必须能展开。以前这里只放一个按钮，点击只改 `expanded`，
+          而这一行**没有可展开的 body** —— 于是「直接连」是个字面上什么都不做的按钮。
+        -->
+        <div v-if="expanded.includes(v.id)" class="vendor__body">
+          <div class="vendor__field">
+            <span class="vendor__key">端点</span>
+            <span class="vendor__val mono">{{ effectiveBaseUrl[v.id] || v.baseUrl }}</span>
+          </div>
+          <div class="vendor__field">
+            <span class="vendor__key">模型</span>
+            <Input
+              class="vendor__input mono"
+              :model-value="effectiveModel[v.id] || ''"
+              :placeholder="v.defaultModel || '这个端点由你决定模型名'"
+              @update:model-value="emit('edit-model', v.id, $event)"
+            />
+          </div>
+          <p v-if="v.note" class="vendor__note">{{ v.note }}</p>
+          <div class="vendor__actions">
+            <Button size="sm" variant="ghost" :disabled="probing[v.id]" @click="emit('probe', v.id)">
+              {{ probing[v.id] ? '探测中…' : '连通性测试' }}
+            </Button>
+            <Button v-if="needsKey(v)" size="sm" variant="ghost" @click="emit('set-key', v.id)">
+              设置密钥
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -216,7 +246,13 @@ function stateDot(vendorId: string): string {
   background: var(--color-surface-1);
 }
 .vendor--on { border-color: var(--color-primary); }
-.vendor--off { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+.vendor--off { display: flex; flex-direction: column; padding: 0; }
+.vendor__off-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; padding: var(--space-2) var(--space-3);
+  background: none; border: none; font: inherit; color: inherit; cursor: pointer; text-align: left;
+}
+.vendor__caret { flex: none; font-size: var(--text-xs); color: var(--color-text-muted); }
 
 .vendor__head {
   display: flex; align-items: center; gap: var(--space-2);
