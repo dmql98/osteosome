@@ -369,7 +369,7 @@
                 <td>抽出偏好读写。<b>返回 <code>corrupted</code> 标记而不是静默容错</b> —— HTTP 路径回 500（让人看见）、
                     RPC 路径回 <code>{}</code> + warn（不让服务起不来），与 <code>CredentialStore.isCorrupted()</code> 同一纪律</td></tr>
             <tr><td class="mono">core/…/manager.ts</td>
-                <td>新��� <code>preferences.get</code> 子服务 RPC，照 <code>credentials.get</code> 先例：点对点、不经总线、不落事件。
+                <td>新增 <code>preferences.get</code> 子服务 RPC，照 <code>credentials.get</code> 先例：点对点、不经总线、不落事件。
                     偏好里没有凭证原值（那在 credentials.json），所以不破「凭证值不过总线」</td></tr>
             <tr><td class="mono">…/llm-provider-openai/src/instances.ts</td>
                 <td><code>resolveCredentialRef</code> 三级来源：<b>env → Core 凭证库 → 不可用</b>。
@@ -640,11 +640,12 @@
                 <code>subscribes</code> 推导 → 安装顺序
                 <code>credentials → models → chat-workbench → reliability</code></span></td>
                 <td class="mono">plugins/*/plugin.json；core/tests/plugin-registry.test.ts</td></tr>
-            <tr><td>S7-2b</td><td><b>切启动语义</b>：把「只启已安装插件声明的服务」接进 <code>manager.start()</code>
-                + 三态降级保护
-                <br><span style="font-size:var(--text-xs);color:var(--danger)"><b>本轮唯一改变 Core 启动行为的一步</b>，
-                夹具与真实清单都在，测得住</span></td>
-                <td class="mono">service-manager/manager.ts；config/config.ts</td></tr>
+            <tr><td>S7-2b</td><td><b>切启动语义</b>：把「只启已安装插件声明的服务」接进启动路径
+                + 三态降级保护 + <code>plugin.start/stop</code> 命令展开
+                <br><span style="font-size:var(--text-xs);color:var(--danger)"><b>本轮唯一改变 Core 启动行为的一步</b>。
+                设计五问已定案（见下），前置条件已就位</span></td>
+                <td class="mono">service-manager/manager.ts（可选参数，不传即全启）；
+                main.ts（唯一降级判断点）</td></tr>
             <tr><td>S7-3</td><td>前端插件清单<b>改从 Core 拉</b>，删掉 <code>plugins/registry.ts</code> 的硬编码 <code>PLUGINS</code>
                 <br><span style="font-size:var(--text-xs)">registry.ts 只留 <code>pluginForWidget</code> 等纯函数</span></td>
                 <td class="mono">plugins/registry.ts；新增 core-sdk/usePlugins.ts</td></tr>
@@ -691,6 +692,12 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           空目录 / 目录不存在是大概率手滑，必须告警。这与仓库既有纪律一致 ——
           偏好文件损坏时 HTTP 路径回 500、RPC 路径容错 + warn，都是
           <b>标记出来让调用方决定严不严</b>，而不是静默兜底。</p>
+        <p class="note"><b>执行点（已定）：降级判断只发生一次，就在 Core 装配层算出
+          「允许启动的服务集合」那一步。</b>不把判断散进 <code>ServiceManager</code> ——
+          那样每个调用点都得自己判一遍三态，而三态本身只有一处知道（插件层扫盘结果）。
+          <br>所以三态的落点是唯一的：<code>status !== 'ok'</code> 就传「不限制」，
+          <code>status === 'ok'</code> 才传按已安装算出的集合。
+          <b>ServiceManager 只看到「一个集合或没有」，看不到三态。</b></p>
         <div class="lbl">S7-2a 已交付（<span class="commit">2ea9006</span> · <span class="commit">1773917</span>）—— 三个刻意的决定</div>
         <ul>
           <li><b>扫盘不抛错，与 <code>loadServices</code> 的「全成功或抛」故意相反。</b>
@@ -780,6 +787,67 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           <br><code>chat-workbench</code> 走 <code>stopped → degraded → ready</code> ——
           degraded 那段正是「我的服务还在启动」（S7-1 规则），且它是被<b>真实服务生命周期事件</b>驱动的。
           <code>workbench</code> 全程没事件：无服务无依赖恒 ready，本就不该变。</p>
+        <div class="lbl">S7-2b 的设计定案（开工前先想清楚的五件事）</div>
+        <p>这是本轮<b>唯一改变 Core 启动行为</b>的一步，所以先把决定写下来，而不是写到一半再补。
+          <span class="commit">1773917</span> 已经把前置条件（真实清单 + 扫盘 + 拓扑序）备齐。</p>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:22%">问题</th><th>定案</th></tr></thead>
+          <tbody>
+            <tr><td><b>过滤放在哪一层？</b></td>
+                <td><b>ServiceManager 不许知道插件的存在。</b>
+                它只接受一个可选的「允许启动的服务集合」，不传就<b>全启</b>。
+                <br><b>为什么不直接把过滤写进 <code>manager.start()</code>：</b>
+                <code>manager.test.ts</code> 有两处 <code>new ServiceManager({servicesDir: 临时目录})</code>
+                配假服务（测重启/心跳/僵尸），那些服务<b>不属于任何插件</b> ——
+                过滤一旦写进 ServiceManager，这些测试会静默变成「零服务启动」。
+                <br>所以：<b>Core 装配层算出集合 → 传给 ServiceManager</b>。
+                依赖方向单一，且 ServiceManager 的测试完全不用改。</td></tr>
+            <tr><td><b>依赖没满足的插件，<br>它的服务启不启？</b></td>
+                <td><b>启。</b>只要插件<b>已安装</b>且 <code>autoStart ≠ false</code>，就启它的服务；
+                依赖不满足只让状态变 <code>degraded</code>。
+                <br><b>关键理由：<code>session</code> 独立可用</b> —— 不装 models 时，
+                用户仍要能看会话列表和历史。仅仅因为缺 provider 就杀掉 session 是真实的功能回退。
+                <br>而且这与 S7-1 的定案一致：缺依赖判 <code>degraded</code> 而非 <code>failed</code>，
+                语义就是「<b>仍该显示、仍该让用户看见缺什么，只是发不出请求</b>」。
+                若连服务都不启，degraded 就退化成空壳，用户看到的是「0 个服务」——
+                那正是当初选 degraded 时要避免的。</td></tr>
+            <tr><td><b>哪些服务不 spawn？</b></td>
+                <td>四条规则，<b>或</b>关系（任一命中就不启）：
+                <br>① 属于 <code>uninstalled</code> 的插件
+                <br>② 属于 <code>autoStart:false</code> 的插件（装了但声明不自动起）
+                <br>③ 属于<b>环内</b>插件（不在 <code>installOrder</code> 里 —— 它的服务互相等，
+                启了就是一起超时）
+                <br>④ 插件层为 <code>missing-dir</code> / <code>empty</code> 时<b>整条规则不生效</b>，
+                退回全启（见下行）</td></tr>
+            <tr><td><b>启动失败要不要自动回退全启？</b></td>
+                <td><b>不。</b>静默改变启动集合比启动失败更糟 —— 用户会困惑「为什么服务少了」，
+                而启动失败有日志可查。
+                <br>三态降级已经挡住了「零插件」这一种灾难，剩下该炸的就让它炸。</td></tr>
+            <tr><td><b>集成测试会受影响吗？</b></td>
+                <td><b>不会，而且已核对过：</b>
+                <br>· 6 个集成测试（e2e / p3 / p4 / p7 / llm / credentials-sse）用的都是
+                <code>servicesDir: REPO_ROOT/services</code> —— <b>真实目录</b>，
+                而 5 个真实插件<b>认领了全部 6 个服务</b>，所以一个都不会被过滤掉
+                <br>· <code>manager.test.ts</code> 直接构造 ServiceManager，不经过 Core 装配层
+                → 因为过滤是「可选参数」，默认全启，<b>零改动</b>
+                <br>· <code>smoke.mjs</code> 传 <code>--services &lt;repo&gt;/services</code>，
+                cwd 是仓库根 → 读到真实 <code>plugins/</code> → 全启
+                <br>· <b>将来新增的测试注意</b>：若用<b>临时 services 目录 + 假服务</b>，
+                必须同时传 <code>--plugins none</code>，否则假服务不属于任何插件会被过滤掉</td></tr>
+          </tbody>
+        </table>
+        <p class="note"><b>验收标准（S7-2b 完成的样子）</b>，六条都要有测试：
+          <br>① <code>--plugins none</code> → 6 个服务全启（逃生门没坏）
+          <br>② 默认（全装）→ 6 个服务全启 + 5 个插件全 <code>ready</code>
+          <br>③ <code>uninstalled=[models]</code> → <code>llm-provider-openai</code> <b>不 spawn</b>，
+          另外 5 个启，<code>chat-workbench</code> <code>degraded</code>
+          <br>④ <code>autoStart:false</code> 的插件 → 其服务不 spawn，插件状态 <code>stopped</code>
+          <br>⑤ <code>missing-dir</code> / <code>empty</code> → <b>告警 + 全启</b>（不切语义）
+          <br>⑥ <code>plugin.start</code> / <code>plugin.stop</code> 命令生效（展开成服务启停）</p>
+        <p class="note ok"><b>顺带修掉 S7-5 记下的那个已知缺口</b>：
+          「uninstalled 的插件若服务还在跑，仍报 ready」。
+          2b 之后被卸插件的服务不会被 spawn，这个不一致世界自然消失 ——
+          状态会正确地变成 <code>stopped</code>。这就是当初选择「钉住缺口而不是顺手修 shared」的理由。</p>
         <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
         <ul>
           <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
@@ -1028,6 +1096,13 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
                 <b>后果</b>：client 打包坏了两个提交没人发现；client 失败又中断了 <code>pnpm -r run build</code>
                 → services 的 dist 全没更新 → S4 集成测跑旧 dist，出现「改了没生效」的假象。<br>
                 <b>规矩：判定成败只看 <code>$LASTEXITCODE</code>，grep 只用来定位、不用来判成败。</b></td></tr>
+        <tr><td style="color:var(--danger)">把过滤写进被测对象内部，会静默废掉它自己的测试</td>
+            <td>⚠️ 若在 <code>ServiceManager.start()</code> <b>内部</b>查插件层，
+            <code>manager.test.ts</code> 那两处「临时 services 目录 + 假服务」就会变成
+            <b>零服务启动</b> —— 因为假服务不属于任何插件。
+            症状很阴：不是报错，是重启/心跳/僵尸那几组用例莫名超时。<br>
+            <b>规矩：过滤器从外面传进去（可选参数，不传即全启），不要让被测对象自己去查另一个子系统。</b>
+            顺带这条也让 <code>ServiceManager</code> 保持不知道插件存在。</td></tr>
         <tr><td style="color:var(--danger)">压平子步会丢掉子步之间的依赖顺序</td>
             <td>⚠️ S7 原计划 6 子步，把「S7-2 扫盘+启停+状态」压成一步、「S7-5 写清单」排在最后。
             选 B 之后这个顺序会 <b>bricking app</b>：B 语义下没有清单 = 零服务 = 界面全空，
