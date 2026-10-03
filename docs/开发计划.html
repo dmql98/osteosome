@@ -1066,6 +1066,84 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           但 <code>--plugins none</code> / <code>OST_PLUGINS=none</code> / 空串 = <b>关掉插件层</b> →
           照旧无条件全启。<b>17 个集成测试零改动</b>，等真要测插件时再传。
           用 <code>none</code> 而不是空串：shell 与测试里都更难误传。</p>
+        <div class="lbl" style="color:var(--success)">S7 收口：现在系统是什么样（8/8 完成）</div>
+        <p>下面是 8 个子步的<b>结果</b>。每个子步怎么做的见后面的「已交付」小节。</p>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:26%">维度</th><th>S7 之前</th><th>S7 之后</th></tr></thead>
+          <tbody>
+            <tr><td><b>插件清单在哪</b></td>
+                <td>前端 <code>plugins/registry.ts</code> 里一张 6 条目的硬编码表</td>
+                <td><b>只有一处</b>：磁盘上的 <code>plugins/&lt;id&gt;/plugin.json</code>，
+                经 <code>GET /api/plugins</code> 下发。前端常量已删</td></tr>
+            <tr><td><b>谁决定启哪些服务</b></td>
+                <td>Core <b>无条件全启</b> <code>services/</code> 下所有服务</td>
+                <td>Core 扫插件清单，<b>只启已安装插件声明的服务</b>（B 语义）；
+                停用 / 卸载的插件不启</td></tr>
+            <tr><td><b>「停用」的实际效果</b></td>
+                <td><b>只写一份 prefs，一个进程都没停</b></td>
+                <td>真发 <code>plugin.stop</code>（停前先 <code>loop.cancel</code> 收尾），
+                且<b>重启后仍然保持</b></td></tr>
+            <tr><td><b>插件状态从哪来</b></td>
+                <td>没有状态。前端只能说「我存在」</td>
+                <td>Core 从<b>服务真实状态 + 依赖满足情况</b>派生
+                （<code>resolvePluginState</code>），前端只显示不重算</td></tr>
+            <tr><td><b>界面能否区分故障</b></td>
+                <td>不能。「没装插件」「插件层坏了」「真一个都没装」全是「还没有插件」</td>
+                <td>四种 <code>layer</code> 各有文案；降级显示<b>原因</b>、
+                <b>未就绪的具体服务</b>、缺哪些依赖</td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">全部实证（真实进程，不是单测）</div>
+        <ul>
+          <li><b>没有 <code>plugins/</code> 目录</b> → 告警照报、<code>core: started</code> 照常出现。
+              这条是当初把 S7-5 提到 S7-2b 之前的<b>全部理由</b>，现在证明确实被挡住了</li>
+          <li><b>全装</b> → 「允许启动 6 个服务（按 5 个已安装插件计算）」——
+              <b>B 语义生效且一个服务都没少</b></li>
+          <li><code>prefs</code> 里 <code>uninstalled:[models]</code> →
+              <code>llm-provider-openai</code> <b>已登记但不 spawn</b>，另外 5 个照常 ready</li>
+          <li><code>plugin.stop models</code> → HTTP 202，<b>只有</b> <code>llm-provider-openai</code>
+              变 stopped，另外 5 个照旧 ready —— 展开粒度是「插件带的服务」，不是一刀切；
+              该插件状态同步变 <code>stopped</code> / 「未启动」</li>
+          <li><code>prefs</code> 里 <code>enabled:{models:false}</code> 后重启 →
+              仍然不启，<b>停用保持住了</b>（S7-4 修的那个 bug）</li>
+          <li><code>plugin.stop ghost</code> → HTTP 400（不存在的插件不静默成功）</li>
+          <li>冒烟里 <code>chat-workbench</code> 走 <code>stopped → degraded → ready</code> ——
+              degraded 那段正是「我的服务还在启动」，且由<b>真实服务生命周期事件</b>驱动；
+              <code>workbench</code> 全程无事件（恒 ready 本就不该变）</li>
+        </ul>
+        <div class="lbl">故意留下、已显式记录的已知限制</div>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:30%">限制</th><th>为什么现在不做</th></tr></thead>
+          <tbody>
+            <tr><td><b>共享服务引用计数</b></td>
+                <td>当前 5 个插件的 6 个服务<b>互不重叠</b>，所以「停插件A会不会停掉B需要的服务」
+                这问题还不存在。写成<b>「已知前提」而不是「已处理」</b>——
+                将来出现服务重叠时必须改成引用计数</td></tr>
+            <tr><td><b>依赖传播 degraded</b></td>
+                <td>依赖满足的判据是「<b>已安装</b>」不是「已健康」。所以卸掉 models 后
+                chat-workbench degraded，而依赖它的 reliability 仍 ready。
+                <b>刻意不传播</b>：那会让一处故障沿依赖树扩散，
+                且让「谁真正缺东西」变成要读整张图</td></tr>
+            <tr><td><b><code>autoStart:false</code> 的分支未被真实清单覆盖</b></td>
+                <td>5 个真实插件都是 <code>autoStart: true</code>，所以这条规则只有夹具能测。
+                已在测试注释里写明，而不是假装它被覆盖了</td></tr>
+            <tr><td><b>插件层关掉时无法按插件启停</b></td>
+                <td><code>--plugins none</code> 时 <code>allowedServiceIds()</code> 返回
+                <code>undefined</code>（不限制），此时 <code>plugin.start/stop</code> 找不到插件。
+                这是<b>测试专用模式</b>，但值得记下来，别以为它在生产路径上也能用</td></tr>
+          </tbody>
+        </table>
+        <div class="lbl">S7 里被「钉住」而不是「顺手修掉」的三件事</div>
+        <p>这三处都是明知有问题、但当次改动不该碰的。记在这里是因为
+          <b>钉住和修掉同样需要理由</b>，否则后来的人只会看到「有个奇怪的测试」。</p>
+        <ul>
+          <li><b>依赖传播 degraded</b> —— 上面已列，理由同上</li>
+          <li><b>uninstalled 的插件若服务还在跑，仍报 ready</b> —— 当时 S7-2a 阶段那个不一致世界
+              真实存在（卸了插件但进程还在）。<b>后来 S7-4 实证服务真的会停，
+              状态正确变成 <code>stopped</code> /「未启动」—— 这条已销案</b></li>
+          <li><b><code>capabilities[]</code> 不参与任何判定</b> —— 它是纯展示。
+              一旦有代码依赖它做判断，它就变成第二个真源</li>
+        </ul>
         <div class="lbl">S7-1 已交付（<span class="commit">16ddba2</span>）</div>
         <ul>
           <li><b>只定契约，不碰 Core 启停语义</b> —— Core 的启动行为一行没改，
@@ -1154,13 +1232,24 @@ plugins/
           <li><code>pnpm -r run build / typecheck / test</code> 退出码全为 0 + <code>node scripts/smoke.mjs</code> PASS
               <br><span style="font-size:var(--text-xs);color:var(--muted)">S4 之后的规矩：判定成败只看退出码，
               grep 只用来定位 —— 前三次「报绿」都是把错误输出过滤掉了</span></li>
-          <li>更新 <code>docs/开发进度/S-对话界面与插件重构-计划.md</code>：P7 状态、S0–S8 落账</li>
-          <li>更新 <code>docs/对话界面架构.html</code>：把「现状 → 目标」落账
-              （服务 <b>6</b> 个、组件 <b>10</b> 个 / 对话区 3 盒、provider 预设表 12 家 + wire 契约）</li>
-          <li>核对本计划与架构文档里是否还有「计划时写的、但已被实现推翻」的表述
-              <br><span style="font-size:var(--text-xs);color:var(--muted)">前 6 步每一步都发现至少一处
-              （provider 进程数、组件数、thinking wire 字段、厂商存在性粒度…）——
-              这个核对不是形式，是这份文档最容易腐烂的地方</span></li>
+          <li>更新 <code>docs/对话界面/S-对话界面与重构-计划.md</code>：P7 状态 → S0～S8 完成</li>
+          <li><b>更新 <code>docs/对话界面架构.html</code></b>：状态胶囊 / 目标 / 系统图
+              <br><b style="color:var(--danger)">这份现在是过时的：它写「<b>6</b> 个插件」，
+              而 S7 实际产出是「<b>5 个插件 / 6 个服务 / 10 个组件</b>」</b>。
+              别只改数字 —— <b>依赖边也要换成真实推导的那三条</b>：
+              models→credentials、chat-workbench→models、reliability→chat-workbench。
+              <b>架构文档写错的依赖边比写错数字更害人</b></li>
+          <li><b>逐项核对「有没有第二个真源」</b> —— 这是 S7 的主线，S8 收尾时要真的查一遍，
+              而不是凭印象写「已收敛」：
+              <br>· 插件清单：应只剩 <code>plugins/*/plugin.json</code>（前端 <code>PLUGINS</code> 已删）
+              <br>· 组件归属：<code>widgets/registry.ts</code> glob 出的定义 ↔ 清单声明，
+              由 <code>client/tests/widgets/registry.test.ts</code> <b>双向</b>对账
+              <br>· 服务清单：只有 <code>services/*/service.json</code>
+              <br>· <b><code>preferences.plugins.enabled</code> 与 <code>uninstalled</code> 是两个集合</b>，
+              别为了「统一」把它们合并 —— 那会丢掉「暂时不要 / 不要了」的区别，
+              而 S7-4 刚为此特意分了两个集合</li>
+          <li>顺带量一下<b>仓库实际规模</b>（包数 / 代码行 / 测试数）并写进计划首页 ——
+              「删掉 4 个包」这类结论要有当下的数字支撑</li>
         </ul>
       </div>
     </div>
