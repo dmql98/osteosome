@@ -1,0 +1,7 @@
+{
+  "id": "cyc-a",
+  "name": "环 A",
+  "version": "1.0.0",
+  "services": ["svc-cyc"],
+  "dependencies": [{ "pluginId": "cyc-b" }]
+}

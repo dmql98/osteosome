@@ -1,0 +1,8 @@
+{
+  "id": "gamma",
+  "name": "丙插件",
+  "version": "0.1.0",
+  "services": [],
+  "components": ["widget.g"],
+  "autoStart": false
+}

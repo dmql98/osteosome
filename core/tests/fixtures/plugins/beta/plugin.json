@@ -1,0 +1,9 @@
+{
+  "id": "beta",
+  "name": "乙插件",
+  "version": "2.1.0",
+  "description": "被 alpha 依赖，所以排在其后",
+  "services": ["svc-b"],
+  "components": [],
+  "dependencies": [{ "pluginId": "gamma" }, { "pluginId": "absent", "optional": true }]
+}

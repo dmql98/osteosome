@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Bus } from '../src/bus/bus'
 import { loadConfig } from '../src/config/config'
 import { SseBridge } from '../src/sse-bridge/server'
+import { PluginRegistry } from '../src/service-manager/plugin-registry-runtime'
 import type { ServiceInfo } from '@osteosome/shared'
 
 // ── helpers ──────────────────────────────────────
@@ -41,6 +42,7 @@ async function startBridge(
     heartbeatMs?: number
     zombieMs?: number
     listServices?: () => ServiceInfo[]
+    plugins?: PluginRegistry
   } = {},
 ): Promise<BridgeCtx> {
   const root = mkdtempSync(path.join(tmpdir(), 'ost-sse-'))
@@ -55,6 +57,7 @@ async function startBridge(
     listServices: overrides.listServices,
     ...(overrides.heartbeatMs !== undefined ? { heartbeatMs: overrides.heartbeatMs } : {}),
     ...(overrides.zombieMs !== undefined ? { zombieMs: overrides.zombieMs } : {}),
+    plugins: overrides.plugins,
   })
   const port = await bridge.listen(0)
   return {
@@ -461,5 +464,52 @@ describe('SseBridge', () => {
     const wrongEvents = await fetch(`${ctx.base}/events`, { method: 'POST' })
     expect(wrongEvents.status).toBe(405)
     wrongEvents.body?.cancel().catch(() => undefined)
+  })
+})
+
+describe('GET /api/plugins（S7-2a）', () => {
+  let ctx: BridgeCtx | undefined
+
+  afterEach(async () => {
+    await stopBridge(ctx)
+    ctx = undefined
+  })
+
+  function registryFor(dir: string | undefined): PluginRegistry {
+    return new PluginRegistry(new Bus(), {
+      pluginsDir: dir,
+      listServiceStates: () => new Map(),
+    })
+  }
+
+  it('layer=disabled 时返回 200 + 空清单（显式关掉不是故障）', async () => {
+    ctx = await startBridge({ plugins: registryFor(undefined) })
+    const res = await fetch(`${ctx.base}/api/plugins`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { layer: string; plugins: unknown[] }
+    expect(body.layer).toBe('disabled')
+    expect(body.plugins).toEqual([])
+  })
+
+  it('目录不存在时 layer=missing-dir，且带 pluginsDir 供 UI 提示', async () => {
+    ctx = await startBridge({ plugins: registryFor(path.join(tmpdir(), 'ost-no-such-plugins')) })
+    const body = (await (await fetch(`${ctx.base}/api/plugins`)).json()) as {
+      layer: string
+      pluginsDir: string | null
+    }
+    expect(body.layer).toBe('missing-dir')
+    expect(body.pluginsDir).toContain('ost-no-such-plugins')
+  })
+
+  it('未装配插件层时回 404，而不是假装返回空清单', async () => {
+    ctx = await startBridge()
+    const res = await fetch(`${ctx.base}/api/plugins`)
+    expect(res.status).toBe(404)
+  })
+
+  it('非 GET -> 405', async () => {
+    ctx = await startBridge({ plugins: registryFor(undefined) })
+    const res = await fetch(`${ctx.base}/api/plugins`, { method: 'POST' })
+    expect(res.status).toBe(405)
   })
 })

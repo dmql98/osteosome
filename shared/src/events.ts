@@ -335,6 +335,7 @@ export const EVENT_TOPICS = [
   'service.restarting',
   'service.failed',
   'service.stopped',
+  'plugin.state.changed',
   'hello.command.started',
   'hello.command.executed',
   'hello.command.failed',
@@ -390,4 +391,6 @@ export const COMMAND_TOPICS = [
   'message.append',
   'loop.run',
   'loop.cancel',
+  'plugin.start',
+  'plugin.stop',
 ] as const satisfies readonly CommandKey[]

@@ -1,0 +1,6 @@
+{
+  "id": "cyc-b",
+  "name": "环 B",
+  "version": "1.0.0",
+  "dependencies": [{ "pluginId": "cyc-a" }]
+}

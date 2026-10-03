@@ -19,9 +19,11 @@ import type { ServiceInfo } from '@osteosome/shared'
 import type { Bus } from '../bus/bus'
 import type { CoreConfig } from '../config'
 import type { CredentialApi } from '../credentials/api'
+import type { PluginRegistry } from '../service-manager/plugin-registry-runtime'
 import { logger } from '../logger'
 import { handleCommand } from './command'
 import { handleCredentials } from './credentials'
+import { handlePlugins } from './plugins'
 import { handlePreferences } from './preferences'
 import { handleStatic } from './static'
 import {
@@ -45,6 +47,8 @@ export interface SseBridgeOptions {
   zombieMs?: number
   /** 凭证能力（P4 WS-1）：提供则挂载 /api/credentials（掩码通道） */
   credentials?: CredentialApi
+  /** 插件层（S7-2a）：提供 `GET /api/plugins`。未装配则该路由回 404 */
+  plugins?: PluginRegistry
 }
 
 export class SseBridge {
@@ -160,7 +164,15 @@ export class SseBridge {
         await handleCredentials(req, res, url, api)
         return
       }
-      if (path === '/api/info') {
+      if (path === '/api/plugins') {
+          if (req.method !== 'GET') {
+            methodNotAllowed(res, 'GET')
+            return
+          }
+          handlePlugins(req, res, this.options.plugins)
+          return
+        }
+        if (path === '/api/info') {
         if (req.method !== 'GET') {
           methodNotAllowed(res, 'GET')
           return

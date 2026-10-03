@@ -1,0 +1,7 @@
+{
+  "id": "dangling",
+  "name": "指向不存在的服务",
+  "version": "1.0.0",
+  "services": ["svc-a", "svc-does-not-exist"],
+  "components": []
+}
