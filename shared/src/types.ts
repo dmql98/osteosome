@@ -17,4 +17,12 @@ export interface ServiceInfo {
   pid?: number
   startedAt?: number
   restartCount: number
+  /**
+   * 最近一次失败的原因（握手被拒 / 协议错误 / 重启预算耗尽等）。
+   *
+   * `protocolFailedReason` 在 `handleExit` 里读完即清、只进 `service.failed`
+   * 事件，事件没人订阅时这个原因就丢了；`reason` 是它的持久副本，供 `/health`
+   * 这类只看快照的调用方定位。转到 `ready` 后清除。
+   */
+  reason?: string
 }

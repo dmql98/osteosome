@@ -204,6 +204,8 @@ describe('ServiceManager', () => {
         expect(ctx.events.some((e) => e.topic === 'service.failed')).toBe(true)
         expect(ctx.events.some((e) => e.topic === 'service.restarting')).toBe(true)
         expect(ctx.manager.list()[0].restartCount).toBe(1)
+        // 失败原因要留在快照上，否则 /health 只能看到 status=failed
+        expect(ctx.manager.list()[0].reason).toContain('protocol error')
       } finally {
         await ctx.cleanup()
       }
@@ -220,6 +222,8 @@ describe('ServiceManager', () => {
         await waitFor(() => ctx.manager.status(SERVICE_ID) === 'failed', 15_000)
         expect(ctx.events.some((e) => e.topic === 'service.restarting')).toBe(true)
         expect(ctx.manager.list()[0].status).toBe('failed')
+        // 无 protocolFailedReason 时兜底文案也要带上 override（health: ...）
+        expect(ctx.manager.list()[0].reason).toContain('health:')
       } finally {
         await ctx.cleanup()
       }
@@ -240,6 +244,8 @@ describe('ServiceManager', () => {
         const restarts = ctx.events.filter((e) => e.topic === 'service.restarting')
         expect(restarts.length).toBeGreaterThanOrEqual(1)
         expect(ctx.events.some((e) => e.topic === 'service.failed')).toBe(true)
+        // 握手超时走不到 protocolFailedReason，原因由 catch 路径留下
+        expect(ctx.manager.list()[0].reason).toMatch(/timeout/)
       } finally {
         await ctx.cleanup()
       }

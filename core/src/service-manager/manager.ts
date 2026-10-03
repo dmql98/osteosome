@@ -68,6 +68,14 @@ interface ManagedService {
   stoppedByUs: boolean
   protocolFailedReason?: string
   restartReasonOverride?: string
+  /**
+   * 最近一次失败的原因，`/health` 的 `ServiceInfo.reason` 就是它。
+   *
+   * 与 `protocolFailedReason` 的分工：那个是**瞬时**的，`handleExit` 读完即清、
+   * 只活在 `service.failed` 事件里；这个跨过事件仍留在快照上。每个新 spawn 重置，
+   * 转到 `ready` 时也重置。
+   */
+  failReason?: string
   handshakeWaiter?: HandshakeWaiter
   readyWaiter?: ReadyWaiter
   /** initialize 响应已验证；真正的 ready 仍等待 initialized 通知。 */
@@ -236,6 +244,7 @@ export class ServiceManager {
         ...(svc.pid != null ? { pid: svc.pid } : {}),
         ...(svc.startedAt != null ? { startedAt: svc.startedAt } : {}),
         restartCount: svc.restartCount,
+        ...(svc.failReason != null ? { reason: svc.failReason } : {}),
       })
     }
     return out
@@ -273,6 +282,9 @@ export class ServiceManager {
         svc.readyWaiter = undefined
       }
       logger.error(`[${svc.manifest.id}] handshake failed: ${String(err)}`)
+      // 握手超时/初始化被拒这类失败不一定走 protocolFailedReason，
+      // 先把原因留在快照上，handleExit 若有更具体的 protocolFailedReason 再覆盖。
+      if (svc.failReason === undefined) svc.failReason = String(err)
       // 只杀本次 spawn 的进程（期间可能已被重启链替换为新进程，勿误杀）
       if (svc.proc === spawned && spawned.child.exitCode === null) {
         forceKill(spawned.child)
@@ -288,6 +300,7 @@ export class ServiceManager {
     svc.startedAt = Date.now()
     svc.stoppedByUs = false
     svc.status = 'starting'
+    svc.failReason = undefined
 
     const client = new JsonRpcClient({
       conn: { write: (c) => proc.child.stdin?.write(c) },
@@ -334,6 +347,7 @@ export class ServiceManager {
     this.verifyInitialize(svc, params)
     svc.status = 'ready'
     svc.protocolFailedReason = undefined
+    svc.failReason = undefined
     svc.initializeParams = undefined
     const hc: HealthCheck = manifest.healthCheck ?? DEFAULT_HEALTH_CHECK
     this.startHealth(svc, hc)
@@ -613,16 +627,21 @@ export class ServiceManager {
         ...(code != null ? { exitCode: code } : {}),
         reason,
       })
+      // protocolFailedReason 到这就被清了，留一份到快照上供 /health 查看
+      svc.failReason = reason
     }
 
     const budget = svc.manifest.restartPolicy?.maxRestarts ?? this.maxRestarts
     if (svc.restartCount >= budget) {
       if (reason === undefined) {
+        const finalReason = `max restarts (${budget}) exceeded; ${exitInfo}${override !== undefined ? `; ${override}` : ''}`
         this.publish('service.failed', {
           serviceId: svc.manifest.id,
           ...(code != null ? { exitCode: code } : {}),
-          reason: `max restarts (${budget}) exceeded; ${exitInfo}${override !== undefined ? `; ${override}` : ''}`,
+          reason: finalReason,
         })
+        // 握手阶段可能已留下更具体的原因（如 handshake timeout），别被泛化文案盖掉
+        if (svc.failReason === undefined) svc.failReason = finalReason
       }
       svc.status = 'failed'
       logger.error(`[${svc.manifest.id}] ${svc.status}: ${exitInfo}`)
@@ -651,6 +670,7 @@ export class ServiceManager {
   private async stopService(svc: ManagedService, graceMs: number): Promise<void> {
     if (svc.status === 'stopped') return
     svc.stoppedByUs = true
+    svc.failReason = undefined
     svc.health?.stop()
 
     if (svc.proc && svc.proc.child.exitCode === null) {
