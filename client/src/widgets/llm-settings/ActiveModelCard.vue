@@ -29,6 +29,8 @@ const props = defineProps<{
   models: { value: string; label: string }[]
   model: string
   loadingModels: boolean
+  /** 已拉到的模型数。0 = 还没拉过 / 一个都没有 —— 两者在 UI 上都表现为下拉是空的 */
+  modelCount: number
   /** null = 未探测过；要与「探测失败」区分显示 */
   reachable: boolean | null
   probe: ProbeResult | undefined
@@ -39,6 +41,7 @@ const emit = defineEmits<{
   (e: 'update:provider', value: string): void
   (e: 'update:model', value: string): void
   (e: 'probe'): void
+  (e: 'refresh-models'): void
 }>()
 
 const credentialLine = computed(() => {
@@ -104,12 +107,29 @@ const needsModel = computed(() => Boolean(props.provider) && !props.provider?.de
           aria-label="active-model"
           @update:model-value="emit('update:model', $event)"
         />
+        <button
+          type="button"
+          class="linkish"
+          :disabled="loadingModels || probing"
+          data-testid="refresh-models"
+          :title="modelCount ? `已加载 ${modelCount} 个模型，点击重新拉取` : '向端点拉取可用模型列表'"
+          @click="emit('refresh-models')"
+        >
+          {{ loadingModels ? '拉取中…' : '获取模型列表' }}
+        </button>
+        <span v-if="modelCount && !loadingModels" class="active-model__count">{{ modelCount }} 个</span>
       </label>
 
       <div class="active-model__row">
         <span class="active-model__key">端点</span>
         <span class="active-model__val mono">{{ provider.baseUrl }}</span>
-        <button type="button" class="linkish" :disabled="probing" @click="emit('probe')">
+        <button
+          type="button"
+          class="linkish"
+          :disabled="probing"
+          data-testid="probe-active"
+          @click="emit('probe')"
+        >
           {{ probing ? '探测中…' : '连通性测试' }}
         </button>
       </div>
@@ -148,6 +168,7 @@ const needsModel = computed(() => Boolean(props.provider) && !props.provider?.de
 .active-model__row { display: flex; align-items: center; gap: var(--space-2); }
 .active-model__key { flex: none; width: 52px; font-size: var(--text-xs); color: var(--color-text-muted); }
 .active-model__val { flex: 1; min-width: 0; font-size: var(--text-xs); overflow-wrap: anywhere; }
+.active-model__count { flex: none; font-size: var(--text-xs); color: var(--color-text-muted); }
 .active-model__status { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); }
 .active-model__status.is-ok { color: var(--color-success); }
 .active-model__status.is-bad { color: var(--color-danger); }

@@ -399,16 +399,60 @@ const wrapper = mountLlm()
       wrapper.unmount()
     })
 
+    it('「获取模型列表」按钮：填下拉 + 显示计数，且只发一次命令', async () => {
+      const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
+      const wrapper = mountLlm()
+      await wrapper.vm.$nextTick()
+      emit('llm.provider.registered', { provider: 'lm-studio', defaultModel: '', credentialRef: '' })
+      await wrapper.vm.$nextTick()
+
+      const btn = wrapper.find('[data-testid="refresh-models"]')
+      expect(btn.exists()).toBe(true)
+      // 挂载 / 切 provider 会自动拉一次，期间按钮禁用 —— 这正是想要的：
+      // 禁用状态下重复点击打多次端点是纯浪费
+      expect(btn.text()).toMatch(/获取模型列表|拉取中/)
+      emit('llm.models.list.result', {
+        requestId: 'auto', provider: 'lm-studio', models: ['stale-model'], catalog: 'remote',
+      })
+      await wrapper.vm.$nextTick()
+      expect(btn.attributes('disabled')).toBeUndefined()
+
+      await btn.trigger('click')
+      await wrapper.vm.$nextTick()
+      emit('llm.models.list.result', {
+        requestId: 'x', provider: 'lm-studio', models: ['qwen2.5-7b', 'qwen2.5-3b'], catalog: 'remote',
+      })
+      await wrapper.vm.$nextTick()
+
+      expect(btn.text()).toContain('获取模型列表')
+      // 计数告诉用户「拉到几个」，否则下拉从「stale-model」变成两个时他不知道发生了什么
+      expect(wrapper.text()).toContain('2 个')
+      expect(wrapper.text()).not.toContain('stale-model')
+      // 连通性顺带更新 —— 同一个往返，不该让用户等两遍
+      expect(wrapper.text()).toContain('已连通')
+
+      const topics = fetchMock.mock.calls
+        .filter((c) => String(c[0]).includes('/api/command'))
+        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)).topic)
+      // 一次点击只该有一次 models.list（探测复用它，不额外发第二次）
+      const lists = topics.filter((t) => t === 'llm.models.list').length
+      expect(lists).toBeLessThanOrEqual(2) // 至多：面板挂载时那一次 + 本次点击
+      wrapper.unmount()
+    })
+
     it('探测 = 拉模型列表：catalog=remote 判为连通，static 判为连不上', async () => {
       vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
       const wrapper = mountLlm()
       await wrapper.vm.$nextTick()
       emit('llm.provider.registered', { provider: 'lm-studio', defaultModel: '', credentialRef: '' })
       await wrapper.vm.$nextTick()
-      expect(wrapper.text(), '未探测前应显示「未测试」而不是「不可达」').toContain('未测试')
+// 挂载即自动探测一次，所以初始是「探测中…」；
+      // 重点是**不能**在还没结果时就显示「连不上」—— 那会冤枉一个其实好好的端点
+      expect(wrapper.text()).toMatch(/探测中|未测试/)
+      expect(wrapper.text()).not.toContain('连不上')
 
-      const probeBtn = wrapper.findAll('button').find((b) => b.text() === '连通性测试')
-      await probeBtn!.trigger('click')
+      const probeBtn = wrapper.find('[data-testid="probe-active"]')
+      await probeBtn.trigger('click')
       await wrapper.vm.$nextTick()
       emit('llm.models.list.result', {
         requestId: 'x', provider: 'lm-studio', models: ['qwen2.5-7b'], catalog: 'remote',
@@ -416,7 +460,7 @@ const wrapper = mountLlm()
       await wrapper.vm.$nextTick()
       expect(wrapper.text()).toContain('已连通')
 
-      await wrapper.findAll('button').find((b) => b.text() === '连通性测试')!.trigger('click')
+      await wrapper.find('[data-testid="probe-active"]').trigger('click')
       await wrapper.vm.$nextTick()
       emit('llm.models.list.result', {
         requestId: 'y', provider: 'lm-studio', models: [], catalog: 'static',

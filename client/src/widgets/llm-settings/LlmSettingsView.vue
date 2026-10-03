@@ -43,7 +43,6 @@ import Input from '@/components/ui/Input.vue'
 import Modal from '@/components/ui/Modal.vue'
 import { useEndpointProbe } from '@/core-sdk/useEndpointProbe'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
-import { useModelCatalog } from '@/core-sdk/useModelCatalog'
 import { usePreferences } from '@/core-sdk/usePreferences'
 import ActiveModelCard from './ActiveModelCard.vue'
 import CustomEndpointSection from './CustomEndpointSection.vue'
@@ -70,7 +69,6 @@ interface MaskedCredential {
 const { t } = useI18n()
 const preferences = usePreferences()
 const { list: providerList, providers } = useLlmProviders()
-const { models: catalogModels, loading: loadingCatalog, load: loadCatalog } = useModelCatalog()
 const probe = useEndpointProbe()
 
 /** 预设表直接静态 import —— 不要改成 `await import()`：
@@ -166,8 +164,6 @@ const providerOptions = computed(() =>
   providerList.value.map((p) => ({ value: p.provider, label: p.provider })),
 )
 
-const modelOptions = computed(() => catalogModels.value.map((m) => ({ label: m, value: m })))
-
 const activeProvider = computed(() => {
   const id = selectedProvider.value
   if (!id) return null
@@ -195,7 +191,8 @@ const probeState = computed(() => ({
 async function onSelectProvider(value: string | number): Promise<void> {
   selectedProvider.value = String(value)
   selectedModel.value = ''
-  await loadCatalog(selectedProvider.value)
+  // 换 provider：清空旧模型选择，并立刻拉一次新家的列表
+  await probe.probe(selectedProvider.value)
 }
 
 function onSelectModel(value: string | number): void {
@@ -319,8 +316,8 @@ async function onSaveEndpoint(): Promise<void> {
   overrides.value = [...overrides.value.filter((o) => o.id !== id), item]
   await saveOverrides()
   endpointOpen.value = false
-  // 建完立刻探：新增端点的首要疑问就是「它通不通」
-  await probe.probe(id)
+  // 建完立刻探：新增端点的首要疑问就是「它通不通」，顺便把模型列表填上
+  await refreshOne(id, true)
 }
 
 async function onDeleteOverride(id: string): Promise<void> {
@@ -329,13 +326,48 @@ async function onDeleteOverride(id: string): Promise<void> {
   probe.clear(id)
 }
 
-async function onProbe(providerId: string): Promise<void> {
-  await probe.probe(providerId)
-  // 探测顺带把模型列表拉回来了 —— 切过去就能选
-  if (selectedProvider.value !== providerId) {
+/**
+ * 「正在使用」卡片与厂商区的模型下拉，**都从 probe 结果派生**。
+ *
+ * 为什么不用 `useModelCatalog`（它也发 `llm.models.list`）：
+ * 两个 composable 各发一次同一个命令 = 用户点一下打两次端点、等两遍 ——
+ * 这正是这个页面要消除的毛病。
+ *
+ * 所以本页只留 probe 一个发送方/状态持有者：
+ * · 模型列表 = `probe.resultOf(id)?.models`
+ * · 「拉取中」 = `probe.isProbing(id)`
+ * · 可达性 = `catalog === 'remote'`
+ *
+ * `useModelCatalog` 仍留给别的组件（如输入框的模型下拉），互不干扰。
+ */
+const activeModels = computed<{ value: string; label: string }[]>(() => {
+  const list = probe.results.value[selectedProvider.value]?.models ?? []
+  return list.map((m) => ({ label: m, value: m }))
+})
+const loadingModels = computed(() => probe.probing.value[selectedProvider.value] === true)
+/**
+ * 对某个 provider 做一次「拉列表 + 探活」。
+ *
+ * 无论从「连通性测试」还是「获取模型列表」进来，做的都是同一件事：
+ * 一次 `llm.models.list` 既填下拉又给出可达性。两个入口只是问的问题不同。
+ */
+async function refreshOne(providerId: string, alsoSelect: boolean): Promise<void> {
+  if (!providerId) return
+  if (alsoSelect) {
     selectedProvider.value = providerId
-    await loadCatalog(providerId)
+    selectedModel.value = ''
   }
+  await probe.probe(providerId)
+}
+
+async function onProbe(providerId: string): Promise<void> {
+  // 从厂商区点的：顺便把它切成当前服务商，否则「探测的是另一家、下拉还是上一家」
+  await refreshOne(providerId, selectedProvider.value !== providerId)
+}
+
+async function onRefreshModels(): Promise<void> {
+  // 从「正在使用」卡片点的：只刷新当前这家
+  await refreshOne(selectedProvider.value, false)
 }
 
 function toggleVendor(providerId: string): void {
@@ -387,7 +419,7 @@ watch(
     if (!first) return
     selectedProvider.value = first.provider
     selectedModel.value = ''
-    await loadCatalog(first.provider)
+    await probe.probe(first.provider)
   },
   { immediate: true },
 )
@@ -408,15 +440,17 @@ onMounted(async () => {
     <ActiveModelCard
       :provider="activeProvider"
       :providers="providerOptions"
-      :models="modelOptions"
+      :models="activeModels"
       :model="selectedModel"
-      :loading-models="loadingCatalog"
+      :loading-models="loadingModels"
+      :model-count="activeModels.length"
       :reachable="probeState.reachable[selectedProvider] ?? null"
       :probe="probe.results.value[selectedProvider]"
       :probing="probe.probing.value[selectedProvider] === true"
       @update:provider="onSelectProvider"
       @update:model="onSelectModel"
       @probe="onProbe(selectedProvider)"
+      @refresh-models="onRefreshModels"
     />
 
     <VendorListSection
