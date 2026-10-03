@@ -4,15 +4,15 @@
       <span class="plugin-win__title" data-tauri-drag-region>🧩 插件管理</span>
       <input v-model="query" class="plugin-win__search" placeholder="搜索插件…" />
       <span class="plugin-win__spacer" data-tauri-drag-region></span>
-      <Button size="sm" variant="ghost" @click="refresh">刷新</Button>
+      <Button size="sm" variant="ghost" class="plugin-refresh" @click="refresh">刷新</Button>
       <WindowControls />
     </header>
     <div class="plugin-win__body">
       <EmptyState
         v-if="!plugins.length"
         icon="📦"
-        title="还没有插件"
-        description="内置插件未加载，或已被全部卸载。"
+        :title="emptyTitle"
+        :description="emptyDescription"
       />
       <div v-else class="plugin-win__list">
         <div class="plugin-win__section-title">已安装 ({{ plugins.length }})</div>
@@ -23,10 +23,13 @@
               {{ plugin.name }}
               <span class="plugin-card__badge">v{{ plugin.version }}</span>
             </div>
-            <div class="plugin-card__meta">{{ plugin.widgets.length }} 组件 · 依赖: {{ dependencyText(plugin) }}</div>
+            <div class="plugin-card__meta">{{ plugin.components.length }} 组件 · 依赖: {{ dependencyText(plugin) }}</div>
             <div class="plugin-card__status">
-              <span class="dot" :class="store.isEnabled(plugin.id) ? 'green' : 'gray'"></span>
-              {{ store.isEnabled(plugin.id) ? '运行中' : '已停用' }}
+              <span class="dot" :class="statusDot(plugin)"></span>
+              {{ statusText(plugin) }}
+              <span v-if="plugin.state !== 'ready' && plugin.reason" class="plugin-card__reason">
+                {{ plugin.reason }}
+              </span>
             </div>
           </div>
           <div class="plugin-card__actions">
@@ -48,16 +51,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import WindowControls from '@/components/layout/WindowControls.vue'
-import { usePluginStore } from '@/stores/plugin.store'
+import { usePlugins } from '@/core-sdk/usePlugins'
 import { openPluginDetailWindow } from '@/layout/window-manager'
 import { notifyPluginsChanged } from '@/layout/window-events'
-import type { PluginDefinition } from './registry'
+import type { PluginView } from './registry'
 
-const store = usePluginStore()
+const { store, reload } = usePlugins()
 const query = ref('')
 
 const plugins = computed(() => store.installed)
@@ -69,8 +72,53 @@ const filtered = computed(() => {
   )
 })
 
-function dependencyText(plugin: PluginDefinition): string {
+function dependencyText(plugin: PluginView): string {
   return plugin.dependencies.length ? plugin.dependencies.map((item) => item.label).join('、') : '无'
+}
+
+/**
+ * 空态要区分三件事，不能一律写「还没有插件」。
+ *
+ * S7-3 之前这句话是写死的，于是「插件层没启用」「插件层坏了」「真的一个都没装」
+ * 在界面上完全一样 —— 用户只会得出「没插件」，于是以为一切正常。
+ * `layer` 就是为了让这三种可分辨；不用它等于白做这个字段。
+ */
+const emptyTitle = computed(() => {
+  if (store.layer === 'disabled') return '插件层未启用'
+  if (store.layer === 'missing-dir') return '插件目录不存在'
+  if (store.layer === 'empty') return '插件目录里没有清单'
+  return '还没有插件'
+})
+
+const emptyDescription = computed(() => {
+  if (store.layer === 'disabled') return '当前以 --plugins none 启动，插件层已关闭（测试与显式意图）。'
+  if (store.layer === 'missing-dir') return `找不到 ${store.pluginsDir ?? '插件目录'}，已退回全启启动服务。`
+  if (store.layer === 'empty') return '目录存在但没有任何 plugin.json —— 是不是漏了插件清单？'
+  return '内置插件未加载，或已被全部卸载。'
+})
+
+/**
+ * 状态行有**两个独立的轴**，别混成一个：
+ * · 用户意愿（启用 / 停用）—— 本地 prefs，Core 并不知道
+ * · 实际状态（ready / degraded / failed）—— Core 派生
+ *
+ * 只显示前者的话，一个 degraded 的插件会显示「运行中」——
+ * 用户看到绿灯却发不出请求，而界面上没有任何线索说它坏了。
+ */
+function statusText(plugin: PluginView): string {
+  if (!store.isEnabled(plugin.id)) return '已停用'
+  if (plugin.state === 'degraded') return '降级'
+  if (plugin.state === 'failed') return '故障'
+  if (plugin.state === 'stopped') return '未运行'
+  return '运行中'
+}
+
+function statusDot(plugin: PluginView): string {
+  if (!store.isEnabled(plugin.id)) return 'gray'
+  if (plugin.state === 'failed') return 'red'
+  if (plugin.state === 'degraded') return 'yellow'
+  if (plugin.state === 'stopped') return 'gray'
+  return 'green'
 }
 
 async function toggle(pluginId: string): Promise<void> {
@@ -83,12 +131,8 @@ function manage(pluginId: string): void {
 }
 
 function refresh(): void {
-  void store.bootstrap()
+  void reload()
 }
-
-onMounted(() => {
-  if (!store.hydrated) void store.bootstrap()
-})
 </script>
 
 <style scoped>

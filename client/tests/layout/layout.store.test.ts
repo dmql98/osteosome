@@ -162,7 +162,28 @@ describe('layout.store', () => {
     const store = useLayoutStore()
     const panel = { id: 'panel.main', params: { widgets: [] }, api: { setActive: vi.fn(), updateParameters: vi.fn() } }
     store.attachApi(fakeApi(panel) as never)
-    await usePluginStore().setEnabled('plugin.service-manager', false)
+    // S7-3：组件归属来自 Core 清单（以前在前端常量里，启动即有）。
+    // 不先喂清单的话 isWidgetEnabled 找不到归属 -> 视为「始终可用」-> 这条会假通过。
+    const plugins = usePluginStore()
+    plugins.applyCatalog({
+      layer: 'ok',
+      problems: [],
+      cycles: [],
+      plugins: [
+        {
+          manifest: { id: 'workbench', name: '工作台外壳', version: '1.0.0', services: [], components: ['widget.service-status'] },
+          installed: true,
+          state: 'ready',
+          reason: '',
+          missingDependencies: [],
+          missingOptional: [],
+          unhealthyServices: [],
+          readyServiceCount: 0,
+          serviceStates: {},
+        },
+      ],
+    })
+    await plugins.setEnabled('workbench', false)
     store.addWidget('widget.service-status')
     expect(panel.api.updateParameters).not.toHaveBeenCalled()
   })
@@ -179,8 +200,60 @@ describe('layout.store', () => {
     }
     const api = { panels: [panel], activePanel: panel, addPanel: vi.fn(), clear: vi.fn(), toJSON: vi.fn(() => ({ grid: {}, panels: {} })) }
     store.attachApi(api as never)
-    await usePluginStore().uninstall('plugin.service-manager')
+    // S7-3：组件归属不再由前端常量提供，所以这里必须先喂一份 Core 清单 ——
+    // reconcilePlugins 现在问的是 store.pluginForWidget()，清单为空时它谁都不认，
+    // 于是「剔除」这条路径根本不会被走到（测试会假通过）。
+    const plugins = usePluginStore()
+    plugins.applyCatalog({
+      layer: 'ok',
+      problems: [],
+      cycles: [],
+      plugins: [
+        {
+          manifest: { id: 'workbench', name: '工作台外壳', version: '1.0.0', services: [], components: ['widget.system-info'] },
+          installed: true,
+          state: 'ready',
+          reason: '',
+          missingDependencies: [],
+          missingOptional: [],
+          unhealthyServices: [],
+          readyServiceCount: 0,
+          serviceStates: {},
+        },
+        {
+          manifest: { id: 'models', name: '模型接入', version: '1.0.0', services: [], components: ['widget.service-status'] },
+          installed: true,
+          state: 'ready',
+          reason: '',
+          missingDependencies: [],
+          missingOptional: [],
+          unhealthyServices: [],
+          readyServiceCount: 0,
+          serviceStates: {},
+        },
+      ],
+    })
+    // 卸「拥有 service-status 的那个」，system-info 属于另一个插件，必须留着 ——
+    // 这样这条断言才真的在验「按归属剔除」，而不是「全清空」
+    await plugins.uninstall('models')
     store.reconcilePlugins()
     expect(updateParameters).toHaveBeenCalledWith({ widgets: ['widget.system-info'] })
+  })
+
+  it('清单还没拉到手时 reconcilePlugins 不动任何面板（而不是把所有组件都当孤儿剔除）', () => {
+    const store = useLayoutStore()
+    const updateParameters = vi.fn()
+    const panel = {
+      id: 'panel.main',
+      params: { widgets: ['widget.service-status'] },
+      api: { setActive: vi.fn(), updateParameters },
+    }
+    const api = { panels: [panel], activePanel: panel, addPanel: vi.fn(), clear: vi.fn(), toJSON: vi.fn(() => ({ grid: {}, panels: {} })) }
+    store.attachApi(api as never)
+    store.reconcilePlugins()
+    // 清单为空 -> 没有插件认领任何组件 -> 按「未登记归属 = 始终可用」处理，一个都不该动。
+    // 这条是 S7-3 引入的新风险：以前归属在前端常量里，启动即有；
+    // 现在它来自 HTTP，若把「查不到归属」当成「已卸载」就会在冷启动瞬间清空所有面板。
+    expect(updateParameters).not.toHaveBeenCalled()
   })
 })

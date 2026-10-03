@@ -49,7 +49,7 @@
       <section class="detail-card">
         <header class="detail-card__head">组件（UI，用户装配）</header>
         <div class="detail-card__body">
-          <div v-for="widgetId in plugin.widgets" :key="widgetId" class="widget-row">
+          <div v-for="widgetId in plugin.components" :key="widgetId" class="widget-row">
             <div class="widget-row__info">
               <span class="widget-row__name">{{ widgetTitle(widgetId) }}</span>
               <span class="widget-row__id">{{ widgetId }}</span>
@@ -71,7 +71,7 @@
       <section class="detail-card">
         <header class="detail-card__head">依赖</header>
         <div class="detail-card__body">
-          <div v-for="dep in plugin.dependencies" :key="dep.id" class="dep-row">
+          <div v-for="dep in plugin.dependencies" :key="dep.pluginId" class="dep-row">
             <span class="dot" :class="dependencyReady(dep) ? 'green' : 'yellow'"></span>
             <span>{{ dep.label }}</span>
             <span class="dep-row__state">{{ dependencyReady(dep) ? '已就绪' : '等待中' }}</span>
@@ -93,7 +93,7 @@
 
     <Modal v-model:open="confirmOpen" :title="`⚠ 卸载「${plugin?.name ?? ''}」？`" :closable="true">
       <div class="uninstall-warn">
-        卸载后：该插件组件会从所有窗口移除（共 {{ plugin?.widgets.length ?? 0 }} 个实例），以下能力将消失：
+        卸载后：该插件组件会从所有窗口移除（共 {{ plugin?.components.length ?? 0 }} 个实例），以下能力将消失：
         <div class="uninstall-caps">
           <span v-for="cap in plugin?.capabilities ?? []" :key="cap.name">- {{ cap.name }}</span>
         </div>
@@ -108,28 +108,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import Button from '@/components/ui/Button.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import Modal from '@/components/ui/Modal.vue'
 import Switch from '@/components/ui/Switch.vue'
 import WindowControls from '@/components/layout/WindowControls.vue'
 import { getWidget } from '@/widgets/registry'
-import { getPlugin, type PluginDependency } from './registry'
-import { usePluginStore } from '@/stores/plugin.store'
-import { useServiceStatus } from '@/core-sdk/useServiceStatus'
+import { usePlugins } from '@/core-sdk/usePlugins'
 import { requestAddWidget, notifyPluginsChanged } from '@/layout/window-events'
 import { closeCurrentWindow } from '@/tauri/plugin-window'
 
 const props = defineProps<{ pluginId: string }>()
 
-const store = usePluginStore()
-const services = useServiceStatus()
+const { store } = usePlugins()
 const confirmOpen = ref(false)
 const addedWidgetId = ref('')
 let addedTimer: ReturnType<typeof setTimeout> | null = null
 
-const plugin = computed(() => getPlugin(props.pluginId))
+const plugin = computed(() => store.byId(props.pluginId))
 const isEnabled = computed(() => store.isEnabled(props.pluginId))
 const statusDot = computed(() => (store.isInstalled(props.pluginId) ? (isEnabled.value ? 'green' : 'gray') : 'red'))
 const statusLabel = computed(() => {
@@ -147,10 +144,15 @@ function widgetTitle(widgetId: string): string {
   return getWidget(widgetId)?.title ?? widgetId
 }
 
-function dependencyReady(dep: PluginDependency): boolean {
-  const service = services.services[dep.id]
-  if (service) return service.status === 'ready'
-  return dep.ready !== false
+/**
+ * 依赖是否就绪。
+ *
+ * 判据换成「被依赖的**插件**状态」而不是「拿 pluginId 去 services 里查」——
+ * 依赖关系连的是插件，不是服务。用旧判据的话 `services[pluginId]` 永远是 undefined，
+ * 于是永远走 `return dep.ready !== false` 那条兜底，看着正常其实没判过。
+ */
+function dependencyReady(dep: { pluginId: string }): boolean {
+  return store.byId(dep.pluginId)?.state === 'ready'
 }
 
 function addWidget(widgetId: string): void {
@@ -172,9 +174,6 @@ async function doUninstall(): Promise<void> {
   await closeCurrentWindow()
 }
 
-onMounted(() => {
-  if (!store.hydrated) void store.bootstrap()
-})
 onBeforeUnmount(() => {
   if (addedTimer) clearTimeout(addedTimer)
 })

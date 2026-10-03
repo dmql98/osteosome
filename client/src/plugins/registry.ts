@@ -1,175 +1,131 @@
 /**
- * 插件注册表（设计期写死）。
+ * 插件清单（S7-3）—— **数据源是 Core，不是这份文件**
  *
- * 定位：组件与插件合并——每个插件在设计初期就把自己需要的组件（widget id）定好，
- * 运行期不再有“添加组件”入口；用户从「插件详情」里按组件加入窗口。
- * 本表同时是插件列表窗 / 详情窗的数据源，也是 widget 归属（widget -> plugin）的反查源。
+ * ## 这里曾经有一张硬编码的 `PLUGINS` 表，现在没有了
  *
- * P2（LLM 能力位拆分）追加：`plugin.llm`（主位服务 `llm`）+ provider 服务插件。
- * 按「能力位 = 独立服务进程」的 OST 思想，**服务插件 = 服务的呈现**：
- * - `plugin.llm`           → `services/llm`（能力主位，组件 `widget.chat-timeline` + `widget.chat-composer`，S5 起拆开）
- * - `plugin.llm-providers` → `services/llm-provider-openai`（provider 位，组件 `widget.llm-providers`）
- *   S1 起该进程内建多个厂商实例（openai / deepseek / openrouter / … 全部 openai 兼容），
- *   每家按「配了凭证才注册」出现在组件里 —— 所以组件呈现的是**厂商**，
- *   而插件对应的仍只有**一个** provider 进程。
- * - credentials / llm-retry 是旁路服务，无独立组件（见 LLM能力位拆分设计.md §4.5.1），
- *   不在本表列为可管理插件——它们的启停由服务层 manifest 控制，UI 不镜像服务内部结构。
+ * 它是 S7 之前唯一的插件清单。问题不是「多了一份要维护」，而是
+ * **它和 Core 讲的是同一件事却是两份数据**：Core 知道服务真实状态、
+ * 依赖是否满足、插件装没装；这张表一概不知道，只会说「我存在」。
+ * 于是状态永远只能在前端猜 —— 而前端拿不到猜对的输入。
  *
- * 注意：插件定义里 `widgets` 指向的 widget 由 WS-8 提供（chat-timeline / chat-composer / llm-providers 已落地）。
+ * 现在清单走 `GET /api/plugins`（见 `@/core-sdk/usePlugins`），Core 是唯一真源。
+ *
+ * ## 剩下的都是纯函数
+ *
+ * `toPluginViews` 把 Core 的快照**摊平成模板好读的形状**。这不是第二份数据 ——
+ * 它的每一个字段都来自快照，没有一个是本地决定的。
+ * 之所以要摊平：`PluginSnapshot` 是 `{manifest, state, reason, …}` 的嵌套形状，
+ * 模板里写 `plugin.manifest.name` 可读性很差。
+ *
+ * ## `pluginForWidget` 为什么要传列表
+ *
+ * 以前它读模块内的 `PLUGINS`。现在清单在 store 里，而 store 可能还没 hydrate ——
+ * 所以由调用方把列表传进来，**不在这里偷偷读 store**。
+ * 读 store 看起来方便，但那会让这个函数在组件外调用时抛错（pinia 未激活），
+ * 而 `layout.store.reconcilePlugins` 恰好就在组件外调它。
  */
 
-export interface PluginCapability {
-  /** 服务层能力标识（点分命名，如 service.restart） */
-  name: string
-  /** 可选的人类可读说明 */
-  detail?: string
-}
-
-export interface PluginDependency {
-  /** 依赖的服务 / 插件 id（可与 service.* 事件的 serviceId 对齐） */
-  id: string
-  /** 展示名 */
-  label: string
-  /** 无实时服务信息时的静态就绪标记，默认 true */
-  ready?: boolean
-}
-
-export interface PluginDefinition {
+/** Core `GET /api/plugins` 的响应（与 core/src/service-manager/plugin-registry-runtime.ts 对应） */
+export interface PluginManifest {
   id: string
   name: string
-  /** 卡片图标（emoji） */
+  version: string
+  icon?: string
+  description?: string
+  author?: string
+  license?: string
+  services: string[]
+  components: string[]
+  capabilities?: { name: string; detail?: string }[]
+  dependencies?: { pluginId: string; optional?: boolean }[]
+  autoStart?: boolean
+}
+
+export type PluginState = 'ready' | 'degraded' | 'stopped' | 'failed'
+
+export interface PluginSnapshot {
+  manifest: PluginManifest
+  installed: boolean
+  state: PluginState
+  reason: string
+  missingDependencies: string[]
+  missingOptional: string[]
+  unhealthyServices: string[]
+  readyServiceCount: number
+  serviceStates: Record<string, string | undefined>
+}
+
+export type PluginLayerStatus = 'disabled' | 'missing-dir' | 'empty' | 'ok'
+
+export interface PluginListResponse {
+  layer: PluginLayerStatus
+  pluginsDir: string | null
+  installOrder: string[]
+  problems: { where: string; reason: string; pluginId?: string }[]
+  cycles: string[][]
+  plugins: PluginSnapshot[]
+}
+
+/** 前端视图模型：给模板用，字段全部派生自 `PluginSnapshot` */
+export interface PluginView {
+  id: string
+  name: string
+  /** 没有 icon 就退化成首字，模板里直接当头像用 */
   icon: string
   version: string
   author?: string
   license?: string
-  /** 插件介绍 */
   description: string
-  /** 服务层能力（可无 UI） */
-  capabilities: PluginCapability[]
-  /** 该插件贡献的 UI 组件（widget id），设计期写死 */
-  widgets: string[]
-  /** 依赖 */
-  dependencies: PluginDependency[]
+  capabilities: { name: string; detail?: string }[]
+  components: string[]
+  services: string[]
+  dependencies: { pluginId: string; label: string; optional: boolean }[]
+  state: PluginState
+  reason: string
+  installed: boolean
+  missingDependencies: string[]
+  unhealthyServices: string[]
+  readyServiceCount: number
+  totalServices: number
 }
 
-/** 内置插件：把现有 widget 按领域收编到插件名下。 */
-export const PLUGINS: PluginDefinition[] = [
-  {
-    id: 'plugin.workbench',
-    name: '工作台基础',
-    icon: '🧰',
-    version: '1.0.0',
-    author: 'osteosome',
-    license: 'Apache-2.0',
-    description:
-      '工作台的最小骨架：系统信息与命令台。它连接 Core 的命令通道，展示本机与控制进程概况，是龙骨默认携带的基础血肉。',
-    capabilities: [
-      { name: 'system.info', detail: '读取本机与控制进程概况' },
-      { name: 'command.execute', detail: '向 Core 投递命令' },
-    ],
-    widgets: ['widget.system-info', 'widget.command-palette', 'widget.settings'],
-    dependencies: [{ id: 'core', label: 'Core 微内核' }],
-  },
-  {
-    id: 'plugin.event-stream',
-    name: '事件流',
-    icon: '🌊',
-    version: '0.9.0',
-    author: 'osteosome',
-    license: 'Apache-2.0',
-    description:
-      '订阅 Core 事件总线的心跳，把 tool.* / service.* / session.* 事件以时间线形式呈现，便于观察 Agent 的实时过程。',
-    capabilities: [
-      { name: 'event.subscribe', detail: '订阅通配主题（* / **）' },
-      { name: 'event.replay', detail: '回放最近事件' },
-    ],
-    widgets: ['widget.event-stream'],
-    dependencies: [{ id: 'bus', label: '消息总线' }],
-  },
-  {
-    id: 'plugin.service-manager',
-    name: '服务管理',
-    icon: '⚙️',
-    version: '1.0.0',
-    author: 'osteosome',
-    license: 'Apache-2.0',
-    description:
-      '管理 Core 下挂载的独立服务进程：查看启动、就绪、异常等生命周期状态，并触发重启。',
-    capabilities: [
-      { name: 'service.list', detail: '列出已注册服务' },
-      { name: 'service.status', detail: '订阅服务生命周期事件' },
-      { name: 'service.restart', detail: '重启异常服务' },
-    ],
-    widgets: ['widget.service-status', 'widget.service-manager'],
-    dependencies: [
-      { id: 'core', label: 'Core 微内核' },
-      { id: 'bus', label: '消息总线' },
-    ],
-  },
-  {
-    id: 'plugin.session',
-    name: '会话',
-    icon: '💬',
-    version: '0.1.0',
-    author: 'osteosome',
-    license: 'Apache-2.0',
-    description:
-      '会话管理（P3 WS-4）：会话列表（新建 / 切换 / 重命名 / 删除 / 当前高亮）经 SSE 事件跨窗实时同步；curId 当前会话为本地态（各窗独立）。组件（widget.session-list）。',
-    capabilities: [
-      { name: 'session.list', detail: '会话索引列表' },
-      { name: 'session.create/rename/delete', detail: '会话 CRUD' },
-    ],
-    widgets: ['widget.session-list'],
-    dependencies: [{ id: 'session', label: '会话服务' }],
-  },
-  {
-    id: 'plugin.llm',
-    name: 'LLM 对话',
-    icon: '🤖',
-    version: '0.1.0',
-    author: 'osteosome',
-    license: 'Apache-2.0',
-    description:
-      'LLM 能力主位（services/llm）：接收前端 llm.request 命令、按 provider 路由、把流式块翻译成 llm.token.streamed 等对外事件。S5 起组件拆成三个盒子：widget.session-list（①会话列表）/ widget.chat-timeline（②消息投影，含折叠思考块与工具卡）/ widget.chat-composer（③输入与请求参数）。②③ 零直接通信，共享 stores/chat.store.ts。',
-    capabilities: [
-      { name: 'llm.request', detail: '发起流式对话' },
-      { name: 'llm.cancel', detail: '取消在途请求' },
-      { name: 'llm.provider.registered', detail: '感知 provider 注册' },
-    ],
-    widgets: ['widget.chat-timeline', 'widget.chat-composer'],
-    dependencies: [{ id: 'llm', label: 'LLM 主位服务' }],
-  },
-  {
-    id: 'plugin.llm-providers',
-    name: 'LLM Providers',
-    icon: '🔌',
-    version: '0.1.0',
-    author: 'osteosome',
-    license: 'Apache-2.0',
-    description:
-      'LLM provider 能力位（单个 services/llm-provider-openai 进程）：进程内按厂商预设表建多个 openai 兼容实例（openai / deepseek / openrouter / moonshot / …），各家经 llm.provider.registered 注册自身能力 —— 配了凭证的才注册。组件（widget.llm-providers）渲染的是**厂商**的存在性与状态（defaultModel / credentialRef / retry 声明）。',
-    capabilities: [
-      { name: 'llm.provider.registered', detail: 'provider 注册（defaultModel / credentialRef / retryPolicy）' },
-      { name: 'llm.provider.unregistered', detail: 'provider 退出（主位摘路由）' },
-      { name: 'credentials.resolve', detail: '经凭证能力位解析 API Key（值不进前端）' },
-    ],
-    widgets: ['widget.llm-providers'],
-    dependencies: [
-      { id: 'llm', label: 'LLM 主位服务' },
-      { id: 'credentials', label: '凭证服务' },
-    ],
-  },
-]
-
-export function listPlugins(): PluginDefinition[] {
-  return [...PLUGINS]
+/** Core 快照 -> 模板视图 */
+export function toPluginViews(snapshots: readonly PluginSnapshot[]): PluginView[] {
+  const names = new Map(snapshots.map((p) => [p.manifest.id, p.manifest.name]))
+  return snapshots.map((snapshot) => {
+    const m = snapshot.manifest
+    return {
+      id: m.id,
+      name: m.name,
+      icon: m.icon ?? m.name.slice(0, 1),
+      version: m.version,
+      author: m.author,
+      license: m.license,
+      description: m.description ?? '',
+      capabilities: m.capabilities ?? [],
+      components: m.components ?? [],
+      services: m.services ?? [],
+      // 依赖的 label 取对方插件名 —— Core 只给 pluginId（依赖关系是数据，不是文案）
+      dependencies: (m.dependencies ?? []).map((dep) => ({
+        pluginId: dep.pluginId,
+        label: names.get(dep.pluginId) ?? dep.pluginId,
+        optional: dep.optional === true,
+      })),
+      state: snapshot.state,
+      reason: snapshot.reason,
+      installed: snapshot.installed,
+      missingDependencies: snapshot.missingDependencies,
+      unhealthyServices: snapshot.unhealthyServices,
+      readyServiceCount: snapshot.readyServiceCount,
+      totalServices: m.services?.length ?? 0,
+    }
+  })
 }
 
-export function getPlugin(id: string): PluginDefinition | undefined {
-  return PLUGINS.find((plugin) => plugin.id === id)
-}
-
-/** widget 归属的插件；未登记归属的 widget 返回 undefined（视为始终可用）。 */
-export function pluginForWidget(widgetId: string): PluginDefinition | undefined {
-  return PLUGINS.find((plugin) => plugin.widgets.includes(widgetId))
+/** widget 归属哪个插件。列表由调用方传 —— 见文件头的说明 */
+export function pluginForWidgetIn(
+  plugins: readonly PluginView[],
+  widgetId: string,
+): PluginView | undefined {
+  return plugins.find((plugin) => plugin.components.includes(widgetId))
 }

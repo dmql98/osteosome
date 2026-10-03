@@ -3,7 +3,6 @@ import { markRaw } from 'vue'
 import type { DockviewApi, GroupviewPanelState, SerializedDockview } from 'dockview-core'
 import { usePreferences } from '@/core-sdk/usePreferences'
 import { getWidget } from '@/widgets/registry'
-import { pluginForWidget } from '@/plugins/registry'
 import { usePluginStore } from '@/stores/plugin.store'
 import { applyDefaultLayout } from '@/panes/default-layout'
 import { PANEL_COMPONENT, type PanelParams } from '@/panes/types'
@@ -100,7 +99,7 @@ export const useLayoutStore = defineStore('layout', {
       for (const panel of api.panels) {
         const current = (panel.params as PanelParams | undefined)?.widgets ?? []
         const next = current.filter((id) => {
-          const owner = pluginForWidget(id)
+          const owner = plugins.pluginForWidget(id)
           return !owner || plugins.isInstalled(owner.id)
         })
         if (next.length !== current.length) {

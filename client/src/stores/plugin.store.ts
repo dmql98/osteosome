@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { usePreferences } from '@/core-sdk/usePreferences'
-import { getPlugin, listPlugins, pluginForWidget, type PluginDefinition } from '@/plugins/registry'
+import { toPluginViews, type PluginLayerStatus, type PluginView } from '@/plugins/registry'
 
 interface PluginPrefs {
   enabled?: Record<string, boolean>
@@ -12,62 +12,162 @@ function parsePluginPrefs(value: unknown): PluginPrefs {
 }
 
 /**
- * 插件状态：启用 / 停用 / 卸载。默认全部启用、全部已安装。
- * 状态写回 /api/preferences 的 `plugins` 键；跨窗变更由 layout/window-events 广播。
+ * 插件状态（S7-3）—— **清单来自 Core，不来自前端常量**。
+ *
+ * 两类数据要分清，混在一起就会出现「两个真源」：
+ * · 清单（装了哪些、叫什么、依赖谁、什么状态）→ **Core 的事实**，存在 `views`
+ * · 用户意愿（我停用了哪个、我卸了哪个）→ **本地偏好**，存在 `enabled` / `uninstalled`
+ *
+ * 所以 `installed` / `isInstalled` 读 Core 的 `snapshot.installed`，
+ * 而 `isEnabled` 读本地 prefs —— 后者是「我主动关的」，Core 并不知道。
  */
 export const usePluginStore = defineStore('plugins', {
   state: () => ({
+    /** 从 Core 拉来的插件视图（未拉取时为空数组，不是 null —— 模板不用到处判空） */
+    views: [] as PluginView[],
+    /** 插件层状态。前端要靠它区分「没启用插件层」「插件层坏了」「真的一个都没装」 */
+    layer: null as PluginLayerStatus | null,
+    /** 插件目录路径。`missing-dir` 时要告诉用户「找的是哪个目录」 */
+    pluginsDir: null as string | null,
+    /** 扫盘问题与依赖环 —— 展示在列表窗顶部，不塞进每个插件条目 */
+    problems: [] as { where: string; reason: string }[],
+    cycles: [] as string[][],
     /** 仅记录显式停用（false）；缺省即启用 */
     enabled: {} as Record<string, boolean>,
+    /** 已被用户卸掉的插件 id。Core 也认这个（`snapshot.installed` 就是按它算的） */
     uninstalled: [] as string[],
     hydrated: false,
-    /** 可见状态版本号：每次启用/停用/卸载自增，供组件 watch 触发重算。 */
+    /** 可见状态版本号：清单更新或启用/停用/卸载时自增，供组件 watch 触发重算。 */
     revision: 0,
   }),
   getters: {
-    installed(state): PluginDefinition[] {
-      return listPlugins().filter((plugin) => !state.uninstalled.includes(plugin.id))
+    /** 清单本身（Core 说了算）。`uninstalled` 已由 Core 折进 `snapshot.installed` */
+    all(state): PluginView[] {
+      return state.views
     },
-    isInstalled: (state) => (pluginId: string) => !state.uninstalled.includes(pluginId),
-    isEnabled: (state) => (pluginId: string) =>
-      !state.uninstalled.includes(pluginId) && state.enabled[pluginId] !== false,
-    /** widget 是否可用：未登记归属的 widget 视为始终可用。 */
-    isWidgetEnabled: (state) => (widgetId: string) => {
-      const plugin = pluginForWidget(widgetId)
-      if (!plugin) return true
-      return !state.uninstalled.includes(plugin.id) && state.enabled[plugin.id] !== false
+    /**
+     * 已安装的。
+     *
+     * 要**同时**看两处，缺一不可：
+     * · `plugin.installed` —— Core 的判断（它读的是**启动时**的 prefs）
+     * · `state.uninstalled` —— 用户刚刚做的动作
+     *
+     * 只看前者会「撒谎到重启」：运行期卸掉一个插件，Core 还没被通知，
+     * `snapshot.installed` 仍是 true，于是界面还显示已安装，组件也还能加。
+     * 只看后者则会在 Core 说「这插件没装」时把它显示出来。
+     *
+     * 这不算第二个真源：prefs 本来就是用户的意愿，而**前端是写它的那一方** ——
+     * Core 只是启动时读了一次。
+     */
+    installed(state): PluginView[] {
+      return this.all.filter(
+        (plugin) => plugin.installed && !state.uninstalled.includes(plugin.id),
+      )
+    },
+    byId(): (pluginId: string) => PluginView | undefined {
+      return (pluginId) => this.all.find((plugin) => plugin.id === pluginId)
+    },
+    /** widget 归属哪个插件。未登记归属的 widget 返回 undefined —— 调用方应视为「始终可用」 */
+    pluginForWidget(): (widgetId: string) => PluginView | undefined {
+      return (widgetId) => this.all.find((plugin) => plugin.components.includes(widgetId))
+    },
+    isInstalled(): (pluginId: string) => boolean {
+      return (pluginId) => {
+        const plugin = this.byId(pluginId)
+        return plugin?.installed === true && !this.uninstalled.includes(pluginId)
+      }
+    },
+    /** 用户是否启用。注意与 `installed` 的区别：这是「我主动关的」，Core 并不知道 */
+    isEnabled(): (pluginId: string) => boolean {
+      return (pluginId) => this.isInstalled(pluginId) && this.enabled[pluginId] !== false
+    },
+    isWidgetEnabled(): (widgetId: string) => boolean {
+      return (widgetId) => {
+        const plugin = this.pluginForWidget(widgetId)
+        if (!plugin) return true
+        return this.isEnabled(plugin.id)
+      }
+    },
+    /** 插件层是否可用。前端据此决定显示「未启用插件层」还是「插件没装好」 */
+    layerOk(state): boolean {
+      return state.layer === 'ok'
     },
   },
   actions: {
-    async bootstrap() {
+    /** 用 Core 的响应覆盖清单。由 `@/core-sdk/usePlugins` 调用 */
+    applyCatalog(
+      payload: {
+        layer: PluginLayerStatus
+        pluginsDir?: string | null
+        problems: { where: string; reason: string }[]
+        cycles: string[][]
+        plugins: Parameters<typeof toPluginViews>[0]
+      },
+    ): void {
+      this.views = toPluginViews(payload.plugins)
+      this.layer = payload.layer
+      this.pluginsDir = payload.pluginsDir ?? null
+      this.problems = payload.problems
+      this.cycles = payload.cycles
+      this.revision += 1
+    },
+    /** 应用一条 `plugin.state.changed`。状态是 Core 派生的，前端只跟着改，不自己算 */
+    applyStateChange(payload: {
+      pluginId: string
+      state: PluginView['state']
+      reason?: string
+      missingDependencies?: string[]
+      readyServices?: number
+      totalServices?: number
+    }): void {
+      const index = this.views.findIndex((p) => p.id === payload.pluginId)
+      if (index < 0) return
+      const current = this.views[index]!
+      this.views = [
+        ...this.views.slice(0, index),
+        {
+          ...current,
+          state: payload.state,
+          reason: payload.reason ?? current.reason,
+          missingDependencies: payload.missingDependencies ?? current.missingDependencies,
+          readyServiceCount: payload.readyServices ?? current.readyServiceCount,
+          totalServices: payload.totalServices ?? current.totalServices,
+        },
+        ...this.views.slice(index + 1),
+      ]
+      this.revision += 1
+    },
+    /** 拉偏好。只管用户意愿，清单由 usePlugins 负责 —— 两者分开拉，失败互不影响 */
+    async bootstrap(): Promise<void> {
       try {
         const prefs = parsePluginPrefs((await usePreferences().get()).plugins)
         this.enabled = { ...(prefs.enabled ?? {}) }
         this.uninstalled = Array.isArray(prefs.uninstalled) ? [...prefs.uninstalled] : []
       } catch {
-        // 离线：保持默认（全部启用、全部已安装）
+        // 离线：保持默认（全部启用）
       }
       this.hydrated = true
       this.revision += 1
     },
-    async setEnabled(pluginId: string, value: boolean) {
-      if (!getPlugin(pluginId)) return
+    async setEnabled(pluginId: string, value: boolean): Promise<void> {
+      // 不再问「这个插件存在吗」—— 那是 Core 的事，前端只管把用户意愿记下来
+      if (!this.byId(pluginId)) return
       this.enabled = { ...this.enabled, [pluginId]: value }
       this.revision += 1
       await this.save()
     },
-    async toggle(pluginId: string) {
+    async toggle(pluginId: string): Promise<void> {
       await this.setEnabled(pluginId, !this.isEnabled(pluginId))
     },
-    async uninstall(pluginId: string) {
-      if (!getPlugin(pluginId) || this.uninstalled.includes(pluginId)) return
+    async uninstall(pluginId: string): Promise<void> {
+      if (!this.byId(pluginId) || this.uninstalled.includes(pluginId)) return
       this.uninstalled = [...this.uninstalled, pluginId]
       const { [pluginId]: _dropped, ...rest } = this.enabled
       this.enabled = rest
       this.revision += 1
       await this.save()
     },
-    async save() {
+    async save(): Promise<void> {
       try {
         await usePreferences().patch({
           plugins: { enabled: this.enabled, uninstalled: this.uninstalled },
