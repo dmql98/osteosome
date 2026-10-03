@@ -1073,10 +1073,24 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           <br><b>规矩：遇到「Element is missing end tag」且代码帧指向文件开头，
           先确认文件末尾的闭合标签在不在</b>，别在文件头部找。</p>
         <div class="lbl">S7 全部 8 个子步已完成</div>
-        <p class="note ok"><span class="mono" style="font-size:var(--text-xs)">S7-1 契约 → S7-2a 只读扫盘 →
+<p class="note ok"><span class="mono" style="font-size:var(--text-xs)">S7-1 契约 → S7-2a 只读扫盘 →
           S7-5 真实清单 → S7-2b 切 B 语义 → S7-3 前端改拉清单 → S7-4 停用真停进程 →
           S7-6 详情窗明细</span><br>
-          剩下：<b>S8</b>（0.5 天，未开始）。</p>
+          <b>执行顺序与编号不同</b>，这正是当初按依赖重排的结果。</p>
+        <p class="note ok"><b>S8 也已完成，P7 全线收官。</b>
+          S8 做了三件事：① <b>规模实测</b>（10 个包 / 27,279 行 / 测试占比 ≈ 69%）
+          ② <b>逐项核对「无第二个真源」</b>（6 服务全被认领、11 组件双向对齐、前端零硬编码残留）
+          ③ <b>三份文档落账</b>（P7 计划 / 架构文档 / 阶段追踪）。
+          <br>其中阶段追踪那份<b>刻意保留了 4 处「六插件」</b> —— 它们在
+          <code>2026-09-28 P2 定案修订</code> 的<b>历史记录</b>里。
+          <b>改历史记录就是篡改历史</b>；正确做法是在当前状态处标注已被取代，
+          并追加一条新变更日志说明取代关系。</p>
+        <p class="note"><b>S8 里最值得记的一条：有一条风险预测错了，而且方案本身有害。</b>
+          原方案写「前端拉清单失败时回退到内置最小清单」——
+          但<b>内置清单就是第二真源</b>。为了离线可用，把刚删掉的东西请回来。
+          改成：拉不到就<b>保持空清单 + 界面显示「未连接」，不假装有插件</b>。
+          <br>这与 S7-3 的判断是同一条：<b>「降级」不等于「回退到假数据」</b> ——
+          诚实地说「我不知道」，好过编一个看起来正常的界面。</p>
         <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
         <ul>
           <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
@@ -1402,7 +1416,13 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
       </tbody>
     </table>
 
-    <h3>风险台账（已发生的实录处置在前，未发生的在后）</h3>
+    <h3>风险台账</h3>
+    <p class="note" style="margin-top:0"><b>怎么读这张表</b>：已发生的记「实际发生了什么」，
+      没发生的记「为什么没发生 / 靠什么挡住」。<b>预测错的也留着</b> ——
+      一条预测错了而没被改掉的记录，比十条预测对了的更有价值，
+      因为它标出了「我当时为什么想错」。<br>
+      <b>S0～S8 已全部完成</b>，所以原本排在末尾的几条预测性风险现在都已结算：
+      见 P7 计划文档 §6「已识别的风险 —— 逐条结算」。</p>
     <table>
       <thead><tr><th style="width:38%">风险</th><th>处置 / 实际发生</th></tr></thead>
       <tbody>
@@ -1470,7 +1490,37 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
                 （注意 <code>session.store</code> 是用 <code>sse.subscribe</code> 直接绑的，没踩这条）</td></tr>
         <tr><td>S5 拆组件后旧 <code>widget.llm-chat</code> 残留引用</td><td>P4 WS-1 那条断言会抓到（插件声明的组件必须 get 得到）—— S2 删 <code>widget.hello-command</code> 时已被它抓到一次，有效</td></tr>
         <tr><td>S7 停插件时进程正在跑工具</td><td>停前发 <code>loop.cancel</code> 走正常收尾，<code>stopGraceMs</code> 超时才强杀</td></tr>
-        <tr><td>S7 前端改拉清单后离线打不开</td><td>拉取失败时回退到内置最小清单（只有一个 core 插件），不白屏</td></tr>
+        <tr><td><b>S7 前端改拉清单后离线打不开</b></td>
+            <td>❌ <b>预测错了，而且方案本身有害</b>。原写「回退到内置最小清单」——
+            但<b>内置清单就是第二真源</b>；为了离线可用，把刚删掉的东西请回来。<br>
+            <b>改成：拉不到就保持空清单 + 界面显示「未连接」，不假装有插件。</b><br>
+            这与 S7-3 的判断同源：<b>「降级」不等于「回退到假数据」</b> ——
+            诚实地说「我不知道」，好过编一个看起来正常的界面。<br>
+            <b>S8 结算这条得到的教训：写风险时「怎么优雅降级」比「会不会出问题」更容易想错，
+            因为降级方案本身会引入新的债。</b></td></tr>
+        <tr><td><b>S7-3 引入、S7-6 才发现：独立窗口拿不到偏好</b></td>
+            <td>⚠️ <b>真的踩了，而且是无声的那种</b>。S7-3 删掉两个窗口里的
+            <code>store.bootstrap()</code>，漏了<b>它们是独立窗口、各有各的 pinia</b> ——
+            主窗口的 <code>bootstrap()</code> 对它们无效。<br>
+            于是 <code>enabled</code> / <code>uninstalled</code> 在那两个窗口里<b>永远是空的</b>，
+            界面把已停用的插件显示成启用中，<b>而且没有任何报错</b>。<br>
+            已让 <code>usePlugins()</code> 自己拉偏好，并加守卫测试断言独立窗口确实请求了
+            <code>/api/preferences</code>。<br>
+            <b>教训：「删掉一个看起来多余的调用」之前，先问它在哪些执行上下文里被调用过</b> ——
+            多窗口 / 多 worker / 独立入口下，「显然会有人调」是不成立的。</td></tr>
+        <tr><td><b>审计脚本自己也要被审计</b></td>
+            <td>⚠️ S8 核对「有没有第二个真源」时，脚本误报<b>「llm / loop 未认领」</b>，
+            差点让我去改本来正确的清单。原因是 <code>claimed.add(...arr)</code> ——
+            <code>Set.add</code> <b>只接受一个参数</b>，展开被静默丢弃。<br>
+            <b>教训：自动化核对工具的输出，本身就是需要复核的结论</b>。
+            它比人可靠，但不会替你对「我以为它检查了什么」负责。</td></tr>
+        <tr><td><b>报错位置不等于出错位置</b></td>
+            <td>⚠️ 写 <code>llm-settings-widget.vue</code> 时漏了 <code>&lt;/script&gt;</code>，
+            报 <code>Element is missing end tag</code> 但<b>位置指向第 1 行，而第 1 行没问题</b>。
+            绕了三步：所有 <code>*-widget.vue</code> 前 3 行一样、代码帧无法区分文件；
+            单独 transform 被 import 的那个文件是 OK 的；最后靠「写 5 个变体逐个 transform」定位。<br>
+            <b>规矩：遇到这个报错且代码帧指向文件开头，先确认文件末尾的闭合标签在不在</b>，
+            别在文件头部找。</td></tr>
       </tbody>
     </table>
   </section>
