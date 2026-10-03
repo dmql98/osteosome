@@ -13,6 +13,7 @@
   "subscribes": [
     "llm.provider.request",
     "llm.provider.cancel",
+    "llm.provider.reannounce",
     "credentials.resolved",
     "llm.models.list",
     "credential.saved",
