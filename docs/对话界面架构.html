@@ -212,13 +212,58 @@
 
 <div class="wrap">
 
-  <div class="lead" style="margin-top:var(--s5)">
-    <b>一句话：</b>界面 3 个组件（会话列表 / 对话 / 输入）；后端按功能拆成 <code>session</code>、<code>agent</code>、<code>models</code>
-    三个必需服务 + 若干能力位；<b>Core 是进程管理 + 总线 + HTTP/SSE 桥，且零业务知识</b>。
-    前端与服务之间只有两条通道：<code>POST /api/command</code> 发命令、<code>GET /events</code> 收事件。
-  </div>
+<div class="lead" style="margin-top:var(--s5)">
+<b>一句话：</b>界面 3 个组件（会话列表 / 对话 / 输入）；后端按功能拆成 <code>session</code>、<code>loop</code>、<code>llm</code>
+三个必需服务 + 若干能力位；<b>Core 是进程管理 + 总线 + HTTP/SSE 桥，且零业务知识</b>。
+前端与服务之间只有两条通道：<code>POST /api/command</code> 发命令、<code>GET /events</code> 收事件。
+</div>
 
-  <!-- 1 盒子 -->
+<div class="note ok" style="margin-top:var(--s3)">
+<b>状态：S0～S8 已全部落地（2026-10-03）。</b>本文档原先写的是「计划」，
+其中<b>「后端拆成 <code>session</code> / <code>agent</code> / <code>models</code>」这一条已经过时</b> ——
+实际落地是 <code>session</code> / <code>loop</code>（编排）/ <code>llm</code>（路由），
+加上能力位服务 <code>llm-provider-openai</code> / <code>credentials</code> / <code>llm-retry</code>，
+共 <b>6 个服务</b>（起点是 10 个）。
+<br><b>插件聚合已生效</b>：<b>5 个插件 / 6 个服务 / 11 个组件</b>，
+清单唯一真源是 <code>plugins/&lt;id&gt;/plugin.json</code>，Core 扫盘后经
+<code>GET /api/plugins</code> 下发，并按「只启已安装插件声明的服务」启动。
+<br><b>逐条对账结论</b>：6 个服务全部被认领；11 个组件与前端注册表<b>双向对齐</b>（无孤儿、无「声明了但没实现」）；
+前端硬编码插件表已删除。<b>归属表见 §5.3</b>，其中「LLM 服务商配置」一条是 S7-7 修正过的。
+<br>过程与踩坑记录见 <code>docs/开发计划.html</code> §S7 收口；
+执行顺序与编号不同（S7 由 6 子步重排为 8），原因记在那里。
+</div>
+
+  <div class="note" style="margin-top:var(--s3);border-color:var(--warn)">
+<b>术语对照（本文档写于实施之前，服务名与 topic 名与现状有出入）</b><br>
+本文档用 <code>agent</code> / <code>models</code> 指代两个概念，实际落地改了名字。
+<b>看本文档的结构与理由可以，但不要照抄服务名或 topic 名</b> —— 那些以
+<code>shared/src/events.ts</code> 的 <code>EVENT_TOPICS</code> / <code>COMMAND_TOPICS</code> 为准。
+<table style="margin-top:var(--s2)">
+<thead><tr><th style="width:22%">本文档写的</th><th style="width:22%">实际是</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>agent</code> 服务</td><td><code>loop</code> + <code>llm</code></td>
+<td>编排拆成两个：<code>loop</code> 跑工具循环，<code>llm</code> 是路由主位。
+<code>agent.run</code> → <code>loop.run</code>；<code>agent.cancel</code> → <code>llm.cancel</code> / <code>loop.cancel</code></td></tr>
+<tr><td><code>models</code> 服务</td><td><code>llm</code> + <code>llm-provider-openai</code></td>
+<td><code>llm</code> 主位只做路由（主位路由表只认 provider 名，不 import 任何实现），
+上游由 <code>llm-provider-openai</code> 一个进程承载 12 家厂商实例</td></tr>
+<tr><td><code>models.stream</code> / <code>models.finished</code></td>
+<td><code>llm.token.streamed</code> / <code>llm.request.finished</code></td>
+<td>事件名带领域前缀，便于按 topic 一次订阅拿到本轮全部进度</td></tr>
+<tr><td><code>agent.token</code> / <code>agent.thinking</code></td>
+<td><code>llm.token.streamed</code>（<code>token</code>）<br><code>loop.token.streamed</code></td>
+<td>另有 <code>loop.tool.executed</code> / <code>loop.state.changed</code>。
+<b>没有单独的 <code>thinking</code> 事件</b>：思考内容随 token 流带 <code>blockType</code> 字段（S4 加的）</td></tr>
+<tr><td>「思考强度选择」</td><td>未实现</td>
+<td>S4 落地时把 <code>reasoning</code> 做成消息上的独立字段 + 流里的 <code>blockType</code>，
+没有做成请求参数。<b>本文档此处是计划，不是现状</b></td></tr>
+</tbody>
+</table>
+<b>另有一处已知残留</b>：<code>EVENT_TOPICS</code> 里仍有 <code>hello.command.*</code> 三条，
+而 <code>hello</code> 服务已在 S2 删除。无害（没有服务发布它们），但属于该清的历史包袱。
+</div>
+
+<!-- 1 盒子 -->
   <section>
     <h2><span class="n">1</span>三个盒子（各自独立）</h2>
     <p>三个组件彼此独立：各自是一个盒子、独立渲染、独立可拖动 / 可拉出独立窗。下面逐个看；<b>组合后的默认预设见 §1.4</b>。</p>
@@ -715,16 +760,28 @@ service.publish(<span class="k">'message.appended'</span>, { sessionId, message 
             <td>免凭证的本地端点不该被强塞</td></tr>
         <tr><td><code>llm-retry</code></td><td>独立插件（旁路）</td>
             <td>缺了只是没重试/没记账，不影响主链路</td></tr>
-        <tr><td>只碰 Core 的组件（system-info / command-palette / settings / event-stream / service-status / service-manager）</td>
-            <td><b>无服务的内置插件</b></td>
-            <td>它们不与任何服务通信，只经 HTTP/SSE 碰微内核 → <code>services: []</code></td></tr>
+<tr><td>只碰 Core 的组件（system-info / command-palette / <b>settings</b> / event-stream / service-status / service-manager）</td>
+<td><b>无服务的内置插件</b></td>
+<td>它们不与任何服务通信，只经 HTTP/SSE 碰微内核 → <code>services: []</code></td></tr>
+<tr><td><b>LLM 服务商配置</b>（原在 <code>settings</code> 的 LLM tab 里）</td>
+<td><b>模型接入插件</b>（<code>widget.llm-settings</code>）</td>
+<td><b style="color:var(--danger)">已被 S7-7 修正</b>：原来它在 <code>settings</code> 里，
+而 <code>settings</code> 归上面的内置插件（外壳）——
+于是「配置 <code>llm-provider-openai</code>」这件事被划给了外壳插件，
+真正拥有该进程的模型接入插件反而只剩一个只读状态面板。<br>
+现在模型接入插件同时拥有 <b>配置</b>（<code>widget.llm-settings</code>，写）
+与 <b>状态</b>（<code>widget.llm-providers</code>，读）；<code>settings</code> 只留通用设置。<br>
+<b>教训：归属错配不会报错</b>，只会让「插件聚合」名不副实 —— 所以归属表要拿
+<code>plugins/*/plugin.json</code> 逐条对账，不能靠「文档没提」判断没问题。</td></tr>
       </tbody>
     </table>
     <p class="note ok"><b>规律：协同才能工作的 → 聚合成插件；可独立取舍的 → 独立插件。</b>
       这样既保证「装一件能用的东西」，又不牺牲「存在性由插件决定」。</p>
-    <p class="note"><b>结论：5 个插件</b> —— 工作台基础（无服务）／对话工作台（session+loop+llm+3 组件）／
-      模型接入（llm-provider-openai）／凭证（credentials）／可靠性（llm-retry）。
-      详见 <code>docs/开发计划.html</code> §S7 与 <code>docs/加一家LLM服务商.md</code>。</p>
+<p class="note"><b>结论：5 个插件 / 6 个服务 / 11 个组件</b> —— 工作台外壳（无服务，6 组件）／
+对话工作台（session+loop+llm，3 组件）／模型接入（llm-provider-openai，2 组件）／凭证（credentials）／可靠性（llm-retry）。
+<b>6 个服务全部被认领，无遗漏</b> —— 这是「只启已安装插件声明的服务」能安全生效的前提：
+漏认领一个服务，切语义之后它就静默不启动了。
+详见 <code>docs/开发计划.html</code> §S7 与 <code>docs/加一家LLM服务商.md</code>。</p>
 
     <h3>5.4 schema 与目录</h3>
     <pre class="code"><span class="cm">// plugins/chat-workbench/plugin.json</span>
@@ -798,8 +855,20 @@ plugins/
             <td>定义为 <code>degraded</code>，插件详情窗列出哪个服务异常</td></tr>
         <tr><td>依赖缺失（装了对话插件但没 provider）</td><td>中</td>
             <td><code>degraded</code> + 明确提示「缺 provider:X」，不启动失败</td></tr>
-        <tr><td>现有 6 个插件条目 + 10 个服务要重写为 <code>plugin.json</code></td><td>低</td>
-            <td>机械工作，顺手修掉插件表硬编码</td></tr>
+<tr><td>原有 6 个前端插件条目 + 10 个服务要重写为 <code>plugin.json</code></td>
+<td>—</td>
+<td><b>已完成（S7-5 / S7-7）</b>：实际是 <b>5 个插件</b>承接 <b>6 个服务 + 11 个组件</b>。
+比原估多一个组件 —— 因为发现「LLM 服务商配置」原先被错划给了工作台外壳插件，
+拆成 <code>widget.llm-settings</code> 归模型接入插件后组件数从 10 变 11。
+顺手修掉了插件表硬编码（前端 <code>PLUGINS</code> 已删）</td></tr>
+<tr><td>「停用」只做运行期，重启后失效</td><td><b style="color:var(--danger)">高（真咬人了）</b></td>
+<td>停用有<b>两个生效点</b>：运行期靠 <code>plugin.stop</code> 命令，启动路径靠
+<code>preferences.plugins.enabled</code>。只做一头 → 用户禁用后<b>重启 Core 它自己回来了</b>。
+单测与冒烟都绿，<b>只有重启才现形</b>。已两处都做，并加测试钉住</td></tr>
+<tr><td>「没有插件清单」在 B 语义下 = 零服务 = 应用不可用</td><td><b style="color:var(--danger)">高（差点 bricking）</b></td>
+<td>已加<b>三态降级</b>：<code>disabled</code>（有意关掉，不告警）／
+<code>missing-dir</code>（路径写错，告警 + 全启）／<code>empty</code>（漏了清单，告警 + 全启）。
+并把 S7 重排为「只读 → 落清单 → 切语义」，确保切语义时磁盘上已有清单</td></tr>
       </tbody>
     </table>
     <p class="note" style="margin-top:var(--s3)"><b>工作量</b>：Core 插件发现 + 拓扑启停 + 状态聚合 + <code>/api/plugins</code> ≈ 1 天；
