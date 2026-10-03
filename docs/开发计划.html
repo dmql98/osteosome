@@ -147,7 +147,7 @@
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
       <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span> · <span class="commit">97e652c</span> · <span class="commit">5a3ddfe</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      <b style="color:var(--success)">S7 插件聚合 8/8 全部完成</b> · 剩 S8（0.5 天）。下一步：S8。
+      <b style="color:var(--success)">S7 插件聚合 8/8 完成</b>（+ S7-7 归属订正）· 剩 S8（0.5 天）。下一步：S8。
     </div>
   </div>
 
@@ -635,7 +635,7 @@
                 <td class="mono">service-manager/{plugin-registry,plugin-registry-runtime}.ts；
                 sse-bridge/{plugins,server}.ts；main.ts</td></tr>
             <tr><td>S7-5</td><td><b style="color:var(--success)">✓ 已完成</b> 落 <b>5 个真实</b> <code>plugin.json</code>：
-                <b>6 个服务 + 10 个组件</b>归组，零问题零环，无服务被漏认领
+                <b>6 个服务 + 11 个组件</b>归组，零问题零环，无服务被漏认领
                 <br><span style="font-size:var(--text-xs)">依赖边从真实 <code>service.json</code> 的
                 <code>subscribes</code> 推导 → 安装顺序
                 <code>credentials → models → chat-workbench → reliability</code></span></td>
@@ -935,7 +935,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
               <code>missing-dir</code> 还报出是哪个目录</li>
         </ul>
         <div class="lbl">S7-5 记的那个担心可以撤销</div>
-        <p class="note ok">「10 个组件里只有 3 个进了 default-layout，另 7 个只活在 registry.ts」——
+        <p class="note ok">「11 个组件里只有 3 个进了 default-layout，另 8 个只活在 registry.ts」——
           <b>查清了，不是问题</b>：10 个 widget 组件文件全都在，
           <code>widgets/registry.ts</code> 用 glob 自动收录全部，
           <code>default-layout.ts</code> 只放 3 个<b>只是默认选择</b>，用户可手动添加其余。</p>
@@ -1021,6 +1021,57 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           （清单与偏好都在这里拉，去掉隐式依赖），并加了一条守卫测试：
           断言独立窗口确实请求了 <code>/api/preferences</code> ——
           否则将来有人把那行删掉，症状是「状态显示错了但一切正常」。</p>
+        <div class="lbl">S7-7 归属订正：LLM 配置从 settings 拆给 models（<span class="commit">dd57952</span>）</div>
+        <p>这一条不是原计划里的，是<b>用户提问触发</b>的：
+          「工作台设置里的 llm，和 llm-providers 两个组件是不是有问题？
+          难道不是 llm-providers 才是配置服务商吗。」</p>
+        <p><b>问题的前提要纠正，但结论方向是对的。</b></p>
+        <table style="margin-top:0">
+          <thead><tr><th style="width:26%"></th><th>settings 的 LLM tab</th><th><code>widget.llm-providers</code></th></tr></thead>
+          <tbody>
+            <tr><td>体量</td><td><code>LlmSettings.vue</code>（<b>20 KB</b>，最大组件）</td>
+                <td><code>LlmProvidersWidget.vue</code>（<b>39 行</b>）</td></tr>
+            <tr><td>能写吗</td><td><b style="color:var(--success)">能</b>：增删服务商、填 Key、自填 baseUrl / 选模型</td>
+                <td><b style="color:var(--danger)">不能</b>，一行写入代码都没有</td></tr>
+            <tr><td>数据源</td><td><code>PUT /api/credentials</code> + <code>preferences.llm.vendorOverrides</code></td>
+                <td>只订阅 <code>llm.provider.registered</code></td></tr>
+          </tbody>
+        </table>
+        <p>所以<b>「配置服务商」确实只有 settings 一处</b>，
+          <code>llm-providers</code> 是只读状态快照 —— 功能上并不重复。</p>
+        <p class="note"><b>但问题指出了一个真缺陷：归属划错了。</b>
+          <code>widget.settings</code> 归 <b>workbench</b>（外壳：系统信息 / 命令面板 / 事件看板 / 服务管理），
+          而它的 LLM tab 讲的是 <code>llm-provider-openai</code> 的配置 —— 那是 <b>models 插件</b>的东西。
+          <br>结果：<b>models 插件只留了一个只读旁观者，配置能力却被划给了外壳插件</b>。
+          这与 S7 的归属原则冲突（归属是意图，settings 里讲的不是「Core 内置」）。
+          <br>现在 models 同时拥有：<b><code>widget.llm-settings</code>（写）</b>与
+          <b><code>widget.llm-providers</code>（读）</b>。</p>
+        <ul>
+          <li><b>这两个组件要分开而不是合并</b>：配置是用户意图、更新频率低；
+              状态是运行期事实，由 <code>registered</code> / <code>unregistered</code> 驱动。
+              塞进同一个组件会让「我改了个 Key，到底生效没有」这类问题<b>更难查</b></li>
+          <li><b>顺带清掉一根指向已不存在 tab 的线</b>：<code>settings.tabs.llm</code>
+              的 i18n key（zh-CN + en）一并删了。留着它，下一个人会照着它去找。
+              对应的老断言 <code>expect(text).toContain('LLM')</code> 改成 <code>not.toContain</code> ——
+              <b>留着它等于要求那个错配的归属一直存在</b></li>
+          <li><b>「像重复」的观感有客观原因</b>：<code>llm-providers</code> <b>不在默认布局里</b>，
+              普通用户默认看不到它，只在插件详情窗能「加入窗口」。
+              一个天天见、一个见不着，自然会怀疑是不是重了</li>
+        </ul>
+        <p class="note ok"><b>双向对账测试证明这次改动是被守着的</b>（不是靠我眼睛看）：
+          <code>client/tests/widgets/registry.test.ts</code> 的反向对账「注册表里没有孤儿组件」
+          在 S7-3 就写好了。<b>反证过</b>：临时把 <code>widget.llm-settings</code> 从 models 清单去掉，
+          测试立刻报 <code>孤儿组件：widget.llm-settings 不属于任何插件</code>；加回去就绿。</p>
+        <div class="lbl">顺带记一个低级错误：报错位置不等于出错位置</div>
+        <p class="note" style="border-color:var(--danger)">新写的 <code>llm-settings-widget.vue</code>
+          末尾只有 <code>})</code>，<b>漏了 <code>&lt;/script&gt;</code></b>，
+          报 <code>Element is missing end tag</code>，但<b>错误位置在第 1 行，而第 1 行没问题</b>。
+          <br>排查绕了三步：① 所有 <code>*-widget.vue</code> 前 3 行长得一样，代码帧无法区分是哪个文件；
+          ② 单独 transform 被动态 import 的那个文件（<code>LlmSettingsView.vue</code>）是 OK 的；
+          ③ 最后写 5 个变体逐个 transform —— 连去掉注释、去掉 import、改短 title 都失败，
+          说明<b>不是内容某一部分的问题，而是整个文件缺闭合标签</b>。
+          <br><b>规矩：遇到「Element is missing end tag」且代码帧指向文件开头，
+          先确认文件末尾的闭合标签在不在</b>，别在文件头部找。</p>
         <div class="lbl">S7 全部 8 个子步已完成</div>
         <p class="note ok"><span class="mono" style="font-size:var(--text-xs)">S7-1 契约 → S7-2a 只读扫盘 →
           S7-5 真实清单 → S7-2b 切 B 语义 → S7-3 前端改拉清单 → S7-4 停用真停进程 →
@@ -1091,6 +1142,14 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
                 <td>不能。「没装插件」「插件层坏了」「真一个都没装」全是「还没有插件」</td>
                 <td>四种 <code>layer</code> 各有文案；降级显示<b>原因</b>、
                 <b>未就绪的具体服务</b>、缺哪些依赖</td></tr>
+            <tr><td><b>「配置服务商」归谁</b></td>
+                <td>在 <code>widget.settings</code> 里，而 settings 归 <b>workbench（外壳）</b> ——
+                于是真正拥有 <code>llm-provider-openai</code> 的 <b>models</b> 插件
+                反而只有一个只读旁观者</td>
+                <td><b>models 同时拥有「配置」与「状态」</b>：
+                <code>widget.llm-settings</code>（写）+
+                <code>widget.llm-providers</code>（读）。
+                workbench 只留通用设置。<b>见 S7-7</b></td></tr>
           </tbody>
         </table>
         <div class="lbl">全部实证（真实进程，不是单测）</div>
@@ -1235,10 +1294,15 @@ plugins/
           <li>更新 <code>docs/对话界面/S-对话界面与重构-计划.md</code>：P7 状态 → S0～S8 完成</li>
           <li><b>更新 <code>docs/对话界面架构.html</code></b>：状态胶囊 / 目标 / 系统图
               <br><b style="color:var(--danger)">这份现在是过时的：它写「<b>6</b> 个插件」，
-              而 S7 实际产出是「<b>5 个插件 / 6 个服务 / 10 个组件</b>」</b>。
+              而 S7 实际产出是「<b>5 个插件 / 6 个服务 / 11 个组件</b>」</b>。
               别只改数字 —— <b>依赖边也要换成真实推导的那三条</b>：
               models→credentials、chat-workbench→models、reliability→chat-workbench。
               <b>架构文档写错的依赖边比写错数字更害人</b></li>
+          <li><b>顺带核对架构文档里「哪些组件归哪个插件」的说法</b> —— S7-7 才发现它也是错的：
+              <code>settings</code> 里曾藏着 LLM 配置（属于 models 却划给了 workbench）。
+              这类<b>归属错配不会报错</b>，只会让「插件聚合」这件事名不副实。
+              <br>所以 S8 要拿 <code>plugins/*/plugin.json</code> <b>逐条对账</b>架构文档里的归属表，
+              而不是相信文档没提就等于没问题</li>
           <li><b>逐项核对「有没有第二个真源」</b> —— 这是 S7 的主线，S8 收尾时要真的查一遍，
               而不是凭印象写「已收敛」：
               <br>· 插件清单：应只剩 <code>plugins/*/plugin.json</code>（前端 <code>PLUGINS</code> 已删）
