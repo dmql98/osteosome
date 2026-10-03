@@ -68,6 +68,44 @@
         </div>
       </section>
 
+      <section v-if="hasIssues" class="detail-card detail-card--warn">
+        <header class="detail-card__head">状态明细</header>
+        <div class="detail-card__body">
+          <p v-if="plugin.reason" class="issue-reason">{{ plugin.reason }}</p>
+          <div v-if="plugin.missingDependencies.length" class="issue-row">
+            <span class="issue-row__label">缺必需依赖</span>
+            <span class="issue-row__value">{{ plugin.missingDependencies.join('、') }}</span>
+          </div>
+          <div v-if="plugin.unhealthyServices.length" class="issue-row">
+            <span class="issue-row__label">未就绪的服务</span>
+            <span class="issue-row__value">{{ plugin.unhealthyServices.join('、') }}</span>
+          </div>
+          <div v-if="plugin.missingOptional.length" class="issue-row">
+            <span class="issue-row__label">缺可选依赖</span>
+            <span class="issue-row__value">{{ plugin.missingOptional.join('、') }}</span>
+          </div>
+          <p class="issue-hint">
+            这些是 Core 判定的<b>事实</b>，界面只负责显示，不在前端重算。
+          </p>
+        </div>
+      </section>
+
+      <section class="detail-card">
+        <header class="detail-card__head">
+          服务<span class="detail-card__count">{{ plugin.readyServiceCount }} / {{ plugin.totalServices }} 就绪</span>
+        </header>
+        <div class="detail-card__body">
+          <div v-for="serviceId in plugin.services" :key="serviceId" class="dep-row">
+            <span class="dot" :class="serviceStateDot(serviceId)"></span>
+            <span>{{ serviceId }}</span>
+            <span class="dep-row__state">{{ serviceStateLabel(serviceId) }}</span>
+          </div>
+          <p v-if="!plugin.services.length" class="detail-card__empty">
+            该插件不带服务（只提供组件，或组件由 Core 内置）
+          </p>
+        </div>
+      </section>
+
       <section class="detail-card">
         <header class="detail-card__head">依赖</header>
         <div class="detail-card__body">
@@ -117,6 +155,7 @@ import Switch from '@/components/ui/Switch.vue'
 import WindowControls from '@/components/layout/WindowControls.vue'
 import { getWidget } from '@/widgets/registry'
 import { usePlugins } from '@/core-sdk/usePlugins'
+import type { PluginView } from './registry'
 import { requestAddWidget, notifyPluginsChanged } from '@/layout/window-events'
 import { closeCurrentWindow } from '@/tauri/plugin-window'
 
@@ -131,11 +170,84 @@ let addedTimer: ReturnType<typeof setTimeout> | null = null
 
 const plugin = computed(() => store.byId(props.pluginId))
 const isEnabled = computed(() => store.isEnabled(props.pluginId))
-const statusDot = computed(() => (store.isInstalled(props.pluginId) ? (isEnabled.value ? 'green' : 'gray') : 'red'))
+
+/**
+ * hero 上的状态有**两个独立的轴**，别混成一个：
+ * · 用户意愿（启用 / 停用）—— 本地 prefs，Core 并不知道
+ * · 实际状态（ready / degraded / failed / stopped）—— Core 派生
+ *
+ * 只显示前者的话，一个 degraded 的插件会显示「运行中」——
+ * 用户看到绿灯却发不出请求，详情窗（本该最详尽的地方）也不给任何线索。
+ * 与列表窗 S7-3 修的是同一个缺口，两处必须一致，否则两个窗口说法不同。
+ */
 const statusLabel = computed(() => {
   if (!store.isInstalled(props.pluginId)) return '已卸载'
-  return isEnabled.value ? '运行中' : '已停用'
+  if (!isEnabled.value) return '已停用'
+  return coreStateLabel(plugin.value?.state)
 })
+
+const statusDot = computed(() => {
+  if (!store.isInstalled(props.pluginId)) return 'red'
+  if (!isEnabled.value) return 'gray'
+  return coreStateDot(plugin.value?.state)
+})
+
+function coreStateLabel(state: PluginView['state'] | undefined): string {
+  if (state === 'degraded') return '降级'
+  if (state === 'failed') return '故障'
+  if (state === 'stopped') return '未运行'
+  return '运行中'
+}
+
+function coreStateDot(state: PluginView['state'] | undefined): string {
+  if (state === 'failed') return 'red'
+  if (state === 'degraded') return 'yellow'
+  if (state === 'stopped') return 'gray'
+  return 'green'
+}
+
+/** 是否值得展开「状态明细」—— 一切正常时不占地方 */
+const hasIssues = computed(() => {
+  const p = plugin.value
+  if (!p) return false
+  return (
+    p.state !== 'ready' ||
+    p.unhealthyServices.length > 0 ||
+    p.missingDependencies.length > 0
+  )
+})
+
+/** 逐个服务的真实状态。`undefined` = 未在跑 */
+function serviceStateOf(serviceId: string): string | undefined {
+  return plugin.value?.serviceStates[serviceId]
+}
+
+function serviceStateLabel(serviceId: string): string {
+  const state = serviceStateOf(serviceId)
+  switch (state) {
+    case 'ready':
+      return '就绪'
+    case 'starting':
+      return '启动中'
+    case 'restarting':
+      return '重启中'
+    case 'failed':
+      return '故障'
+    case 'stopped':
+      return '已停'
+    default:
+      // 没在跑：区分「被停用」与「所属插件没装」—— 前者是用户的决定，后者是缺东西
+      return isEnabled.value ? '未在跑' : '随插件停用'
+  }
+}
+
+function serviceStateDot(serviceId: string): string {
+  const state = serviceStateOf(serviceId)
+  if (state === 'ready') return 'green'
+  if (state === 'failed') return 'red'
+  if (state === 'starting' || state === 'restarting') return 'yellow'
+  return 'gray'
+}
 const authorLine = computed(() => {
   const parts: string[] = []
   if (plugin.value?.author) parts.push(`作者: ${plugin.value.author}`)
@@ -210,6 +322,14 @@ onBeforeUnmount(() => {
 
 .detail-card { border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
 .detail-card__head { padding: var(--space-2) var(--space-3); background: var(--color-surface-2); font-weight: 700; font-size: var(--text-sm); }
+.detail-card__count { margin-left: var(--space-2); font-weight: 400; font-size: var(--text-xs); color: var(--color-text-muted); }
+.detail-card--warn { border-color: var(--color-warning); }
+.detail-card--warn .detail-card__head { background: var(--color-warning-soft); color: var(--color-warning); }
+.issue-reason { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--color-warning); }
+.issue-row { display: flex; gap: var(--space-2); font-size: var(--text-xs); }
+.issue-row__label { color: var(--color-text-muted); flex: none; min-width: 88px; }
+.issue-row__value { font-family: var(--font-mono); }
+.issue-hint { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
 .detail-card__body { padding: var(--space-3); font-size: var(--text-sm); display: flex; flex-direction: column; gap: var(--space-2); line-height: 1.6; max-height: 32vh; overflow-y: auto; }
 .detail-card__empty { margin: 0; color: var(--color-text-muted); font-size: var(--text-xs); }
 

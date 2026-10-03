@@ -44,6 +44,13 @@ export function usePlugins() {
         store.applyStateChange(payload as Parameters<typeof store.applyStateChange>[0])
       }
     })
+    // 清单与偏好**都要在这里拉**，不能指望主窗口已经拉过。
+    //
+    // 插件列表窗 / 详情窗是独立的窗口，各有各的 JS 上下文与 pinia ——
+    // 主窗口的 `bootstrap()` 对它们无效。S7-3 把两个窗口里的 bootstrap 删掉之后，
+    // 如果不在这里补上，`enabled` / `uninstalled` 就永远是空的：
+    // 界面会把已停用的插件显示成启用中，而且没有任何报错。
+    void store.bootstrap()
     void load()
   })
   onUnmounted(() => {

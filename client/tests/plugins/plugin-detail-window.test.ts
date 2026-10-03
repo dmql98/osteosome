@@ -46,15 +46,16 @@ function coreResponse(over: Partial<PluginListResponse> = {}): PluginListRespons
           description: '厂商接入层',
           services: ['llm-provider-openai'],
           components: [],
+          dependencies: [{ pluginId: 'credentials' }, { pluginId: 'telemetry', optional: true }],
         },
         installed: true,
-        state: 'ready',
-        reason: '',
-        missingDependencies: [],
-        missingOptional: [],
-        unhealthyServices: [],
-        readyServiceCount: 1,
-        serviceStates: { 'llm-provider-openai': 'ready' },
+        state: 'degraded',
+        reason: '缺必需依赖: credentials',
+        missingDependencies: ['credentials'],
+        missingOptional: ['telemetry'],
+        unhealthyServices: ['llm-provider-openai'],
+        readyServiceCount: 0,
+        serviceStates: { 'llm-provider-openai': 'failed' },
       },
     ],
     ...over,
@@ -135,6 +136,100 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
     await flushPromises()
     // 依赖 label 取自对方插件名，且状态非 ready 时不应显示成就绪
     expect(wrapper.text()).toContain('模型接入')
+    expect(wrapper.text()).not.toContain('已就绪')
+  })
+
+  it('S7-6：degraded 的插件显示状态明细（原因 / 缺必需依赖 / 未就绪服务 / 缺可选依赖）', async () => {
+    const wrapper = mountDetail('models')
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('状态明细')
+    expect(text).toContain('缺必需依赖: credentials')
+    expect(text).toContain('缺必需依赖')
+    expect(text).toContain('credentials')
+    expect(text).toContain('未就绪的服务')
+    expect(text).toContain('llm-provider-openai')
+    // 可选依赖也要说，但要说清它不影响状态
+    expect(text).toContain('缺可选依赖')
+    expect(text).toContain('telemetry')
+  })
+
+  it('S7-6：服务清单逐个显示状态与「N / M 就绪」', async () => {
+    const wrapper = mountDetail('models')
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('0 / 1 就绪')
+    expect(text).toContain('llm-provider-openai')
+    expect(text).toContain('故障')
+  })
+
+  it('S7-6：一切正常时不展开状态明细（不占地方）', async () => {
+    const wrapper = mountDetail('workbench')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('状态明细')
+    // 无服务的插件要说清是「不带服务」，而不是空白
+    expect(wrapper.text()).toContain('该插件不带服务')
+  })
+
+  it('S7-6：hero 状态反映 Core 的判定，不只看用户意愿', async () => {
+    // 与列表窗 S7-3 修的是同一个缺口，两处必须一致，
+    // 否则「列表说降级、详情说运行中」比只说错更糟
+    const wrapper = mountDetail('models')
+    await flushPromises()
+    expect(wrapper.text()).toContain('降级')
+    expect(wrapper.text()).not.toContain('运行中')
+  })
+
+  it('S7-6：服务未在跑时区分「未在跑」与「随插件停用」', async () => {
+    // 同一个「进程没在跑」，在两种情况下含义完全不同：
+    // · 插件启用着 -> 「未在跑」= 有点问题，去看看
+    // · 插件被用户停了 -> 「随插件停用」= 你的决定，不是故障
+    lastBody = coreResponse()
+    lastBody.plugins[1]!.state = 'stopped'
+    lastBody.plugins[1]!.serviceStates = {}
+    const running = mountDetail('models')
+    await flushPromises()
+    expect(running.text()).toContain('未在跑')
+    expect(running.text()).not.toContain('随插件停用')
+
+    // 偏好里把 models 停用 —— 走真实响应，不直接改 store，
+    // 因为「独立窗口要自己拉偏好」正是这条要守的东西
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/preferences')) {
+          return { ok: true, json: async () => ({ plugins: { enabled: { models: false } } }) }
+        }
+        return { ok: true, status: 202, json: async () => lastBody }
+      }),
+    )
+    const disabled = mountDetail('models')
+    await flushPromises()
+    expect(disabled.text()).toContain('随插件停用')
+    expect(disabled.text()).toContain('已停用')
+  })
+
+  it('独立窗口自己拉偏好，不依赖主窗口已经拉过', async () => {
+    // 插件列表窗 / 详情窗各有各的 pinia，主窗口的 bootstrap() 对它们无效。
+    // 若哪天有人把 usePlugins 里那行 bootstrap 删了，症状是
+    // 「已停用的插件显示成启用中」且**没有任何报错** —— 所以钉住它。
+    const requested: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        requested.push(url)
+        if (url.includes('/api/preferences')) {
+          return { ok: true, json: async () => ({ plugins: { enabled: { models: false } } }) }
+        }
+        return { ok: true, json: async () => lastBody }
+      }),
+    )
+    const wrapper = mountDetail('workbench')
+    await flushPromises()
+    expect(requested.some((u) => u.includes('/api/preferences'))).toBe(true)
+    expect(wrapper.text()).toContain('依赖')
   })
 
   it('Core 拉取失败时不崩（离线保持空清单）', async () => {

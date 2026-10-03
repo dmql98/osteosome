@@ -84,9 +84,18 @@ export interface PluginView {
   reason: string
   installed: boolean
   missingDependencies: string[]
+  /** 可选依赖中未满足的 —— 不影响 state，只作展示 */
+  missingOptional: string[]
   unhealthyServices: string[]
   readyServiceCount: number
   totalServices: number
+  /**
+   * 服务 id → 真实状态。`undefined` = 该服务未在跑。
+   *
+   * 必须带出来：详情窗要能逐个服务显示状态，而 Core 才知道真实状态。
+   * 前端若只拿 `state`（插件级聚合结果）就没法回答「哪个服务坏了」。
+   */
+  serviceStates: Record<string, string | undefined>
 }
 
 /** Core 快照 -> 模板视图 */
@@ -115,9 +124,11 @@ export function toPluginViews(snapshots: readonly PluginSnapshot[]): PluginView[
       reason: snapshot.reason,
       installed: snapshot.installed,
       missingDependencies: snapshot.missingDependencies,
+      missingOptional: snapshot.missingOptional,
       unhealthyServices: snapshot.unhealthyServices,
       readyServiceCount: snapshot.readyServiceCount,
       totalServices: m.services?.length ?? 0,
+      serviceStates: snapshot.serviceStates ?? {},
     }
   })
 }
