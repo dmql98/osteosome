@@ -146,8 +146,8 @@
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
-      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">9ba9052</span> · <span class="commit">16ddba2</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      进行中：<b>S7 插件聚合</b>（8 子步 · 原 6 步按依赖重排）· S7-1 契约已定并推送，下一步 <b>S7-2a 只读扫盘</b>。
+      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
+      进行中：<b>S7 插件聚合</b>（8 子步）· 已完成 S7-1、S7-2a，下一步 <b>S7-5 落 5 个真实 plugin.json</b>。
     </div>
   </div>
 
@@ -159,7 +159,7 @@
       <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
       <div><b class="big">0</b><span>未提交改动</span></div>
       <div><b class="big">12</b><span>测试包全绿</span></div>
-      <div><b>≈2</b><span>剩余计划天数（S7 余 7 子步 + S8 0.5 天）</span></div>
+      <div><b>≈2</b><span>剩余计划天数（S7 余 6 子步 + S8 0.5 天）</span></div>
     </div>
     <table>
       <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
@@ -589,7 +589,7 @@
     <div class="step">
       <div class="hd"><span class="sid">S7</span><span class="lane plug">插件线</span>
         <span class="stitle">插件 = 聚合</span>
-        <span class="done-badge" style="background:var(--warning)">进行中 1/8</span><span class="dur">2 天</span></div>
+        <span class="done-badge" style="background:var(--warning)">进行中 2/8</span><span class="dur">2 天</span></div>
       <div class="bd">
         <div class="lbl">为什么它还是「假的」—— 三处不实（2026-10-02 复核）</div>
         <table style="margin-top:0">
@@ -628,10 +628,12 @@
                 <br><span class="mono" style="font-size:var(--text-xs)">fields: id / name / version / icon? / description? /
                 services[] / components[] / capabilities[]? / dependencies[{pluginId, optional?}] / autoStart</span></td>
                 <td class="mono">shared/src/{plugin-manifest,events}.ts；core/src/config/config.ts</td></tr>
-            <tr><td>S7-2a</td><td><b>只读</b>：Core 扫 <code>plugins/*/plugin.json</code> → zod 校验 → <b>先跑环检测</b> →
-                拓扑排序 → 状态聚合 → <code>GET /api/plugins</code> + 发 <code>plugin.state.changed</code>
-                <br><span style="font-size:var(--text-xs);color:var(--success)"><b>启动行为完全不变</b>（照旧全启）→ 零风险，可独立回归</span></td>
-                <td class="mono">新增 service-manager/plugin-registry.ts；sse-bridge/server.ts</td></tr>
+            <tr><td>S7-2a</td><td><b style="color:var(--success)">✓ 已完成</b> <b>只读</b>：扫 <code>plugins/&lt;id&gt;/plugin.json</code> → zod 校验 →
+                <b>先跑环检测</b> → 拓扑排序 → 状态聚合 → <code>GET /api/plugins</code> + 发 <code>plugin.state.changed</code>
+                <br><span style="font-size:var(--text-xs);color:var(--success)"><b>启动行为完全不变</b>（照旧全启）→ 零风险。已实测：
+                无 <code>plugins/</code> 目录时告警照报、<code>core: started</code> 照常出现</span></td>
+                <td class="mono">service-manager/{plugin-registry,plugin-registry-runtime}.ts；
+                sse-bridge/{plugins,server}.ts；main.ts</td></tr>
             <tr><td>S7-5</td><td>落 <b>5 个真实</b> <code>plugin.json</code>，把 <b>6 个服务 + 10 个组件</b>归组
                 （划法见架构文档 §5.3）
                 <br><span style="font-size:var(--text-xs)">必须在 S7-2b 之前 —— 见下方「B 语义的最大风险」</span></td>
@@ -687,6 +689,40 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           空目录 / 目录不存在是大概率手滑，必须告警。这与仓库既有纪律一致 ——
           偏好文件损坏时 HTTP 路径回 500、RPC 路径容错 + warn，都是
           <b>标记出来让调用方决定严不严</b>，而不是静默兜底。</p>
+        <div class="lbl">S7-2a 已交付（<span class="commit">2ea9006</span>）—— 三个刻意的决定</div>
+        <ul>
+          <li><b>扫盘不抛错，与 <code>loadServices</code> 的「全成功或抛」故意相反。</b>
+              <code>services/</code> 是<b>代码</b>，坏一个就是部署坏了；插件层是<b>数据</b>，
+              拷目录进来就可能不合法，且插件坏掉不该让 Core 起不来。
+              每个问题收进 <code>problems</code> 继续扫 —— 这正是三态降级保护要读的数据形状。
+              测试夹具里<b>故意放了环 + 坏 JSON + 缺字段 + 重复 id + 指向不存在的服务</b>，
+              因为「一个坏清单不许掀桌子」这条最容易被写回抛错</li>
+          <li><b><code>installOrder</code> 只含能排出来的</b>，环内成员给不出真顺序，
+              <b>宁可少列也不列一个假的</b>让 S7-2b 照着启（那会让它们互相等待直到一起超时）。
+              但环内成员<b>保留在 <code>plugins</code> 里让用户看见</b> ——
+              表现为「插件凭空消失」比「这两个插件坏了」更难排查。
+              顺带分清两件事：<b>展示排序</b>（环内成员按 id 稳定排最后，界面上连成一排）
+              ≠ <b>安装顺序</b>（S7-2b 用，不含环内成员）</li>
+          <li><b><code>installed</code> 与「依赖是否满足」是两个集合。</b>
+              <code>installed</code> = 目录在且未被卸（只回答「用户装了吗」）；
+              <code>installedPluginIds</code> = <b>能在 installOrder 里被启的</b>。
+              环内插件装了但永远起不来 → 依赖它的插件必须知道，
+              否则会以为「对方在，只是慢」而一直等</li>
+        </ul>
+        <p class="note"><b>实测到的「不会掀桌子」证据</b>（无 <code>plugins/</code> 目录时）：
+          <br><span class="mono" style="font-size:var(--text-xs)">WARN plugin layer: dir not found
+          (…/plugins) -&gt; 未安装任何插件；S7-2b 起这会退回全启
+          <br>INFO core: started port=… services=…</span>
+          <br>告警照报，Core 照常起来。<b>这条证据正是当初把 S7-5 提到 S7-2b 之前的理由</b> ——
+          B 语义下缺清单会 bricking app，而 S7-2a 的存在让这件事<b>只告警不致命</b>。</p>
+        <div class="lbl">S7-2a 顺手修掉的 S7-1 遗漏</div>
+        <p><code>plugin.state.changed</code> / <code>plugin.start</code> / <code>plugin.stop</code>
+          当时只加进了 <code>EventMap</code> / <code>CommandMap</code>，<b>没进
+          <code>EVENT_TOPICS</code> / <code>COMMAND_TOPICS</code> 运行时清单</b>。
+          后果不是「不好看」：<code>validateManifest</code> 的 eventSet/commandSet 与 bus 订阅校验
+          都读那份清单 —— 任何 <code>service.json</code> 声明
+          <code>subscribes: ["plugin.stop"]</code> 都会被判非法。
+          <b>「定义了 Map」不等于「可用了」</b>，清单才是运行时认的那一份。</p>
         <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
         <ul>
           <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
