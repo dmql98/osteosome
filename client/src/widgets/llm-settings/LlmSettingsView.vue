@@ -1,339 +1,288 @@
-<template>
-  <div class="llm-settings">
-    <!-- S3：厂商目录。数据源是 shared 的预设表（12 家），**不是**「已注册的」——
-         否则这里只能看到已经能用的那几家，用户没有任何地方可以「新增」一家。 -->
-    <div class="llm-settings__section">
-      <div class="llm-settings__section-head">
-        <h3 class="llm-settings__heading">{{ t('llm.vendorCatalog') }}</h3>
-      </div>
-      <p class="llm-settings__hint">{{ t('llm.vendorCatalogHint') }}</p>
-      <div
-        v-for="v in catalog"
-        :key="v.id"
-        class="llm-settings__vendor"
-        :class="{ 'llm-settings__vendor--on': isConfigured(v.id) }"
-        :data-testid="`vendor-${v.id}`"
-      >
-        <button class="llm-settings__vendor-head" type="button" @click="toggleDetail(v.id)">
-          <span class="llm-settings__vendor-name">{{ v.label }}</span>
-          <span class="llm-settings__vendor-id">{{ v.id }}</span>
-          <span
-            class="llm-settings__state"
-            :class="stateClass(v)"
-            :data-testid="`vendor-state-${v.id}`"
-          >{{ stateText(v) }}</span>
-        </button>
-
-        <div v-if="detailOpen === v.id" class="llm-settings__vendor-body">
-          <dl class="llm-settings__facts">
-            <dt>{{ t('llm.vendorBaseUrl') }}</dt>
-            <dd class="mono">{{ v.baseUrl }}</dd>
-            <dt>{{ t('llm.vendorKeyEnv') }}</dt>
-            <dd class="mono">{{ v.credentialEnv || '—' }}</dd>
-            <dt>{{ t('llm.vendorDefaultModel') }}</dt>
-            <dd class="mono">{{ v.defaultModel }}</dd>
-          </dl>
-          <p v-if="v.note" class="llm-settings__hint">{{ v.note }}</p>
-          <p v-if="credentialProvider(v.id)" class="llm-settings__hint">
-            {{ t('llm.vendorFromEnv') }}（{{ credentialProvider(v.id) }}）
-          </p>
-          <div class="llm-settings__row">
-            <Button size="sm" :data-testid="`vendor-setkey-${v.id}`" @click="openKeyModal(v.id)">
-              {{ t('llm.vendorSetKey') }}
-            </Button>
-            <IconButton
-              v-if="credentialFor(v.id)"
-              icon="✕"
-              :label="t('llm.vendorRemoveKey')"
-              :data-testid="`vendor-dropkey-${v.id}`"
-              @click="onDeleteCredential(credentialFor(v.id)!)"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- S3：自定义端点（写入 preferences.llm.vendorOverrides） -->
-    <div class="llm-settings__section">
-      <div class="llm-settings__section-head">
-        <h3 class="llm-settings__heading">{{ t('llm.customEndpoint') }}</h3>
-        <Button size="sm" data-testid="endpoint-new" @click="openEndpointModal()">
-          {{ t('llm.newEndpoint') }}
-        </Button>
-      </div>
-      <p class="llm-settings__hint">{{ t('llm.customEndpointHint') }}</p>
-      <div v-if="!overrides.length" class="llm-settings__empty">{{ t('common.empty') }}</div>
-      <div
-        v-for="o in overrides"
-        :key="o.id"
-        class="llm-settings__credential"
-        :data-testid="`endpoint-${o.id}`"
-      >
-        <span class="llm-settings__credential-name">{{ o.label || o.id }}</span>
-        <span class="llm-settings__credential-masked mono">{{ o.baseUrl }}</span>
-        <IconButton icon="✕" :label="t('common.delete')" @click="onDeleteOverride(o.id)" />
-      </div>
-    </div>
-
-    <div class="llm-settings__section">
-      <div class="llm-settings__section-head">
-        <h3 class="llm-settings__heading">{{ t('llm.model') }}</h3>
-      </div>
-      <div class="llm-settings__row">
-        <Select
-          :model-value="selectedProvider"
-          :options="providerOptions"
-          :placeholder="t('llm.provider')"
-          aria-label="model-provider"
-          @update:model-value="onSelectProvider"
-        />
-        <div v-if="catalogModels.length" class="llm-settings__models">
-          <Select
-            :model-value="selectedModel"
-            :options="modelOptions"
-            :placeholder="t('llm.model')"
-            aria-label="model"
-            @update:model-value="onSelectModel"
-          />
-          <span
-            v-if="catalogKind === 'static'"
-            class="llm-settings__badge"
-            :title="t('llm.staticListHint')"
-          >
-            {{ t('llm.staticList') }}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <div class="llm-settings__section">
-      <div class="llm-settings__section-head">
-        <h3 class="llm-settings__heading">{{ t('llm.credential') }}</h3>
-        <Button size="sm" @click="credentialOpen = true">{{ t('llm.newCredential') }}</Button>
-      </div>
-      <div v-if="!credentialOptions.length" class="llm-settings__empty">{{ t('common.empty') }}</div>
-      <div v-for="c in credentialOptions" :key="c.value" class="llm-settings__credential">
-        <span class="llm-settings__credential-name">{{ c.label }}</span>
-        <span class="llm-settings__credential-masked">{{ c.masked }}</span>
-        <IconButton icon="✕" :label="t('common.delete')" @click="onDeleteCredential(String(c.value))" />
-      </div>
-    </div>
-
-    <!-- 存密钥：provider 字段就是厂商 id，provider 服务凭它把该厂商注册上来 -->
-    <Modal :open="keyOpen" :title="t('llm.vendorSetKey')" @update:open="keyOpen = $event">
-      <div class="llm-settings__form">
-        <p class="llm-settings__hint mono">{{ keyTarget }}</p>
-        <Input
-          v-model="keyValue"
-          type="password"
-          :placeholder="t('llm.credentialKey')"
-          aria-label="vendor-key"
-        />
-      </div>
-      <template #footer>
-        <div class="llm-settings__form-actions">
-          <Button variant="ghost" @click="keyOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!keyValue" data-testid="vendor-key-save" @click="onSaveVendorKey">
-            {{ t('common.save') }}
-          </Button>
-        </div>
-      </template>
-    </Modal>
-
-    <Modal :open="endpointOpen" :title="t('llm.newEndpoint')" @update:open="endpointOpen = $event">
-      <div class="llm-settings__form">
-        <Input v-model="epId" :placeholder="t('llm.endpointId')" aria-label="endpoint-id" />
-        <Input v-model="epLabel" :placeholder="t('llm.providerName')" aria-label="endpoint-label" />
-        <Input v-model="epBaseUrl" :placeholder="t('llm.endpointBaseUrl')" aria-label="endpoint-baseurl" />
-        <Input
-          v-model="epModel"
-          :placeholder="t('llm.endpointDefaultModel')"
-          aria-label="endpoint-model"
-        />
-        <label class="llm-settings__check">
-          <input v-model="epNoCredential" type="checkbox" aria-label="endpoint-nocred" />
-          <span>{{ t('llm.endpointNoCredential') }}</span>
-        </label>
-      </div>
-      <template #footer>
-        <div class="llm-settings__form-actions">
-          <Button variant="ghost" @click="endpointOpen = false">{{ t('common.cancel') }}</Button>
-          <Button
-            :disabled="!epId || !epBaseUrl"
-            data-testid="endpoint-save"
-            @click="onSaveEndpoint"
-          >
-            {{ t('common.save') }}
-          </Button>
-        </div>
-      </template>
-    </Modal>
-
-    <Modal
-      :open="credentialOpen"
-      :title="t('llm.newCredential')"
-      @update:open="credentialOpen = $event"
-    >
-      <div class="llm-settings__form">
-        <Input v-model="credentialName" :placeholder="t('common.name')" aria-label="credential-name" />
-        <Input v-model="credentialValue" type="password" :placeholder="t('llm.credentialKey')" aria-label="credential-value" />
-      </div>
-      <template #footer>
-        <div class="llm-settings__form-actions">
-          <Button variant="ghost" @click="credentialOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!credentialValue" @click="onSaveCredential">{{ t('common.save') }}</Button>
-        </div>
-      </template>
-    </Modal>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+/**
+ * 模型配置（S7-7 起是独立的 `widget.llm-settings`，归 models 插件）
+ *
+ * ## ⚠️ 这个文件头不要放 JS 块注释
+ *
+ * Vue 的 SFC 解析器把 `<script>` **之前**的内容按 HTML 解析。
+ * 所以块注释里只要出现 `<dl>`、`<b>` 这类尖括号，就会被当成顶层标签 ——
+ * 报 `Element is missing end tag`，而错误位置指向注释里那个词附近，完全不指向真因。
+ * 本文件踩过一次（说明文字里写了 `<dl>`）。所以注释一律写在 `<script>` 内部。
+ *
+ * ## 这一版改了什么，为什么
+ *
+ * 上一版把 12 家预设**平铺成一个长列表**，展开后是只读的事实表，
+ * 而「选模型」被放在第三段。于是：
+ *
+ * · 12 家里通常只有 1–2 家连上了，其余 11 行是噪音，用户要滚动着找
+ * · 「选厂商 → 选模型」这个**连续动作**被拆到相隔两段
+ * · 想改端点 / 默认模型只能去「自定义端点」**另建一条** —— 同一厂商两处出现、两处配置
+ * · 展开只看得到「默认模型: (空)」（lm-studio / vLLM 的预设就是这样），
+ *   用户无从下手，而 `llm.models.list` 这个能力其实早就存在，只是没有入口
+ *
+ * 现在拆成四块，职责各自单一：正在使用 / 服务商 / 自定义端点 / 插件提供的接入。
+ *
+ * ## 「就地改预设」不需要任何 Core 侧新机制
+ *
+ * `buildVendorInstances` 里 `byId` 是 Map：先塞预设，**再用 override 按同 id 覆盖**。
+ * 所以「改预设的端点」= 写一条同 id 的 `vendorOverride`，并在上游标「已覆盖预设」。
+ *
+ * 但**没配凭证的云厂商不能这么改**：`instanceFromOverride` 在 `credentialRef`
+ * 解析不出来时返回 `null`，那条 override 压根不会成为实例 —— 填了也白填。
+ * 所以这类厂商不给端点编辑框，只给「设置密钥」。
+ *
+ * ## 探测 = 拉模型列表（同一个动作）
+ *
+ * `llm.models.list.result` 的 `catalog:'static'` 就意味着走了内置兜底 = 端点连不上，
+ * 于是连通性是顺带的，见 `useEndpointProbe`。
+ */
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { VENDOR_PRESETS, type VendorPreset } from '@osteosome/shared'
 import Button from '@/components/ui/Button.vue'
-import IconButton from '@/components/ui/IconButton.vue'
 import Input from '@/components/ui/Input.vue'
 import Modal from '@/components/ui/Modal.vue'
-import Select from '@/components/ui/Select.vue'
-import Textarea from '@/components/ui/Textarea.vue'
+import { useEndpointProbe } from '@/core-sdk/useEndpointProbe'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
 import { useModelCatalog } from '@/core-sdk/useModelCatalog'
 import { usePreferences } from '@/core-sdk/usePreferences'
-import { sse } from '@/core-sdk/sse'
+import ActiveModelCard from './ActiveModelCard.vue'
+import CustomEndpointSection from './CustomEndpointSection.vue'
+import PluginProviderSection from './PluginProviderSection.vue'
+import VendorListSection from './VendorListSection.vue'
+import type { VendorPreset } from '@osteosome/shared'
+import { VENDOR_PRESETS } from '@osteosome/shared'
 
-interface MaskedCredential {
-  id: string
-  name: string
-  provider: string
-  kind: string
-  masked: string
-}
-
-/** 自填端点一条（与 `services/llm-provider-openai` 的 `VendorOverride` 同形） */
 interface EndpointOverride {
   id: string
   label?: string
   baseUrl: string
   defaultModel?: string
-  models?: string[]
-  /** wire id；缺省 openai。填别家会被 provider 拒绝并告警 */
-  api?: string
   credentialRef?: string
+  api?: string
+}
+
+interface MaskedCredential {
+  id: string
+  name: string
+  provider: string
 }
 
 const { t } = useI18n()
-const { list: providerList, providers } = useLlmProviders()
-const { models: catalogModels, catalog: catalogKind, options: modelOptions, load: loadCatalog } = useModelCatalog()
 const preferences = usePreferences()
+const { list: providerList, providers } = useLlmProviders()
+const { models: catalogModels, loading: loadingCatalog, load: loadCatalog } = useModelCatalog()
+const probe = useEndpointProbe()
 
+/** 预设表直接静态 import —— 不要改成 `await import()`：
+ *  那会让首屏的厂商清单晚一拍才出现（实测：整页只剩标题，测试与人都看不出是「加载中」）。
+ */
+const catalog = ref<VendorPreset[]>([...VENDOR_PRESETS])
 const credentials = ref<MaskedCredential[]>([])
+const overrides = ref<EndpointOverride[]>([])
+const expanded = ref<string[]>([])
+
+const selectedProvider = ref('')
+const selectedModel = ref('')
+
+// ── 凭证弹窗 ──
 const credentialOpen = ref(false)
+const credentialId = ref('')
 const credentialName = ref('')
 const credentialValue = ref('')
 
-/** 厂商目录：预设表全量 12 家（不是「已注册的」——那样用户无处可新增） */
-const catalog = VENDOR_PRESETS
-/** 展开详情的厂商 id（一次一个） */
-const detailOpen = ref('')
-
-/** 存密钥弹窗 */
-const keyOpen = ref(false)
-const keyTarget = ref('')
-const keyValue = ref('')
-
-/** 自定义端点 */
-const overrides = ref<EndpointOverride[]>([])
+// ── 自定义端点弹窗 ──
 const endpointOpen = ref(false)
+const endpointEditId = ref('')
 const epId = ref('')
 const epLabel = ref('')
 const epBaseUrl = ref('')
 const epModel = ref('')
 const epNoCredential = ref(true)
 
-const selectedProvider = ref('')
-const selectedModel = ref('')
-
-const providerOptions = computed(() =>
-  providerList.value.map((p) => ({ label: p.provider, value: p.provider })),
+// ── 派生：服务商列表（预设） ──
+const vendorRows = computed(() =>
+  catalog.value.map((v) => ({
+    id: v.id,
+    label: v.label,
+    baseUrl: v.baseUrl,
+    credentialEnv: v.credentialEnv,
+    defaultModel: v.defaultModel,
+    note: v.note,
+  })),
 )
-const credentialOptions = computed(() =>
-  credentials.value.map((c) => ({ value: c.id, label: `${c.name}（${c.provider}）`, masked: c.masked })),
-)
 
-// 目录到达后默认选第一个模型（未选过时）
-watch(catalogModels, (list) => {
-  if (list.length > 0 && !selectedModel.value) selectedModel.value = list[0]
+/** 已注册成实例的 id 集合（= 「连上了」） */
+const connected = computed(() => {
+  const out: Record<string, boolean> = {}
+  for (const id of Object.keys(providers.value ?? {})) out[id] = true
+  for (const o of overrides.value) out[o.id] = true
+  return out
 })
 
-function toggleDetail(id: string): void {
-  detailOpen.value = detailOpen.value === id ? '' : id
-}
+const overrideById = computed(() => {
+  const m: Record<string, EndpointOverride> = {}
+  for (const o of overrides.value) m[o.id] = o
+  return m
+})
 
-/** 该厂商在凭证库里那条的 id（没有则空串） */
-function credentialFor(vendorId: string): string {
-  return credentials.value.find((c) => c.provider === vendorId)?.id ?? ''
-}
+const overridden = computed(() => {
+  const out: Record<string, boolean> = {}
+  for (const id of Object.keys(overrideById.value)) out[id] = true
+  return out
+})
+
+/** 生效端点 / 模型：override 优先于预设 */
+const effectiveBaseUrl = computed(() => {
+  const out: Record<string, string> = {}
+  for (const v of vendorRows.value) out[v.id] = v.baseUrl
+  for (const [id, o] of Object.entries(overrideById.value)) out[id] = o.baseUrl
+  return out
+})
+
+const effectiveModel = computed(() => {
+  const out: Record<string, string> = {}
+  for (const v of vendorRows.value) out[v.id] = v.defaultModel
+  for (const [id, o] of Object.entries(overrideById.value)) out[id] = o.defaultModel ?? ''
+  return out
+})
 
 /**
- * 已配置 = 主位路由表里真有它。
+ * 自定义端点区只列**非预设**的 override。
  *
- * 不用「凭证库里有没有那条」当判据：env 注入的密钥不进凭证库，但它照样能用 ——
- * 拿凭证库当真相会把「明明能用」显示成「未配置」。
+ * 预设 id 的 override 已经在「服务商」里就地编辑了；在这儿再列一遍，
+ * 同一个端点就会出现在两个地方、两处配置。
  */
-function isConfigured(vendorId: string): boolean {
-  return !!providers.value?.[vendorId]
+const customEndpoints = computed(() => {
+  const presetIds = new Set(catalog.value.map((v) => v.id))
+  return overrides.value
+    .filter((o) => !presetIds.has(o.id))
+    .map((o) => ({ id: o.id, label: o.label ?? '', baseUrl: o.baseUrl, credentialRef: o.credentialRef ?? '' }))
+})
+
+/** 插件提供的接入：目前恒为空 —— 没有插件注册原生 wire provider */
+const pluginProviders = ref<{ id: string; label: string; baseUrl: string }[]>([])
+
+const providerOptions = computed(() =>
+  providerList.value.map((p) => ({ value: p.provider, label: p.provider })),
+)
+
+const modelOptions = computed(() => catalogModels.value.map((m) => ({ label: m, value: m })))
+
+const activeProvider = computed(() => {
+  const id = selectedProvider.value
+  if (!id) return null
+  const row = vendorRows.value.find((v) => v.id === id)
+  const baseUrl = effectiveBaseUrl.value[id]
+  if (!row && !baseUrl) return null
+  return {
+    provider: id,
+    label: row?.label ?? id,
+    baseUrl: baseUrl ?? '',
+    credentialRef: providers.value?.[id]?.credentialRef ?? overrideById.value[id]?.credentialRef ?? '',
+    defaultModel: effectiveModel.value[id] ?? '',
+  }
+})
+
+/** 探测状态：预设 + 自定义端点一起给子组件 */
+const probeState = computed(() => ({
+  probing: probe.probing.value,
+  reachable: Object.fromEntries(
+    Object.entries(probe.results.value).map(([k, v]) => [k, v ? v.catalog === 'remote' : null]),
+  ),
+}))
+
+// ── 当前 provider 的模型目录 ──
+async function onSelectProvider(value: string | number): Promise<void> {
+  selectedProvider.value = String(value)
+  selectedModel.value = ''
+  await loadCatalog(selectedProvider.value)
 }
 
-/** 免密钥端点（ollama / vllm / lm-studio）不需要任何凭证 */
-function isNoCredential(vendor: VendorPreset): boolean {
-  return !vendor.credentialEnv
+function onSelectModel(value: string | number): void {
+  selectedModel.value = String(value)
+  void saveModelPick(selectedProvider.value, selectedModel.value)
 }
 
-function stateText(vendor: VendorPreset): string {
-  if (isConfigured(vendor.id)) return t('llm.vendorConfigured')
-  if (isNoCredential(vendor)) return t('llm.vendorNoCredential')
-  return t('llm.vendorNotConfigured')
+async function saveModelPick(providerId: string, model: string): Promise<void> {
+  if (!providerId) return
+  await upsertOverride(providerId, { defaultModel: model })
 }
 
-function stateClass(vendor: VendorPreset): string {
-  if (isConfigured(vendor.id)) return 'llm-settings__state--on'
-  if (isNoCredential(vendor)) return 'llm-settings__state--free'
-  return 'llm-settings__state--off'
+// ── 就地改预设：写同 id 的 override ──
+async function upsertOverride(id: string, patch: Partial<EndpointOverride>): Promise<void> {
+  const existing = overrideById.value[id]
+  const base = existing ?? { id, baseUrl: '', credentialRef: '' }
+  const next: EndpointOverride = { ...base, ...patch, id }
+  if (!next.baseUrl) return
+  overrides.value = [...overrides.value.filter((o) => o.id !== id), next]
+  await saveOverrides()
+  probe.clear(id)
 }
 
-/** 展示用：这家当前实际用的 credentialRef（`env:` 前缀说明是环境变量注入的） */
-function credentialProvider(vendorId: string): string {
-  const ref = providers.value?.[vendorId]?.credentialRef ?? ''
-  return ref.startsWith('env:') ? ref.slice(4) : ''
+async function onEditBaseUrl(id: string, value: string): Promise<void> {
+  await upsertOverride(id, { baseUrl: value.replace(/\/+$/, '') })
 }
 
-function openKeyModal(vendorId: string): void {
-  keyTarget.value = vendorId
-  keyValue.value = ''
-  keyOpen.value = true
+async function onEditModel(id: string, value: string): Promise<void> {
+  await upsertOverride(id, { defaultModel: value.trim() })
+  // 改了模型就把端点探一次：用户填完模型名通常正等着它能用
+  await probe.probe(id)
 }
 
-/** 存密钥 → provider 收到 `credential.saved` 即注册（不用重启进程） */
-async function onSaveVendorKey(): Promise<void> {
-  if (!keyTarget.value || !keyValue.value) return
-  const res = await fetch('/api/credentials', {
+// ── 凭证 ──
+function credentialFor(providerId: string): MaskedCredential | undefined {
+  return credentials.value.find((c) => c.provider === providerId)
+}
+
+function openKeyModal(providerId: string): void {
+  const existing = credentialFor(providerId)
+  credentialId.value = existing?.id ?? `${providerId}-key`
+  credentialName.value = existing?.name ?? `${providerId} API Key`
+  credentialValue.value = ''
+  credentialOpen.value = true
+}
+
+async function onSaveCredential(): Promise<void> {
+  if (!credentialValue.value) return
+  await fetch('/api/credentials', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: `${keyTarget.value} key`,
-      provider: keyTarget.value,
-      value: keyValue.value,
+      id: credentialId.value,
+      name: credentialName.value,
+      provider: keyTargetProvider.value,
+      value: credentialValue.value,
     }),
   })
-  if (!res.ok) return
-  keyOpen.value = false
-  keyValue.value = ''
+  credentialValue.value = ''
+  credentialOpen.value = false
   await loadCredentials()
+  // 刚给了密钥 → 那家可能刚刚注册成功，立刻探一次
+  if (keyTargetProvider.value) await probe.probe(keyTargetProvider.value)
 }
 
+/** 记录「这个密钥弹窗是为谁开的」—— 保存后要按它探测 */
+const keyTargetProvider = ref('')
+
+function openKey(providerId: string): void {
+  keyTargetProvider.value = providerId
+  openKeyModal(providerId)
+}
+
+async function onDeleteCredential(id: string): Promise<void> {
+  await fetch(`/api/credentials?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  credentials.value = credentials.value.filter((c) => c.id !== id)
+}
+
+async function removeKey(providerId: string): Promise<void> {
+  const c = credentialFor(providerId)
+  if (c) await onDeleteCredential(c.id)
+  probe.clear(providerId)
+}
+
+// ── 自定义端点 ──
 function openEndpointModal(): void {
+  endpointEditId.value = ''
   epId.value = ''
   epLabel.value = ''
   epBaseUrl.value = ''
@@ -342,30 +291,60 @@ function openEndpointModal(): void {
   endpointOpen.value = true
 }
 
+function editEndpoint(id: string): void {
+  const o = overrideById.value[id]
+  if (!o) return
+  endpointEditId.value = id
+  epId.value = o.id
+  epLabel.value = o.label ?? ''
+  epBaseUrl.value = o.baseUrl
+  epModel.value = o.defaultModel ?? ''
+  epNoCredential.value = (o.credentialRef ?? '') === ''
+  endpointOpen.value = true
+}
+
 async function onSaveEndpoint(): Promise<void> {
   const id = epId.value.trim()
   const baseUrl = epBaseUrl.value.trim()
   if (!id || !baseUrl) return
-  if (overrides.value.some((o) => o.id === id)) return
+  if (!endpointEditId.value && overrides.value.some((o) => o.id === id)) return
   const item: EndpointOverride = {
     id,
-    baseUrl,
+    baseUrl: baseUrl.replace(/\/+$/, ''),
     // 免密钥就写空串 credentialRef；否则按约定推断 env 名，由用户在凭证库补密钥
     ...(epNoCredential.value ? { credentialRef: '' } : {}),
     ...(epLabel.value.trim() ? { label: epLabel.value.trim() } : {}),
     ...(epModel.value.trim() ? { defaultModel: epModel.value.trim() } : {}),
   }
-  overrides.value = [...overrides.value, item]
+  overrides.value = [...overrides.value.filter((o) => o.id !== id), item]
   await saveOverrides()
   endpointOpen.value = false
+  // 建完立刻探：新增端点的首要疑问就是「它通不通」
+  await probe.probe(id)
 }
 
 async function onDeleteOverride(id: string): Promise<void> {
   overrides.value = overrides.value.filter((o) => o.id !== id)
   await saveOverrides()
+  probe.clear(id)
 }
 
-/** 写入 Core 偏好 `llm.vendorOverrides`（provider 启动时经 `preferences.get` 读回） */
+async function onProbe(providerId: string): Promise<void> {
+  await probe.probe(providerId)
+  // 探测顺带把模型列表拉回来了 —— 切过去就能选
+  if (selectedProvider.value !== providerId) {
+    selectedProvider.value = providerId
+    await loadCatalog(providerId)
+  }
+}
+
+function toggleVendor(providerId: string): void {
+  expanded.value = expanded.value.includes(providerId)
+    ? expanded.value.filter((x) => x !== providerId)
+    : [...expanded.value, providerId]
+}
+
+// ── 偏好读写 ──
 async function saveOverrides(): Promise<void> {
   await preferences.patch({ llm: { vendorOverrides: overrides.value } })
 }
@@ -380,234 +359,161 @@ async function loadOverrides(): Promise<void> {
   }
 }
 
-function onSelectProvider(value: string | number): void {
-  selectedProvider.value = String(value)
-  selectedModel.value = ''
-  void loadCatalog(selectedProvider.value)
-}
-
-function onSelectModel(value: string | number): void {
-  selectedModel.value = String(value)
-}
-
-async function onDeleteCredential(id: string): Promise<void> {
-  await fetch(`/api/credentials?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-  credentials.value = credentials.value.filter((c) => c.id !== id)
-}
-
-async function onSaveCredential(): Promise<void> {
-  if (!credentialValue.value) return
-  await fetch('/api/credentials', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: credentialName.value || credentialValue.value.slice(0, 8),
-      provider: selectedProvider.value || 'llm',
-      value: credentialValue.value,
-    }),
-  })
-  credentialOpen.value = false
-  credentialName.value = ''
-  credentialValue.value = ''
-  await loadCredentials()
-}
-
 async function loadCredentials(): Promise<void> {
   try {
     const res = await fetch('/api/credentials')
-    if (res.ok) {
-      const data = (await res.json()) as { credentials?: MaskedCredential[] }
-      credentials.value = data.credentials ?? []
-    }
+    if (!res.ok) return
+    const body = (await res.json()) as { credentials?: MaskedCredential[] }
+    credentials.value = body.credentials ?? []
   } catch {
-    // Core 无凭证能力 → 空列表
+    credentials.value = []
   }
 }
 
-function onCredentialEvent(): void {
-  void loadCredentials()
-}
+/**
+ * 挂载后等 provider 列表到位，再挑一个当前服务商。
+ *
+ * 为什么必须 watch 而不是只在 onMounted 里挑一次：
+ * `onMounted` 那一刻 `providerList` 通常还是**空的** —— provider 是通过
+ * `llm.provider.registered` 事件陆续注册上来的，晚一拍。
+ * 于是旧写法会让「正在使用」卡片**一直空着**，直到用户手动选一次 ——
+ * 而那卡片恰恰是回答「我现在发问走哪家」的地方，空着最伤。
+ */
+watch(
+  providerList,
+  async (list) => {
+    if (selectedProvider.value && list.some((p) => p.provider === selectedProvider.value)) return
+    const first = list[0]
+    if (!first) return
+    selectedProvider.value = first.provider
+    selectedModel.value = ''
+    await loadCatalog(first.provider)
+  },
+  { immediate: true },
+)
 
-let disposeSaved: (() => void) | null = null
-let disposeDeleted: (() => void) | null = null
-
-onMounted(() => {
-  void loadCredentials()
-  void loadOverrides()
-  disposeSaved = sse.subscribe('credential.saved', onCredentialEvent)
-  disposeDeleted = sse.subscribe('credential.deleted', onCredentialEvent)
-})
-
-onUnmounted(() => {
-  disposeSaved?.()
-  disposeSaved = null
-  disposeDeleted?.()
-  disposeDeleted = null
+onMounted(async () => {
+  await Promise.all([loadOverrides(), loadCredentials()])
 })
 </script>
 
-<style scoped>
-.llm-settings {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-.llm-settings__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.llm-settings__section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.llm-settings__heading {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.llm-settings__empty {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  padding: var(--space-2) 0;
-}
-.llm-settings__provider,
-.llm-settings__credential {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-}
-.llm-settings__provider-name {
-  font-size: var(--text-sm);
-  color: var(--color-text);
-}
-.llm-settings__provider-meta {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-.llm-settings__provider-retry,
-.llm-settings__retry {
-  margin-left: var(--space-2);
-  color: var(--color-text-muted);
-}
+<template>
+  <div class="llm-settings">
+    <header class="llm-settings__bar">
+      <h2 class="llm-settings__title">模型接入</h2>
+      <Button size="sm" data-testid="endpoint-new-top" @click="openEndpointModal">＋ 连接新端点</Button>
+    </header>
+    <p class="llm-settings__sub">连上本地或云端模型。改动即时生效，不用重启。</p>
 
-/* ── S3：厂商目录 ── */
-.llm-settings__hint {
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-.llm-settings__vendor {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  margin-bottom: var(--space-2);
-}
-.llm-settings__vendor--on {
-  border-color: var(--color-success);
-}
-.llm-settings__vendor-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  background: none;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.llm-settings__vendor-name {
-  font-size: var(--text-sm);
-  color: var(--color-text);
-}
-.llm-settings__vendor-id {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-.llm-settings__state {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-2);
-  white-space: nowrap;
-  color: var(--color-text-muted);
-}
-.llm-settings__state--on {
-  border-color: var(--color-success);
-  color: var(--color-success);
-}
-.llm-settings__state--free {
-  border-color: var(--color-border-strong, var(--color-border));
-}
-.llm-settings__vendor-body {
-  padding: 0 var(--space-3) var(--space-3);
-}
-.llm-settings__facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px var(--space-3);
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-xs);
-}
-.llm-settings__facts dt {
-  color: var(--color-text-muted);
-}
-.llm-settings__facts dd {
-  margin: 0;
-  color: var(--color-text);
-  overflow-wrap: anywhere;
-}
-.llm-settings__check {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text);
-}
-.llm-settings__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.llm-settings__models {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.llm-settings__badge {
-  font-size: var(--text-xs);
-  color: var(--color-warning);
-  border: 1px solid var(--color-warning);
-  border-radius: var(--radius-sm);
-  padding: 1px var(--space-2);
-  white-space: nowrap;
-}
-.llm-settings__credential-name {
-  font-size: var(--text-sm);
-  color: var(--color-text);
-}
-.llm-settings__credential-masked {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  flex: 1;
-}
-.llm-settings__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.llm-settings__form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
+    <ActiveModelCard
+      :provider="activeProvider"
+      :providers="providerOptions"
+      :models="modelOptions"
+      :model="selectedModel"
+      :loading-models="loadingCatalog"
+      :reachable="probeState.reachable[selectedProvider] ?? null"
+      :probe="probe.results.value[selectedProvider]"
+      :probing="probe.probing.value[selectedProvider] === true"
+      @update:provider="onSelectProvider"
+      @update:model="onSelectModel"
+      @probe="onProbe(selectedProvider)"
+    />
+
+    <VendorListSection
+      :vendors="vendorRows"
+      :connected="connected"
+      :effective-base-url="effectiveBaseUrl"
+      :effective-model="effectiveModel"
+      :overridden="overridden"
+      :probing="probe.probing.value"
+      :reachable="probeState.reachable"
+      :expanded="expanded"
+      @toggle="toggleVendor"
+      @set-key="openKey"
+      @remove-key="removeKey"
+      @probe="onProbe"
+      @edit-base-url="onEditBaseUrl"
+      @edit-model="onEditModel"
+    />
+
+    <CustomEndpointSection
+      :endpoints="customEndpoints"
+      :probing="probe.probing.value"
+      :reachable="probeState.reachable"
+      @create="openEndpointModal"
+      @edit="editEndpoint"
+      @remove="onDeleteOverride"
+      @probe="onProbe"
+    />
+
+    <PluginProviderSection :plugin-providers="pluginProviders" />
+
+    <p class="llm-settings__ports">
+      ⓘ 本地端点默认端口：LM Studio <b class="mono">1234</b> · Ollama <b class="mono">11434</b> ·
+      vLLM <b class="mono">8000</b>，都要带 <b class="mono">/v1</b>。
+    </p>
+
+    <Modal v-model:open="endpointOpen" :title="endpointEditId ? '编辑端点' : '新增端点'" :closable="true">
+      <div class="form">
+        <label class="form__row">
+          <span class="form__key">端点 id</span>
+          <Input v-model="epId" :disabled="Boolean(endpointEditId)" placeholder="my-proxy" />
+        </label>
+        <label class="form__row">
+          <span class="form__key">显示名</span>
+          <Input v-model="epLabel" placeholder="可留空" />
+        </label>
+        <label class="form__row">
+          <span class="form__key">Base URL</span>
+          <Input v-model="epBaseUrl" placeholder="http://127.0.0.1:1234/v1" />
+        </label>
+        <label class="form__row">
+          <span class="form__key">默认模型</span>
+          <Input v-model="epModel" placeholder="本地端点由你决定模型名" />
+        </label>
+        <label class="form__row">
+          <span class="form__key">免凭证</span>
+          <input v-model="epNoCredential" type="checkbox" />
+        </label>
+      </div>
+      <template #footer>
+        <Button size="sm" variant="ghost" @click="endpointOpen = false">取消</Button>
+        <Button size="sm" variant="primary" data-testid="endpoint-save" @click="onSaveEndpoint">保存并探测</Button>
+      </template>
+    </Modal>
+
+    <Modal v-model:open="credentialOpen" title="设置密钥" :closable="true">
+      <div class="form">
+        <label class="form__row">
+          <span class="form__key">凭证 id</span>
+          <Input v-model="credentialId" />
+        </label>
+        <label class="form__row">
+          <span class="form__key">名称</span>
+          <Input v-model="credentialName" />
+        </label>
+        <label class="form__row">
+          <span class="form__key">密钥值</span>
+          <Input v-model="credentialValue" type="password" placeholder="只写入，不回显" />
+        </label>
+        <p class="form__note">密钥明文只进 Core 凭证库，不进日志、不进总线。</p>
+      </div>
+      <template #footer>
+        <Button size="sm" variant="ghost" @click="credentialOpen = false">取消</Button>
+        <Button size="sm" variant="primary" data-testid="credential-save" @click="onSaveCredential">保存</Button>
+      </template>
+    </Modal>
+  </div>
+</template>
+
+<style scoped>
+.llm-settings { display: flex; flex-direction: column; gap: var(--space-3); }
+.llm-settings__bar { display: flex; align-items: center; gap: var(--space-2); }
+.llm-settings__title { margin: 0; font-size: var(--text-md); font-weight: 700; flex: 1; }
+.llm-settings__sub { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
+.llm-settings__ports { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
+.form { display: flex; flex-direction: column; gap: var(--space-2); }
+.form__row { display: flex; align-items: center; gap: var(--space-2); }
+.form__key { flex: none; width: 72px; font-size: var(--text-xs); color: var(--color-text-muted); }
+.form__note { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
 </style>
