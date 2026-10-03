@@ -5,9 +5,9 @@
   "icon": "🧠",
   "author": "osteosome",
   "license": "Apache-2.0",
-  "description": "模型接入层（services/llm-provider-openai）：wire 层 provider，一个进程内承载多家厂商实例（openai / deepseek / openrouter / moonshot …，S1 起统一走 OpenAI 兼容 wire），运行期按 credential.saved / deleted 增量注册与注销。组件：厂商管理面板。",
+  "description": "模型接入层（services/llm-provider-openai）：wire 层 provider，一个进程内承载多家厂商实例（openai / deepseek / openrouter / moonshot …，S1 起统一走 OpenAI 兼容 wire），运行期按 credential.saved / deleted 增量注册与注销。两个组件分工明确：widget.llm-settings 是配置入口（写），widget.llm-providers 是状态快照（读，S7-7 从 settings 的 LLM tab 拆过来，让配置与状态都归本插件）。",
   "services": ["llm-provider-openai"],
-  "components": ["widget.llm-providers"],
+  "components": ["widget.llm-settings", "widget.llm-providers"],
   "capabilities": [
     { "name": "llm.provider.registered", "detail": "provider 注册（defaultModel / credentialRef / retryPolicy）" },
     { "name": "llm.provider.unregistered", "detail": "provider 注销（凭证位删除）" },

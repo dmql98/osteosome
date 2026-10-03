@@ -1,7 +1,9 @@
 export default {
   settings: {
     title: '设置',
-    tabs: { llm: 'LLM', ui: '界面', advanced: '高级' },
+    // S7-7：`llm` tab 已拆成独立的 widget.llm-settings（归 models 插件），
+    // 所以这里不再有 settings.tabs.llm —— 留着就是一根指向不存在 tab 的线
+    tabs: { ui: '界面', advanced: '高级' },
     ui: {
       theme: '主题',
       themeLight: '浅色',

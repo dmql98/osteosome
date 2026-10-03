@@ -29,7 +29,7 @@ vi.mock('../../src/core-sdk/sse', async () => {
 })
 
 import SettingsPaneView from '../../src/widgets/settings/SettingsPaneView.vue'
-import LlmSettings from '../../src/widgets/settings/llm/LlmSettings.vue'
+import LlmSettings from '../../src/widgets/llm-settings/LlmSettingsView.vue'
 
 const DESCRIPTOR = {
   provider: 'openai',
@@ -93,25 +93,40 @@ describe('i18n 基础设施（initLocale）', () => {
     expect((i18n.global.locale as { value: string }).value).toBe(DEFAULT_LOCALE)
   })
 
-  it('resources 按命名空间：settings.tabs.llm / llm.provider / common.save 均可达', () => {
-    expect(i18n.global.t('settings.tabs.llm')).toBe('LLM')
+  it('resources 按命名空间：settings.tabs.ui / llm.provider / common.save 均可达', () => {
+    expect(i18n.global.t('settings.tabs.ui')).toBeTruthy()
     expect(i18n.global.t('llm.provider')).toBeTruthy()
     expect(i18n.global.t('common.save')).toBeTruthy()
+  })
+
+  it('S7-7：settings 不再有 llm tab（它已是独立的 widget.llm-settings，归 models 插件）', () => {
+    // 正向断言容易糊弄：t() 对不存在的 key 会返回 key 本身，所以要断言它**不是** 'LLM'
+    expect(i18n.global.t('settings.tabs.llm')).not.toBe('LLM')
+  })
+
+  it('S7-7：settings 只剩 ui / advanced 两个 tab，且没有 LLM', () => {
+    const wrapper = mount(SettingsPaneView, { global: { plugins: [createPinia(), i18n] } })
+    const labels = wrapper.findAll('button').map((b) => b.text())
+    expect(labels.some((l) => l.includes('LLM'))).toBe(false)
+    expect(labels.length).toBeGreaterThan(0)
   })
 })
 
 describe('SettingsPaneView 壳', () => {
-  it('渲染 LLM / 界面 / 高级 三个 Tab（i18n 文案）', async () => {
+  it('渲染 界面 / 高级 两个 Tab（i18n 文案）—— S7-7 起没有 LLM tab 了', async () => {
     const wrapper = mount(SettingsPaneView, { global: { plugins: [createPinia(), i18n, UiPlugin] } })
     await flushPromises()
     const text = wrapper.text()
-    expect(text).toContain('LLM')
+    // 原来这里是 expect(text).toContain('LLM')。S7-7 把 LLM 拆成独立的
+    // widget.llm-settings（归 models 插件），所以这条断言必须跟着变 ——
+    // 留着它就等于要求那个错配的归属一直存在
+    expect(text).not.toContain('LLM')
     expect(text).toContain('界面')
     expect(text).toContain('高级')
   })
 })
 
-  describe('LlmSettings LLM 设置', () => {
+  describe('LlmSettingsView 服务商配置（S7-7 起是独立的 widget.llm-settings，归 models 插件）', () => {
     it('厂商目录来自预设表全量 12 家（不是「已注册的」——否则无处可新增）', async () => {
       vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
       const wrapper = mount(LlmSettings, { global: { plugins: [createPinia(), i18n, UiPlugin] } })

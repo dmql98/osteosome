@@ -1,7 +1,10 @@
 export default {
   settings: {
     title: 'Settings',
-    tabs: { llm: 'LLM', ui: 'UI', advanced: 'Advanced' },
+    // S7-7: the `llm` tab became its own widget.llm-settings (owned by the models
+    // plugin), so there is no settings.tabs.llm any more — keeping it would be a
+    // thread pointing at a tab that doesn't exist
+    tabs: { ui: 'UI', advanced: 'Advanced' },
     ui: {
       theme: 'Theme',
       themeLight: 'Light',
