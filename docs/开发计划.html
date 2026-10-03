@@ -146,8 +146,8 @@
       <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
       <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
       <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
-      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      进行中：<b>S7 插件聚合</b>（8 子步）· 已完成 S7-1、S7-2a、S7-5、S7-2b、S7-3，下一步 <b>S7-4 停用真停进程</b>。
+      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span> · <span class="commit">97e652c</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
+      进行中：<b>S7 插件聚合</b>（8 子步）· 已完成 S7-1、S7-2a、S7-5、S7-2b、S7-3、S7-4，下一步 <b>S7-6 详情窗明细</b>。
     </div>
   </div>
 
@@ -159,7 +159,7 @@
       <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
       <div><b class="big">0</b><span>未提交改动</span></div>
       <div><b class="big">12</b><span>测试包全绿</span></div>
-      <div><b>≈2</b><span>剩余计划天数（S7 余 3 子步 + S8 0.5 天）</span></div>
+      <div><b>≈2</b><span>剩余计划天数（S7 余 2 子步 + S8 0.5 天）</span></div>
     </div>
     <table>
       <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
@@ -589,7 +589,7 @@
     <div class="step">
       <div class="hd"><span class="sid">S7</span><span class="lane plug">插件线</span>
         <span class="stitle">插件 = 聚合</span>
-        <span class="done-badge" style="background:var(--warning)">进行中 5/8</span><span class="dur">2 天</span></div>
+        <span class="done-badge" style="background:var(--warning)">进行中 6/8</span><span class="dur">2 天</span></div>
       <div class="bd">
         <div class="lbl">为什么它还是「假的」—— 三处不实（2026-10-02 复核）</div>
         <table style="margin-top:0">
@@ -654,9 +654,13 @@
                 <b>顺手修掉两个界面真缺口</b>：degraded 显示「运行中」、空态不区分 layer</span></td>
                 <td class="mono">plugins/{registry.ts,PluginListWindow,PluginDetailWindow}.vue；
                 stores/plugin.store.ts；新增 core-sdk/usePlugins.ts；layout/layout.store.ts</td></tr>
-            <tr><td>S7-4</td><td><b><code>setEnabled</code> 真的停服务</b>（现在只写 prefs，一个进程都没停）
-                <br><span style="font-size:var(--text-xs)">停前先发 <code>loop.cancel</code> 正常收尾，超时才强杀</span></td>
-                <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start</td></tr>
+            <tr><td>S7-4</td><td><b style="color:var(--success)">✓ 已完成</b> <b><code>setEnabled</code> 真的停服务</b>
+                （以前只写 prefs，一个进程都没停）+ <code>uninstall</code> 同样停
+                <br><span style="font-size:var(--text-xs);color:var(--success)"><b>顺带修掉「重启后自己回来」的 bug</b> ——
+                停用在 Core 有<b>两个生效点</b>，启动路径原本不认 <code>enabled</code>。
+                已用真实进程验证：停用后只有该插件的 3 个服务变 stopped</span></td>
+                <td class="mono">stores/plugin.store.ts → 发 plugin.stop/start；
+                core：plugin-registry-runtime.ts（新增 disabledIds）+ main.ts（readDisabled）</td></tr>
             <tr><td>S7-6</td><td>插件详情窗显示「N 组件 / M 服务 / 依赖 / degraded 明细」</td>
                 <td class="mono">PluginListWindow.vue / PluginDetailWindow.vue</td></tr>
           </tbody>
@@ -703,7 +707,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           <br>所以三态的落点是唯一的：<code>status !== 'ok'</code> 就传「不限制」，
           <code>status === 'ok'</code> 才传按已安装算出的集合。
           <b>ServiceManager 只看到「一个集合或没有」，看不到三态。</b></p>
-        <div class="lbl">S7-2a 已交付（<span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>）—— 三个刻意的决定</div>
+        <div class="lbl">S7-2a 已交付（<span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span> · <span class="commit">97e652c</span>）—— 三个刻意的决定</div>
         <ul>
           <li><b>扫盘不抛错，与 <code>loadServices</code> 的「全成功或抛」故意相反。</b>
               <code>services/</code> 是<b>代码</b>，坏一个就是部署坏了；插件层是<b>数据</b>，
@@ -737,7 +741,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           都读那份清单 —— 任何 <code>service.json</code> 声明
           <code>subscribes: ["plugin.stop"]</code> 都会被判非法。
           <b>「定义了 Map」不等于「可用了」</b>，清单才是运行时认的那一份。</p>
-        <div class="lbl">S7-5 已交付（<span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>）—— 划法与依据</div>
+        <div class="lbl">S7-5 已交付（<span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span> · <span class="commit">97e652c</span>）—— 划法与依据</div>
         <table style="margin-top:0">
           <thead><tr><th style="width:20%">插件</th><th style="width:26%">服务</th><th>组件</th></tr></thead>
           <tbody>
@@ -853,7 +857,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           「uninstalled 的插件若服务还在跑，仍报 ready」。
           2b 之后被卸插件的服务不会被 spawn，这个不一致世界自然消失 ——
           状态会正确地变成 <code>stopped</code>。这就是当初选择「钉住缺口而不是顺手修 shared」的理由。</p>
-        <div class="lbl">S7-2b 已交付（<span class="commit">dfdef29</span> · <span class="commit">046dbaa</span>）—— 六条验收全部实证</div>
+        <div class="lbl">S7-2b 已交付（<span class="commit">dfdef29</span> · <span class="commit">046dbaa</span> · <span class="commit">97e652c</span>）—— 六条验收全部实证</div>
         <p class="note ok"><span class="mono" style="font-size:var(--text-xs)">===== --plugins none =====
           <br>WARN plugin layer: 'disabled' -&gt; 不按插件过滤，全部服务照旧启动
           <br>INFO core: started
@@ -896,7 +900,7 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
           接回去只是把编译期错误换成运行期错误，还多一个「到底什么时候安全」的问题要知道。</p>
         <p>顺带修掉一处过时文案：告警里还写着「S7-2b 起这会退回全启」，
           而 S7-2b 已经生效了 —— 这种「描述未来」的注释在功能落地后就是错的。</p>
-        <div class="lbl">S7-3 已交付（<span class="commit">046dbaa</span>）—— 两个真源合成一个的过程</div>
+        <div class="lbl">S7-3 已交付（<span class="commit">046dbaa</span> · <span class="commit">97e652c</span>）—— 两个真源合成一个的过程</div>
         <p><b>为什么那张硬编码表非删不可</b>：它和 Core 讲同一件事却是两份数据 ——
           Core 知道服务真实状态、依赖是否满足、插件装没装；那张表一概不知道，只会说「我存在」。
           于是状态只能在前端猜，<b>而前端拿不到猜对的输入</b>。</p>
@@ -947,6 +951,47 @@ Core 起来了，/health 里 <span class="k">0 个服务</span>，界面全空</
               而不是悄悄表现成「插件都没了」。两个窗口测试的 fetch stub 改为返回真实形状 ——
               stub 成 <code>{}</code> 的话，「渲染不出来」和「Core 没返回」分不清</li>
         </ul>
+        <div class="lbl">S7-4 已交付（<span class="commit">97e652c</span>）—— 先修 bug，再接线</div>
+        <p class="note"><b>先修掉一个「重启后自己回来」的 bug。</b>
+          <code>allowedServiceIds()</code> 只看 <code>uninstalled</code> /
+          <code>autoStart:false</code> / 环，<b>不看 <code>enabled</code></b>。于是：
+          用户禁用某插件 → 当天一切正常 → <b>重启 Core 后它自己回来了</b>。
+          <br>根因是<b>停用在 Core 那边有两个生效点</b>，而它们不共享同一份判定：
+          运行期走 <code>plugin.stop</code> 命令，启动路径只看 <code>uninstalled</code>。
+          <b>只补一头就会出现「运行期生效、重启失效」。</b></p>
+        <ul>
+          <li><code>PluginRegistry</code> 新增 <code>disabledIds</code>，与 <code>uninstalledIds</code>
+              <b>分开</b>而不是合成一个集合 —— 停用是「我暂时不要」，卸载是「我不要了」，
+              界面要区别对待</li>
+          <li><code>main.ts</code> 新增 <code>readDisabled()</code>，<b>只认显式 false</b>
+              （缺省即启用）</li>
+          <li><b>命令先发，成功了才写偏好</b>。反过来写会留下「界面说停了、进程还在跑」的偏差，
+              而<b>重启后进程真的没了</b> —— 那是「撒谎到重启」的极端版本。
+              所以命令失败时<b>不改偏好</b>，返回 false 让界面报出来。
+              停用是这三者里最容易出偏差的一个，因为它是唯一一个在 Core 那边有<b>两处</b>生效点的动作</li>
+          <li><code>uninstall</code> 同样发 <code>plugin.stop</code>：启动路径已经认
+              <code>uninstalled</code>，但<b>运行期</b> Core 还没被通知，
+              不停的话进程会一直跑到 Core 退出</li>
+          <li><b>失败必须说出来，否则界面就是骗人</b>：两个窗口都加行内错误条。
+              详情窗<b>卸载失败时不关窗口</b> —— 关了用户会以为已经卸载了，而插件还在跑</li>
+        </ul>
+        <p class="note ok"><b>真实进程实证</b>：
+          <br><span class="mono" style="font-size:var(--text-xs)">停前: credentials=ready, llm=ready,
+          llm-provider-openai=ready, llm-retry=ready, loop=ready, session=ready
+          <br>plugin.stop models -&gt; HTTP 202
+          <br>停后: credentials=ready, llm=ready, <b>llm-provider-openai=stopped</b>, llm-retry=ready,
+          loop=ready, session=ready
+          <br>models 插件状态: stopped / reason: 未启动
+          <br>plugin.stop 不存在的插件 -&gt; HTTP 400</span>
+          <br>「停后」那一行里<b>只有 llm-provider-openai 变了</b>，另外 5 个照旧 ready ——
+          说明展开粒度是「插件带的服务」，不是「一刀切」。
+          重启场景另测：prefs 里 <code>enabled:{models:false}</code> 时启动，
+          <code>llm-provider-openai=stopped</code>，<b>停用保持住了</b>。</p>
+        <p class="note ok"><b>S7-5 那个「已知缺口」现在可以销案了。</b>
+          当时记的是「uninstalled 的插件若服务还在跑仍报 ready，
+          <b>2b 之后服务不会被 spawn 就好了</b>」—— 那是<b>预测</b>。
+          现在实测服务真的会停，状态正确变成 <code>stopped</code> / 「未启动」。
+          <b>从「预测会好」变成「已验证」。</b></p>
         <div class="lbl">顺序为什么是这样（每一步都为下一步提供地基）</div>
         <ul>
           <li><b>S7-1 先定契约</b>：schema 没定，后面扫盘与前端拉清单都没有可验证的形状。
@@ -1195,6 +1240,13 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
                 <b>后果</b>：client 打包坏了两个提交没人发现；client 失败又中断了 <code>pnpm -r run build</code>
                 → services 的 dist 全没更新 → S4 集成测跑旧 dist，出现「改了没生效」的假象。<br>
                 <b>规矩：判定成败只看 <code>$LASTEXITCODE</code>，grep 只用来定位、不用来判成败。</b></td></tr>
+        <tr><td style="color:var(--danger)">一个动作在两处生效，只补一头就会「重启失效」</td>
+            <td>⚠️ 「停用插件」在 Core 有<b>两个生效点</b>：运行期靠 <code>plugin.stop</code> 命令，
+            启动路径靠 <code>preferences.plugins.enabled</code>。
+            S7-4 之前只做了前者，于是<b>禁用后重启，插件自己回来了</b>。
+            <br>症状很阴：当天测怎么测都对，只有重启才现形。
+            <br><b>规矩：任何「让某个东西不再运行」的动作，都要问一遍「重启后还在吗」，
+            并把两个生效点写在同一处注释里</b> —— 否则下一个改启动路径的人必然漏掉它。</td></tr>
         <tr><td style="color:var(--danger)">注释比代码更自信，于是它先骗了人</td>
             <td>⚠️ S7-2b 里我给 <code>PluginRegistry</code> 写「构造期不会回调」，
             而它<b>真的会</b>（构造时算初始快照要读服务状态）——
