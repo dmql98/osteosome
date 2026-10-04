@@ -131,7 +131,7 @@
 <header class="bar">
   <div class="wrap">
     <h1>开发计划 · 对话界面重构</h1>
-    <span class="sub">减法 · 插件聚合 · 8 步 · 已完成 S0–S6（7/9）· 界面线全通</span>
+    <span class="sub">减法 · 插件聚合 · S0–S8 已完成 · <b>10-04 这一轮：崩溃自愈闭环（§5）进行中</b></span>
     <span class="sp"></span>
     <button id="theme">切换深色</button>
   </div>
@@ -151,7 +151,10 @@
         <br><span style="font-size:var(--text-xs)">📌 <b>交接 / 进度 follow 看这份</b>：
         <a href="开发进度/开发日志.md"><code>docs/开发进度/开发日志.md</code></a>
         —— 含现状数据、遗留清单、<b>踩过的坑（交接必读）</b>、验证命令、关键文件地图。
-        本文档是过程与设计理由，<b>日志是「现在到哪了」</b>。</span>
+        本文档是过程与设计理由，<b>日志是「现在到哪了」</b>。</span><br>
+      <span style="font-size:var(--text-xs)">🔧 <b>10-04 这一轮（进行中）</b>：
+        <a href="#s10-04"><code>§5 崩溃自愈闭环</code></a> —— provider 进程崩了会「永久转圈、零提示」，
+        修成「几秒内明确失败 + 恢复自动接上」。<b>与 manifest 无关</b>，用户撞不到 4.1 #7。</span>
     </div>
   </div>
 
@@ -1529,11 +1532,157 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
     </table>
   </section>
 
+  <!-- 5 · 10-04 这一轮 -->
+  <section id="s10-04">
+    <h2><span class="n">5</span>10-04 这一轮：崩溃自愈闭环<span class="done-badge" style="vertical-align:middle">进行中</span></h2>
+
+    <div class="lead">
+      <b>一句话：</b>把「provider 进程崩了 → 用户点发送后<b>永久转圈、零提示</b>」修成
+      「<b>几秒内明确失败，恢复了自动接上，用户什么都不用管</b>」。
+      <div style="margin-top:var(--s2);font-size:var(--sm)">
+      这轮<b>与 manifest 无关</b>。上一轮遗留的 4.1 #7（改 <code>service.json</code> 要重启 Core）
+      是<b>开发期</b>问题，用户永远不会编辑 <code>service.json</code>，所以它被降级、不进本轮。
+      本轮做的是<b>用户能撞上</b>的那个。
+      </div>
+    </div>
+
+    <h3>5.1 起点：一个查出来的真 bug（不是设想）</h3>
+    <p>四个环节<b>各自做了件合理的事</b>，合起来是一个死循环。这是本轮唯一有价值的发现，
+      其余都是它的解法。</p>
+    <table>
+      <thead><tr><th style="width:6%">#</th><th style="width:32%">环节</th><th>做了什么</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>llm-provider-openai/src/index.ts:126</code></td>
+            <td><code>unregistered</code> <b>只在 <code>reconcile()</code> 里发</b>，
+              而 <code>reconcile()</code> 只被凭证增删触发 ——
+              <b>进程死亡时没有任何人发 <code>unregistered</code></b></td></tr>
+        <tr><td>2</td><td><code>llm/src/index.ts:129</code></td>
+            <td>主位路由表是内存里由 <code>registered/unregistered</code> 驱动的。
+              provider 死了，<b>路由表里还留着它</b>，于是照常发 <code>llm.provider.request</code></td></tr>
+        <tr><td>3</td><td>总线</td>
+            <td>请求<b>发进黑洞</b>：没人回 chunk，主位<b>不会</b>发 <code>llm.request.failed</code>
+              （它只在收不到 finish 块时才发，而 finish 块永远不来）</td></tr>
+        <tr><td>4</td><td><code>client/src/stores/chat.store.ts:209</code></td>
+            <td>只对 <code>service.failed</code> 里 <code>serviceId === 'loop'</code> 有反应，
+              provider 崩了它<b>一动不动</b>；且 <code>client/src/stores</code> +
+              <code>core-sdk</code> 里<b>一个 <code>setTimeout</code> 都没有</b>，没有兜底超时</td></tr>
+      </tbody>
+    </table>
+    <p><b>用户看到的</b>：<code>pending: true</code> 的那行永远挂着、输入框永远禁用、<b>零提示</b>。<br>
+      <b>为什么比报错更糟</b>：报错至少告诉他「坏了」。转圈只会让他以为应用卡了，
+      然后<b>去重启整个应用</b>。</p>
+    <div class="note bad">
+      <b>对照：另一档其实还行。</b>provider <b>没起来</b>（10-04 的 LM Studio 那次）时路由表里没有它，
+      主位立刻发 <code>unsupported_provider</code> —— 用户<b>拿到了错误提示</b>。
+      所以问题<b>只在「跑着崩了」这一档</b>。这也说明 ① 与 ② 是互补的，不是二选一。
+    </div>
+
+    <h3>5.2 三个动作</h3>
+    <div class="step">
+      <div class="hd"><span class="sid">①</span><span class="stitle">请求必须有截止时间</span>
+        <span class="dur">最高价值</span></div>
+      <div class="bd">
+        <ul>
+          <li>主位转发 <code>llm.provider.request</code> 时记 deadline；
+              收到 <code>llm.provider.chunk</code> 即<b>重置</b>（idle 而非总时长）</li>
+          <li>超时未收到任何 chunk → 发
+              <code>llm.request.failed { code: 'provider_unresponsive' }</code></li>
+          <li><b>为什么用 idle 不用总时长</b>：长回答本来就慢。总时长会把正常的长流式误杀，
+              而 idle 同时覆盖「没起来」与「中途崩了」两种</li>
+          <li>新错误码：<code>StreamErrorCode</code> 加 <code>provider_unresponsive</code>，
+              标注<b>瞬态</b>（自愈后重试可能成功）；前端 <code>ERROR_LABEL</code> 同步加文案</li>
+          <li>收尾处（finish 块 / cancel / 超时）统一清 deadline，<b>不留悬挂定时器</b></li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="hd"><span class="sid">②</span><span class="stitle">崩溃注销路由，恢复自动重挂</span>
+        <span class="dur">闭环的另一半</span></div>
+      <div class="bd">
+        <ul>
+          <li><code>llm/service.json</code> 的 <code>subscribes</code> 加
+              <code>service.failed</code> + <code>service.stopped</code>
+              （<code>service.*</code> <b>本来就是合法总线 topic</b>，只是没有任何服务订阅过）</li>
+          <li><b>关键：怎么知道路由属于哪个服务？</b> —— 已有基础设施。
+              Core 在 <code>manager.ts:400</code> 给每个服务发布的事件都加了
+              <code>source: '&lt;serviceId&gt;'</code>。主位注册路由时记下这个 source，
+              失败时按 source 摘掉全部对应路由</li>
+          <li>失败时<b>顺手让该source 的在途请求失败</b>（不等超时）——
+              崩溃是确定的信息，没道理让用户再等一个 deadline</li>
+          <li><b>恢复那一半是免费的，已经存在</b>：provider 重启后
+              <code>service.start()</code> 成功才调 <code>registerCapabilities()</code> →
+              <code>reconcile()</code> 发 <code>registered</code>
+              （<code>llm-provider-openai/src/index.ts:302-305</code>）。
+              顺序还是对的（握手后才注册），所以不会有「注册了但握手失败」的幽灵路由。
+              <b>所以本轮不订阅 <code>service.ready</code> —— 那是多余的</b></li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="hd"><span class="sid">③</span><span class="stitle">纠正 <code>unsupported_provider</code> 文案</span>
+        <span class="dur">顺手带</span></div>
+      <div class="bd">
+        <ul>
+          <li>现在写「provider 未注册或已下线」。但 ② 落地后它的<b>主要成因变成「服务崩了/被停了」</b>，
+              用户会照着「未注册」去排查一个不存在的问题（去检查自己装没装插件）</li>
+          <li>改成能同时覆盖「没装」与「挂了」的说法</li>
+          <li><b>文案错比不显示更糟</b> —— 它会让人往错的方向查</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>5.3 明确不做</h3>
+    <div class="note">
+      <b>manifest 热重载（4.1 #7）：用户价值为零，不进本轮。</b><br>
+      用户不会编辑 <code>service.json</code>，所以「改清单后不用重启 Core」对TA毫无意义。
+      真要做的代价也不小：<code>this.services</code> 是 <code>readonly Map</code>，
+      热重载要么<b>重建记录</b>（丢掉 <code>restartCount</code>/<code>healthFailures</code>/<code>status</code>
+      等运行期状态，正在跑的服务状态被抹掉），要么<b>原地改字段</b>（与正在跑的进程又不一致，
+      等于把「磁盘 vs 快照」换成「快照 vs 活进程」）。<br>
+      <b>但 ② 做完之后，那个现在形同虚设的「重启服务」按钮第一次真正对用户有用了</b> ——
+      服务崩了会按 <code>maxRestarts</code> 自启，重启后 <code>reconcile()</code> 把路由挂回来，
+      用户最多看到一条「刚才失败了，现在已恢复」。<b>这才是「自愈」对用户的真实收益，
+      而不是「开发者少重启一次 Core」。</b>
+    </div>
+
+    <h3>5.4 怎么验证</h3>
+    <p>除了四条标准命令（见 <code>docs/开发进度/开发日志.md</code> §6），这轮要额外验三件事，
+      <b>且都必须落到测试里</b> —— 「本地看起来对」不算：</p>
+    <table>
+      <thead><tr><th style="width:34%">验什么</th><th>怎么验</th></tr></thead>
+      <tbody>
+        <tr><td>provider 不回 chunk 会失败</td><td>发 <code>llm.request</code>，
+            <b>不发</b> <code>llm.provider.chunk</code> → 必须收到
+            <code>llm.request.failed</code> 且 code 为 <code>provider_unresponsive</code></td></tr>
+        <tr><td>崩溃即摘路由</td><td>先 <code>registered</code> 建立路由，
+            再发 <code>service.failed { serviceId }</code> →
+            后续 <code>llm.request</code> 必须得到 <code>unsupported_provider</code>，
+            <b>而不是又发出一条 <code>llm.provider.request</code></b></td></tr>
+        <tr><td>崩溃时在途请求不悬挂</td><td>请求发出后立刻 <code>service.failed</code> →
+            <b>不等 deadline</b> 就该收到失败</td></tr>
+        <tr><td>闭环：崩了能自己回来</td><td>摘掉后重新 <code>registered</code> →
+            路由恢复、请求重新走得通。<b>这条验的是「恢复路径本来就存在」这个判断，
+            如果哪天 provider 的启动顺序变了，它会红</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3>5.5 本轮新增的坑位（预期）</h3>
+    <div class="note">
+      <b>deadline 是典型的「引入悬挂状态」风险</b>：定时器没清 → 进程活多久泄漏多久，
+      且测试里表现为<b>句柄不释放、vitest 不退出</b>。
+      收尾点（finish / cancel / 超时 / 服务失败）必须<b>每一条都清</b>，
+      并用 <code>vi.useFakeTimers({ toFake: ['setTimeout','clearTimeout'] })</code> 写，
+      否则测试会挂死（见日志 §5.3 那条 <code>useFakeTimers</code> 连 <code>setImmediate</code> 一起伪造的坑）。
+    </div>
+  </section>
+
   <footer>
-    Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） · 更新于 S2 完成后（2026-10-02）·
-    进度 S0–S6 + S7-1 已推（<span class="commit">16ddba2</span>）·
-    配套：<code>docs/开发进度/S-对话界面与插件重构-计划.md</code> ·
-    架构：<code>docs/对话界面架构.html</code>
+    Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） ·
+    P7 S0–S8 已完成（<span class="commit">64b42f4</span>）·
+    <b>10-04 这一轮 §5「崩溃自愈闭环」进行中</b> · 更新于 2026-10-04<br>
+    配套：<code>docs/开发进度/开发日志.md</code>（现状 / 遗留 / 踩过的坑）·
+    <code>docs/开发进度/阶段追踪.md</code> ·
+    架构：<code>docs/对话界面架构.html</code>（<b>写于实施前，有过时处</b>）
   </footer>
 </div>
 
