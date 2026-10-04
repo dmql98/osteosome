@@ -1,5 +1,5 @@
 /**
- * chat-timeline（②）/ chat-composer（③）/ llm-providers Widget 单测。
+ * chat-timeline（②）/ chat-composer（③）Widget 单测。
  *
  * S5 把原来的 `widget.llm-chat`（407 行，逻辑 290 行全塞在一个组件里）拆成
  * ② 只读消息投影 + ③ 输入与请求参数，两者**零直接通信**、共享 `stores/chat.store.ts`。
@@ -11,26 +11,31 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-const sseHandlers = new Map<string, (payload: unknown) => void>()
-
-vi.mock('../../src/core-sdk/sse', async () => {
-  const actual = await vi.importActual<typeof import('../../src/core-sdk/sse')>('../../src/core-sdk/sse')
-  return {
-    ...actual,
-    sse: {
-      subscribe: vi.fn((topic: string, handler: (payload: unknown) => void) => {
-        sseHandlers.set(topic, handler)
-        return () => sseHandlers.delete(topic)
-      }),
-      ensureConnected: vi.fn(),
-    },
-  }
-})
+/**
+ * 这里**不 mock SSE**，而是装一个假的 `EventSource`（`@osteosome/core-client/testing`）。
+ *
+ * ## 换掉 mock 的两个理由
+ *
+ * 1. **它已经失效了**：P6 把 core-sdk 抽成包，`../../src/core-sdk/sse` 只是个转发 shim，
+ *    而 `useLlmProviders` / `session.store` 用的是**包内部**的 sse 实例 ——
+ *    mock 一个没人 import 的模块不会报错，只会让被测物偷偷用真实现。
+ *    症状：`providerOptions` 为空 → 组件走「尚未注册任何 provider」分支 →
+ *    `[data-testid="composer-input"]` 找不到 → 22 条用例集体红。
+ * 2. **它自己就带着 bug**：`sseHandlers.set(topic, handler)` 是
+ *    「一个 topic 只存一个 handler」—— 真实客户端是 `Map<topic, Set<handler>>`。
+ *    页面里两个 composable 订阅同一 topic 时，后订阅的会把先订阅的顶掉。
+ *    这类 mock 的缺陷比被测代码的缺陷更难查，因为它让「事件机制」看起来是坏的。
+ *
+ * 换成真客户端之后，连接建立、open、JSON 解包、topic 通配匹配、多订阅者分发
+ * 全都在被测之内 —— 比原来多测了一整层。
+ */
+let fakeSse: ReturnType<typeof installFakeEventSource>
 
 import ChatTimelineWidget from '../../src/widgets/chat-timeline/ChatTimelineWidget.vue'
 import ChatComposerWidget from '../../src/widgets/chat-composer/ChatComposerWidget.vue'
-import LlmProvidersWidget from '../../src/widgets/llm-providers/LlmProvidersWidget.vue'
 import { useSessionStore } from '../../src/stores/session.store'
+import { installFakeEventSource } from '@osteosome/core-client/testing'
+import { sse } from '@osteosome/core-client'
 
 const DESCRIPTOR = {
   provider: 'deepseek',
@@ -40,7 +45,7 @@ const DESCRIPTOR = {
 }
 
 function emit(topic: string, payload: unknown): void {
-  sseHandlers.get(topic)?.(payload)
+  fakeSse.emit(topic, payload)
 }
 
 /**
@@ -67,25 +72,20 @@ async function setSelect(wrapper: VueWrapper, testid: string, value: string): Pr
 }
 
 beforeEach(() => {
-  sseHandlers.clear()
+  // SSE 是模块级单例：跨用例不断订阅，后一个用例会收到前一个的 handler，
+  // 症状是「用例之间互相影响、单独跑都过」—— 那类红最难查
+  sse.close()
+  fakeSse = installFakeEventSource()
   setActivePinia(createPinia())
 })
 
-describe('llm-providers widget', () => {
-  it('无 provider → EmptyState；registered 渲染行；unregistered 摘除', async () => {
-    const wrapper = mount(LlmProvidersWidget)
-    expect(wrapper.text()).toContain('无 provider 注册')
-    emit('llm.provider.registered', DESCRIPTOR)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.get('[data-testid="llm-provider-deepseek"]').text()).toContain('deepseek-chat')
-    emit('llm.provider.unregistered', { provider: 'deepseek' })
-    await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('无 provider 注册')
-  })
-})
+/**
+ * 只读的 `widget.llm-providers` 状态面板已删除（与「模型接入」面板信息重复），
+ * 所以本文件现在只覆盖 ② / ③。它的用例在 `settings.test.ts` 的
+ * `LlmSettingsView 服务商配置` 那一节里 —— provider 的存在性在那边已有断言。
+ */
 
-/** 挂 ② + ③（共享 store），并把当前会话设成 s1 */
-async function mountChat(sessionId = 's1') {
+/** 挂 ② + ③（共享 store），并把当前会话设成 s1 */async function mountChat(sessionId = 's1') {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 202 }))
   const timeline = mount(ChatTimelineWidget)
   const composer = mount(ChatComposerWidget)

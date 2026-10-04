@@ -195,7 +195,7 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
     core = await startCore({
       argv: [],
       config: {
-        servicesDir: path.join(REPO_ROOT, 'services'),
+        pluginsDir: path.join(REPO_ROOT, 'plugins'),
         dataDir,
         distDir: path.join(dataDir, 'dist-client'),
         port: 0,

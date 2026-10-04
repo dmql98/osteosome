@@ -39,7 +39,27 @@
               @click.stop="removeWidget(widget.id)"
             >×</button>
           </header>
-          <div class="panel-boxes__body"><component :is="widget.component" /></div>
+          <div class="panel-boxes__body">
+            <component :is="widget.resolved.component" v-if="widget.resolved.kind === 'local'" />
+            <PluginWidgetHost
+              v-else-if="widget.resolved.kind === 'iframe'"
+              :src="widget.resolved.src"
+              :title="widget.resolved.title"
+            />
+            <div v-else class="widget-missing">
+              <p class="widget-missing__title">
+                {{ widget.resolved.title }}
+                {{ widget.resolved.reason === 'removed' ? '已被移除' : '未知组件' }}
+              </p>
+              <p v-if="widget.resolved.reason === 'removed'" class="widget-missing__text">
+                这个组件已不在当前版本里，但你的布局里还留着它。
+              </p>
+              <p v-else class="widget-missing__text">
+                当前没有组件注册这个 id（<code>{{ widget.id }}</code>）。
+              </p>
+              <p class="widget-missing__hint">选中本框后点右上角 × 即可清掉。</p>
+            </div>
+          </div>
         </MovableBox>
       </MovableGroup>
       <p v-if="visible.length === 0" class="panel-boxes__empty">空面板 · 到「插件管理」里选组件加入</p>
@@ -53,10 +73,20 @@ import { storeToRefs } from 'pinia'
 import { MovableBox, MovableGroup, type MovableBoxRect } from 'vue-movable-box'
 import { useLayoutStore } from '../layout/layout.store'
 import { usePluginStore } from '../stores/plugin.store'
-import { getWidget, widgetComponents } from '../widgets/registry'
+import PluginWidgetHost from '../widgets/PluginWidgetHost.vue'
+import { resolveWidget } from '../widgets/registry'
+import type { ResolvedWidget } from '../widgets/types'
 import { chatThreeBoxRectsFor } from './default-layout'
 
-type WidgetBox = { id: string; title: string; component: unknown; rect: MovableBoxRect }
+/**
+ * 面板里画的一个盒子。
+ *
+ * `widget` 存的是**解析结果**（`ResolvedWidget`）而不是 id：重建时要把 id 解析成
+ * 「本地组件 / iframe / 占位」三者之一，而同一个 id 的答案会随插件启停而变
+ * （停用时隐藏、启用时回来）。存解析结果就等于把「当前这一刻的形态」钉住 ——
+ * 形态变了就重建，而不是让每个盒子自己去查一遍。
+ */
+type WidgetBox = { id: string; title: string; resolved: ResolvedWidget; rect: MovableBoxRect }
 type PanelContainerParams = { widgets?: string[]; title?: string; layout?: Record<string, MovableBoxRect> }
 const props = defineProps<{ params?: PanelContainerParams | { params?: PanelContainerParams; api?: { updateParameters?: (p: object) => void } } }>()
 const resolved = computed<PanelContainerParams>(() => {
@@ -67,7 +97,6 @@ const panelApi = computed(() => (props.params as { api?: { updateParameters?: (p
 const widgets = computed(() => resolved.value.widgets ?? [])
 const saved = computed(() => resolved.value.layout ?? {})
 const canvas = ref<HTMLElement | null>(null)
-const componentMap = widgetComponents()
 const gridSize = 8
 
 // 编辑模式才可拖拽/缩放：运行时锁定组件位置与大小
@@ -126,10 +155,11 @@ function rebuild(): void {
   visible.value = widgets.value.flatMap((id, index) => {
     // 停用 / 已卸载插件的组件不渲染（停用仅隐藏，重新启用自动恢复）
     if (!pluginStore.isWidgetEnabled(id)) return []
-    const widget = getWidget(id)
-    if (!widget) return []
+    // 解析不出来的 id **也要画出来**（`kind: 'missing'`）：用户布局里存着的 id
+    // 不会因为我们删了组件就自动消失 —— 悄悄少一个盒子，用户会以为布局坏了。
+    const widget = resolveWidget(id, pluginStore.all)
     const rect = saved.value[id] ?? presets[id] ?? defaultRect(index)
-    return [{ id, title: widget.title, component: markRaw(componentMap[id] as object), rect }]
+    return [{ id, title: widget.title, resolved: markRaw(widget) as ResolvedWidget, rect }]
   })
   const alive = new Set(visible.value.map((widget) => widget.id))
   selectedIds.value = selectedIds.value.filter((id) => alive.has(id))
@@ -221,4 +251,9 @@ watch(() => pluginStore.revision, rebuild)
 /* 组件内容自适应：内容根节点至少撑满盒子，随盒子缩放自适应；超出部分在盒内滚动 */
 .panel-boxes__body > :deep(*) { min-height: 100%; }
 .panel-boxes__empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+/* 已移除/未知组件的占位：与正常组件同尺寸同可拖动（用户要能把它拖走，也能直接删） */
+.widget-missing { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-4); text-align: center; color: var(--color-text-muted); }
+.widget-missing__title { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--color-text); }
+.widget-missing__text { margin: 0; font-size: var(--text-xs); line-height: 1.5; }
+.widget-missing__hint { margin: 0; font-size: var(--text-xs); color: var(--color-text-subtle, var(--color-text-muted)); }
 </style>

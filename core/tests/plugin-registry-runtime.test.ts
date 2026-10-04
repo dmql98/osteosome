@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { EventPayload, ServiceStatus } from '@osteosome/shared'
@@ -6,6 +8,38 @@ import { Bus } from '../src/bus/bus'
 import { PluginRegistry } from '../src/service-manager/plugin-registry-runtime'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+
+/**
+ * 造一个「有源码侧 service.json、但没构建产物」的小插件。
+ *
+ * 刻意**不**建 `dist/server/` —— 那正是「插件装上但忘了 build」的状态，
+ * 也是 P2 里 Core 必须能说清的那种状态。
+ */
+function writePlugin(
+  root: string,
+  id: string,
+  serviceId: string,
+  extra: Record<string, unknown>,
+): void {
+  const dir = path.join(root, id)
+  mkdirSync(path.join(dir, 'services', serviceId), { recursive: true })
+  writeFileSync(
+    path.join(dir, 'services', serviceId, 'service.json'),
+    JSON.stringify({
+      id: serviceId,
+      version: '1.0.0',
+      protocolVersion: '1.0.0',
+      entry: 'node dist/index.js',
+      inject: [],
+      publishes: [],
+      subscribes: [],
+    }),
+  )
+  writeFileSync(
+    path.join(dir, 'plugin.json'),
+    JSON.stringify({ id, name: id, version: '1.0.0', services: [serviceId], ...extra }),
+  )
+}
 
 /** bus 是微任务投递，同步断言收不到事件（与 credentials.test.ts 同一套等待） */
 const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 10))
@@ -16,6 +50,8 @@ type ChangedEvent = EventPayload<'plugin.state.changed'>
 
 function makeRegistry(opts: {
   pluginsDir: string | undefined
+  dataDir?: string
+  coreVersion?: string
   states?: Record<string, ServiceStatus>
   uninstalled?: string[]
   disabled?: string[]
@@ -25,6 +61,9 @@ function makeRegistry(opts: {
   const bus = opts.bus ?? new Bus()
   const registry = new PluginRegistry(bus, {
     pluginsDir: opts.pluginsDir,
+    // 用户数据根：插件层用它算「服务 id → 该插件的数据目录」（P1）
+    dataDir: opts.dataDir ?? path.join(here, '.tmp-userdata'),
+    coreVersion: opts.coreVersion ?? '0.1.0',
     listServiceStates: () => new Map(Object.entries(opts.states ?? {})),
     uninstalledIds: () => new Set(opts.uninstalled ?? []),
     disabledIds: () => new Set(opts.disabled ?? []),
@@ -115,6 +154,8 @@ describe('PluginRegistry · 只在状态变化时发事件', () => {
     const bus = new Bus()
     const registry = new PluginRegistry(bus, {
       pluginsDir: PLUGINS,
+      dataDir: path.join(here, '.tmp-userdata'),
+      coreVersion: '0.1.0',
       listServiceStates: () => new Map(Object.entries(states)),
       uninstalledIds: () => new Set(uninstalled),
       controlService: async () => undefined,
@@ -237,6 +278,74 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
     }).registry.allowedServiceIds() as Set<string>
     expect(allowed.has('llm-provider-openai')).toBe(false)
     expect(allowed.size).toBe(5)
+  })
+
+  /**
+   * `coreCompatibility`（P2）：**不声明 = 不限**，所以现有插件零改动就能过。
+   *
+   * 这一条值得单独断：它保证「加一个声明字段」不会变成「所有插件都必须填」——
+   * 那种要求一旦落地，没填的插件会在用户机器上集体不启动。
+   */
+  test('现有插件都不声明 coreCompatibility → 无论 Core 版本都全放行', () => {
+    expect((real({ coreVersion: '0.1.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(6)
+    expect((real({ coreVersion: '99.0.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(6)
+    expect((real({ coreVersion: '0.0.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(6)
+  })
+
+  /**
+   * `coreCompatibility` 逐个插件判：版本不满足 → 该插件的服务不启动，
+   * 但**插件仍留在清单里**（照「环内成员」的既有语义：用户要看得见「我装了它」，
+   * 插件凭空消失比「装了但用不了」难排查得多）。
+   */
+  test('coreCompatibility 逐个插件判，不是全局一刀切；不满足的那个只是不启动', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ost-compat-'))
+    try {
+      writePlugin(dir, 'heavy', 'svc-heavy', { coreCompatibility: { min: '99.0.0' } })
+      writePlugin(dir, 'light', 'svc-light', {})
+
+      const { registry } = makeRegistry({ pluginsDir: dir, coreVersion: '0.1.0' })
+      const allowed = registry.allowedServiceIds() as Set<string>
+      expect(allowed.has('svc-light')).toBe(true)
+      expect(allowed.has('svc-heavy')).toBe(false)
+      // 仍然出现在插件清单里（可见但不启动）
+      expect(registry.list().plugins.map((p) => p.manifest.id).sort()).toEqual(['heavy', 'light'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('coreCompatibility 约束写错 → fail closed（拦住，不是当成无约束放行）', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ost-compat-bad-'))
+    try {
+      writePlugin(dir, 'typo', 'svc-typo', { coreCompatibility: { min: 'v0.1.0' } })
+      const allowed = makeRegistry({ pluginsDir: dir, coreVersion: '0.1.0' }).registry.allowedServiceIds() as Set<string>
+      expect(allowed.has('svc-typo')).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * P2：Core **只认产物**。没构建过的插件，服务不进发现清单，插件报「未构建」。
+   */
+  test('没构建的插件 → serviceDirs 为空，且问题里说清是「未构建」', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ost-unbuilt-'))
+    try {
+      writePlugin(dir, 'lazy', 'svc-lazy', {})
+      const { registry } = makeRegistry({ pluginsDir: dir })
+      expect(registry.serviceDirs()).toEqual([]) // 产物目录不存在 → 不收
+      expect(registry.list().problems.map((x) => x.reason).join()).toContain('未构建')
+      // 启动决策本身仍然是合法集合 —— 「服务没被发现」与「决定不启动」是两件事
+      expect(registry.allowedServiceIds()?.has('svc-lazy')).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('构建过的插件 → serviceDirs 指向 dist/server（Core 只认产物）', () => {
+    const dirs = real({}).registry.serviceDirs()
+    expect(dirs.length).toBeGreaterThan(0)
+    for (const d of dirs) expect(d).toContain(path.join('dist', 'server'))
   })
 })
 

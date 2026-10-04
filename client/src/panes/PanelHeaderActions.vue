@@ -11,7 +11,7 @@ import { computed } from 'vue'
 import { useLayoutStore } from '../layout/layout.store'
 import { openPanelWindow } from '../layout/window-manager'
 import type { PanelParams } from './types'
-import IconButton from '../components/ui/IconButton.vue'
+import { IconButton } from '@osteosome/ui'
 
 type HeaderParams = {
   activePanel?: { id?: string; params?: PanelParams; api?: { close?: () => void } }

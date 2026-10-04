@@ -1,8 +1,2 @@
-import { onMounted, onUnmounted } from 'vue'
-import { sse, type SseHandler } from './sse'
-
-export function useEventBus(topic: string, handler: SseHandler): void {
-  let dispose: (() => void) | null = null
-  onMounted(() => { dispose = sse.subscribe(topic, handler) })
-  onUnmounted(() => { dispose?.(); dispose = null })
-}
+/** 转发到 @osteosome/core-client（P6）—— 只做零改动的别名，实现只有一份 */
+export { useEventBus } from '@osteosome/core-client'

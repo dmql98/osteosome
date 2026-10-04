@@ -65,11 +65,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import Button from '@/components/ui/Button.vue'
-import Card from '@/components/ui/Card.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
-import Select from '@/components/ui/Select.vue'
-import Textarea from '@/components/ui/Textarea.vue'
+import { Button } from '@osteosome/ui'
+import { Card } from '@osteosome/ui'
+import { EmptyState } from '@osteosome/ui'
+import { Select } from '@osteosome/ui'
+import { Textarea } from '@osteosome/ui'
 import { useLlmProviders } from '@/core-sdk/useLlmProviders'
 import { useModelCatalog } from '@/core-sdk/useModelCatalog'
 import { usePreferences } from '@/core-sdk/usePreferences'

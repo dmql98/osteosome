@@ -5,16 +5,19 @@
   "icon": "🧭",
   "author": "osteosome",
   "license": "Apache-2.0",
-  "description": "工作台外壳与系统可观测性：系统信息面板、命令面板、设置、事件看板、服务与服务管理器。只碰 Core 的内置组件，不带任何服务。",
+  "description": "系统可观测性：系统信息、命令台、设置、事件流、服务管理、服务状态。P6 起界面自带（ui/ 独立打包，Core 伺服在 /plugins/workbench/ui/），六个视图共用一份 bundle，用 hash 切换。",
   "services": [],
-  "components": [
-    "widget.system-info",
-    "widget.command-palette",
-    "widget.settings",
-    "widget.event-stream",
-    "widget.service-manager",
-    "widget.service-status"
-  ],
+  "components": [],
+  "ui": {
+    "views": [
+      { "id": "widget.system-info", "title": "系统信息", "entry": "index.html#system-info" },
+      { "id": "widget.command-palette", "title": "命令台", "entry": "index.html#command-palette" },
+      { "id": "widget.settings", "title": "设置", "entry": "index.html#settings" },
+      { "id": "widget.event-stream", "title": "事件流", "entry": "index.html#event-stream" },
+      { "id": "widget.service-manager", "title": "服务管理", "entry": "index.html#service-manager" },
+      { "id": "widget.service-status", "title": "服务状态", "entry": "index.html#service-status" }
+    ]
+  },
   "capabilities": [
     { "name": "system.info", "detail": "读取版本与运行平台" },
     { "name": "command.execute", "detail": "向 Core 投递命令" },

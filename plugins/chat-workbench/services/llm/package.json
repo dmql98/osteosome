@@ -1,0 +1,21 @@
+{
+  "name": "@osteosome/llm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LLM 能力主位（P2 WS-4）：provider 路由表 + chunk 翻译 + cancel 转发，不 import 任何 provider",
+  "buildOutput": "../../dist/server/llm/index.js",
+  "scripts": {
+    "build": "node ../../../../scripts/build-service.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}

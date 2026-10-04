@@ -1,6 +1,8 @@
 /**
  * 厂商预设表（S1）—— 「加一家厂商 = 加一行」的单一真源。
  *
+ * > **P5 起，「表」是 `plugins/models/catalog.json`，本文件是它的契约。**
+ *
  * ## 为什么是数据不是代码
  *
  * 此前：`llm-provider-deepseek` 与 `llm-provider-openrouter` 的 `provider.ts` 就是
@@ -26,6 +28,25 @@
  * | 附加 header（全局） | `OPENAI_EXTRA_HEADERS`（JSON） |
  *
  * 优先级：**env 覆盖 > 预设值**。这让集成冒烟可以用假上游指任意厂商，无需改代码。
+ */
+
+/**
+ * 厂商预设的**契约**（不是数据）。
+ *
+ * ## 数据搬走了（P5）
+ *
+ * 12 家预设原来是一份编译期常量 `VENDOR_PRESETS`。现在它在
+ * `plugins/models/catalog.json` —— 插件自带数据，UI 与 provider 服务读同一份文件。
+ * 搬走之后这里只剩**类型、wire 契约与 env 覆盖规则**。
+ *
+ * ## 为什么要搬
+ *
+ * · 「加一家厂商」应该只改一个数据文件，不用改 shared 的代码、不用重编译所有包；
+ * · 数据归插件 —— 不装 models 插件就不该被它的厂商表牵扯；
+ * · **UI 与服务端读同一份文件**，于是「界面上有的厂商，服务一定认」不再靠两边手工同步。
+ *
+ * 仍然留在 shared 的是**规则**（env 覆盖优先级、wire → 服务 id 的映射）——
+ * 规则是跨进程契约，数据不是。
  */
 
 /** 一家厂商的预设 */
@@ -71,141 +92,105 @@ export function providerServiceIdForWire(wire: string): string {
   return `llm-provider-${wire}`
 }
 
-/** 本进程只服务属于某个 wire 的预设（provider 进程启动时按自己的 wire 过滤） */
-export function presetsForWire(wire: string, presets: readonly VendorPreset[] = VENDOR_PRESETS): VendorPreset[] {
+/** 本进程只服务属于某个 wire 的预设（provider 进程启动时按自己的 wire 过滤）。
+ *
+ *  `presets` **没有默认值**了 —— 数据搬去了 `plugins/models/catalog.json`（P5），
+ *  这里只剩契约。留一个默认表等于把数据又抄回 shared 一份。
+ */
+export function presetsForWire(wire: string, presets: readonly VendorPreset[]): VendorPreset[] {
   return presets.filter((p) => p.api === wire)
 }
 
 /** 预设表声明过的全部 wire（去重、有序） */
-export function declaredWires(presets: readonly VendorPreset[] = VENDOR_PRESETS): string[] {
+export function declaredWires(presets: readonly VendorPreset[]): string[] {
   return [...new Set(presets.map((p) => p.api))].sort()
 }
 
 /**
- * 内置预设表。
+ * 解析并校验 `catalog.json`（P5）。
  *
- * ⚠️ baseUrl 为**编写时的公开端点**，使用前请自行核对厂商文档（端点会变）。
- * 任何一家都可以用 `<ID_UPPER>_BASE_URL` 覆盖，或在设置窗里加「自定义端点」。
+ * ## 为什么校验器住在 shared
+ *
+ * 这份文件现在有**两个读者**：models 的 provider 服务（`plugins.readFile`）与它的 UI
+ * （`GET /plugins/models/ui/catalog.json`）。两份校验逻辑必然漂移 ——
+ * 漂移的症状是「UI 上出现了这家厂商，但服务不认它」，而排障要跨两个进程。
+ * 所以校验器与**类型**放一起：谁读都跑同一条规则。
+ *
+ * ## 逐条报，不整份拒
+ *
+ * 一家厂商写错 `baseUrl` 不该让其余 11 家一起消失。返回 `{ vendors, errors }`：
+ * 好的进 `vendors`，坏的逐条进 `errors`。调用方决定怎么呈现错误
+ * （服务侧倾向于**照常启动**并把错误打进日志 —— UI 里少一家比整个 provider 起不来好）。
  */
-export const VENDOR_PRESETS: readonly VendorPreset[] = [
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    baseUrl: 'https://api.openai.com/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'OPENAI_API_KEY',
-    defaultModel: 'gpt-4o-mini',
-    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'o4-mini'],
-  },
-  {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    baseUrl: 'https://api.deepseek.com',
-    api: WIRE_OPENAI,
-    credentialEnv: 'DEEPSEEK_API_KEY',
-    defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
-    note: 'deepseek-reasoner 恒思考，不接受 reasoning_effort',
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'OPENROUTER_API_KEY',
-    defaultModel: 'openai/gpt-4o-mini',
-    models: ['openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash'],
-    note: '可经此调用 claude / gemini 等非 openai 原生模型',
-  },
-  {
-    id: 'moonshot',
-    label: 'Moonshot',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'MOONSHOT_API_KEY',
-    defaultModel: 'moonshot-v1-8k',
-    models: ['moonshot-v1-8k', 'moonshot-v1-32k'],
-  },
-  {
-    id: 'siliconflow',
-    label: '硅基流动 SiliconFlow',
-    baseUrl: 'https://api.siliconflow.cn/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'SILICONFLOW_API_KEY',
-    defaultModel: 'Qwen/Qwen2.5-7B-Instruct',
-    models: ['Qwen/Qwen2.5-7B-Instruct', 'deepseek-ai/DeepSeek-V3'],
-  },
-  {
-    id: 'groq',
-    label: 'Groq',
-    baseUrl: 'https://api.groq.com/openai/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'GROQ_API_KEY',
-    defaultModel: 'llama-3.3-70b-versatile',
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
-  },
-  {
-    id: 'together',
-    label: 'Together AI',
-    baseUrl: 'https://api.together.xyz/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'TOGETHER_API_KEY',
-    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo'],
-  },
-  {
-    id: 'xai',
-    label: 'xAI',
-    baseUrl: 'https://api.x.ai/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'XAI_API_KEY',
-    defaultModel: 'grok-2-latest',
-    models: ['grok-2-latest'],
-  },
-  {
-    id: 'mistral',
-    label: 'Mistral',
-    baseUrl: 'https://api.mistral.ai/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: 'MISTRAL_API_KEY',
-    defaultModel: 'mistral-small-latest',
-    models: ['mistral-small-latest', 'mistral-large-latest'],
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama（本地）',
-    baseUrl: 'http://127.0.0.1:11434/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: '',
-    defaultModel: 'qwen2.5:7b',
-    models: [],
-    note: '本地端点，免凭证',
-  },
-  {
-    id: 'vllm',
-    label: 'vLLM（本地）',
-    baseUrl: 'http://127.0.0.1:8000/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: '',
-    defaultModel: '',
-    models: [],
-    note: '本地端点，免凭证；模型名取决于你启了什么',
-  },
-  {
-    id: 'lm-studio',
-    label: 'LM Studio（本地）',
-    baseUrl: 'http://127.0.0.1:1234/v1',
-    api: WIRE_OPENAI,
-    credentialEnv: '',
-    defaultModel: '',
-    models: [],
-    note: '本地端点，免凭证',
-  },
-]
+export function parseVendorCatalog(raw: unknown): {
+  vendors: VendorPreset[]
+  errors: string[]
+} {
+  const errors: string[] = []
+  const vendors: VendorPreset[] = []
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { vendors, errors: ['catalog is not an object'] }
+  }
+  const list = (raw as { vendors?: unknown }).vendors
+  if (!Array.isArray(list)) {
+    return { vendors, errors: ['catalog.vendors is not an array'] }
+  }
 
-/** provider id → 预设（找不到返回 undefined） */
-export function findVendorPreset(id: string): VendorPreset | undefined {
-  return VENDOR_PRESETS.find((v) => v.id === id)
+  const seen = new Set<string>()
+  list.forEach((item, index) => {
+    const at = `vendors[${index}]`
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push(`${at} is not an object`)
+      return
+    }
+    const v = item as Record<string, unknown>
+    const bad = (why: string): void => {
+      errors.push(`${at} (${String(v.id ?? '?')}): ${why}`)
+    }
+    for (const key of ['id', 'label', 'baseUrl', 'api', 'defaultModel'] as const) {
+      if (typeof v[key] !== 'string') {
+        bad(`${key} must be a string`)
+        return
+      }
+    }
+    // `credentialEnv` 允许空串（本地端点免凭证），但必须是字符串 ——
+    // 「没写」与「写了但不是字符串」是两件事，后者是数据错误。
+    if (typeof v.credentialEnv !== 'string') {
+      bad('credentialEnv must be a string (use "" for no credential)')
+      return
+    }
+    if (!Array.isArray(v.models) || v.models.some((m) => typeof m !== 'string')) {
+      bad('models must be an array of strings')
+      return
+    }
+    if (v.note !== undefined && typeof v.note !== 'string') {
+      bad('note must be a string when present')
+      return
+    }
+    const id = v.id as string
+    if (!id) {
+      bad('id must not be empty')
+      return
+    }
+    if (seen.has(id)) {
+      // 重复 id 会被后面的静默覆盖 —— 用户会看到「设了没生效」
+      errors.push(`${at} (${id}): duplicate vendor id`)
+      return
+    }
+    seen.add(id)
+    vendors.push({
+      id,
+      label: v.label as string,
+      baseUrl: v.baseUrl as string,
+      api: v.api as string,
+      credentialEnv: v.credentialEnv as string,
+      defaultModel: v.defaultModel as string,
+      models: v.models as string[],
+      ...(typeof v.note === 'string' ? { note: v.note } : {}),
+    })
+  })
+
+  return { vendors, errors }
 }
 
 /** env 覆盖用的后缀：`deepseek` → `DEEPSEEK`（含 `-` → `_`） */

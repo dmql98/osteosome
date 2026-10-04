@@ -62,7 +62,7 @@ if errorlevel 1 (
 )
 
 echo [client] Starting Core on port 1420...
-start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --services "%~dp0\services" --data "%~dp0\.data" --dist "%~dp0\core\dist\client"
+start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --plugins "%~dp0\plugins" --data "%~dp0\.data" --dist "%~dp0\core\dist\client"
 
 for /l %%I in (1,1,20) do (
   powershell.exe -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 1420 -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"

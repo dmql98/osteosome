@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { markRaw } from 'vue'
 import type { DockviewApi, GroupviewPanelState, SerializedDockview } from 'dockview-core'
 import { usePreferences } from '@/core-sdk/usePreferences'
-import { getWidget } from '@/widgets/registry'
+import { resolveWidget } from '@/widgets/registry'
 import { usePluginStore } from '@/stores/plugin.store'
 import { applyDefaultLayout } from '@/panes/default-layout'
 import { PANEL_COMPONENT, type PanelParams } from '@/panes/types'
@@ -70,11 +70,16 @@ export const useLayoutStore = defineStore('layout', {
       this.mode = mode
     },
     /** 组件为最小单位：把 widget 放进当前激活面板；无面板则新建一个。
-     *  停用 / 已卸载插件的 widget 不可加入。 */
+     *  停用 / 已卸载插件的 widget 不可加入。
+     *
+     *  P4：入参是 **widget id**，它可能解析成三种东西（本地组件 / 插件 iframe / 已退役占位）。
+     *  只有前两种能加 —— 占位是给**已有布局**看的，不该被新增进来。
+     *  这也是为什么参数名没从 `widgetId` 改成 `viewId`：widget id 就是持久化主键，
+     *  插件视图沿用同一个 id（同名 = 组件在原地换了实现 = 用户拖的位置不丢）。 */
     addWidget(widgetId: string) {
       const api = this.api as DockviewApi | null
-      const widget = getWidget(widgetId)
-      if (!api || !widget) return
+      const widget = resolveWidget(widgetId, usePluginStore().all)
+      if (!api || widget.kind === 'missing') return
       if (!usePluginStore().isWidgetEnabled(widgetId)) return
       const panel = api.activePanel
       if (!panel) {

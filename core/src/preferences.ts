@@ -1,7 +1,9 @@
 /**
- * Core 偏好存储的读写（S3 新增）—— `${dataDir}/preferences.json`。
+ * Core 偏好存储的读写（S3 新增）—— `userData/core/preferences.json`。
  *
- * 路径在 `config.preferencesFile`（与 serviceDataDir 服务目录约定不同，这是 Core 自己的数据）。
+ * 路径见 `config.preferencesFile`：P1 之后落在 `userData/core/` 下，与插件的数据
+ * （`userData/plugin/<id>/`）**并列** —— Core 仍然解析这份文档里的
+ * `plugins.*` / `ui.theme`，所以它需要一个专属命名空间。
  *
  * 抽成独立模块而不是留在 `sse-bridge/preferences.ts`，是因为**两个地方要读**：
  * 1. `sse-bridge` 的 `GET/PUT /api/preferences`（前端通道，服务人）
@@ -18,6 +20,7 @@
  * 这与 `CredentialStore` 的 `isCorrupted()` 是同一套纪律：**标记出来，让调用方决定严不严**。
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { ensureDir, preferencesFile } from './config'
 
 export interface PreferencesReadResult {
@@ -44,6 +47,8 @@ export function readPreferences(dataDir: string): PreferencesReadResult {
 
 /** 整体覆盖写偏好（调用方负责合并，语义与 `PUT /api/preferences` 一致） */
 export function writePreferences(dataDir: string, value: Record<string, unknown>): void {
-  ensureDir(dataDir)
-  writeFileSync(preferencesFile(dataDir), JSON.stringify(value, null, 2), 'utf8')
+  // 目录是 `userData/core/`（P1 之后偏好落在 Core 自己的子命名空间），所以要建的是**它**
+  const file = preferencesFile(dataDir)
+  ensureDir(dirname(file))
+  writeFileSync(file, JSON.stringify(value, null, 2), 'utf8')
 }

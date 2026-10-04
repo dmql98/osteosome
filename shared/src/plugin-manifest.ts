@@ -5,10 +5,18 @@
  *
  * | 文件 | 回答的问题 | 谁读 |
  * |---|---|---|
- * | `services/<id>/service.json` | **一个进程怎么被拉起来**（entry / protocolVersion / publishes / subscribes） | Core 管生命周期时 |
+ * | `plugins/<id>/dist/server/<sid>/service.json` | **一个进程怎么被拉起来**（entry / protocolVersion / publishes / subscribes） | Core 管生命周期时 |
  * | `plugins/<id>/plugin.json` | **哪些进程与组件算一件东西**（归属与依赖） | Core 编排 + 前端展示 |
  *
  * 所以加一个插件不用改任何 `service.json`，加一个能力位不用改任何 `plugin.json`。
+ *
+ * ## 两份 service.json：源码侧与产物侧（P2）
+ *
+ * 服务在 `plugins/<id>/services/<sid>/service.json`（**源码侧**，跟 git 走）也有一份 ——
+ * 那是「这个服务存在、它声明了哪些 topic」的**声明**，CI 的 `service-manifest-sync`
+ * 校验的就是它。构建时它被复制到 `dist/server/<sid>/service.json`（**产物侧**，`entry`
+ * 改写成 `node index.js`），**Core 只读产物侧那份** —— 没构建过的服务对 Core 不可见，
+ * 插件相应地降级成「未构建」。这样「插件交付物 = 一个 dist 目录」才成立。
  *
  * ## 为什么归属必须落盘，不能派生
  *
@@ -25,6 +33,56 @@ export const PluginDependencySchema = z.object({
   optional: z.boolean().default(false),
 })
 
+/**
+ * 「我这个插件要哪些 Core 才装得上」的闭区间声明（P2）。
+ *
+ * **不写 = 不限**：现有插件零改动就能过，而「没声明」永远是安全的缺省。
+ *
+ * 两端都是**含**的闭区间，且只支持 `x.y.z`（可带预发布后缀）—— 刻意不支持
+ * `^1.2.3` / `1.x` 这类简写与 range 表达式，理由见 `shared/src/semver.ts` 文件头。
+ */
+const VersionRangeSchema = z
+  .object({
+    min: z.string().min(1).optional(),
+    max: z.string().min(1).optional(),
+  })
+  .optional()
+
+/** 别的插件的数据命名空间，本插件**只读**（P2 只声明，P3 才真正生效） */
+const DataReadableBySchema = z.array(z.string().min(1)).default([])
+
+/**
+ * 插件 UI 里的一个**命名视图**（P3，形态 1）。
+ *
+ * 一个插件的 UI 是一个应用，`views[]` 声明它有哪些可独立摆放的视图。Core 的路由是
+ * `/plugins/<id>/ui/<entry>`，同一个插件的多个视图因此只是不同入口 ——
+ * 这就是「多个可拖动组件」得以保留的原因（否则一个插件只能整块摆放）。
+ *
+ * `entry` 用 **hash** 切视图（`index.html#timeline`）而不是路径，是刻意的：
+ * hash 不产生服务端请求，于是「深链」这件事完全由插件自己管，Core 不需要知道
+ * 任何路由规则 —— 它只当静态文件搬运工。
+ */
+const UiViewSchema = z.object({
+  /** 视图 id，惯例是 widget id（前端按它摆位）；Core 只当字符串，不校验命名 */
+  id: z.string().min(1),
+  /** 展示名（插件详情窗 / 添加组件的列表用） */
+  title: z.string().min(1),
+  /** 相对 `dist/ui/` 的入口，惯例 `index.html` 或 `index.html#timeline` */
+  entry: z.string().min(1),
+})
+
+/**
+ * 插件的 WebUI 产物（P3）。
+ *
+ * **没有 `ui` 的插件就没有前端界面** —— 纯服务插件（credentials / reliability）合法地不声明。
+ * 声明了但 `dist/ui/` 没构建 → 插件报「UI 未构建」，Core 的路由回 404（而不是白屏）。
+ */
+const UiSchema = z
+  .object({
+    views: z.array(UiViewSchema).default([]),
+  })
+  .optional()
+
 export const PluginManifestSchema = z.object({
   /** 插件唯一标识，须等于所在目录名（`plugins/<id>/plugin.json`） */
   id: z.string().min(1),
@@ -36,7 +94,8 @@ export const PluginManifestSchema = z.object({
   author: z.string().optional(),
   license: z.string().optional(),
   /**
-   * 本插件带来的服务 id（对应 `services/<id>/`）。
+   * 本插件带来的服务 id（源码在 `plugins/<id>/services/<id>/`，
+   * 产物在 `plugins/<id>/dist/server/<id>/` —— **Core 只认后者**，P2 起）。
    *
    * 允许为空（内置的无服务插件，如只碰 Core 的工作台骨架）。
    * 校验交给编排层：声明了不存在的服务 id 是**编排错误**，不是 schema 错误。
@@ -53,6 +112,30 @@ export const PluginManifestSchema = z.object({
     .array(z.object({ name: z.string().min(1), detail: z.string().optional() }))
     .default([]),
   dependencies: z.array(PluginDependencySchema).default([]),
+  /**
+   * 这个插件要哪些 Core 版本才装得上（P2）。**缺省 = 不限**，别把 Core 的版本轴
+   * 变成所有插件的负担 —— 只有真的用到了新能力的插件才该写。
+   *
+   * 不满足时插件**可见但不启动**（照「依赖环内成员」的既有语义），reason 说清差在哪。
+   */
+  coreCompatibility: VersionRangeSchema,
+  /**
+   * 允许**只读**本插件用户数据的其他插件 id（P3 生效）。
+   *
+   * 为什么要有它：一个插件的 UI 常常要读另一个插件的数据（chat-workbench 的输入框
+   * 要读 models 的模型开关）。今天那种共享靠「都塞进同一个 preferences.json」——
+   * 而那意味着 Core 必须解析插件内容。拆成命名空间后，跨命名空间读就得**显式授权**，
+   * 否则任何插件都能读到任何插件的密钥。
+   *
+   * 写**永远只限自己**，没有对应的「可写别人」字段 —— 那条路不开。
+   */
+  dataReadableBy: DataReadableBySchema,
+  /**
+   * 这个插件的 WebUI（P3）。**没有它 = 纯服务插件**（credentials / reliability 就不是）。
+   *
+   * 产物在 `plugins/<id>/dist/ui/`，由 Core 伺服在 `/plugins/<id>/ui/<entry>`。
+   */
+  ui: UiSchema,
   /**
    * 是否随 Core 自动启动。
    *

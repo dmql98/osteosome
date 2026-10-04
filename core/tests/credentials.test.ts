@@ -2,7 +2,7 @@
  * 凭证 store 单测（P4 WS-1）—— 原子写 / 损坏降级 / 掩码 / 值不进事件。
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Bus } from '../src/bus/bus'
@@ -47,7 +47,7 @@ describe('CredentialStore', () => {
   it('原子写：无残留 .tmp', () => {
     const store = new CredentialStore(dir)
     store.set({ name: 'a', provider: 'p', value: 'v1' })
-    const files = readdirSync(dir)
+    const files = readdirSync(join(dir, 'core'))
     expect(files.filter((f) => f.endsWith('.tmp'))).toEqual([])
     expect(files).toContain('credentials.json')
   })
@@ -69,7 +69,8 @@ describe('CredentialStore', () => {
   })
 
   it('损坏文件 → corrupted 标记，get/set 报错但服务可构造（不崩）', () => {
-    writeFileSync(join(dir, 'credentials.json'), 'not valid json', 'utf8')
+    mkdirSync(join(dir, 'core'), { recursive: true })
+    writeFileSync(join(dir, 'core', 'credentials.json'), 'not valid json', 'utf8')
     const store = new CredentialStore(dir)
     expect(store.isCorrupted()).toBe(true)
     expect(() => store.get('x')).toThrow(CredentialStoreError)
@@ -77,8 +78,9 @@ describe('CredentialStore', () => {
   })
 
   it('脏条目跳过（缺 value 的条目不加载）', () => {
+    mkdirSync(join(dir, 'core'), { recursive: true })
     writeFileSync(
-      join(dir, 'credentials.json'),
+      join(dir, 'core', 'credentials.json'),
       JSON.stringify({ a: { id: 'a', name: 'A', provider: 'p', value: 'ok' }, b: { id: 'b' } }),
       'utf8',
     )

@@ -17,7 +17,10 @@
  * 挂 `service.*` 生命周期事件，而不是轮询：状态变化的**唯一**来源就是服务状态变化，
  * 轮询只是把同一个信息换个方式取回来，还多一份定时器要清理。
  */
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import type { ServiceStatus } from '@osteosome/shared'
+import { describeRangeMismatch, pluginDataDir } from '@osteosome/shared'
 import type { PluginState } from '@osteosome/shared'
 import type { Bus } from '../bus/bus'
 import { logger } from '../logger'
@@ -45,6 +48,16 @@ export interface PluginListResponse {
   cycles: string[][]
   plugins: PluginSnapshot[]
 }
+
+/**
+ * `uiDir(pluginId)` 的结果（P3）：要么给出产物目录，要么给出**为什么不给**。
+ *
+ * 用一个类型而不是「返回 `string | undefined`」：五种失败原因在界面上要说得不同的话
+ * （没装 / 停用了 / 版本不合 / 没声明 UI / 没构建），`undefined` 会把它们压成一个 404。
+ */
+export type PluginUiLookup =
+  | { ok: true; dir: string }
+  | { ok: false; error: string }
 
 /** 参与聚合的等价性判断。只看会影响展示的字段 */
 function sameSnapshots(a: PluginSnapshot[], b: PluginSnapshot[]): boolean {
@@ -84,7 +97,21 @@ export class PluginRegistry {
     private readonly bus: Bus,
     private readonly options: {
       pluginsDir: string | undefined
-      knownServiceIds?: ReadonlySet<string>
+      /**
+       * 用户数据根 —— 用来把「服务 id → 它所属插件的数据目录」算出来交给 ServiceManager。
+       *
+       * 为什么放在插件层算而不在 `main.ts`：插件清单是这里扫的，**只有这里知道哪个服务
+       * 属于哪个插件**。`main.ts` 若自己另扫一遍，磁盘就被读两次，且两边可能不一致。
+       */
+      dataDir: string
+      /**
+       * Core 自己的语义版本 —— 拿来判 `plugin.json` 的 `coreCompatibility`（P2）。
+       *
+       * 为什么是字符串而不是让插件去读 package.json：Core 版本是**部署事实**，
+       * 从 package.json 读意味着「Core 的版本由它的构建方式决定」；而这里要回答的是
+       * 「运行中的这份 Core 是多少」，两件事恰好相等，但只有前者能进比较。
+       */
+      coreVersion: string
       /** 取当前服务真实状态。由 `ServiceManager.list()` 提供 */
       listServiceStates: () => ReadonlyMap<string, ServiceStatus>
       /** `preferences.plugins.uninstalled` */
@@ -100,8 +127,104 @@ export class PluginRegistry {
       controlService: (command: 'start' | 'stop', serviceId: string) => Promise<void>
     },
   ) {
-    this.scan = scanPlugins(options.pluginsDir, options.knownServiceIds)
+    this.scan = scanPlugins(options.pluginsDir)
     warnAboutScan(this.scan)
+  }
+
+  /**
+   * 服务目录清单 —— P2 起是**产物**目录 `plugins/<id>/dist/server`（里面直接放
+   * `<sid>/service.json` + `index.js`）。
+   *
+   * 只给**确实存在**的：插件可以合法地不带服务（`plugins/workbench/` 只有 UI），
+   * 也可以还没构建（`dist/` 不存在）。没构建的那个插件由 `scanPlugins` 报成「未构建」，
+   * 这里安静地不收 —— 于是 `serviceDirs` 为空，`loadServicesFrom([])` 也不抛
+   * （见那函数的注释：「没给根」与「给了但都不存在」是两件事）。
+   */
+  serviceDirs(): string[] {
+    const out: string[] = []
+    for (const p of this.scan.plugins) {
+      const dir = path.join(p.dir, 'dist', 'server')
+      if (existsSync(dir)) out.push(dir)
+    }
+    return out
+  }
+
+  /**
+   * 服务 id → 它所属插件的数据根（`userData/plugin/<pluginId>/`）。
+   *
+   * 表里只有**插件声明过**的服务；没声明的服务不在表里，于是 ServiceManager 会退回
+   * `dataDir`（旧行为）—— 那种情况意味着有人手写了 service.json 却没在 plugin.json 里声明，
+   * 而那本来就该被插件层的「services 指向插件内不存在的服务目录」检查报出来。
+   */
+  serviceDataDirs(): Map<string, string> {
+    const out = new Map<string, string>()
+    for (const p of this.scan.plugins) {
+      const dir = pluginDataDir(this.options.dataDir, p.manifest.id)
+      for (const id of p.manifest.services) out.set(id, dir)
+    }
+    return out
+  }
+
+  /**
+   * 插件 UI 产物目录（`plugins/<id>/dist/ui`）—— P3。
+   *
+   * **为什么 policy 放在这里而不是 HTTP 路由里**：能否伺服某插件的界面，
+   * 依赖的全是插件层的判定（装了吗／停用了吗／Core 版本合不合适／构建了吗）。
+   * 让路由自己重新推导一遍这些条件，等于同一套规则有两个实现 ——
+   * 而它们不一致的症状是「停用了插件，它的页面还能打开」，这种错很难在界面上看出来。
+   * 所以这里给**决策**，路由只负责搬运字节。
+   *
+   * 五种结局，各自不同的 HTTP 语义：
+   * · `ok`         → 伺服
+   * · `absent`     404：没这个插件 / 已卸载 / 压根没声明 ui（纯服务插件）
+   * · `disabled`   404：用户显式停用了 —— **停用必须连界面一起停**，否则「停用」只是个摆设
+   * · `incompatible` 404：Core 版本不满足它的 coreCompatibility（与服务不启动同一条理由）
+   * · `not-built`  404：声明了 ui.views 但 dist/ui 不存在（由 `scanPlugins` 报成「UI 未构建」）
+   *
+   * 为什么**全都是 404 而不是 403**：对浏览器而言「这个插件不存在」和「你没权限看它」
+   * 没有区别，而 403 会让 iframe 显示一个能看见的错误页 —— 一个本该消失的
+   * 组件留在一块空地上，比空白更让人困惑。真实原因已经写在 `list()` 的 problems 里。
+   */
+  uiDir(pluginId: string): PluginUiLookup {
+    const found = this.scan.plugins.find((p) => p.manifest.id === pluginId)
+    if (!found) return { ok: false, error: `unknown plugin '${pluginId}'` }
+    const manifest = found.manifest
+
+    const uninstalled = this.options.uninstalledIds?.() ?? new Set<string>()
+    if (uninstalled.has(manifest.id)) {
+      return { ok: false, error: `plugin '${pluginId}' is uninstalled` }
+    }
+    const disabled = this.options.disabledIds?.() ?? new Set<string>()
+    if (disabled.has(manifest.id)) {
+      return { ok: false, error: `plugin '${pluginId}' is disabled` }
+    }
+    const incompat = describeRangeMismatch(this.options.coreVersion, manifest.coreCompatibility)
+    if (incompat) return { ok: false, error: `plugin '${pluginId}': ${incompat}` }
+    if (!manifest.ui || manifest.ui.views.length === 0) {
+      return { ok: false, error: `plugin '${pluginId}' declares no ui` }
+    }
+
+    const dir = path.join(found.dir, 'dist', 'ui')
+    if (!existsSync(dir)) return { ok: false, error: `plugin '${pluginId}' ui not built` }
+    return { ok: true, dir }
+  }
+
+  /**
+   * 服务 id → 它所属**插件的目录**（`plugins/<id>/`）（P3）。
+   *
+   * 唯一的用途是 `plugins.readFile` 的边界：服务只能读自己插件目录里的文件，
+   * 于是「跨插件读文件」在结构上不可能 —— 不需要额外的 ACL 逻辑。
+   *
+   * 只列**插件声明过**的服务，和 `serviceDataDirs` 同一张键集：
+   * 手写 `service.json` 却没在 `plugin.json` 声明的服务不在这张表里，
+   * 调 `plugins.readFile` 会拿到 `no plugin directory`（fail closed）。
+   */
+  servicePluginDirs(): Map<string, string> {
+    const out = new Map<string, string>()
+    for (const p of this.scan.plugins) {
+      for (const id of p.manifest.services) out.set(id, p.dir)
+    }
+    return out
   }
 
   /** 上一次聚合结果；没有就算一次并记下 */
@@ -189,12 +312,14 @@ export class PluginRegistry {
   rescan(): void {
     const { scan, snapshots } = loadPluginLayer({
       pluginsDir: this.options.pluginsDir,
-      knownServiceIds: this.options.knownServiceIds,
       serviceStates: this.options.listServiceStates(),
       uninstalledIds: this.options.uninstalledIds?.(),
     })
     this.scan = scan
     this.lastCache = snapshots
+    // ⚠️ 重扫**不会**把新插件的服务接进 ServiceManager —— 后者的服务目录表是构造时定的。
+    // 「运行期装插件即启动它的服务」是 P8 装插件那条线的事（那时才需要真正的 reload），
+    // 现在这里只更新清单与状态，所以调用方要清楚这一点。
     for (const p of snapshots) this.publishOne(p)
   }
 
@@ -305,6 +430,13 @@ export class PluginRegistry {
       if (disabled.has(manifest.id)) continue
       if (manifest.autoStart === false) continue
       if (cyclic.has(manifest.id)) continue
+      // P2：Core 版本不满足 → 不启动，但**插件仍然可见**（照「环内成员」的既有语义：
+      // 用户要看得见「我装了它」，而不是「插件凭空消失了」—— 后者比「装了但用不了」更难排查）。
+      const incompat = describeRangeMismatch(this.options.coreVersion, manifest.coreCompatibility)
+      if (incompat) {
+        logger.warn(`plugin layer: ${manifest.id} 不启动（${incompat}）`)
+        continue
+      }
       for (const sid of manifest.services) allowed.add(sid)
     }
 

@@ -1,16 +1,16 @@
 /**
  * i18n 基础设施（P4 WS-4）—— createI18n + locale 读写 preferences。
  *
- * - 资源按命名空间拆文件：zh-CN/{common,settings,llm}.ts ↔ en/{common,settings,llm}.ts
- *   （同类型不混一个文件；命名空间 = 文件名前缀：`common.*` / `settings.*` / `llm.*`）
+* - 资源按命名空间拆文件：zh-CN/{common,llm}.ts ↔ en/{common,llm}.ts
+ *   （P6：`settings.*` 随设置组件搬进了 workbench 插件，它现在在插件自己的 i18n 里 ——
+ *    `plugins/workbench/ui/src/i18n/`。宿主这里若留着它，会变成一份没人读的第二份文案）
+ *   （同类型不混一个文件；命名空间 = 文件名前缀：`common.*` / `llm.*`）
  * - locale 持久化走 P1a preferences 通道（`ui.locale`），刷新后从 preferences 恢复。
  */
 import { createI18n } from 'vue-i18n'
 import zhCommon from './zh-CN/common'
-import zhSettings from './zh-CN/settings'
 import zhLlm from './zh-CN/llm'
 import enCommon from './en/common'
-import enSettings from './en/settings'
 import enLlm from './en/llm'
 
 export type Locale = 'zh-CN' | 'en'
@@ -18,8 +18,8 @@ export type Locale = 'zh-CN' | 'en'
 export const DEFAULT_LOCALE: Locale = 'zh-CN'
 
 const messages = {
-  'zh-CN': { ...zhCommon, ...zhSettings, ...zhLlm },
-  en: { ...enCommon, ...enSettings, ...enLlm },
+  'zh-CN': { ...zhCommon, ...zhLlm },
+  en: { ...enCommon, ...enLlm },
 }
 
 export const i18n = createI18n({

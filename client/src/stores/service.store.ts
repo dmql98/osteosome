@@ -1,53 +1,22 @@
-import { defineStore } from 'pinia'
-
-export type ServiceLifecycle = 'starting' | 'ready' | 'restarting' | 'failed' | 'stopped'
-export interface ServiceStatusEntry {
-  serviceId: string
-  status: ServiceLifecycle
-  version?: string
-  lastSeenAt: number
-  reason?: string
-}
-
-export const useServiceStore = defineStore('services', {
-  state: () => ({ services: {} as Record<string, ServiceStatusEntry> }),
-  getters: {
-    readyCount: (state) => Object.values(state.services).filter((item) => item.status === 'ready').length,
-    totalCount: (state) => Object.keys(state.services).length,
-  },
-  actions: {
-    apply(topic: string, payload: Record<string, unknown>): void {
-      const serviceId = typeof payload.serviceId === 'string' ? payload.serviceId : ''
-      if (!serviceId) return
-      const statusByTopic: Record<string, ServiceLifecycle> = {
-        'service.starting': 'starting',
-        'service.ready': 'ready',
-        'service.restarting': 'restarting',
-        'service.failed': 'failed',
-        'service.stopped': 'stopped',
-      }
-      const status = statusByTopic[topic]
-      if (!status) return
-      const previous = this.services[serviceId]
-      this.services[serviceId] = {
-        serviceId,
-        status,
-        lastSeenAt: Date.now(),
-        ...(typeof payload.version === 'string' ? { version: payload.version } : previous?.version ? { version: previous.version } : {}),
-        ...(typeof payload.reason === 'string' ? { reason: payload.reason } : {}),
-      }
-    },
-    setStatus(status: ServiceLifecycle, payload: Record<string, unknown>): void {
-      const serviceId = typeof payload.serviceId === 'string' ? payload.serviceId : typeof payload.id === 'string' ? payload.id : ''
-      if (!serviceId) return
-      this.services[serviceId] = {
-        serviceId,
-        status,
-        lastSeenAt: Date.now(),
-        ...(typeof payload.version === 'string' ? { version: payload.version } : {}),
-        ...(typeof payload.reason === 'string' ? { reason: payload.reason } : {}),
-      }
-    },
-    clear(): void { this.services = {} },
-  },
-})
+/**
+ * 服务状态表 —— 转发到 `@osteosome/core-client`（P6）。
+ *
+ * 原来是 client 里的一个 **pinia store**。现在改成包里的一张 `reactive` 表，
+ * 由宿主与所有插件 UI 共用。
+ *
+ * ## 去掉 pinia 的理由（不是「pinia 不好」，是这里用不上）
+ *
+ * · 这张表 51 行、只被 `useServiceStatus` 用；
+ * · pinia 的价值在 devtools / 跨 store 依赖 / 插件化 store —— 这里一个都没有；
+ * · 而它<b>要收</b>的代价是每个插件 UI 都得 `createPinia()` 并挂上，
+ *   忘了就在 setup 里抛错。插件 UI 是独立入口，比宿主更容易漏这一步。
+ *
+ * API 形状刻意保持一致（`services` / `readyCount` / `totalCount` /
+ * `apply` / `setStatus` / `clear`），所以 client 的调用点一行都不用改。
+ */
+export {
+  serviceStatus as useServiceStore,
+  serviceStatus,
+  type ServiceLifecycle,
+  type ServiceStatusEntry,
+} from '@osteosome/core-client'

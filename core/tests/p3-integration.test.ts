@@ -154,7 +154,7 @@ describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
     core = await startCore({
       argv: [],
       config: {
-        servicesDir: path.join(REPO_ROOT, 'services'),
+        pluginsDir: path.join(REPO_ROOT, 'plugins'),
         dataDir,
         distDir: path.join(dataDir, 'dist-client'),
         port: 0,

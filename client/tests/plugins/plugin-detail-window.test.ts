@@ -25,7 +25,17 @@ function coreResponse(over: Partial<PluginListResponse> = {}): PluginListRespons
           icon: '🧭',
           description: '系统可观测性面板',
           services: [],
-          components: ['widget.system-info', 'widget.settings'],
+          // P6 之后 workbench 的六个组件都由自己的 dist/ui 提供，
+          // `components` 为空、`ui.views` 才是它的组件声明 ——
+          // 这份 stub 照抄真实的 plugins/workbench/plugin.json，
+          // 否则测试就在验一份仓库里不存在的清单形状。
+          components: [],
+          ui: {
+            views: [
+              { id: 'widget.system-info', title: '系统信息', entry: 'index.html#system-info' },
+              { id: 'widget.settings', title: '设置', entry: 'index.html#settings' },
+            ],
+          },
           capabilities: [{ name: 'system.info', detail: '读取版本' }],
           dependencies: [{ pluginId: 'models' }],
         },
@@ -100,18 +110,64 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
     expect(text).toContain('卸载插件')
   })
 
-  it('组件标题用前端 widget 注册表解析（Core 只给 id）', async () => {
+  /**
+   * P6 的行为变更：标题不再一律「用前端 widget 注册表解析」。
+   *
+   * 组件分两类，来源不同：
+   * · `components[]`（宿主的本地组件）→ 前端注册表查得到标题
+   * · `ui.views[]`（插件自己的页面）→ 前端**没有**它的定义，标题只能来自 Core 清单
+   *
+   * 原来这两条断言隐含假设「所有组件都是本地组件」，所以用 `系统信息` 做样本。
+   * 六个组件搬进 workbench 插件之后它不再成立 —— 详情窗若还在注册表里查，
+   * 对插件页面就会显示成裸 id（`widget.system-info`），界面上很难看出是缺了标题。
+   */
+  it('组件标题对 ui.views 用 Core 清单里的标题（前端注册表没有它）', async () => {
     const wrapper = mountDetail('workbench')
     await flushPromises()
-    expect(wrapper.text()).toContain('系统信息')
+    const text = wrapper.text()
+    // 标题取自 ui.views（'系统信息' / '设置'），而不是退化成裸 id。
+    // 断言写法要注意：界面上 id 仍然作为副标签渲染（「系统信息 widget.system-info」），
+    // 所以不能用 not.toContain(id) —— 那测的是「副标签还在不在」，不是「标题对不对」。
+    // 真正的判据是**标题存在、且分类标成「插件页面」**。
+    expect(text).toContain('系统信息')
+    expect(text).toContain('插件页面')
+  })
+
+  it('组件标题对本地 components 仍用前端注册表解析', async () => {
+    const base = coreResponse()
+    lastBody = {
+      ...base,
+      plugins: base.plugins.map((p) =>
+        p.manifest.id === 'workbench'
+          ? {
+              ...p,
+              manifest: {
+                ...p.manifest,
+                // 造一个「仍然在宿主注册表里」的本地组件
+                components: ['widget.chat-timeline'],
+                ui: { views: [] },
+              },
+            }
+          : p,
+      ),
+    }
+    const wrapper = mountDetail('workbench')
+    await flushPromises()
+    // '对话' 是 chat-timeline 在宿主注册表里的标题；查不到就会只剩裸 id，
+    // 而标题是**主标签**、id 是副标签，所以断言标题 + 分类为「内置组件」
+    expect(wrapper.text()).toContain('对话')
+    expect(wrapper.text()).toContain('内置组件')
   })
 
   it('每个组件有「加入窗口」按钮，数量由 Core 清单推导', async () => {
     const wrapper = mountDetail('workbench')
     await flushPromises()
     const addButtons = wrapper.findAll('button').filter((b) => b.text().includes('加入窗口'))
-    // 从 stub 响应里数，不写魔数 —— 增删组件时这条断言跟着变
-    expect(addButtons.length).toBe(lastBody.plugins[0]!.manifest.components.length)
+    // P6 之后「组件」= ui.views ∪ components，两个来源都要计入
+    const manifest = lastBody.plugins[0]!.manifest
+    const expected =
+      (manifest.ui?.views?.length ?? 0) + (manifest.components?.length ?? 0)
+    expect(addButtons.length).toBe(expected)
     await addButtons[0]!.trigger('click')
     expect(wrapper.text()).toContain('已加入')
   })

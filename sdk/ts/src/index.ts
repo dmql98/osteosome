@@ -13,6 +13,12 @@
 export { Service, type ServiceOptions, type ServiceHandler } from './service'
 export { attachCredentialClient, CredentialClientError, type CredentialClient, type ResolvedCredential, type AttachCredentialClientOptions } from './credentials'
 export { performHandshake, assertInitializeResult, type HandshakeOptions } from './handshake'
+export {
+  PLUGIN_READ_FILE_METHOD,
+  loadPluginJson,
+  readPluginFile,
+  type PluginReadFileOptions,
+} from './plugin-files'
 export { attachHeartbeat } from './heartbeat'
 export {
   StreamTransport,

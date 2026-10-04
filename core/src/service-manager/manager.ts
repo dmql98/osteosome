@@ -6,7 +6,10 @@
  * - stdio JSON-RPC：Core 应答 initialize，受理 bus.publish / bus.subscribe / bus.unsubscribe /
  *   shutdown，按 topic 把事件推给对应服务（bus.event）
  * - 崩溃 / 协议错误 / 心跳超时 → 重启（backoff，超 maxRestarts → failed）
+ * - 特权只读方法：credentials.* / preferences.get / plugins.readFile（后者 P3）
  */
+import { readFileSync, statSync, type Stats as FsStats } from 'node:fs'
+import { resolve as pathResolve, sep } from 'node:path'
 import type { Bus } from '../bus/bus'
 import { readPreferences } from '../preferences'
 import {
@@ -33,7 +36,7 @@ import {
   jsonRpcError,
 } from './jsonrpc'
 import { HealthMonitor } from './health'
-import { loadServices } from './manifest'
+import { loadServicesFrom } from './manifest'
 import { forceKill, sendSigterm, spawnServiceProcess, waitExit, type ManagedProcess } from './process'
 import { topologicalOrder } from './topology'
 import { CredentialApi, CredentialStoreError } from '../credentials/api'
@@ -41,6 +44,14 @@ import { CredentialApi, CredentialStoreError } from '../credentials/api'
 const DEFAULT_STOP_GRACE_MS = 5000
 const DEFAULT_BACKOFF_BASE_MS = 1000
 const DEFAULT_CONSECUTIVE_HEALTH_FAILURES = 3
+
+/**
+ * `plugins.readFile` 的单文件上限（P3）—— 2 MiB。
+ *
+ * 这个 RPC 的用途是读「插件自带的静态数据」（catalog.json 这类），那种文件是 KB 级。
+ * 2 MiB 已经大到能塞下一份压缩过的模型清单，再大就说明有人拿它当通用文件通道用了。
+ */
+const PLUGIN_READFILE_MAX_BYTES = 2 * 1024 * 1024
 
 interface HandshakeWaiter {
   resolve: (params: InitializeParams) => void
@@ -84,8 +95,41 @@ interface ManagedService {
 }
 
 export interface ServiceManagerOptions {
-  servicesDir: string
+  /**
+   * 服务目录清单（每个里面直接放 `<id>/service.json`）。
+   *
+   * P1 之后服务住在插件里（`plugins/<id>/services/<sid>/`），所以是**多个根**。
+   * 由 `main.ts` 从插件清单算出 —— **ServiceManager 仍然不知道插件存在**，
+   * 它只收一张字符串表（与 `allowedServiceIds` 同一性质：别人算好的值）。
+   */
+  serviceDirs: readonly string[]
   dataDir: string
+  /**
+   * 服务 id → 它自己的数据根（`userData/plugin/<pluginId>/`）。
+   *
+   * 缺省 = 退回 `dataDir`（**旧行为**，只有测试与逃生门会走到）。
+   * 生产路径必须有这张表：否则服务会把数据写到用户数据根里，多个插件共用一个目录。
+   */
+  serviceDataDirs?: ReadonlyMap<ServiceId, string>
+  /**
+   * 服务 id → **它所属插件的目录**（`plugins/<id>/`）（P3）。
+   *
+   * 存在的唯一理由是 `plugins.readFile`：服务要读自己插件目录下的文件
+   * （`catalog.json` 这类插件自带数据），而读文件必须有边界。边界就是「自己插件的目录」。
+   *
+   * 为什么给的是**目录**而不是别的：ServiceManager 不该知道插件 id 或 `plugins/<id>/`
+   * 这个布局（那是插件层的知识），它只把 Core 算好的一个根交给文件读取去卡前缀。
+   * 表里没有的服务调用 `plugins.readFile` 会拿到 `no plugin directory` 而不是文件内容 ——
+   * **fail closed**，绝不因为「没配表」就退化成读任意路径。
+   */
+  servicePluginDirs?: ReadonlyMap<ServiceId, string>
+  /**
+   * Core 自己的版本（P2）—— 随握手回给服务（`InitializeResult.coreVersion`）。
+   *
+   * 服务据此能自己判断「我这个插件声明的 coreCompatibility 在这台 Core 上成立吗」，
+   * 缺省时**不判断**（服务可以只信任 Core 侧那道闸）。
+   */
+  coreVersion?: string
   sessionId: string
   bus: Bus
   handshakeTimeoutMs?: number
@@ -138,9 +182,19 @@ export class ServiceManager {
     this.sleepImpl = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
   }
 
+  /**
+   * 握手时交给服务的 `dataDir` —— 它**自己插件**的数据根。
+   *
+   * 缺表项就退回 `dataDir`（旧行为）。生产路径一定有表：`main.ts` 用插件清单算出，
+   * 所以「服务属于哪个插件」这件事在本类里根本不存在 —— 这里只是查一张外部算好的表。
+   */
+  private dataDirOf(serviceId: ServiceId): string {
+    return this.options.serviceDataDirs?.get(serviceId) ?? this.options.dataDir
+  }
+
   async start(): Promise<void> {
     await this.options.bus.ready()
-    const loaded = loadServices(this.options.servicesDir)
+    const loaded = loadServicesFrom(this.options.serviceDirs)
     this.startOrder.length = 0
     const sequence = topologicalOrder(loaded.map((s) => s.manifest))
     for (const manifest of sequence) {
@@ -431,6 +485,9 @@ export class ServiceManager {
         // 偏好里没有凭证原值（那在 credentials.json），所以这条通道不破「凭证值不过总线」。
         case 'preferences.get':
           return this.handlePreferencesGet()
+        // ── plugins.readFile（P3）：只读、只限**自己插件目录** ──
+        case 'plugins.readFile':
+          return this.handlePluginReadFile(svc, params)
         default:
           throw jsonRpcError(-32601, `method not found: ${method}`)
       }
@@ -526,6 +583,74 @@ export class ServiceManager {
     return { preferences: value, corrupted }
   }
 
+  /**
+   * `plugins.readFile { path }` → `{ content }`（P3）
+   *
+   * ## 为什么需要它
+   *
+   * 服务打成了**单文件**，所以它读不到自己插件目录里的任何东西（没有 `require` 能解析到
+   * `../../catalog.json`）。但插件确实要带自己的静态数据（models 的 12 家预设就是
+   * `catalog.json`）。于是有两条路：把数据编进产物（改一个字都要重新构建），
+   * 或者让服务能读自己的目录。选后者 —— **插件自带数据应该是可以不改代码就改的文件**。
+   *
+   * ## 边界（这是本方法唯一重要的部分）
+   *
+   * - **只读**：没有 write/delete。插件要持久化就用它自己的 `dataDir`（那里可写）。
+   * - **只限自己插件的目录**：`servicePluginDirs` 给的根之外一律 403。
+   *   于是**跨插件读文件在结构上不可能**，不需要额外的检查逻辑。
+   * - **没有根就是拒绝**（fail closed）：不在 `servicePluginDirs` 表里的服务
+   *   （手写 service.json 的旧式服务）拿到的是 `no plugin directory`。
+   *   绝不能退化成「没配表就随便读」—— 那等于给任意服务发了文件系统读权限。
+   * - **不读 `node_modules`**：那是仓库布局不是插件内容，而且能撑爆响应。
+   * - **有大小上限**：读文件走 JSON-RPC，一次几百 KB 就够了；目录、符号链接
+   *   逃逸、绝对路径都由前缀检查 + `isFile()` 挡住。
+   *
+   * 为什么走 **stdio JSON-RPC 而不是 HTTP 路由**：服务本来就有这条私有管道，
+   * 再开一个 HTTP 端点就等于给每个服务进程开了一个能读文件的公网入口。
+   */
+  private handlePluginReadFile(
+    svc: ManagedService,
+    params: unknown,
+  ): { content: string } {
+    const { path } = (params ?? {}) as { path?: string }
+    if (typeof path !== 'string' || path.length === 0) {
+      throw jsonRpcError(-32602, 'plugins.readFile: path required')
+    }
+    const pluginDir = this.options.servicePluginDirs?.get(svc.manifest.id)
+    if (!pluginDir) {
+      throw jsonRpcError(
+        -32004,
+        `plugins.readFile: no plugin directory for service '${svc.manifest.id}'`,
+      )
+    }
+
+    const root = pathResolve(pluginDir)
+    const target = pathResolve(root, path.replace(/^[/\\]+/, ''))
+    if (target !== root && !target.startsWith(root + sep)) {
+      throw jsonRpcError(-32004, 'plugins.readFile: path outside plugin directory')
+    }
+    if (target.split(sep).includes('node_modules')) {
+      throw jsonRpcError(-32004, 'plugins.readFile: node_modules is not readable')
+    }
+
+    let stat: FsStats
+    try {
+      stat = statSync(target)
+    } catch {
+      throw jsonRpcError(-32004, `plugins.readFile: not found: ${path}`)
+    }
+    if (!stat.isFile()) {
+      throw jsonRpcError(-32004, `plugins.readFile: not a file: ${path}`)
+    }
+    if (stat.size > PLUGIN_READFILE_MAX_BYTES) {
+      throw jsonRpcError(
+        -32004,
+        `plugins.readFile: file too large (${stat.size} > ${PLUGIN_READFILE_MAX_BYTES} bytes): ${path}`,
+      )
+    }
+    return { content: readFileSync(target, 'utf8') }
+  }
+
   private async handleInitialize(
     svc: ManagedService,
     params: InitializeParams,
@@ -539,7 +664,8 @@ export class ServiceManager {
         result = createInitializeResult({
           sessionId: this.options.sessionId,
           heartbeatInterval: hc.interval,
-          dataDir: this.options.dataDir,
+          dataDir: this.dataDirOf(svc.manifest.id),
+          coreVersion: this.options.coreVersion ?? '0.0.0',
         })
       } catch (err) {
         // 校验失败 → 错误响应 + 标记 failed 触发重启（协议错误路径）

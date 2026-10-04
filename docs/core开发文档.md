@@ -535,7 +535,7 @@ bus.subscribe('service.failed', (e) => services.restart(e.serviceId))
      "result": {
        "sessionId": "core-session-abc",
        "heartbeatInterval": 5000,
-       "dataDir": "/Users/dmql/.osteosome"    // ★ 数据根目录（--data 传入）
+        "dataDir": "/opt/osteosome/osteosome/userData"    // ★ 数据根目录；--data 未提供时按「发行版 / 开发」两分（见 core/src/config/paths.ts）
      }
    }
 4. 服务 → Core：notification 'initialized'
@@ -543,7 +543,19 @@ bus.subscribe('service.failed', (e) => services.restart(e.serviceId))
 6. 服务退出前：notification 'shutdown'，Core 回 'exit'
 ```
 
-> **数据目录约定**：`dataDir` 令服务进程知道往哪儿写数据——只写自己的 `serviceDataDir(dataDir, serviceId)` = `${dataDir}/services/<serviceId>/`（`shared/src/paths.ts`，P1a §3.1）；`dataDir/credentials.json` 是 Core 自己的，例外。
+> **数据目录约定（P1 起）**：`dataDir` 令服务进程知道往哪儿写数据——**它所属插件**的数据根 `userData/plugin/<pluginId>/`（`shared/src/paths.ts` 的 `pluginDataDir()`，P1a §3.1 的「每服务一个目录」被插件级取代：一个插件的 UI 与它的服务要看到同一份东西）。Core 自己的数据在 `userData/core/`（`preferences.json` / `credentials.json`，Core 解析它们）。
+>
+> **缺省是安装目录内的 `userData/`**：发行版里是 `<exe 旁边>/osteosome/userData`（判据：exe 同级有 `.osteosome-dist` 标记文件 —— 必须是显式声明，因为开发时 `process.execPath` 指向 node.exe，用它的目录会得到荒谬路径），开发跑时退到 `%LOCALAPPDATA%/osteosome`（其它平台 `$XDG_DATA_HOME/osteosome`）。理由：接入配置、密钥、布局、会话都属于**用这个系统的人**，不属于某一份工作副本 —— 换个目录启动不该换一套配置，`git clone` 也不该带上密钥。换机器时整个 `userData/` 拷过去即可。
+>
+> **服务发现也在插件里，且只认产物**：`plugins/<插件>/dist/server/<sid>/service.json`（P2 起）。源码侧 `plugins/<插件>/services/<sid>/service.json` 继续存在、继续被 CI 的 `service-manifest-sync` 校验 —— 那是**声明**；产物侧那份 `entry` 被改写成 `node index.js`，是**可执行的真相**。没构建过的服务对 Core 不可见（插件报「未构建」）。`CoreConfig.servicesDir` 降级为「显式给出时只用它」的测试 / 逃生门。`ServiceManager` 只收 `serviceDirs: string[]` 与 `serviceDataDirs: Map`，不 import 任何插件概念。
+>
+> **产物是单文件、零外部依赖**（P2）：服务构建用 esbuild 把 `service → sdk / shared → zod` 全打进去，只留 Node 内置模块。于是「拷到一台没装这个仓库的机器上能跑」成立（`core/tests/service-distribution.test.ts` 每次都把产物拷到空目录跑一遍来守这条）。
+>
+> **Core 版本轴**（P2）：`core/package.json` 的 version 从 `process.argv[1]` 旁的 package.json 读（**不 import** —— import 会把版本冻在打包那一刻），读不到退 `0.0.0` 并告警。插件在 `plugin.json` 的 `coreCompatibility: { min, max }` 里声明它要哪些 Core（闭区间、只支持 `x.y.z`、**不写 = 不限**）；不满足 → 该插件的服务不启动，但**插件仍可见**（照「环内成员」的既有语义）。
+>
+> **插件 UI 由 Core 同源伺服**（P3）：`GET /plugins/<id>/ui/<path>` → `plugins/<id>/dist/ui/`。Core 接管**整个** `/plugins/` 前缀，挂在 `static.ts` 兜底**之前**。能不能伺服由 `PluginRegistry.uiDir()` 判定（未装 / 停用 / 版本不合 / 没声明 ui / 未构建 → 全是 **404**，理由写进 `list().problems`）。前缀校验复用 `static.ts` 那四步，不要重写。
+>
+> **`plugins.readFile` 是特权，不是便利**（P3）：服务只读地读**自己插件目录**里的文件（边界 = `ServiceManagerOptions.servicePluginDirs` 给的根）。只读、没有 write/delete、跨插件读结构上不可能、**没有根就拒绝**（fail closed）、不读 `node_modules`、单文件 2 MiB 上限。要给服务新能力先问「这个能力需要读文件吗」—— 需要的话加 RPC，不要加 HTTP 端点。
 
 ### 6.2 Manifest 校验（SDK 启动时执行）
 
@@ -796,6 +808,7 @@ sdk/
 - [x] 内层布局：vue-movable-box 管理 Widget 拖动、缩放、吸附和 `params.layout`
 - [x] 通用组件库（WS-1b）：`components/ui` 18 个 + `components/layout` 3 个，全部消费 `tokens.css`
 - [x] `widgets/registry.ts` —— `defineWidget` + `import.meta.glob` 自动发现
+- [x] **P4：widget id 的运行时解析** —— `resolveWidget(id, plugins)` 返回 `local`（内置组件）/ `iframe`（插件 `ui.views`）/ `missing`（已退役或未知，占位不消失）。同名时插件页面优先；`components[]` 只声明归属不声明形态；本地 loader 必须包 `defineAsyncComponent`（裸 loader 会画出空盒子且不报错）
 - [x] `core-sdk/` —— `sse.ts` 单例（全应用单 SSE 连接）+ `useEventBus` / `useCommand` / `useServiceStatus` / `usePreferences`
 - [x] 布局模型：Panel 外层和 Widget 内层一起保存到 `/api/preferences`
 - [x] **绿灯**：Panel 停靠 / Widget 拖拽缩放 / 刷新还原 / 拉出独立窗；`pnpm test` + `pnpm build` 零错误

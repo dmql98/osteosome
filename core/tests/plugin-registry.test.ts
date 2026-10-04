@@ -10,7 +10,6 @@ const FIXTURES = path.join(here, 'fixtures')
 /** 仓库根下的真实 plugins/ 与 services/ —— S7-5 落的就是它 */
 const REPO_ROOT = path.join(here, '..', '..')
 const REAL_PLUGINS = path.join(REPO_ROOT, 'plugins')
-const REAL_SERVICES = path.join(REPO_ROOT, 'services')
 const PLUGINS = path.join(FIXTURES, 'plugins')
 const EMPTY = path.join(FIXTURES, 'plugins-empty')
 
@@ -232,13 +231,19 @@ describe('snapshotPlugins · 状态聚合吃真实服务状态', () => {
   })
 })
 
-describe('真实 plugins/ 与 services/（S7-5 落的那份划分）', () => {
+describe('真实 plugins/（S7-5 落的那份划分，P1 起服务在插件里）', () => {
+  /** 真实服务 id —— P1 之后要从插件目录两级扫（`plugins/<id>/services/<sid>/`） */
   function realServiceIds(): Set<string> {
-    return new Set(
-      readdirSync(REAL_SERVICES, { withFileTypes: true })
-        .filter((e) => e.isDirectory() && existsSync(path.join(REAL_SERVICES, e.name, 'service.json')))
-        .map((e) => e.name),
-    )
+    const out = new Set<string>()
+    for (const plugin of readdirSync(REAL_PLUGINS, { withFileTypes: true })) {
+      if (!plugin.isDirectory()) continue
+      const root = path.join(REAL_PLUGINS, plugin.name, 'services')
+      if (!existsSync(root)) continue
+      for (const e of readdirSync(root, { withFileTypes: true })) {
+        if (e.isDirectory() && existsSync(path.join(root, e.name, 'service.json'))) out.add(e.name)
+      }
+    }
+    return out
   }
 
   test('扫得出 5 个插件，且零问题零环', () => {

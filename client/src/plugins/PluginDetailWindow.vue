@@ -49,22 +49,24 @@
       <section class="detail-card">
         <header class="detail-card__head">组件（UI，用户装配）</header>
         <div class="detail-card__body">
-          <div v-for="widgetId in plugin.components" :key="widgetId" class="widget-row">
+          <div v-for="widgetId in widgetIds" :key="widgetId" class="widget-row">
             <div class="widget-row__info">
               <span class="widget-row__name">{{ widgetTitle(widgetId) }}</span>
               <span class="widget-row__id">{{ widgetId }}</span>
+              <span class="widget-row__origin">{{ widgetOrigin(widgetId) }}</span>
             </div>
             <span v-if="addedWidgetId === widgetId" class="widget-row__added">已加入 ✓</span>
             <Button
               size="sm"
               :variant="isEnabled ? 'primary' : 'ghost'"
-              :disabled="!isEnabled"
+              :disabled="!isEnabled || !canAddWidget(widgetId)"
               @click="addWidget(widgetId)"
             >
               ＋ 加入窗口
             </Button>
           </div>
-          <p v-if="!isEnabled" class="widget-row__hint">插件已停用，启用后才能加入组件。</p>
+          <p v-if="widgetIds.length === 0" class="widget-row__hint">该插件未提供可装配的界面组件。</p>
+          <p v-else-if="!isEnabled" class="widget-row__hint">插件已停用，启用后才能加入组件。</p>
         </div>
       </section>
 
@@ -148,12 +150,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import Button from '@/components/ui/Button.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
-import Modal from '@/components/ui/Modal.vue'
-import Switch from '@/components/ui/Switch.vue'
+import { Button } from '@osteosome/ui'
+import { EmptyState } from '@osteosome/ui'
+import { Modal } from '@osteosome/ui'
+import { Switch } from '@osteosome/ui'
 import WindowControls from '@/components/layout/WindowControls.vue'
-import { getWidget } from '@/widgets/registry'
+import { addableWidgetIds, resolveWidget } from '@/widgets/registry'
 import { usePlugins } from '@/core-sdk/usePlugins'
 import type { PluginView } from './registry'
 import { requestAddWidget, notifyPluginsChanged } from '@/layout/window-events'
@@ -255,8 +257,27 @@ const authorLine = computed(() => {
   return parts.join(' · ') || '本地插件'
 })
 
+/**
+ * 可加入窗口的组件 id：插件的 `ui.views` ∪ `components`（本地组件）。
+ *
+ * 用 `addableWidgetIds` 而不是直接列 `plugin.components` —— P3 起插件的页面
+ * 走 `ui.views`，只列 `components` 的话，将来插件搬走了自己的 UI，
+ * 这个列表会**悄悄变空**，而插件确实还提供着界面。
+ */
+const widgetIds = computed(() => (plugin.value ? addableWidgetIds(plugin.value) : []))
+
 function widgetTitle(widgetId: string): string {
-  return getWidget(widgetId)?.title ?? widgetId
+  return resolveWidget(widgetId, store.all).title
+}
+
+/** 来源标注：插件页面 vs 还在 client 包里的本地组件（用户据此知道界面归谁） */
+function widgetOrigin(widgetId: string): string {
+  return resolveWidget(widgetId, store.all).kind === 'iframe' ? '插件页面' : '内置组件'
+}
+
+/** 占位（已退役/未知）不可加入：它只是给已有布局看的残留 */
+function canAddWidget(widgetId: string): boolean {
+  return resolveWidget(widgetId, store.all).kind !== 'missing'
 }
 
 /**
@@ -342,6 +363,7 @@ onBeforeUnmount(() => {
 .widget-row__info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .widget-row__name { font-size: var(--text-sm); }
 .widget-row__id { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+.widget-row__origin { font-size: var(--text-xs); color: var(--color-text-subtle, var(--color-text-muted)); }
 .widget-row__added { font-size: var(--text-xs); color: var(--color-success); flex: none; }
 .widget-row__hint { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
 

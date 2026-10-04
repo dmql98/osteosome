@@ -53,7 +53,7 @@ function seedCatalog(over: Partial<PluginSnapshot>[] = []): void {
     cycles: [],
     plugins: [
       snap('workbench', ['widget.system-info', 'widget.service-status']),
-      snap('models', ['widget.llm-providers']),
+      snap('models', ['widget.llm-settings']),
       snap('reliability', [], over[0] ?? {}),
     ],
   })
@@ -246,7 +246,7 @@ describe('plugin.store', () => {
     mockPrefs()
     seedCatalog()
     const store = usePluginStore()
-    expect(store.pluginForWidget('widget.llm-providers')?.id).toBe('models')
+    expect(store.pluginForWidget('widget.llm-settings')?.id).toBe('models')
     expect(store.isWidgetEnabled('widget.unregistered')).toBe(true)
   })
 

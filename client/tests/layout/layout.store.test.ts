@@ -79,8 +79,29 @@ describe('layout.store', () => {
     const store = useLayoutStore()
     const api = fakeApi()
     store.attachApi(api as never)
+    // 样本换成仍在宿主注册表里的 widget：`widget.service-status` 随 P6 搬进了
+    // workbench 插件，在无插件清单时会解析为 missing，addWidget 直接 return
+    // （见下面那条专门守这个行为的用例）
+    store.addWidget('widget.chat-timeline')
+    expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ component: 'panel', params: { widgets: ['widget.chat-timeline'] } }))
+  })
+
+  /**
+   * P6 引入的行为：解析为 missing 的 widget **不加面板**。
+   *
+   * 组件搬进插件后，宿主的注册表里已经没有它了；此时若 `addWidget` 仍然照建面板，
+   * 界面上会出现一个空盒子 —— 用户以为组件坏了，实际是「它现在住在插件里」。
+   *
+   * 这条断言守的是 `resolveWidget(...).kind === 'missing'` 那个 early return
+   * （layout.store.ts:82）。它不是「顺手加的」，而是 P6 之后 addWidget 的
+   * 正常分支之一：Core 返回了插件清单时走 iframe，没返回时这里就拦住。
+   */
+  it('解析为 missing 的 widget 不建面板（否则是空盒子）', () => {
+    const store = useLayoutStore()
+    const api = fakeApi()
+    store.attachApi(api as never)
     store.addWidget('widget.service-status')
-    expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ component: 'panel', params: { widgets: ['widget.service-status'] } }))
+    expect(api.addPanel).not.toHaveBeenCalled()
   })
 
   it('detachPanel 摘除面板并记住状态，restorePanel 回到原 tab 组', () => {

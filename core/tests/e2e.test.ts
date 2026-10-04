@@ -20,7 +20,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const BASE_ARTIFACTS = [
   path.join(REPO_ROOT, 'shared', 'dist', 'index.js'),
   path.join(REPO_ROOT, 'sdk', 'ts', 'dist', 'index.js'),
-  path.join(REPO_ROOT, 'services', 'session', 'dist', 'index.js'),
+  // P2：服务产物在**插件**的 dist/server 下（Core 只认产物），不再在服务自己的 dist/
+  path.join(REPO_ROOT, 'plugins', 'chat-workbench', 'dist', 'server', 'session', 'index.js'),
 ]
 
 /** e2e 载体：真服务 id（命令往返 + 进程运维都拿它当靶子） */
@@ -196,7 +197,7 @@ describe('e2e: core + session', () => {
     core = await startCore({
       argv: [],
       config: {
-        servicesDir: path.join(REPO_ROOT, 'services'),
+        pluginsDir: path.join(REPO_ROOT, 'plugins'),
         dataDir,
         distDir: path.join(dataDir, 'dist-client'),
         port: 0,

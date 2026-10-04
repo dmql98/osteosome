@@ -24,7 +24,8 @@ const REQUIRED_ARTIFACTS = [
   path.join(REPO_ROOT, 'core', 'dist', 'main.js'),
   path.join(REPO_ROOT, 'shared', 'dist', 'index.js'),
   path.join(REPO_ROOT, 'sdk', 'ts', 'dist', 'index.js'),
-  path.join(REPO_ROOT, 'services', 'session', 'dist', 'index.js'),
+  // P2：服务产物在**插件**的 dist/server 下（Core 只认产物），不再在服务自己的 dist/
+  path.join(REPO_ROOT, 'plugins', 'chat-workbench', 'dist', 'server', 'session', 'index.js'),
 ]
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -187,15 +188,15 @@ async function main() {
   }
 
   dataDir = mkdtempSync(path.join(tmpdir(), 'ost-smoke-'))
-  const servicesDir = path.join(REPO_ROOT, 'services')
+  const pluginsDir = path.join(REPO_ROOT, 'plugins')
   const distDir = path.join(dataDir, 'dist-client')
 
   coreProc = spawn(
     process.execPath,
     [
       path.join(REPO_ROOT, 'core', 'dist', 'main.js'),
-      '--services',
-      servicesDir,
+      '--plugins',
+      pluginsDir,
       '--data',
       dataDir,
       '--dist',

@@ -181,7 +181,53 @@ export function scanPlugins(pluginsDir: string | undefined, knownServiceIds?: Re
         })
       }
     }
-    loaded.push({ manifest, dir: path.join(pluginsDir, entry.name) })
+    // 声明了服务，但要么源码侧没有 `services/<id>/service.json`，要么**产物**没构建（P2）。
+    //
+    // 两条分开的检查，因为它们要修的问题不同：
+    // - 源码侧缺失 = 插件自己写错了（改 id / 忘了建目录）→ 改代码；
+    // - 产物缺失   = 忘了 build（很常见：刚 clone 下来、`dist/` 是 gitignore 的）
+    //   → 跑一次 build。而 Core **只认产物**，所以没构建的服务根本不会被启动。
+    //
+    // 这条检查是「服务到底会不会被启动」的唯一依据：缺了它，用户看到的症状是
+    // 「插件显示 ready 但服务没起来」，而 ready 是从服务状态派生的，压根不会 ready。
+    const pluginDir = path.join(pluginsDir, entry.name)
+    const missingSource = manifest.services.filter(
+      (s) => !existsSync(path.join(pluginDir, 'services', s, 'service.json')),
+    )
+    const missingBuild = existsSync(path.join(pluginDir, 'services'))
+      ? manifest.services.filter((s) => !existsSync(path.join(pluginDir, 'dist', 'server', s, 'service.json')))
+      : []
+    if (missingSource.length > 0) {
+      problems.push({
+        where: entry.name,
+        pluginId: manifest.id,
+        reason: `services 在插件内没有对应目录: ${missingSource.join(', ')}（期望 plugins/${entry.name}/services/<id>/service.json）`,
+      })
+    }
+    if (missingBuild.length > 0) {
+      problems.push({
+        where: entry.name,
+        pluginId: manifest.id,
+        reason: `未构建: ${missingBuild.join(', ')}（期望 plugins/${entry.name}/dist/server/<id>/service.json；跑一次 pnpm build）`,
+      })
+    }
+    // P3：声明了 ui.views 但 dist/ui 没构建。与上面的「未构建」同性质、不同修法
+    //（服务产物 vs 前端产物），但**必须分开报**：合并成一条会让用户以为跑一次
+    // build 就全好了，而 P5 之前 build 根本不会产出 UI。
+    if (manifest.ui && manifest.ui.views.length > 0) {
+      const uiRoot = path.join(pluginDir, 'dist', 'ui')
+      const missingViews = manifest.ui.views.filter(
+        (v) => !existsSync(path.join(uiRoot, v.entry.split('#')[0] ?? v.entry)),
+      )
+      if (!existsSync(uiRoot) || missingViews.length > 0) {
+        problems.push({
+          where: entry.name,
+          pluginId: manifest.id,
+          reason: `UI 未构建: ${missingViews.length > 0 ? missingViews.map((v) => v.id).join(', ') : manifest.id}（期望 plugins/${entry.name}/dist/ui/；该插件的界面会回 404）`,
+        })
+      }
+    }
+    loaded.push({ manifest, dir: pluginDir })
   }
 
   // 重复 id：两个目录声明同一个 id。必须在拓扑排序**之前**检出 —— 否则后一个会

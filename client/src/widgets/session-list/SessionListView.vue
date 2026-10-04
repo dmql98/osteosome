@@ -41,12 +41,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import Button from '@/components/ui/Button.vue'
-import Card from '@/components/ui/Card.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
-import Input from '@/components/ui/Input.vue'
-import List from '@/components/ui/List.vue'
-import Modal from '@/components/ui/Modal.vue'
+import { Button } from '@osteosome/ui'
+import { Card } from '@osteosome/ui'
+import { EmptyState } from '@osteosome/ui'
+import { Input } from '@osteosome/ui'
+import { List } from '@osteosome/ui'
+import { Modal } from '@osteosome/ui'
 import { useSessionStore } from '@/stores/session.store'
 import type { SessionMeta } from '@osteosome/shared'
 

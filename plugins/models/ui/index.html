@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>模型设置</title>
+    <!--
+      预取插件自带的目录数据：与 bundle 的下载并行，所以「运行时读」不会让
+      厂商清单晚一拍（这条是原来静态 import 的那条注释留下的约束）。
+      `crossorigin` 与 fetch 的默认模式一致，否则预取的结果不会被复用。
+    -->
+    <link rel="preload" href="catalog.json" as="fetch" crossorigin />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

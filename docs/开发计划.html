@@ -131,7 +131,7 @@
 <header class="bar">
   <div class="wrap">
     <h1>开发计划 · 对话界面重构</h1>
-    <span class="sub">减法 · 插件聚合 · S0–S8 已完成 · <b>10-04 这一轮：崩溃自愈闭环（§5）进行中</b></span>
+    <span class="sub">减法 · 插件聚合（S0–S8 完成）· <b>插件化 P0–P5 完成，P6 未做（§6）</b></span>
     <span class="sp"></span>
     <button id="theme">切换深色</button>
   </div>
@@ -139,47 +139,61 @@
 
 <div class="wrap">
 
-  <div class="lead" style="margin-top:var(--s5)">
-    <b>一句话：</b>先减法（10 个服务 → 6），再修缺陷与拆组件（3 个盒子），最后做插件聚合。
-    <b>前 2 天就有可见收益</b>：进程数减 4 家、provider 一个不少。总计 <b>8 天</b>。
-    <div style="margin-top:var(--s2);font-size:var(--sm)">
-      <b>当前进度：</b>S0 / S1 / S2 已完成并推送（<span class="commit">d2c61e3</span> ·
-      <span class="commit">761a269</span> · <span class="commit">74d823d</span> ·
-      <span class="commit">7bfb01a</span> · <span class="commit">3a6cc33</span> ·
-      <span class="commit">9e30297</span> · <span class="commit">adc7728</span> · <span class="commit">0962d41</span> · <span class="commit">16ddba2</span> · <span class="commit">2ea9006</span> · <span class="commit">1773917</span> · <span class="commit">dfdef29</span> · <span class="commit">046dbaa</span> · <span class="commit">97e652c</span> · <span class="commit">5a3ddfe</span> · <span class="commit">dd57952</span> · <span class="commit">64b42f4</span>），服务数 <b>10 → 6</b>，全仓 12 个测试包全绿。
-      <b style="color:var(--success)">P7 全线完成</b> · S0～S8 全部落地（含 S7-7 归属订正）· 服务 10 → 6、组件 10 → 11、插件 5 个。
-        <br><span style="font-size:var(--text-xs)">📌 <b>交接 / 进度 follow 看这份</b>：
-        <a href="开发进度/开发日志.md"><code>docs/开发进度/开发日志.md</code></a>
-        —— 含现状数据、遗留清单、<b>踩过的坑（交接必读）</b>、验证命令、关键文件地图。
-        本文档是过程与设计理由，<b>日志是「现在到哪了」</b>。</span><br>
-      <span style="font-size:var(--text-xs)">🔧 <b>10-04 这一轮（进行中）</b>：
-        <a href="#s10-04"><code>§5 崩溃自愈闭环</code></a> —— provider 进程崩了会「永久转圈、零提示」，
-        修成「几秒内明确失败 + 恢复自动接上」。<b>与 manifest 无关</b>，用户撞不到 4.1 #7。</span>
-    </div>
+<div class="lead" style="margin-top:var(--s5)">
+  <b>这份文档有两条线：</b>
+  <br>· <b>① S0–S8（已完成）</b>：把<b>服务</b>做进插件 —— 先减法（10 个服务 → 6），
+  修缺陷、拆三盒、做插件聚合。进程数减 4 家、provider 一个不少。
+  <br>· <b>② P0–P8（进行中，P0–P5 完成）</b>：把<b>界面</b>也做进插件 ——
+  插件自带 UI 产物，Core 同源伺服，client 只剩 iframe 宿主与拖动布局。
+  <br><span style="font-size:var(--text-sm);color:var(--muted)">
+  两条线共用同一套地基：P1 之后服务已住在 <code>plugins/&lt;id&gt;/services/&lt;sid&gt;/</code>，
+  所以第二条线不必先搬服务。</span>
+  <div style="margin-top:var(--s2);font-size:var(--sm)">
+  <b>当前进度：</b>S0～S8 全部落地并推送（<span class="commit">64b42f4</span>）·
+  插件化 <b style="color:var(--success)">P0–P5 完成</b>（<span class="commit">8e4e93b</span> + 未提交改动）·
+  服务 6 个（按插件分组）· 界面 <b>9 内置 + 1 插件页面</b> · 5 个插件 · 760 测试全绿。
+  <br><span style="font-size:var(--text-xs)">📌 <b>交接 / 进度 follow 看这份</b>：
+  <a href="开发进度/开发日志.md"><code>docs/开发进度/开发日志.md</code></a>
+  —— 含现状数据、遗留清单、<b>踩过的坑（交接必读）</b>、验证命令、关键文件地图。
+  本文档是过程与设计理由，<b>日志是「现在到哪了」</b>。</span><br>
+  <span style="font-size:var(--text-xs)">🧩 <b>插件化的下一步</b>：
+  <a href="#p6"><code>§6</code></a> —— <b>P6「其余界面迁移」未做，还剩 9 个组件</b>
+  （chat-workbench 三盒 + workbench 六个）。前置是<b>跨 iframe 通信协议</b>，至今未定
+  —— 迁 chat-workbench 就会撞上它。</span>
+  </div>
   </div>
 
   <!-- 0 -->
   <section>
     <h2><span class="n">0</span>起点（实测）与现状</h2>
-    <div class="stat">
-      <div><b class="big">6</b><span>服务进程（起点 10，S2 已减 4）</span></div>
-      <div><b class="big">10</b><span>组件（起点 10 · S5 已拆出②③，S6 拼成三盒）</span></div>
-      <div><b class="big">0</b><span>未提交改动</span></div>
-      <div><b class="big">12</b><span>测试包全绿</span></div>
-      <div><b>≈2</b><span>剩余计划天数（无，S0～S8 已完成）</span></div>
-    </div>
-    <table>
-      <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S5 已推）</th></tr></thead>
+<div class="stat">
+    <div><b class="big">6</b><span>服务进程（起点 10，S2 已减 4）· 现按插件分组</span></div>
+    <div><b class="big">9+1</b><span>组件：9 个内置 + 1 个插件页面</span></div>
+    <div><b class="big">5</b><span>插件（P0–P5 后）</span></div>
+    <div><b class="big">760</b><span>测试全绿（11 个包）</span></div>
+    <div><b>3/9</b><span>界面已迁到插件（P6 未完）</span></div>
+  </div>
+  <table>
+      <thead><tr><th style="width:14%"></th><th style="width:43%">起点（S0 之前）</th><th>现状（S0～S8 + 插件化 P0–P5）</th></tr></thead>
       <tbody>
         <tr><th>分支 / HEAD</th><td class="mono">P2-llm / ec03717（P4 收尾）</td>
-            <td class="mono">P2-llm / 7bfb01a（S2 删 4 服务）</td></tr>
+            <td class="mono">P2-llm / 8e4e93b · <span style="color:var(--warning)">162 个未提交改动（插件化 P0–P5）</span></td></tr>
         <tr><th>服务</th>
             <td class="mono">hello · session · loop · llm · llm-provider-{openai, openrouter, deepseek, anthropic} · credentials · llm-retry</td>
-            <td class="mono">session · loop · llm · llm-provider-openai · credentials · llm-retry<br>
+            <td class="mono">6 个，<b>住在插件里</b>（P1）：<br>
+                chat-workbench → session · loop · llm<br>
+                models → llm-provider-openai　credentials → credentials　reliability → llm-retry<br>
                 <span style="color:var(--success)">provider 由 4 个进程变 1 个进程内的多厂商实例</span></td></tr>
         <tr><th>组件</th><td>10 个，其中 <code>widget.llm-chat</code> = 消息区 + 输入框<b>焊在一起</b></td>
-            <td>10 个：<code>widget.hello-command</code> 随 hello 服务删（S2）、<code>widget.llm-chat</code> 拆成
-                <code>widget.chat-timeline</code> + <code>widget.chat-composer</code>（S5）</td></tr>
+            <td><b>10 个，形态开始分流</b>（P4）：<br>
+                · 9 个<b>内置</b>（仍在 <code>client/src/widgets/</code>，编译期 glob 注册）<br>
+                · 1 个<b>插件页面</b>（<code>widget.llm-settings</code> → models 插件，Core 伺服在
+                <code>/plugins/models/ui/</code>，P5 迁完）<br>
+                <span style="color:var(--warning)">⚠️ 迁移未结束</span>：chat-workbench 3 个 + workbench 6 个待迁（P6）</td></tr>
+        <tr><th>厂商预设表</th><td class="mono">shared/src/llm/vendors.ts 的编译期常量</td>
+            <td class="mono"><b style="color:var(--success)">已搬（P5）</b> → <code>plugins/models/catalog.json</code><br>
+                <code>shared</code> 只剩<b>契约</b>（类型 + wire 映射 + env 规则 + <code>parseVendorCatalog</code>）<br>
+                服务经 <code>plugins.readFile</code> 读、UI 读构建复制的副本 —— 一份被编写的文件</td></tr>
         <tr><th>已知缺陷</th>
             <td>① 思考流泄漏进正文（主位 <code>isDelta</code> 不看 <code>blockType</code>）
                 ② 插件表硬编码在前端 ③ <code>setEnabled</code> 不真停服务 ④ <code>hello</code> 是纯演示</td>
@@ -191,7 +205,12 @@
                     → <b style="color:var(--success)">已修（S4）</b>，顺带补上 <code>reasoning</code><br>
                 ⑥ 设置窗「启用」开关指向已删服务 → <b style="color:var(--success)">已修（S3）</b><br>
                 ⑦ <b style="color:var(--danger)">client 打包从 S3 起一直是坏的</b> → <b style="color:var(--success)">已修（S4）</b>；
-                    但它<b>没被任何测试或冒烟抓到</b>，是因为我验证时把错误输出 grep 掉了（见风险台账）</td></tr>
+                    但它<b>没被任何测试或冒烟抓到</b>，是因为我验证时把错误输出 grep 掉了（见风险台账）<br>
+                ⑧ <b style="color:var(--danger)">界面没跟着插件走</b> → 组件全在 client 包里，插件只有服务。
+                    <b>已定方向并开做（P0–P5）</b>，剩 9 个组件待迁（P6，见 §6）<br>
+                ⑨ <b style="color:var(--danger)">模型设置掉出默认布局</b> → <b style="color:var(--success)">P5 的副作用</b>。
+                    <code>defaultWidgetIds()</code> 只列内置组件，迁走的插件视图不再自动进默认面板。
+                    老用户靠 <code>layout</code> 快照不受影响，<b>新装 / 重置过布局的会看不到</b> —— 未修</td></tr>
       </tbody>
     </table>
 
@@ -203,9 +222,14 @@
         <tr><th>provider</th><td><b>一个通用 openai 兼容实现 + 厂商预设表（数据）</b>；加厂商 = 加一行，不加代码不加进程</td></tr>
         <tr><th>Core</th><td>进程 + 总线 + 桥 + 凭证 store，<b>零业务知识</b></td></tr>
         <tr><th>插件</th><td><b>聚合</b>：一组服务 + 一组组件 + 依赖；Core 扫 <code>plugins/*/plugin.json</code></td></tr>
+        <tr><th>界面的最终形态</th><td><b>插件自带 UI</b>：<code>plugins/&lt;id&gt;/ui/</code> 独立打包，Core 同源伺服在
+            <code>/plugins/&lt;id&gt;/ui/*</code>，client 只是壳（iframe 宿主 + 拖动布局）。<br>
+            <b>数据归插件</b>：<code>userData/plugin/&lt;id&gt;/</code> 可写、<code>plugins/&lt;id&gt;/</code> 只读</td></tr>
       </tbody>
     </table>
     <p class="note ok"><b>明确不做：</b>窄窗降级、代码语法高亮库、工具跨进程化、审批 listener、MCP 接入、上下文压缩、整体转 pi。</p>
+    <p class="note"><b>两条线的分工：</b>S0～S8 是<b>把插件聚合做对</b>（服务进插件、清单归 Core、启停真停进程）；
+      P0–P8 是<b>把界面也放进插件</b>。前者已完成，后者进行到 P5 —— 详见 <a href="#p6"><code>§6 插件化（P0–P8）</code></a>。</p>
   </section>
 
   <!-- 1 甘特 -->
@@ -1342,17 +1366,29 @@ plugins/
 
   <!-- 3 预设表 -->
   <section>
-    <h2><span class="n">3</span>S1 的核心：厂商预设表（数据）<span class="done-badge" style="vertical-align:middle">已落地</span></h2>
-    <pre class="code"><span class="cm">// shared/src/llm/vendors.ts —— 加一家 = 加一行，零代码、零进程、零测试改动</span>
+    <h2><span class="n">3</span>S1 的核心：厂商预设表（数据）<span class="done-badge" style="vertical-align:middle">已落地</span><span class="done-badge" style="vertical-align:middle;background:var(--warning)">P5 已搬走</span></h2>
+    <div class="note">
+      <b>⚠️ 这一节描述的是 S1 当时的形态，P5 之后位置变了。</b>
+      当时预设表是 <code>shared/src/llm/vendors.ts</code> 里的<b>编译期常量</b>；
+      现在它是 <code>plugins/models/catalog.json</code> 里的<b>插件自带数据</b>，
+      <code>shared</code> 只剩类型与 wire 规则。下面保留原样是为了说清「为什么长成这样」，
+      当前形态见 <a href="#p6"><code>§6</code></a> 与
+      <a href="插件化架构优化.html"><code>插件化架构优化.html</code></a> 的 P5。
+    </div>
+    <pre class="code"><span class="cm">// 当时在 shared/src/llm/vendors.ts —— 加一家 = 加一行，零代码、零进程、零测试改动</span>
 export interface VendorPreset {
   <span class="k">id</span>: string              <span class="cm">// 'deepseek'</span>
   <span class="k">label</span>: string           <span class="cm">// 'DeepSeek'</span>
   <span class="k">baseUrl</span>: string         <span class="cm">// 'https://api.deepseek.com'</span>
   <span class="k">api</span>: <span class="k">'openai'</span>           <span class="cm">// 预留：将来接原生 wire 用</span>
-  <span class="k">credentialEnv</span>: string   <span class="cm">// 'DEEPSEEK_API_KEY'</span>
+  <span class="k">credentialEnv</span>: string   <span class="cm">// 'DEEPSEEK_API_KEY'，本地端点写 ''（不是省略字段）</span>
   <span class="k">defaultModel</span>: string    <span class="cm">// 'deepseek-chat'</span>
   <span class="k">models</span>?: string[]       <span class="cm">// 静态兜底目录（拉不到 /models 时用）</span>
 }</pre>
+    <p class="note"><b>P5 补的一条规则</b>：<code>credentialEnv</code> 必须是<b>字符串</b>，本地端点写空串
+      —— 「没写」与「写了但不是字符串」是两件事，后者是数据错误。
+      校验器 <code>parseVendorCatalog</code> 会挑出坏条目<b>逐条报错</b>而不是整份拒掉：
+      一家厂商写错 <code>baseUrl</code> 不该让其余 11 家一起消失。</p>
     <table>
       <thead><tr><th>id</th><th>baseUrl</th><th>credentialEnv</th></tr></thead>
       <tbody>
@@ -1380,6 +1416,9 @@ export interface VendorPreset {
       它写着「wire 类型」，但表住在 <code>llm-provider-openai</code> 进程里，只能表达「这一个进程能服务谁」。
       于是往表里加一行 <code>api:'opencode'</code> 就成了一个无法兑现的声明 —— 本进程要么注册出一个
       声称支持、实际发 openai 请求体的假 provider，要么悄悄忽略让用户以为装上了。</p>
+      <p class="note ok"><b>这条不变量今天由谁守</b>：<code>shared/tests/vendor-wires.test.ts</code> ——
+        P5 之后它<b>改读 catalog.json</b>（不再是 import 常量），于是顺带成了那份手写 JSON 的第一道校验：
+        少一个逗号、id 打错一个字母，在这里就红，而不是等某个厂商在用户界面上神秘地不出现。</p>
     <pre class="code"><span class="cm">// 约定：wire X → 服务 llm-provider-X</span>
 <span class="k">api</span>: <span class="k">string</span>   <span class="cm">// 不再是 'openai' 字面量，而是「由哪个进程实现这个 wire」</span>
 
@@ -1676,13 +1715,140 @@ declaredWires(presets)            <span class="cm">// CI 用</span></pre>
     </div>
   </section>
 
-  <footer>
-    Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合） ·
-    P7 S0–S8 已完成（<span class="commit">64b42f4</span>）·
-    <b>10-04 这一轮 §5「崩溃自愈闭环」进行中</b> · 更新于 2026-10-04<br>
-    配套：<code>docs/开发进度/开发日志.md</code>（现状 / 遗留 / 踩过的坑）·
-    <code>docs/开发进度/阶段追踪.md</code> ·
-    架构：<code>docs/对话界面架构.html</code>（<b>写于实施前，有过时处</b>）
+<!-- 6 插件化 -->
+  <section id="p6">
+    <h2><span class="n">6</span>插件化 P0–P8（界面也进插件）</h2>
+    <div class="lanes">
+      <div class="lane-row">
+        <span class="lane-name">地基</span>
+        <div class="lane-flow">
+          <span class="step-chip done">P0 边界定案 ✓</span><span class="arw">→</span>
+          <span class="step-chip done">P1 服务进插件 ✓</span><span class="arw">→</span>
+          <span class="step-chip done">P2 编译产物 ✓</span><span class="arw">→</span>
+          <span class="step-chip done">P3 Core 伺服 UI ✓</span><span class="arw">→</span>
+          <span class="step-chip done">P4 client 变壳 ✓</span><span class="arw">→</span>
+          <span class="step-chip done">P5 首个切片 ✓</span>
+        </div>
+      </div>
+      <div class="lane-row">
+        <span class="lane-name">剩余</span>
+        <div class="lane-flow">
+          <span class="step-chip">P6 其余 UI 迁移 ★最大</span><span class="arw">→</span>
+          <span class="step-chip">P7 轻量插件 API</span><span class="arw">→</span>
+          <span class="step-chip">P8 分发与安装</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="note"><b>与 S0～S8 的关系：</b>那条线把<b>服务</b>做进了插件（清单归 Core、启停真停进程、依赖排序），
+      这条线把<b>界面</b>也做进去。地基是共用的 —— P1 之后服务已经住在
+      <code>plugins/&lt;id&gt;/services/&lt;sid&gt;/</code>，P5 的切片才能直接搬走而不必先搬服务。</p>
+
+    <h3>6.1 当前进度：地基全通，切片只做完一个</h3>
+    <table>
+      <thead><tr><th style="width:8%"></th><th style="width:26%">阶段</th><th style="width:12%">状态</th><th>做成了什么</th></tr></thead>
+      <tbody>
+        <tr><td>P0</td><td>边界定案</td><td><span class="done-badge">完成</span></td>
+            <td>数据归属三段分清：Core 私有 <code>userData/core/</code>、插件可写 <code>userData/plugin/&lt;id&gt;/</code>、
+                插件自带只读 <code>plugins/&lt;id&gt;/</code></td></tr>
+        <tr><td>P1</td><td>服务进插件</td><td><span class="done-badge">完成</span></td>
+            <td>6 个服务搬进 4 个插件；每服务拿到自己的数据根；旧 <code>.data</code> 自动换根迁移</td></tr>
+        <tr><td>P2</td><td>编译产物 + 分发约定</td><td><span class="done-badge">完成</span></td>
+            <td>服务打成<b>单文件零外部依赖</b>；Core <b>只认产物</b>；<code>coreCompatibility</code> 版本闸；
+                有测试把产物拷到空目录验证能跑</td></tr>
+        <tr><td>P3</td><td>Core 伺服插件 UI</td><td><span class="done-badge">完成</span></td>
+            <td><code>GET /plugins/&lt;id&gt;/ui/*</code> 同源伺服；停用/未构建/版本不合一律 404；
+                <code>plugins.readFile</code> 特权只读 RPC（只限自己插件目录）</td></tr>
+        <tr><td>P4</td><td>client 变壳</td><td><span class="done-badge">完成</span></td>
+            <td>组件来源分两路：内置走编译期 glob、插件走运行时 <code>ui.views</code> + iframe 宿主；
+                已删除/未知的 id 画占位而不是<b>悄悄消失</b></td></tr>
+        <tr><td>P5</td><td>端到端切片</td><td><span class="done-badge">完成</span></td>
+            <td>模型设置整片搬进 <code>plugins/models/ui/</code>；厂商预设表搬成插件自带数据；
+                真实构建 + 真实 Core 的 e2e 测住整条链路</td></tr>
+        <tr><td>P6</td><td>其余 UI 迁移</td><td><span style="color:var(--warning)">未做</span></td>
+            <td><b>还剩 9 个组件</b>：chat-workbench 3（三盒）+ workbench 6。<b>前置：跨 iframe 通信协议至今未定</b></td></tr>
+        <tr><td>P7</td><td>轻量插件 API</td><td><span style="color:var(--muted)">按需</span></td>
+            <td>插件要自己的 B 面时再做；难点已识别为<b>同源不等于互信</b></td></tr>
+        <tr><td>P8</td><td>分发与安装</td><td><span style="color:var(--muted)">未做</span></td>
+            <td>解压即用 + 五条校验。<b>已知限制：仍要求用户机器装 Node ≥ 24</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3>6.2 界面迁移到哪一步了</h3>
+    <table>
+      <thead><tr><th style="width:20%">插件</th><th style="width:16%">服务</th><th style="width:16%">界面</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>models</code> 模型接入</td><td>llm-provider-openai</td>
+            <td style="color:var(--success)"><b>1/1 已迁</b></td>
+            <td><code>plugins/models/ui/</code> 独立打包；厂商目录是插件自带数据，服务与 UI 共读一份</td></tr>
+        <tr><td><code>chat-workbench</code></td><td>session · loop · llm</td>
+            <td style="color:var(--warning)">0/3</td>
+            <td>三盒 = 工作台骨架。<b>最难的一个</b>：三个视图之间要通信（输入框 ↔ 会话 ↔ 对话区）</td></tr>
+        <tr><td><code>workbench</code></td><td>（无）</td>
+            <td style="color:var(--warning)">0/6</td>
+            <td>系统信息 / 命令台 / 设置 / 事件流 / 服务管理 / 服务状态</td></tr>
+        <tr><td><code>credentials</code></td><td>credentials</td><td style="color:var(--muted)">—</td>
+            <td>纯服务插件，<b>合法地没有界面</b></td></tr>
+        <tr><td><code>reliability</code></td><td>llm-retry</td><td style="color:var(--muted)">—</td>
+            <td>同上</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <b>为什么 P5 只搬一个：</b>它是唯一一个「单服务 + 单视图 + 不需要跟别的视图通信」的插件。
+      单视图不需要跨 iframe 协议，于是 P5 能先把地基（构建 → 伺服 → 数据）整条跑通并测住，
+      把「多视图怎么通信」这个问题留到 P6 正面解决 —— 那时至少有真实场景可依。
+    </div>
+
+    <h3>6.3 P6 的前置：跨 iframe 通信协议（至今未定）</h3>
+    <p>搬 chat-workbench 会立刻撞上它。三个视图在同一个 iframe 里时，pinia 单例直接共享；
+      拆成三个 iframe 之后：</p>
+    <table>
+      <thead><tr><th style="width:26%">要传什么</th><th style="width:24%">可能的做法</th><th>取舍</th></tr></thead>
+      <tbody>
+        <tr><td>输入框 → 对话区<br><span style="color:var(--muted)">（发消息）</span></td><td><code>BroadcastChannel</code></td>
+            <td>同源同浏览器，<b>最省事</b>；但它是「广播」不是「调用」，<b>没有返回值</b>。需要等回音就不能这么干</td></tr>
+        <tr><td>对话区 → 输入框<br><span style="color:var(--muted)">（回显 / 状态）</span></td><td><code>BroadcastChannel</code></td>
+            <td>同上，够用</td></tr>
+        <tr><td>会话列表 → 输入框<br><span style="color:var(--muted)">（切换会话）</span></td><td><code>postMessage</code> + 配对</td>
+            <td>跨 iframe 传「命令」需要<b>定向</b>，BroadcastChannel 做不到（谁都在听）</td></tr>
+        <tr><td>任意 → Core</td><td>现成的 <code>/api/*</code></td>
+            <td><b>已经通了</b>（同源）。模型设置那片就是这么工作的 —— 这是 P5 最大的便宜</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <b>建议顺序：</b>先把 P5 那条路的<b>已知可用</b>部分用足（每个视图自己调 <code>/api/*</code>），
+      只在「视图之间要传命令」时才引入消息层。理由：多一层跨 iframe 通信就多一处
+      「<b>消息丢了页面不报错</b>」的排障地 —— 而这类症状（点了没反应）最难定位。
+      若最终仍需要消息层，契约必须定死<b>消息形状 + 来源校验</b>：同源不代表互信
+      （任何页面都能 <code>postMessage</code> 到这个 iframe）。
+    </div>
+
+    <h3>6.4 两个已知的未修项</h3>
+    <table>
+      <thead><tr><th style="width:22%">问题</th><th style="width:14%">严重度</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>模型设置掉出默认布局</td><td style="color:var(--warning)">中</td>
+            <td><code>defaultWidgetIds()</code> 只列内置组件。models 是<b>内置</b>插件、几乎人人都有，
+                把它当「可选插件」处理是错的。<br>
+                影响面：老用户靠 <code>layout</code> 快照<b>不受影响</b>；新装 / 重置过布局的<b>看不到</b>。<br>
+                修法：默认布局纳入「<b>内置插件</b>的视图」，且只在能解析成 iframe 时纳入
+                （否则未构建的插件又变成一屏 404 框）</td></tr>
+        <tr><td><code>client/src/widgets/llm-settings/</code> 空目录</td><td style="color:var(--muted)">低</td>
+            <td>迁走后留下的空壳，删掉即可</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+<footer>
+  Osteosome · 开发计划（对话界面重构 / 减法 / 插件聚合 / 插件化） ·
+  P7 S0–S8 已完成（<span class="commit">64b42f4</span>）·
+  <b>10-04 插件化 P0–P5 已完成（§6）· P6 其余 UI 迁移未做</b> ·
+  <span class="commit">8e4e93b</span> + 162 个未提交改动 · 更新于 2026-10-04<br>
+  配套：<code>docs/开发进度/开发日志.md</code>（现状 / 遗留 / 踩过的坑）·
+  <code>docs/开发进度/阶段追踪.md</code> ·
+  <b>插件化详细计划：<a href="插件化架构优化.html"><code>docs/插件化架构优化.html</code></a></b>（P0–P8 逐阶段的设计理由与落地记录）·
+  架构：<code>docs/对话界面架构.html</code>（<b>写于实施前，有过时处</b>）
   </footer>
 </div>
 

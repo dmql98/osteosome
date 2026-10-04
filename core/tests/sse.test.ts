@@ -3,12 +3,20 @@
  * - topics 过滤 / 推流格式 / 心跳 / dispose / command 202 / 僵尸断开
  * - Origin 白名单 / preferences 往返 / static 占位与穿越 / health / config 解析
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Bus } from '../src/bus/bus'
 import { loadConfig } from '../src/config/config'
+import {
+  DIST_MARKER,
+  coreVersion,
+  installRoot,
+  migrateFlatLayout,
+  migrateLegacyDataDir,
+  userDataDir,
+} from '../src/config/paths'
 import { SseBridge } from '../src/sse-bridge/server'
 import { PluginRegistry } from '../src/service-manager/plugin-registry-runtime'
 import type { ServiceInfo } from '@osteosome/shared'
@@ -143,12 +151,28 @@ describe('loadConfig', () => {
     expect(cfg.servicesDir).toBe(path.resolve('/tmp/base', 'env-svc'))
   })
 
-  it('defaults port to 1420 and paths to repo-relative defaults', () => {
+  it('defaults port to 1420 and paths to repo-relative defaults; data goes to the USER dir', () => {
     const cfg = loadConfig([], {}, '/tmp/base')
     expect(cfg.port).toBe(1420)
-    expect(cfg.servicesDir).toBe(path.resolve('/tmp/base', './services'))
-    expect(cfg.dataDir).toBe(path.resolve('/tmp/base', './.data'))
     expect(cfg.distDir).toBe(path.resolve('/tmp/base', './dist/client'))
+    // P1：服务目录**没有缺省**了 —— 没给 --services 时由 main.ts 从插件清单算
+    expect('servicesDir' in cfg).toBe(false)
+    // 数据根**不跟工作副本**：没给 --data 时落用户目录
+    expect(cfg.dataDir).toBe(userDataDir())
+    expect(path.isAbsolute(cfg.dataDir)).toBe(true)
+    expect(cfg.dataDir.startsWith(path.resolve('/tmp/base'))).toBe(false)
+    expect(cfg.dataDirIsDefault).toBe(true)
+    // 没发行标记 → 不是发行版（开发跑）
+    expect(cfg.installRoot).toBeUndefined()
+  })
+
+  it('给了 --data / OST_DATA → 相对 cwd 解析，且标记为「非缺省」（不触发迁移）', () => {
+    const fromCli = loadConfig(['--data', 'dat'], {}, '/tmp/base')
+    expect(fromCli.dataDir).toBe(path.resolve('/tmp/base', 'dat'))
+    expect(fromCli.dataDirIsDefault).toBe(false)
+    const fromEnv = loadConfig([], { OST_DATA: path.resolve('abs-data') }, '/tmp/base')
+    expect(fromEnv.dataDir).toBe(path.resolve('abs-data'))
+    expect(fromEnv.dataDirIsDefault).toBe(false)
   })
 
   it('rejects invalid port (fail fast)', () => {
@@ -181,6 +205,230 @@ describe('loadConfig', () => {
     expect('pluginsDir' in loadConfig(['--plugins', 'none'], {}, '/tmp/base')).toBe(false)
     expect('pluginsDir' in loadConfig(['--plugins', ''], {}, '/tmp/base')).toBe(false)
     expect('pluginsDir' in loadConfig([], { OST_PLUGINS: 'none' }, '/tmp/base')).toBe(false)
+  })
+})
+
+/**
+ * 数据根的**位置**本身也是行为：密钥搬错了家 = 用户丢配置或泄密钥。
+ * 所以两条分支（各平台位置、旧目录迁移）都直接断在这个纯函数上。
+ */
+describe('用户级数据根', () => {
+  it('Windows → %LOCALAPPDATA%\\osteosome；刻意不用 %APPDATA%（那会随域策略漫游）', () => {
+    expect(userDataDir({ LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local' }, 'C:\\Users\\u', 'win32')).toBe(
+      path.join('C:\\Users\\u\\AppData\\Local', 'osteosome'),
+    )
+    // 只有 APPDATA 时退回它 —— 仍然在用户目录下，不落到 cwd
+    expect(userDataDir({ APPDATA: 'D:\\Roam' }, 'C:\\Users\\u', 'win32')).toBe(path.join('D:\\Roam', 'osteosome'))
+    // 都没有 → 用 home 拼，且**不是** cwd 相对
+    expect(userDataDir({}, '/home/u', 'win32')).toBe(path.join('/home/u', 'AppData', 'Local', 'osteosome'))
+  })
+
+  it('非 Windows → $XDG_DATA_HOME/osteosome，退 ~/.local/share/osteosome', () => {
+    expect(userDataDir({ XDG_DATA_HOME: '/home/u/share' }, '/home/u', 'linux')).toBe(
+      path.join('/home/u/share', 'osteosome'),
+    )
+    // 空白值当没给 —— 否则 join 出来是 'osteosome' 相对路径，又回到「跟着 cwd 走」的坑
+    expect(userDataDir({ XDG_DATA_HOME: '  ' }, '/home/u', 'linux')).toBe(
+      path.join('/home/u', '.local', 'share', 'osteosome'),
+    )
+  })
+
+  describe('旧 <cwd>/.data 的一次性迁移', () => {
+    let root = ''
+    let legacy = ''
+    let target = ''
+
+    beforeEach(() => {
+      root = mkdtempSync(path.join(tmpdir(), 'ost-migrate-'))
+      legacy = path.join(root, '.data')
+      target = path.join(root, 'user-data')
+      mkdirSync(legacy)
+    })
+
+    afterEach(() => {
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('缺省值 + 目标空 → 按三层布局搬运（旧的保留）', () => {
+      writeFileSync(path.join(legacy, 'preferences.json'), '{"llm":{}}')
+      writeFileSync(path.join(legacy, 'credentials.json'), '{"cred_1":{"id":"cred_1"}}')
+      mkdirSync(path.join(legacy, 'sessions'))
+      writeFileSync(path.join(legacy, 'sessions', 'index.json'), '[]')
+      mkdirSync(target)
+
+      const copied = migrateLegacyDataDir(target, root, true).sort()
+      // Core 自己的进 core/，会话进它所属插件（chat-workbench）
+      expect(copied).toEqual([
+        'core/credentials.json',
+        'core/preferences.json',
+        'plugin/chat-workbench/sessions',
+      ])
+      expect(readFileSync(path.join(target, 'core', 'preferences.json'), 'utf8')).toBe('{"llm":{}}')
+      expect(readFileSync(path.join(target, 'core', 'credentials.json'), 'utf8')).toBe('{"cred_1":{"id":"cred_1"}}')
+      expect(readFileSync(path.join(target, 'plugin', 'chat-workbench', 'sessions', 'index.json'), 'utf8')).toBe('[]')
+      // 复制不是移动：旧目录还在，用户确认前随时能回去拿
+      expect(existsSync(path.join(legacy, 'preferences.json'))).toBe(true)
+    })
+
+    it('未登记的旧文件进 core/（那些是 Core 的日志之类）', () => {
+      writeFileSync(path.join(legacy, 'core.out.log'), 'x')
+      mkdirSync(target)
+      expect(migrateLegacyDataDir(target, root, true)).toEqual(['core/core.out.log'])
+      expect(existsSync(path.join(target, 'core', 'core.out.log'))).toBe(true)
+    })
+
+    it('目标已有数据 → 一个字节都不动（那可能是用户特意指过来的备份）', () => {
+      writeFileSync(path.join(legacy, 'preferences.json'), '{"legacy":true}')
+      mkdirSync(target)
+      writeFileSync(path.join(target, 'preferences.json'), '{"mine":true}')
+
+      expect(migrateLegacyDataDir(target, root, true)).toEqual([])
+      expect(readFileSync(path.join(target, 'preferences.json'), 'utf8')).toBe('{"mine":true}')
+    })
+
+    it('显式 --data（isDefault=false）→ 不迁移；测试与 smoke 的临时目录因此不会被灌进本机密钥', () => {
+      writeFileSync(path.join(legacy, 'credentials.json'), '{"cred_1":{}}')
+      expect(migrateLegacyDataDir(target, root, false)).toEqual([])
+      expect(existsSync(path.join(target, 'credentials.json'))).toBe(false)
+    })
+
+it('旧目录不存在 → 什么都不做（不建目录、不报错）', () => {
+      const fresh = path.join(root, 'no-legacy')
+      expect(migrateLegacyDataDir(target, fresh, true)).toEqual([])
+      expect(existsSync(target)).toBe(false)
+    })
+  })
+
+  /**
+   * 同一个根里「扁平 → 三层」的迁移。
+   *
+   * 不做这一步的后果是**静默丢配置**：P0 时代写下的 `<dataDir>/preferences.json` 留在原地，
+   * 而 P1 之后 Core 只读 `<dataDir>/core/preferences.json` —— 用户看到的是「全没了」，
+   * 文件却好好地躺在磁盘上，最难自查的一种丢。
+   */
+  describe('扁平布局 → 三层布局（同一个根内）', () => {
+    let dataDir = ''
+
+    beforeEach(() => {
+      dataDir = mkdtempSync(path.join(tmpdir(), 'ost-flat-'))
+    })
+    afterEach(() => {
+      rmSync(dataDir, { recursive: true, force: true })
+    })
+
+    it('把根下的 preferences / credentials / sessions 搬进 core/ 与 plugin/<id>/', () => {
+      writeFileSync(path.join(dataDir, 'preferences.json'), '{"ui.theme":"dark"}')
+      writeFileSync(path.join(dataDir, 'credentials.json'), '{"cred_1":{"id":"cred_1"}}')
+      mkdirSync(path.join(dataDir, 'sessions'))
+      writeFileSync(path.join(dataDir, 'sessions', 'index.json'), '[]')
+
+      expect(migrateFlatLayout(dataDir).sort()).toEqual([
+        'core/credentials.json',
+        'core/preferences.json',
+        'plugin/chat-workbench/sessions',
+      ])
+      expect(readFileSync(path.join(dataDir, 'core', 'preferences.json'), 'utf8')).toBe('{"ui.theme":"dark"}')
+      // 源仍在（不删）—— 迁错了还能回去拿
+      expect(existsSync(path.join(dataDir, 'preferences.json'))).toBe(true)
+    })
+
+    it('已经是新布局 → 什么都不做（幂等）', () => {
+      mkdirSync(path.join(dataDir, 'core'), { recursive: true })
+      writeFileSync(path.join(dataDir, 'core', 'preferences.json'), '{}')
+      expect(migrateFlatLayout(dataDir)).toEqual([])
+    })
+
+    it('什么都没有 → 返回空数组，不建 core/ 目录', () => {
+      expect(migrateFlatLayout(dataDir)).toEqual([])
+      expect(existsSync(path.join(dataDir, 'core'))).toBe(false)
+    })
+  })
+
+  /**
+   * 发行版判据（`installRoot`）。
+   *
+   * 这条判据错了的代价是**开发期与发行期数据分叉**：用户装完发现密钥「不见了」，
+   * 而文件就在 exe 旁边的 userData/ 里 —— 极难自查。所以它必须有测试。
+   */
+  describe('发行版判据（exe 同级的 .osteosome-dist）', () => {
+    let root = ''
+    let exeDir = ''
+    let fakeExe = ''
+
+    beforeEach(() => {
+      root = mkdtempSync(path.join(tmpdir(), 'ost-dist-'))
+      exeDir = path.join(root, 'app')
+      mkdirSync(exeDir, { recursive: true })
+      fakeExe = path.join(exeDir, 'osteosome.exe')
+      writeFileSync(fakeExe, '')
+    })
+    afterEach(() => {
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('没有标记 → 不是发行版（开发跑），installRoot 为 undefined', () => {
+      expect(installRoot(fakeExe)).toBeUndefined()
+    })
+
+    it('有标记 → 安装根 = <exe 目录>/osteosome', () => {
+      writeFileSync(path.join(exeDir, DIST_MARKER), '')
+      expect(installRoot(fakeExe)).toBe(path.join(exeDir, 'osteosome'))
+    })
+
+    it('标记存在 → dataDir 与 pluginsDir 都落在安装根下（发行物自包含）', () => {
+      writeFileSync(path.join(exeDir, DIST_MARKER), '')
+      const cfg = loadConfig([], {}, root, fakeExe)
+      expect(cfg.installRoot).toBe(path.join(exeDir, 'osteosome'))
+      expect(cfg.dataDir).toBe(path.join(exeDir, 'osteosome', 'userData'))
+      expect(cfg.pluginsDir).toBe(path.join(exeDir, 'osteosome', 'plugins'))
+    })
+
+it('发行版下显式 --data / --plugins 仍然优先（部署者另有安排）', () => {
+      writeFileSync(path.join(exeDir, DIST_MARKER), '')
+      const cfg = loadConfig(['--data', 'd', '--plugins', 'p'], {}, root, fakeExe)
+      expect(cfg.dataDir).toBe(path.resolve(root, 'd'))
+      expect(cfg.pluginsDir).toBe(path.resolve(root, 'p'))
+    })
+  })
+
+  /**
+   * Core 自己的版本号（P2）—— `coreCompatibility` 的判定输入。
+   *
+   * 退 `0.0.0` 是刻意的**可见的坏**：它会让所有声明 `min: "0.1.0"` 的插件被判为
+   * 「不满足」，即被拦住并打出警告 —— 而猜一个好看的版本会让插件在错误的 Core 上装上，
+   * 症状是运行期的怪问题。所以这里断的是「读不到就诚实退 0.0.0」。
+   */
+  describe('Core 自己的版本号', () => {
+    let root = ''
+
+    beforeEach(() => {
+      root = mkdtempSync(path.join(tmpdir(), 'ost-ver-'))
+    })
+    afterEach(() => {
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    it('从入口旁的 package.json 读（core/dist/main.js → core/package.json）', () => {
+      mkdirSync(path.join(root, 'dist'), { recursive: true })
+      writeFileSync(
+        path.join(root, 'package.json'),
+        JSON.stringify({ name: '@osteosome/core', version: '1.2.3' }),
+      )
+      expect(coreVersion(path.join(root, 'dist', 'main.js'))).toBe('1.2.3')
+    })
+
+    it('读不到 / 不是 core 的包 / 版本为空 → 退 0.0.0（不猜）', () => {
+      expect(coreVersion(path.join(root, 'nope', 'main.js'))).toBe('0.0.0')
+      expect(coreVersion('')).toBe('0.0.0')
+      mkdirSync(path.join(root, 'dist'), { recursive: true })
+      writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'something-else', version: '9.9.9' }))
+      expect(coreVersion(path.join(root, 'dist', 'main.js'))).toBe('0.0.0')
+      writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: '@osteosome/core', version: '' }))
+      expect(coreVersion(path.join(root, 'dist', 'main.js'))).toBe('0.0.0')
+    })
+
+    // 刻意**不**在这里断「本仓库读得出来」：那依赖 process.argv[1] 指向 core/dist/main.js，
+    // 而 vitest 下 argv[1] 是它自己。真路径由 smoke 覆盖（它就是 `node core/dist/main.js` 起的）。
   })
 })
 
@@ -478,6 +726,8 @@ describe('GET /api/plugins（S7-2a）', () => {
   function registryFor(dir: string | undefined): PluginRegistry {
     return new PluginRegistry(new Bus(), {
       pluginsDir: dir,
+      dataDir: path.join(tmpdir(), 'ost-sse-userdata'),
+      coreVersion: '0.1.0',
       listServiceStates: () => new Map(),
       controlService: async () => undefined,
     })

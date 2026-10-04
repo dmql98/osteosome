@@ -102,7 +102,14 @@ pnpm build
 ```
 
 - `pnpm install` 会安装全部 workspace 依赖，其中包含 `src-tauri` 需要的 `@tauri-apps/cli`。
-- `pnpm build` 会依次构建 `shared` / `core` / `sdk` / `services/*` / `client`；客户端产物输出到 `core/dist/client`。
+- `pnpm build` 会依次构建 `shared` / `core` / `sdk` / `plugins/*/services/*` / `client`；客户端产物输出到 `core/dist/client`。
+- **服务产物输出到插件目录**：`plugins/<插件>/dist/server/<服务>/{index.js, service.json}`。`index.js` 是**单文件、零外部依赖**的（esbuild 打包，连 workspace 依赖与 zod 都在里面），所以它可以单独拷到任何装了 Node 的机器上运行 —— Core 也**只认产物**：某个插件没构建，它的服务就不会启动，插件详情里会写「未构建」。
+- 服务侧的 `typecheck` 仍走 `tsc --noEmit`（类型检查不需要产物）；旧的 `services/*/tsconfig.build.json` 已删除，它指向的 `dist/` 不再有人写。
+- **插件 UI 的路由**：`http://127.0.0.1:4317/plugins/<插件>/<视图 entry>`。Core 伺服 `dist/ui/`，插件停用 / 未构建 / 版本不兼容都回 404（所以「界面空白」通常意味着产物没构建，不是 Core 坏了）。
+- **插件 UI 是一个独立的 workspace 包**（`plugins/<插件>/ui`），`pnpm build` 会构建它，产物落在插件的 `dist/ui/`。改插件界面后在工作台里刷新即可（不必重启 Core）。
+- **插件自带的静态数据**放插件目录根部（如 `plugins/models/catalog.json`）。服务端经 `plugins.readFile` 读它，插件 UI 经 `/plugins/<插件>/ui/<文件名>` 读构建复制的那份副本 —— 一份被编写的文件，两个投递路径。
+- **组件（widget）有两个来源**：还在 client 包里的内置组件（`client/src/widgets/`），以及插件 `plugin.json` 的 `ui.views[]`（运行时从 `/api/plugins` 发现，渲染成 iframe）。同一个 widget id 同时存在于两边时**插件页面优先**。
+- 插件页面的 Vite 配置必须把 `base` 设成 `/plugins/<插件id>/ui/` —— 默认的 `/` 会让所有插件的 chunk 抢同一个全局 `/assets/xxx.js`（症状是两个插件互相换脸）。
 - Tauri 桌面壳**不在这一步编译**，首次 `start-client.cmd` 时由 `tauri dev` 增量编译（第一次会编译几分钟，之后只重编改动的部分，产物缓存在 `src-tauri/target/`）。
 
 只构建、不含 Tauri 时也可以显式排除：
@@ -173,7 +180,27 @@ Get-Process cargo,osteosome -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item -Recurse -Force .\src-tauri\target
 ```
 
-Core 的本地运行数据在 `.data/`（同样已忽略），删掉即回到全新状态。
+Core 的用户数据放在一个 `userData/` 目录里，分两层：
+
+- **发行版**：`<安装目录>\osteosome\userData\`（exe 旁边 —— 判据是 exe 同级有 `.osteosome-dist` 标记文件）。整份发行物自包含，**拷走即换机器**。
+- **开发跑**（无标记）：`%LOCALAPPDATA%\osteosome`（其它平台 `$XDG_DATA_HOME/osteosome` 或 `~/.local/share/osteosome`）。
+
+里面长这样：
+
+```
+userData/
+├── core/       ← Core 自己的：preferences.json（布局 / 主题 / 插件状态 / 模型开关）、credentials.json（API Key 明文）、日志
+└── plugin/
+    ├── chat-workbench/  ← 这个插件的数据 = 对话（sessions/）
+    └── models/          ← 这个插件的数据 = 密钥 + 接入清单 + 模型开关
+```
+
+数据**不跟着仓库走**，所以 `git clone` 不会带上你的密钥。删掉即回到全新状态。
+
+两次自动迁移（都在日志里说明，源文件都保留）：
+
+- 仓库里还留着老版本的 `.data/`（早期把数据放在工作副本内）→ 复制到新位置，按三层布局归位。
+- 用户目录里是 P0 时代的**扁平**布局（`preferences.json` 直接在根下）→ 搬进 `core/`。
 
 ## 8. 环境自检清单
 

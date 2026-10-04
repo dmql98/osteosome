@@ -21,16 +21,18 @@ export type {
   JsonRpcResponse,
 } from '@osteosome/shared'
 
-/** 构造 Core → 服务的 initialize 响应（RFC §6.1 / P1a §3.1 数据目录约定） */
+/** 构造 Core → 服务的 initialize 响应（RFC §6.1 / P1a §3.1 数据目录约定 / P2 Core 版本） */
 export function createInitializeResult(info: {
   sessionId: string
   heartbeatInterval: number
   dataDir: string
+  coreVersion: string
 }): InitializeResult {
   return {
     sessionId: info.sessionId,
     heartbeatInterval: info.heartbeatInterval,
     dataDir: info.dataDir,
+    coreVersion: info.coreVersion,
   }
 }
 

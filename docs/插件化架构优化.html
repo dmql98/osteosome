@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>插件化架构优化 · 开发计划</title>
+<style>
+  /* 令牌取自 sdk/ui/src/tokens.css（原 client/src/styles/tokens.css，P6 随组件一起搬过去）
+     —— 与 docs/ 对话界面架构.html 同一套 */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-2:#0b3f74; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec; --warning:#9a6700; --warning-soft:#fdf6e3;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 12px rgba(16,22,26,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-2:#093460; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f; --warning:#d29922; --warning-soft:#33280f;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--s5) var(--s6); }
+
+  header.bar { position: sticky; top:0; z-index:10; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding-top:10px; padding-bottom:10px; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  header.bar button:hover { filter:brightness(1.08); }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+
+  section { margin: var(--s6) 0 0; }
+  h2 { font-size:var(--lg); margin: 0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+       border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size: var(--md); margin: var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin: 0 0 var(--s3); }
+  ul { margin: 0 0 var(--s3); padding-left: 1.2em; }
+  li { margin: 3px 0; }
+
+  table { width:100%; border-collapse: collapse; margin: var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th, td { text-align:left; padding: 8px 10px; border-bottom:1px solid var(--border); vertical-align: top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background: var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.ok { border-left-color: var(--success); background: var(--success-soft); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); vertical-align:middle; }
+  .tag.done { background:var(--success); }
+  .tag.next { background:var(--primary); }
+  .tag.plan { background:var(--warning); }
+  .tag.opt  { background:var(--muted); }
+  .tag.risk { background:var(--danger); }
+  .ref { font-family:var(--mono); font-size:12px; color:var(--primary); white-space:nowrap; }
+
+  /* ── 结构 / 架构图 ───────────────────────────── */
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.85; margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .bad { color:var(--danger); }
+  .tree .dim { color:var(--muted); }
+
+  .arch { display:grid; grid-template-columns:1fr auto 1fr; gap:var(--s3); align-items:center; margin:0 0 var(--s4); }
+  .arch-col { display:flex; flex-direction:column; gap:var(--s2); }
+  .box { border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--surface); padding:var(--s3); }
+  .box h4 { margin:0 0 var(--s2); font-size:var(--sm); font-weight:700; }
+  .box.core { border-color:var(--primary); background:var(--primary-soft); }
+  .box.plug { border-color:var(--success); }
+  .arrow { text-align:center; color:var(--muted); font-size:var(--xs); line-height:1.5; }
+
+  /* ── 阶段卡 ─────────────────────────────────── */
+  .phase { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    margin:0 0 var(--s3); overflow:hidden; }
+  .phase > .hd { display:flex; align-items:center; gap:var(--s2); padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .phase > .hd .id { font-family:var(--mono); font-weight:700; color:var(--primary); }
+  .phase > .hd .ttl { font-weight:600; }
+  .phase > .bd { padding:var(--s3) var(--s4); }
+  .phase > .bd > dl { margin:0; display:grid; grid-template-columns:76px 1fr; gap:6px var(--s3); font-size:var(--sm); }
+  .phase > .bd dt { color:var(--muted); font-size:var(--xs); font-weight:600; padding-top:2px; }
+  .phase > .bd dd { margin:0; }
+  .phase.done > .hd { background:var(--success-soft); }
+
+  .kv { display:grid; grid-template-columns:200px 1fr; gap:4px var(--s3); font-size:var(--sm); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  footer { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  footer a { color:var(--primary); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>插件化架构优化 · 开发计划</h1>
+    <span class="sp"></span>
+    <span class="sub">2026-10-04 · 目标：插件 = 编译好的服务（前端 + 后端）</span>
+    <button id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>一句话结论</b>：现在 <code>plugins/</code> 里只有一张清单，代码全在 <code>services/</code> 与
+  <code>client/src/widgets/</code>，所以「插件」不是可分发单元。本计划把它改成
+  <b>插件 = 一个编译好的服务（后端进程 + 前端产物）</b>；OST 里的组件是
+  <b>打开该插件 WebUI 的一个小窗口（iframe 视图）</b>；Core 只做三件事：
+  <b>扫插件目录 → 起服务 → 伺服各插件的 UI 产物</b>。
+  <br><b>最大的好消息</b>：进程间协议一行都不用新增 —— 现在的 client 本身就是一个「通过 HTTP/SSE 跟 Core 说话的编译好的 UI」，
+  那四条通路（<code>/api/command</code> · <code>/events</code> · <code>/api/preferences</code> · <code>/api/credentials</code>）直接沿用。
+</div>
+
+<!-- ══════════════ 1 ══════════════ -->
+<section>
+  <h2><span class="n">1</span>现状：目录不是插件</h2>
+
+  <p>四个目录各管一段，没有一个是「插件」这个单元：</p>
+
+  <div class="tree">osteosome/
+├── plugins/&lt;id&gt;/plugin.json      <span class="dim">← 只有清单，一行代码都没有</span>
+├── services/&lt;id&gt;/                <span class="own">← 真正的后端代码</span>（package.json / tsconfig / src / dist / service.json）
+├── client/src/widgets/&lt;name&gt;/     <span class="own">← 真正的组件代码</span>（defineWidget 壳 + Vue 实现）
+└── shared/src/                       <span class="dim">← 跨进程契约 + 12 家预设表（数据）</span></div>
+
+  <h3>四个具体的乱点</h3>
+  <table>
+    <thead><tr><th style="width:22%">问题</th><th style="width:44%">证据</th><th>后果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>插件目录不含代码</b></td>
+        <td class="mono">plugins/models/ 下只有 plugin.json；服务在 services/llm-provider-openai/</td>
+        <td>插件永远不是可分发单元；<code>models</code> 这个名字只是个人工标签</td>
+      </tr>
+      <tr>
+        <td><b>名字不对应</b></td>
+        <td class="mono">plugins/models → services: ["llm-provider-openai"]<br>plugins/chat-workbench → services: ["session","loop","llm"]</td>
+        <td>「这个插件和哪个进程是什么关系」只能靠读 manifest 得知</td>
+      </tr>
+      <tr>
+        <td><b>组件声明与实现分离</b></td>
+        <td class="mono" style="text-decoration:line-through;opacity:.65">manifest.components = ["widget.llm-settings"]<br>实现：client/src/widgets/llm-settings/<br>绑定点：client/src/widgets/registry.ts 的 import.meta.glob</td>
+        <td><b>已解决（P5 + P6）</b>：模型设置（P5）与 workbench 六个视图（P6）都已搬进各自的 <code>ui/</code>，
+            由 Core 伺服在 <code>/plugins/&lt;id&gt;/ui/*</code>。
+            <br><b>还剩 client/src/widgets/ 三盒</b>（chat-workbench 的）：它们<b>之间要通信</b>，
+            跨 iframe 的传输层契约至今未定 —— 这是 P6 剩下的全部工作量</td>
+      </tr>
+      <tr>
+        <td><b>组件本体无处安放</b><br><span style="color:var(--warning)">P6 新暴露</span></td>
+        <td class="mono">Button / EmptyState / Switch … <b>宿主自己也在用</b>（顶栏、插件列表窗、面板头）<br>
+          搬进 workbench → client 立刻编译不过</td>
+        <td>只有两条路：<b>各留一份 .vue</b>（改一次样式要记得改两处，漏一处就是「插件界面的按钮和宿主不是一个样」）
+          或<b>抽共享包</b>。已选后者：<code>@osteosome/ui</code>，
+          组件与设计令牌各<b>一份源码</b>，宿主与全部插件 UI 从源码引</td>
+      </tr>
+      <tr>
+        <td><b>数据目录约定没落地</b></td>
+        <td class="mono">manager.ts:542 传的是根 dataDir（不是 serviceDataDir）<br>结果：session 写在 ${dataDir}/sessions/<br>.data/ 下从无 services/ 子目录</td>
+        <td>P1a §3.1 的「每个服务只写自己的目录」写在文档里但没实现；<b>插件化正好是第一次把它真正落地</b>（→ <code>${dataDir}/plugin/&lt;id&gt;/</code>）</td>
+      </tr>
+      <tr>
+        <td><b>数据混进契约包</b></td>
+        <td class="mono" style="text-decoration:line-through;opacity:.65">shared/src/llm/vendors.ts:90 VENDOR_PRESETS（12 家预设）</td>
+        <td><b>已解决（P5）</b>：数据搬进 <code>plugins/models/catalog.json</code>，
+            shared 只剩契约（类型 + wire 映射 + env 规则 + <code>parseVendorCatalog</code>）。<br>
+            消费者：provider 服务走 <code>plugins.readFile</code>，插件 UI 走 <code>dist/ui/catalog.json</code> —— 一份被编写的文件</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「装插件要重编前端」具体长什么样</b>（组件搬进插件但仍靠构建期 glob 时的失败模式，已顺着代码核过）：
+    插件详情页照常列出它的 UI（清单来自 Core 的 <code>/api/plugins</code>，运行时数据），
+    但名字显示成裸 id，点「添加」<b>毫无反应也不报错</b>（<span class="ref">layout.store.ts:79-83</span> 静默 return），
+    已保存布局里那个位置直接空白（<span class="ref">PanelContainer.vue</span>）。
+    CI 有 <code>registry.test.ts</code> 的双向对账能拦，终端用户手上没有这道守门。
+    <br><b>P6 已把这三种失败模式都变成显式的</b>：裸 id → 标题从 <code>ui.views[].title</code> 取；
+    静默 return → 解析为 <code>missing</code> 时画占位；空白框 → <code>PluginWidgetHost</code> 有加载/失败提示。
+    而「同名冲突」（插件视图与本地组件同名）现在由 <b>两侧互斥</b>守住：
+    <code>ui.views[]</code> 与 <code>components[]</code> 不允许声明同一个 id，
+    否则客户端不知道该用本地实现还是 iframe，<b>而两者都能渲染出东西</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<section>
+  <h2><span class="n">2</span>目标模型</h2>
+
+  <div class="tree">plugins/&lt;id&gt;/
+├── plugin.json           <span class="own">← 清单：services[] / ui.views[] / capabilities[] / dependencies[]</span>
+├── catalog.json 等        <span class="own">← 插件自带数据（models 的 12 家预设搬到这里）</span>
+├── services/&lt;sid&gt;/       <span class="own">← 后端源码（已落地 P1）；构建产物在 dist/server/&lt;sid&gt;/（P2 已落地）</span>
+├── ui/                   <span class="own">← 前端源码（models 已落地 P5 · workbench 已落地 P6 · chat-workbench 待做）</span>
+└── dist/                 <span class="own">← 编译产物，Core 只认它（P2）</span>
+    ├── server/&lt;sid&gt;/       <span class="dim">← index.js（单文件、零外部依赖）+ service.json</span>
+    └── ui/                  <span class="dim">← index.html + assets；base 必须命名空间化（P5）</span>
+
+client/src/                <span class="dim">← 只剩壳：面板容器 / 布局 / iframe 宿主 / chat-workbench 三盒</span>
+core/                      <span class="dim">← 扫插件目录 · 起服务 · 伺服插件 UI · 路由命令到总线</span>
+shared/                    <span class="dim">← 只剩跨进程契约：协议类型 / 事件表 / wire 解析（不再持有厂商清单）</span>
+
+sdk/
+├── core-client/          <span class="own">← ★ Core HTTP/SSE 客户端（宿主与插件共用的那一份）</span>
+└── ui/                   <span class="own">← ★ 共享 UI 组件 + 设计令牌（各一份源码，不产运行时产物）</span>
+
+<span class="own">安装目录</span>（免安装 zip 解压到任意可写目录；<span class="own">路径基准 = 可执行文件所在目录</span>）：
+&lt;安装目录&gt;/osteosome/
+├── core/                      <span class="dim">← Core 运行时</span>
+├── plugins/                   <span class="dim">← 插件（分发时装这里；开发时源码也在此处）</span>
+│   └── models/
+│       ├── plugin.json        <span class="own">← 清单：services[] / ui.views[] / capabilities[] / dataReadableBy[]</span>
+│       ├── catalog.json       <span class="own">← 插件自带数据（12 家预设；随插件走，不是用户数据）</span>
+│       └── dist/              <span class="own">← 编译产物，Core 只认它</span>
+│           ├── server/&lt;sid&gt;/
+│           └── ui/
+└── userData/                  <span class="own">← ★ 全部用户数据，跟着人走（整目录拷走即换机器）</span>
+    ├── core/                  <span class="dim">← Core 自己的：布局 / 主题 / 语言 / 插件启停状态</span>
+    │   ├── layout.json
+    │   ├── ui.json
+    │   └── plugins.json
+    └── plugin/
+        ├── models/            <span class="dim">← 这个插件的数据 = 你的 API Key + 接入清单 + 模型开关</span>
+        │   ├── credentials.json
+        │   └── settings.json
+        ├── chat-workbench/    <span class="dim">← 这个插件的数据 = 对话</span>
+        │   └── sessions/
+        └── reliability/       <span class="dim">← 也许将来是重试统计，也许什么都不写</span></div>
+
+  <div class="note ok">
+    <b>三层归属，别混：</b>① <b>插件自带数据</b>（<code>catalog.json</code>：服务商清单）在插件里，<b>随插件走</b>；
+    ② <b>插件的用户数据</b>（密钥 / 对话 / 统计）在 <code>userData/plugin/&lt;id&gt;/</code>，<b>跟着用户走</b>；
+    ③ <b>Core 自己的</b>（布局 / 主题 / 插件状态）在 <code>userData/core/</code>。
+    <br><b>Core 不规定插件数据里有什么。</b>那是每个插件自己的事 —— 目录约定只有「你有一个属于自己的目录」这一条。
+  </div>
+
+  <div class="note">
+    <b>「插件数据根」这条约定今天并没有实现</b>：<span class="ref">core/src/service-manager/manager.ts:542</span> 传给服务的是<b>根目录</b>
+    （<code>dataDir: this.options.dataDir</code>），所以 session 实际写在 <code>${dataDir}/sessions/</code>
+    （<span class="ref">services/session/src/store.ts:86</span>），而 <code>.data/</code> 里从来不存在 <code>services/</code> 子目录。
+    其余 5 个服务完全不落盘。<b>所以这不是「换个位置」，而是一条没落地的约定第一次真正落地</b> —— 没有历史包袱要迁。
+  </div>
+
+  <div class="arch">
+    <div class="arch-col">
+      <div class="box plug">
+        <h4>插件（编译产物）</h4>
+        <div class="mono">plugins/models/<br>├─ dist/server/llm-provider-openai<br>└─ dist/ui/index.html</div>
+      </div>
+      <div class="box plug">
+        <h4>插件 UI（iframe 视图）</h4>
+        <div class="mono">GET /plugins/models/ui/index.html#settings</div>
+      </div>
+    </div>
+    <div class="arrow">
+      ↔<br>HTTP / SSE<br><span class="mono" style="font-size:11px">1420</span>
+    </div>
+    <div class="arch-col">
+      <div class="box core">
+        <h4>Core（本机 127.0.0.1:1420）</h4>
+        <div class="mono">① 扫 plugins/*/plugin.json<br>② spawn dist/server/&lt;sid&gt;<br>③ 伺服 /plugins/&lt;id&gt;/ui/*<br>④ /api/command → manifest 白名单 → 总线<br>⑤ /api/preferences（只管 Core 自己的）<br>⑥ /api/plugins/&lt;id&gt;/{data,files}/*<br>⑦ /events SSE</div>
+      </div>
+      <div class="box">
+        <h4>client（壳）</h4>
+        <div class="mono">面板容器 · 拖拽布局 · iframe 宿主</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>三条职责边界</h3>
+  <dl class="kv">
+    <dt>Core 做什么</dt><dd>扫盘、起服务、<b>搬运</b>静态产物、把命令路由到总线、持有偏好与凭证。</dd>
+    <dt>Core 不做什么</dt><dd>不解析插件内容（不认识 catalog.json 里哪一家是哪家）；不新增进程间协议；不管理插件 UI 的内部路由。</dd>
+    <dt>插件 UI 做什么</dt><dd>在自己的 iframe 里渲染界面，通过 Core 的四条通路拿数据、发命令、订阅事件。</dd>
+  </dl>
+
+  <h3>widget 与插件 UI 的关系：形态 1（一个插件多个视图）</h3>
+  <p>
+    <code>widget = iframe(插件 UI 的一个命名视图)</code>。一个插件的 UI 是一个应用，内部按 hash 切视图，
+    <code>plugin.json</code> 声明它有哪些视图。这样<b>现有「多个组件在同一面板自由拖动摆位」的体验完整保留</b>：
+  </p>
+  <div class="tree">"ui": { "views": [
+  { "id": "widget.chat-timeline", "title": "消息",   "entry": "index.html#timeline" },
+  { "id": "widget.chat-composer", "title": "输入",   "entry": "index.html#composer" }
+]}</div>
+  <div class="note">
+    代价：<b>同一插件的多个 iframe 之间要共享状态</b>。现在 <code>session.store.ts</code> 是单例 Pinia store，
+    跨 iframe 就得靠 <code>BroadcastChannel</code> 或 <code>postMessage</code>。这条只在同插件多视图时需要，
+    是 P6 剩下的全部工作量。<br>
+    <b>P6 已验证的事实</b>：workbench 的六个视图<b>一个都没碰</b>这条 —— 它们要的信息全部来自 Core
+    （<code>/health</code>、<code>/events</code>、<code>preferences</code>），而 iframe 与宿主同源，
+    直接调就行。<b>「需要通信」不是多视图的必然，是多视图之间共享客户端状态才需要。</b>
+    三盒正好是后者（② ③ 今天零直接通信、靠单例 store 同步）。
+  </div>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<section>
+  <h2><span class="n">3</span>运行时链路：沿用四条，新增两条</h2>
+  <table>
+    <thead><tr><th style="width:22%">需求</th><th style="width:34%">通路</th><th>Core 解析内容吗</th></tr></thead>
+    <tbody>
+      <tr><td>发命令</td><td class="mono">POST /api/command</td><td>只做白名单路由（<span class="ref">server.ts:137</span>），不解释 payload</td></tr>
+      <tr><td>收事件</td><td class="mono">GET /events?topics=…</td><td>否 —— 转发总线事件</td></tr>
+      <tr><td><b>Core 自己</b>的偏好<br><span style="color:var(--muted)">布局 / 主题 / 插件状态</span></td><td class="mono">GET/PUT /api/preferences <span class="tag plan">缩小</span></td><td><b>是</b> —— 它本来就该管这些（<code>readUninstalled</code> / <code>readDisabled</code> 直接取键）</td></tr>
+      <tr><td><b>插件自己的</b>用户数据<br><span style="color:var(--muted)">密钥 / 接入清单 / 对话…</span></td><td class="mono">GET/PUT/DELETE<br>/api/plugins/&lt;id&gt;/data/&lt;文件名&gt; <span class="tag plan">新增</span></td><td><b>否</b> —— 只是读一个文件回一个文件。内容与格式由插件定义</td></tr>
+      <tr><td>取插件<b>自带</b>的静态文件<br><span style="color:var(--muted)">catalog.json</span></td><td class="mono">GET /api/plugins/&lt;id&gt;/files/&lt;文件名&gt; <span class="tag plan">新增</span></td><td><b>否</b>，只读。两条新增 API 形状完全一样，差别只有 <code>data</code> 可写、<code>files</code> 只读 —— 这是「用户数据」与「插件自带数据」的边界在 URL 上唯一的体现</td></tr>
+      <tr><td>服务读<b>自己的</b>用户数据</td><td class="mono">零新增 —— 握手已给 <code>dataDir</code></td><td>不参与：服务本地读自己的目录</td></tr>
+      <tr><td>服务读<b>插件自带</b>的文件</td><td class="mono">plugins.readFile <span class="tag done">已落地 P3</span></td><td>否，只读。点对点特权 RPC，不经总线（与 <code>preferences.get</code> 同一套纪律）。<br><b>第一个真实使用者</b>：provider 服务读自己的 <code>catalog.json</code>（P5）</td></tr>
+      <tr><td>取插件 UI 产物</td><td class="mono">GET /plugins/&lt;id&gt;/ui/* <span class="tag done">已落地 P3</span></td><td>否。复用 <span class="ref">sse-bridge/static.ts:49</span> 的路径穿越防护；同源，iframe 直接调上面几条。<br>已在真实链路上跑通并被测住（P5 的 <code>core/tests/plugin-ui-e2e.test.ts</code>）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>不能直接拿 <code>/api/preferences</code> 装插件数据</b>，两处形状不对：<br>
+    ① <b>整个文档覆盖写</b>（<span class="ref">sse-bridge/preferences.ts:48</span> 直接 <code>writePreferences</code>）——
+    这正是 <span class="ref">LlmSettingsView.vue:474</span> 必须把 <code>vendorOverrides</code> / <code>enabledModels</code> /
+    <code>connectedVendors</code> <b>三个字段一起写</b>的原因（浅合并，写一层换掉一层）。插件各自写就互相覆盖。<br>
+    ② <b>Core 会读里面的键</b> —— <span class="ref">main.ts:111</span> 的 <code>readUninstalled</code> / <code>readDisabled</code>
+    直接从这份文档取 <code>plugins.uninstalled</code> / <code>plugins.enabled</code>。这与「Core 不解析插件内容」冲突。
+  </div>
+
+  <div class="note">
+    <b>访问控制：写只限自己，读别人靠声明。</b>写只允许自己的命名空间；读别人的要在 <code>plugin.json</code> 里声明
+    <code>"dataReadableBy": ["chat-workbench"]</code>。核心代码大概五行（比对声明 → 不在列表就 403）。
+    今天唯一的跨插件读是 <span class="ref">ChatComposerWidget.vue:110</span> 读 models 的 <code>llm.enabledModels</code>
+    （且<b>只读不写</b>），所以现网只有这一处。
+    <br><b>连带影响</b>：<code>/api/credentials</code> 与 <code>credentials.resolve</code> 要重估（密钥归使用方插件，
+    服务本地读文件就够，<code>services/credentials</code> 这个「凭证能力位」的定位需重新决定，P1 顺手定）；
+    <code>preferences.get</code> 服务 RPC 可以退休（<code>llm-provider-openai</code> 要读的 <code>vendorOverrides</code>
+    新模型下就在它自己的 <code>dataDir</code> 里）。
+    <br><b>明文不再由 Core 兜着不 echo</b> —— 今天 <code>GET /api/credentials</code> 只回掩码；改成插件自己的文件后，
+    插件 UI 能读回自己的密钥（它本来就是键入方，同源同信任边界）。要守住的是「<b>值不进总线、不进 SSE、不进日志</b>」，它仍然成立。
+  </div>
+
+  <div class="note ok">
+    <b>服务不需要开 HTTP 端口</b>。服务继续是 stdio JSON-RPC（<code>sdk/ts/src/service.ts:92</code> 只带一个 <code>dataDir</code>），
+    UI 是静态产物由 Core 代伺服。所以「Core 要做的事情就是启动这个服务」这句原话成立 ——
+    Core 只多几条文件路由，没有反向代理、没有端口生命周期、没有 SSE 反代缓冲这类坑。
+  </div>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<section>
+  <h2><span class="n">4</span>已定决策</h2>
+  <table>
+    <thead><tr><th style="width:30%">决策</th><th style="width:16%">选择</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>一个插件多个 widget 怎么处理</td><td><span class="tag done">形态 1</span> 多视图 iframe</td><td>保留自由拖动摆位；Core/client 只需把 <code>component</code> 换成 <code>iframe src</code></td></tr>
+      <tr><td>插件 WebUI 怎么被访问</td><td><span class="tag done">A 为主</span> Core 代伺服</td><td>活动部件最少：服务零改动、复用现成静态防护、无端口、无 SSE 反代</td></tr>
+      <tr><td>要不要给 B 留出口</td><td><span class="tag plan">P7 可选</span></td><td>插件声明 <code>http.port</code> 时 Core 才开 <code>/plugins/&lt;id&gt;/api/*</code> 反代；不声明就不启用这条路由，B 的成本不付</td></tr>
+      <tr><td>仓库根 <code>services/</code> 是否留作兼容区</td><td><span class="tag done">不留</span></td><td>每个服务必须属于某个插件，「装了什么」与「有什么服务」永远一致，没有例外</td></tr>
+      <tr><td>插件的<b>用户数据</b>放哪</td><td><span class="tag done">userData/plugin/&lt;id&gt;/</span></td><td>目录约定只有「你有一个属于自己的目录」这一条；<b>里面有什么、什么格式由插件自己定</b>（models = 密钥 + 接入清单，chat-workbench = 对话，reliability 也许什么都不写）</td></tr>
+      <tr><td>数据根放哪</td><td><span class="tag done">安装目录内</span></td><td><code>&lt;安装目录&gt;/osteosome/{core,plugins,userData}</code>。自包含、用户找得到、整目录拷走即换机器。<b>路径基准从 cwd 改为可执行文件所在目录</b>（见 P1 的判据）</td></tr>
+      <tr><td>Core 自己的数据放哪</td><td><span class="tag done">userData/core/</span></td><td>只剩布局 / 主题 / 语言 / 插件启停状态；<code>/api/preferences</code> 缩小成只管这些，<code>/api/credentials</code> 与 <code>credentials.resolve</code> 退休</td></tr>
+      <tr><td>Core 怎么把数据根给服务</td><td><span class="tag done">Core 算、传查表</span></td><td><code>ServiceManagerOptions.dataDir: string</code> → <code>serviceDataDirs: Map&lt;serviceId, string&gt;</code>，由 <code>main.ts</code> 用插件清单算出（它已经在算 <code>allowedServiceIds</code>）。<b>ServiceManager 继续不知道插件存在</b>，SDK 一行不改</td></tr>
+      <tr><td>插件能不能读别人的数据</td><td><span class="tag plan">写只限自己<br>已生效</span></td><td>写：服务只拿到自己的 <code>userData/plugin/&lt;id&gt;/</code>，跨插件写结构上不可能。读：<code>plugin.json</code> 的 <code>dataReadableBy[]</code> 已进 schema（P2），<b>但要等「按插件读数据」的 HTTP 面存在才谈得上 403</b> —— 见 §5 P3 的「没做」。约五行代码换来可审计的权限边界，而不是靠信任</td></tr>
+      <tr><td><code>plugin.json.version</code> 要不要参与阻断</td><td><span class="tag done">加 coreCompatibility</span></td><td>见下方 §5 P2；不写 = 不限，现有插件零改动</td></tr>
+      <tr><td>发行方式</td><td><span class="tag plan">待确认</span></td><td>必须是「解压到任意可写目录」的免安装 zip —— 装进 <code>Program Files</code> / <code>/Applications</code> 就写不进 userData。发行包内<b>不含</b> <code>userData/</code>，所以解压升级天然不覆盖数据</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<section>
+  <h2><span class="n">5</span>开发计划</h2>
+  <p class="mono" style="color:var(--muted)">阶段之间有依赖：P2 是 P3/P5 的前置（Core 只认产物），P4 是 P5/P6 的前置（先有 iframe 宿主）。</p>
+
+  <!-- P0 -->
+  <div class="phase done">
+    <div class="hd"><span class="id">P0</span><span class="ttl">本轮已完成（三件事）</span><span class="tag done">done</span></div>
+    <div class="bd">
+      <dl>
+        <dt>做了什么</dt>
+        <dd>
+          ① <b>接入清单显式化</b>：新增偏好 <code>llm.connectedVendors</code>，12 家预设一律先落在「未连接的预设」，
+              点「连接」才进已连接，卡片上的「删除」退回（<span class="ref">LlmSettingsView.vue:287 / :303</span>）；
+          ② <b>删掉 <code>widget.llm-providers</code></b>（只读状态快照，与模型接入面板信息重复）；
+          ③ <b>数据根挪到用户目录</b>（<span class="ref">core/src/config/paths.ts</span> 的 <code>userDataDir()</code> +
+              旧 <code>.data</code> 的一次性复制迁移）。
+        </dd>
+        <dt>为什么先做</dt>
+        <dd>前两件是 UI 层的收口，等 UI 搬进插件后这些代码整体位移（不重写）；第三件与插件化无关，但同属「数据归谁」这条线，先落地免得后面再动一次数据根。</dd>
+        <dt>验收</dt>
+        <dd class="mono">core 194 / client 222 / services 151 全绿；typecheck 全绿</dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P1 -->
+  <div class="phase">
+    <div class="hd"><span class="id">P1</span><span class="ttl">Core 从插件目录发现服务 + 三层数据归属</span><span class="tag done">已完成</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd>① 服务发现从「扫 <code>services/&lt;id&gt;/service.json</code>」改成「扫 <code>plugins/*/services/*/service.json</code>」，然后删掉仓库根的 <code>services/</code>；<br>
+            ② 数据根从「相对 cwd 的用户目录」改成「<b>可执行文件旁</b>的 <code>&lt;安装目录&gt;/osteosome/</code>」，
+                并拆成三层：<code>userData/core/</code>（Core 自己的）+ <code>userData/plugin/&lt;id&gt;/</code>（插件自己的）；<br>
+            ③ 服务的 <code>dataDir</code> 从<b>根目录</b>改成<b>它所属插件的数据根</b>。本阶段零行为变化（纯搬迁 + 改路径指针）。</dd>
+        <dt>触点</dt>
+        <dd>
+          <ul>
+            <li><span class="ref">core/src/service-manager/manifest.ts:64</span> <code>loadServices()</code> 支持多根 / 两级；<code>LoadedService.dir</code> 语义从 <code>services/&lt;id&gt;</code> 改成插件内路径</li>
+            <li><span class="ref">core/src/service-manager/manager.ts:87,143</span> <code>servicesDir: string</code> → <code>serviceDirs: string[]</code>（由插件层算出，与已存在的 <code>allowedServiceIds</code> 同一处）</li>
+            <li><span class="ref">core/src/service-manager/manager.ts:88,542</span> <code>dataDir: string</code> → <code>serviceDataDirs: ReadonlyMap&lt;serviceId, string&gt;</code>；握手时按服务 id 取</li>
+            <li><span class="ref">shared/src/paths.ts:12</span> <code>serviceDataDir(dataDir, serviceId)</code> → <code>pluginDataDir(dataDir, pluginId)</code>（单一真相源）</li>
+            <li><span class="ref">core/src/config/paths.ts</span> <code>userDataDir()</code>（<span class="tag done">P0 已做</span>）改成 <code>installDir()/userDataDir()</code>：基准从 cwd 改为 <code>dirname(process.execPath)</code>。
+                <b>需要一个「是不是发行版」的判据</b> —— 开发时 <code>node core/dist/main.js</code> 的 execPath 是 node.exe 的目录，会错。
+                建议：exe 同级有发行标记文件 → 用它；否则退回 cwd（保持今天行为）</li>
+            <li><b>偏好拆分</b>：<code>preferences.json</code> → <code>userData/core/{layout,ui,plugins}.json</code>；
+                <code>/api/preferences</code> 缩小成只读写这三个（<span class="ref">sse-bridge/preferences.ts:14</span>）。
+                <code>llm.*</code> 那三段现在就<b>不搬</b>，等 P5 随 UI 一起搬（否则要动两次）</li>
+            <li><b>凭证退休</b>：<code>/api/credentials</code> 与 <code>credentials.resolve</code> 的去留在这里定；
+                <code>preferences.get</code> 服务 RPC 退休（<span class="ref">manager.ts:432</span>）。
+                <b>连带问题</b>：<code>services/credentials</code> 这个「凭证能力位」插件的定位要重新决定 —— 服务已有 <code>dataDir</code>，
+                凭证解析可以回到服务侧自己做（本地读文件天然满足「不过总线」）</li>
+            <li><span class="ref">core/src/main.ts:22,125</span> <code>readDeclaredServiceIds()</code> 扫插件目录；同处算 <code>serviceDataDirs</code></li>
+            <li><span class="ref">core/tests/service-manifest-sync.test.ts:18</span> <code>SERVICES_DIR</code> 换根（校验逻辑一行不动）</li>
+            <li>17 个直接构造 <code>ServiceManager</code> 的集成测试：改用「临时 <code>pluginsDir</code> 骨架」helper</li>
+            <li><code>--services</code> 逃生门保留（显式给出时优先，测试仍可用它绕开插件层）</li>
+          </ul>
+        </dd>
+        <dt>验收</dt>
+        <dd><code>/health</code> 与 <code>/api/plugins</code> 里的服务集合与迁移前<b>逐个相等</b>；6 个服务全部 ready；
+            会话文件落在 <code>userData/plugin/chat-workbench/sessions/</code>；布局落在 <code>userData/core/layout.json</code>；
+            从<b>另一个目录</b>启动 Core 拿到<b>同一份</b> userData（这是「基准从 cwd 改为 exe 目录」的核心验收）；全仓测试绿</dd>
+        <dt>风险</dt>
+        <dd>集成测试的装配路径要重写（它们从「起真 Core」变成「测插件装配」，红灯理由可能与被测物无关 —— 用 helper 隔离）；
+            发行版判据选错会让开发期与发行期数据分叉，所以判据要有测试</dd>
+        <dt>落地结果</dt>
+        <dd>
+          <b>2026-10-04 完成</b>。全仓绿：shared 38 / sdk 54 / client 222 / core 208 / services 151，
+          <code>node scripts/smoke.mjs</code> PASS。实际落地与原计划有四处偏差：<br>
+          ① <b><code>CoreConfig.servicesDir</code> 变成可选</b>（缺省即「从插件目录发现」），集成测试改成传
+          <code>pluginsDir</code> —— 于是它们走的是<b>与生产同一条路径</b>，比原来「<code>--services</code> 绕过插件层」更真；<br>
+          ② <code>ServiceManager</code> 多收一张 <code>serviceDirs: string[]</code>（不只是 dataDirs），
+          并新增 <code>loadServicesFrom()</code>：缺根跳过、<b>重复 service id 直接抛</b>（多根之后「后者静默覆盖前者」
+          是新的事故面，症状是「服务随机启动了一个」）；<br>
+          ③ <code>scanPlugins</code> 新增一条检查：「声明了服务但插件目录里没有 <code>services/&lt;sid&gt;/service.json</code>」——
+          这是「服务到底会不会被启动」的唯一依据，缺了它症状是「插件显示 ready 但服务没起来」；<br>
+          ④ 数据的<b>换根</b>与<b>换布局</b>分成两次迁移（<code>migrateLegacyDataDir</code> 换根、
+          <code>migrateFlatLayout</code> 把 P0 时代的扁平布局搬进 <code>core/</code>）—— 后者不做就是
+          <b>静默丢配置</b>：文件好好躺在磁盘上，而 Core 只读新位置。
+          <br><b>顺带修掉一个真实缺陷</b>：服务遍历顺序从「平铺目录字母序」变成「按插件」后，
+          <code>llm-provider-openai</code> 变成<b>先于</b> <code>llm</code> 启动 → 路由主位订阅时注册事件已经发完 →
+          路由表空 → 所有请求 <code>unsupported_provider</code>（集成测试直接把它报出来）。
+          修法不是把顺序排回去，而是让 <b><code>llm</code> 启动后自己发一次 <code>llm.provider.reannounce</code></b> ——
+          前端早就为同一个坑做过这件事（<code>useLlmProviders.ts</code>），现在主位自己上线也问一次，
+          <b>启动顺序不再是任何人的隐式依赖</b>。
+        </dd>
+        <dt>没做（留给 P5 / P8）</dt>
+        <dd>
+          <code>llm.*</code> 偏好与凭证<b>仍在 Core 那一侧</b>（<code>userData/core/</code>）：搬它们要 UI 与 provider 服务同时搬
+          （客户端还住着 <code>client/</code>），所以属于 P5。<code>preferences.get</code> 服务 RPC 因此也留到那时再退休。<br>
+          <b>运行期装插件不会启动它的服务</b>（<code>rescan()</code> 只更新清单与状态，ServiceManager 的服务目录表是构造时定的）
+          —— 那是 P8「装插件」那条线的事。
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P2 -->
+  <div class="phase">
+    <div class="hd"><span class="id">P2</span><span class="ttl">编译产物、分发约定、coreCompatibility</span><span class="tag done">已完成</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd>Core <b>只认产物</b>，且产物必须<b>能脱离本仓库运行</b>；再加一条能提前回答「装上能不能用」的兼容性声明。</dd>
+        <dt>触点</dt>
+        <dd>
+          <ul>
+            <li><b>服务改成打单文件</b>（<span class="tag risk">关键</span>）：<code>tsc</code> → <code>esbuild --bundle --platform=node --format=cjs</code>。
+                今天的产物 <span class="ref">services/llm-provider-openai/dist/index.js:26-28</span> 还在 <code>require("@osteosome/service-sdk")</code> /
+                <code>require("@osteosome/shared")</code>，那两个包只存在于<b>本仓库的 node_modules</b> ——
+                现在把 <code>dist/</code> 拷给任何人，Core 一 spawn 就是 <code>Cannot find module</code>。
+                依赖链只有 <code>service → sdk/shared → zod</code>，全部可打包，只留 Node 内置模块</li>
+            <li><b>UI</b>：每个插件一个 <code>vite build --outDir dist/ui</code></li>
+            <li><span class="ref">shared/src/plugin-manifest.ts:28</span> <code>PluginManifestSchema</code> 加 <code>ui</code>、<code>coreCompatibility</code>、<code>dataReadableBy</code>（zod 默认剥掉未声明字段，不加就丢了）；<code>components</code> 标记为迁移期字段</li>
+            <li><b><code>coreCompatibility</code> 的形状</b>：<code>{ "min": "3.1.0", "max": "4.0.0" }</code>，两端可选、闭区间；<b>不写 = 不限</b>。
+                需要一个约 20 行的 semver 比较（<code>shared/src/semver.ts</code>），不引第三方依赖</li>
+            <li><b>不满足时的行为</b>照抄既有的「环内成员」语义：仍出现在 <code>/api/plugins</code>（用户看得见「装了但用不了」），
+                但<b>不进 <code>installOrder</code>、不 spawn</b>，reason 写「要求 Core ≥ 3.1，当前 3.0」</li>
+            <li><b>前置条件</b>：Core 要有真实版本号 —— <code>core/package.json</code> 现在是 <code>0.0.0</code>，
+                且 <span class="ref">core/src/service-manager/jsonrpc/protocol.ts:25</span> 的 <code>createInitializeResult</code> 还没带 <code>coreVersion</code>（概念在 <code>InitializeParams</code> 里有）</li>
+            <li><span class="ref">core/src/service-manager/plugin-registry.ts:56</span> <code>LoadedPlugin.dir</code> 已有 → 产物路径可直接推出；补「产物存在性」检查并写进 <code>PluginSnapshot.reason</code></li>
+            <li><span class="ref">pnpm-workspace.yaml</span>：<code>services/*</code> → <code>plugins/*</code> + <code>plugins/*/services/*</code> + <code>plugins/*/ui</code></li>
+            <li>删除仓库根 <code>services/</code>；<code>scripts/smoke.mjs</code> 的 <code>--services</code> 改指向</li>
+          </ul>
+        </dd>
+        <dt>验收</dt>
+        <dd>① 删掉某插件的 <code>dist/</code> → 该插件 degraded + reason 可读，其余不受影响，<code>pnpm build</code> 后恢复；
+            ② <b>把构建出的插件目录拷到一台没装 pnpm 的机器上（只要有 Node），Core 能起这个插件的服务</b>；
+            ③ <code>coreCompatibility.min</code> 高于当前 Core 版本 → 该插件可见但不 spawn，reason 可读</dd>
+        <dt>风险</dt>
+        <dd><span class="tag risk">高</span> 这是<b>「分发给用户」能成立的前提</b>：Core 到用户机器上不编译、插件不依赖本仓库的 node_modules。没有 P2，后面全是空谈</dd>
+        <dt>落地结果</dt>
+        <dd>
+          <b>2026-10-04 完成</b>（UI 那半留到 P5 —— 还没有 <code>ui/</code> 源码可构建）。
+          全仓绿：shared 52 / sdk 54 / client 222 / core 220 / services 151，smoke PASS。落地的形状：<br>
+          ① <b>服务打单文件</b>：构建从 <code>tsc</code> 换成 <code>scripts/build-service.mjs</code>（esbuild bundle，
+          <code>platform=node</code> 只留 Node 内置模块），产物落在
+          <code>plugins/&lt;插件&gt;/dist/server/&lt;sid&gt;/{index.js, service.json}</code>。
+          <code>service.json</code> 跟着走且 <code>entry</code> 被改写成 <code>node index.js</code>；
+          源码侧那份继续被 CI 的 topic 白名单校验。<b>「产物归插件不归服务」</b>是为了
+          「一个目录 = 一个插件的交付物」：分发时取 <code>dist/</code> 就是全部。<br>
+          ② <b>Core 只认产物</b>：<code>serviceDirs()</code> 指向 <code>dist/server</code>；
+          <code>scanPlugins</code> 把「源码目录缺失」与「<b>未构建</b>」分成两条问题（修法不同：改代码 vs 跑 build），
+          未构建时 <code>serviceDirs</code> 不收、<code>loadServicesFrom([])</code> 也不抛 ——
+          <b>「还没构建任何插件」与「装配写错了」必须分开</b>，否则刚 clone 下来就崩。<br>
+          ③ <b>coreCompatibility</b>：<code>{min, max}</code> 闭区间、<b>不写 = 不限</b>；
+          新增 <code>shared/src/semver.ts</code>（约 100 行，不引依赖，<b>fail closed</b>：非法版本/约束一律判不满足）；
+          不满足 → 该插件的服务不启动但<b>仍可见</b>（照「环内成员」的既有语义）。<br>
+          ④ <b>Core 有真实版本号</b>（<code>0.1.0</code>，从 <code>package.json</code> 读而不是 import ——
+          import 会把版本冻在打包那一刻），并随握手回给服务（<code>InitializeResult.coreVersion</code>，
+          之前这个概念只存在于反方向那一半）。读不到就退 <code>0.0.0</code> 并告警：<b>可见的坏好过不可见的坏</b>。<br>
+          ⑤ 顺带删掉了 6 个 <code>tsconfig.build.json</code> 与 <code>main/types</code>（指向已不存在的
+          <code>dist/</code>），换成 <code>buildOutput</code> 字段说明产物去哪 —— 留着旧配置就是一个陷阱：
+          有人跑 <code>tsc -p tsconfig.build.json</code> 会得到一份 Core 根本不读的多文件产物。
+        </dd>
+        <dt>新增的守卫</dt>
+        <dd>
+          <code>core/tests/service-distribution.test.ts</code> —— 它<b>真的把每个产物拷到空目录跑一次</b>：
+          发不出 <code>initialize</code> 就红。这条性质极易被无声破坏（哪天有人在 build 里加一个
+          <code>external</code>，产出会安静退化成「在仓库里能跑、拷出去不能跑」，而 CI 全绿、用户装上才发现）。
+          加上「产物里没有任何非 Node 内置 <code>require</code>」这条静态断言。
+        </dd>
+        <dt>没做</dt>
+        <dd>
+          UI 产物（<code>dist/ui/</code>）—— 没有 <code>ui/</code> 源码，属于 P5。
+          <code>dataReadableBy</code> 只是<b>声明进 schema</b>，真正生效（跨命名空间只读 + 越权 403）是 P3。
+          <code>plugins/*/ui</code> 的 workspace 包、<code>catalog.json</code> 归插件，都是 P5。
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P3 -->
+  <div class="phase done">
+    <div class="hd"><span class="id">P3</span><span class="ttl">Core 伺服插件 UI</span><span class="tag done">已完成</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd><code>GET /plugins/&lt;id&gt;/ui/*</code> 伺服插件的 <code>dist/ui/</code>；<code>/api/plugins</code> 快照带 <code>ui</code>；新增 <code>plugins.readFile</code> 特权 RPC（给服务读自己插件目录的数据）。</dd>
+        <dt>落地结果</dt>
+        <dd>
+          <b>2026-10-04 完成</b>。core 252（全仓 52/54/222/252/151），smoke PASS。形状：
+          <br>① <b>schema 补上 <code>ui.views[]</code></b>（原计划放在 P2，实际拖到 P3 ——
+          因为它只在「有东西可伺服」时才有意义，且 P5 会改它的形状）。
+          一个插件的 UI 是一个应用、多个命名视图（惯例 <code>index.html#timeline</code>），
+          这正是「多个可拖动组件」得以保留的原因 —— 否则一个插件只能整块摆放。<br>
+          ② <b>Core 接管整个 <code>/plugins/</code> 前缀</b>，不只是 <code>/plugins/*/ui/</code>：
+          <code>/plugins/&lt;id&gt;</code> 与 <code>/plugins/&lt;id&gt;/other</code> 一律 <b>404</b>，而不是漏给
+          <span class="ref">static.ts</span> 兜底回 <code>index.html</code>。理由：那里没有任何 Core 自己的资源，
+          客户端也只用 hash 路由（不会请求 <code>/plugins/chat</code>），
+          所以「回 404」比「回一个看起来像成功」的页面诚实得多。挂载点必须在
+          <span class="ref">static.ts</span> <b>之前</b> —— <span class="ref">static.ts</span> 是兜底 handler，
+          顺序反了插件的 404 就永远说不出口。<br>
+          ③ <b>能不能伺服由插件层判定</b>（<code>PluginRegistry.uiDir()</code>），路由只搬字节。
+          五个结局：ok / 未装 / 停用 / <code>coreCompatibility</code> 不满足 / 没声明 ui 或未构建 ——
+          <b>后四种全是 404</b>（不是 403）：对浏览器而言「不存在」和「没权限」没区别，
+          而 403 会让 iframe 显示一个能看见的错误页 —— 一个本该消失的组件留在空地上比空白更让人困惑。
+          真实原因写进 <code>list()</code> 的 problems，并且 <code>scanPlugins</code> 会单列
+          「<b>UI 未构建</b>」—— 与「未构建（服务）」分开报，因为合并会让用户以为跑一次 build 就全好了，
+          而 P5 之前 build 根本不产出 UI。<br>
+          ④ <b>前缀校验沿用 <span class="ref">static.ts</span> 那四步</b>，没有重写第二套穿越防护；
+          <code>Cache-Control</code> 按文件名是否带内容哈希分流（带哈希的 immutable，
+          <code>index.html</code> 必须 <code>no-cache</code>，否则插件升级后用户被旧壳指着已删除的 chunk → 白屏）；
+          顺带把 MIME 表提到 <span class="ref">util.ts</span> —— 现在有两个「伺服静态文件」的主人，
+          两份 MIME 表意味着迟早有一份漏项，而漏项的症状是「本地能显示、装到别的机器上白屏」。<br>
+          ⑤ <code>plugins.readFile</code>：服务打成了单文件（没有 <code>require</code> 能解析到
+          <code>../../catalog.json</code>），但插件要带自己的静态数据，于是「读自己插件目录」由 Core 授予。
+          边界就是全部内容：<b>只读</b>（没有 write/delete，要写用 <code>dataDir</code>）、
+          <b>只限自己插件目录</b>（跨插件读文件在结构上不可能，不需要额外 ACL）、
+          <b>没有根就拒绝</b>（fail closed —— 绝不因为「没配表」退化成读任意路径）、
+          不读 <code>node_modules</code>、单文件 2 MiB 上限。走 <b>stdio JSON-RPC</b> 而不是 HTTP 路由：
+          服务本来就有这条私有管道，再开 HTTP 端点等于给每个服务进程开一个能读文件的公网入口。
+        </dd>
+        <dt>新增的守卫</dt>
+        <dd>
+          <code>core/tests/plugin-ui.test.ts</code>（18）+ <code>core/tests/plugin-readfile.test.ts</code>（14）。
+          两处值得记：<b>①</b> 穿越用例用的是<b>编码后</b>的 <code>%2e%2e%2f</code> 而不是裸 <code>../</code> ——
+          Node/浏览器会先把裸 <code>..</code> 规范化掉，请求根本到不了这条路由（落到 static 的占位页 200），
+          那种「穿越」测不到 Core 的任何判定。编码形态能活到 handler，也正是真实攻击会用的形态。
+          <b>②</b> <code>readFile</code> 用真实子进程走完整 stdio JSON-RPC（为此给
+          <span class="ref">fake-service.mjs</span> 加了 <code>FAKE_REQUEST_METHOD</code> 探针），
+          而不是直接调私有方法 —— 否则测的是「一个函数返回了我预期的值」，
+          不是「Core 真的应答了一个特权请求」。
+        </dd>
+        <dt>没做 / 往前挪</dt>
+        <dd>
+          <b><code>llm-provider-openai</code> 改用 readFile 读 <code>catalog.json</code></b> → <b>挪到 P5</b>。
+          理由不是省事：<code>catalog.json</code> 现在**根本不存在**，它就是 P5 的内容搬迁（「12 家预设从
+          <span class="ref">shared/src/llm/vendors.ts</span> 搬进插件」）。现在造一个就要让 12 家厂商定义
+          同时存在于两个文件里 —— 两份真相源，且其中一份还是编译期常量。
+          <code>readFile</code> 本身已经用真实服务进程验证过（能读到真实插件目录里的真实 <code>catalog.json</code>），
+          P5 搬过去时只要把 import 换成一次 RPC 调用。
+          <br><b><code>dataReadableBy</code> 仍然只是声明</b>：生效需要一个「按插件读数据」的 HTTP 面
+          （<code>/api/plugins/&lt;id&gt;/data/*</code>），那个面还不存在 ——
+          现在没有可施加限制的通道，写了也只是空转。跟 P5 的插件数据路由一起做。
+          <br><b>没搬客户端</b>：<code>ui.views</code> 已经进 <code>/api/plugins</code> 快照（manifest 原样出去），
+          但 client 还不会摆 iframe —— 那是 P4。
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P4 -->
+  <div class="phase done">
+    <div class="hd"><span class="id">P4</span><span class="ttl">client 变成壳 + iframe 宿主</span><span class="tag done">已完成</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd>组件来源分两路：<b>Core/工作台自己的</b>继续编译期 glob（住 <code>client/src/widgets/</code>），<b>插件的</b>改为运行时来自 <code>/api/plugins</code> 的 <code>ui.views</code>，渲染成 iframe。</dd>
+        <dt>落地结果</dt>
+        <dd>
+          <b>2026-10-04 完成</b>。client 242（+20），全仓绿，smoke PASS。形状：<br>
+          ① <b><code>resolveWidget(id, plugins)</code> 是新老两套形态的唯一交界处</b>，返回
+          <code>local</code> / <code>iframe</code> / <code>missing</code> 三种，判定顺序固定为
+          <code>ui.views</code> → 本地注册表 → 退役表 → 未知。
+          <code>PluginView.views</code> 是从 Core 快照摊平出来的（<code>components</code> 与之并存，各管一件事，见下）。<br>
+          ② <b>id 不加命名空间</b>：插件视图就叫 <code>widget.llm-settings</code>，和它顶替的本地组件同名。
+          widget id 是 <code>params.widgets[]</code> 与 <code>layout[id]</code> 的**持久化主键**，
+          改名 = 用户拖好的位置全丢（症状「升级后所有组件回到默认位置」）。同名 = 组件在原地换了实现，零迁移。
+          冲突时<b>插件视图赢</b> —— 反过来的话，P5 搬完 UI 也不会生效，而这种错会静默到有人翻产物目录才发现。<br>
+          ③ <b><code>missing</code> 是这轮新增的第三种形态</b>，也是最容易被省掉的：删掉一个组件的定义，
+          等于让用户的布局<b>悄悄少一个框</b>，而他没做任何操作。
+          占位说清两件事：它叫什么（<code>RETIRED_WIDGETS</code> 记着标题与 <code>replacedBy</code>）、为什么没了。
+          未知 id 也画占位，但说的是「未知」—— 对用户没有价值的是那个「<b>未知组件</b>」。
+          <span class="ref">widget.llm-providers</span> 就是第一个进这张表的（P4 已合并进模型设置卡片）。<br>
+          ④ <b><code>PluginWidgetHost.vue</code></b>：iframe + 三态（loading / failed / ready）。
+          失败占位写清「这是 Core 在伺服 <code>plugins/&lt;插件&gt;/dist/ui/</code>」，并列出 404 的三个真实原因
+          （没构建 / 已停用 / <code>coreCompatibility</code> 不满足）—— 空白框是最坏的排障起点。<br>
+          ⑤ <code>layout.store.addWidget</code> 接受解析后的 id，<b>占位不可加入</b>（它是给已有布局看的残留）；
+          插件详情窗的「组件」列表改成 <code>ui.views ∪ components</code>，并标注每项是「插件页面」还是「内置组件」。
+        </dd>
+        <dt>三条容易写错的，已各自钉住</dt>
+        <dd>
+          <b>① <code>iframe @error</code> 对 404 根本不触发。</b>Core 回 404 时浏览器照样把那个错误页当成功加载完，
+          <code>load</code> 正常触发 —— 于是「看起来很自然的写法」永远不执行，表现是<b>一块什么都不说的空白框</b>。
+          成功判定只能靠时间上限（8s）或插件主动握手（已监听 <code>osteosome:plugin-ui:ready</code>，协议细节留 P5）。<br>
+          <b>② 归属 ≠ 形态。</b>一个 id 可以同时满足「某插件在 <code>components[]</code> 里声明了它」
+          与「它在本地注册表里」—— 这时它是 <code>local</code>，不是 iframe。
+          <code>components[]</code> 只声明<b>归属</b>（谁停用时该把它一起藏），不声明形态。开发期在这里混淆过一次，
+          结果 10 个内置 widget 全变成 <code>/plugins/&lt;id&gt;/ui/</code> 的 404 框。现在 <code>components</code> 还得留着，
+          就是因为本地组件连 <code>dist/ui</code> 都没有；P5 之后它会逐个归零。<br>
+          <b>③ 本地组件的 loader 必须包一层 <code>defineAsyncComponent</code>。</b>definition 里存的是
+          <code>() => import(...)</code>，直接交给模板 <code>:is</code> 会被 Vue 当函数式组件调用、
+          拿到 Promise 当渲染结果 —— <b>盒子照画、里面永远空的，且没有任何报错</b>。
+          这条曾经被漏掉（原先是 <code>widgetComponents()</code> 在做），改用 <code>resolveWidget</code> 后必须在它里面做。
+        </dd>
+        <dt>迁移兼容</dt>
+        <dd>
+          不需要 id 映射表 —— <b>因为 id 没改名</b>（见上）。真正需要的是<b>退役表</b>：删组件时把 id 记下来。
+          <code>requestAddWidget</code> 的跨窗载荷<b>没动</b>（它传的就是 widget id，跨窗契约不能随便改形状）。<br>
+          对账测试也拆了：<code>registry.test.ts</code> 那条「Core 声明的每个组件都能被取到」现在只管
+          <code>components[]</code> 里的内置组件；插件视图由 <code>resolveWidget</code> 的用例管
+          （它不需要真实插件 —— 此刻还没有任何插件声明 <code>ui</code>）。
+        </dd>
+        <dt>没做 / 往前挪</dt>
+        <dd>
+          <b>跨 iframe 通信</b>（<code>postMessage</code> / <code>BroadcastChannel</code>）：宿主只<b>监听</b>一个就绪握手，
+          真正的状态同步协议在 P5 —— 因为要有第一个真实插件 UI（<code>models</code>）才知道该同步什么。<br>
+          <b>没有任何插件搬走</b>：<code>ui.views</code> 目前零声明，10 个内置 widget 还在 client 包里。
+          P4 装的是运行时那条腿；每个插件在搬走自己那份组件的<b>同一个提交</b>里删本地组件，窗口不动。<br>
+          <b>默认布局不含插件视图</b>（<code>defaultWidgetIds()</code> 仍是本地组件）：
+          默认布局是「打开即是三盒对话」的引导，必须是确定的；把插件视图灌进去会让 UI 还没构建的新装环境得到一屏 404。
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P5 -->
+  <div class="phase done">
+    <div class="hd"><span class="id">P5</span><span class="ttl">端到端切片：models 插件</span><span class="tag done">已完成 · 链路跑通</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd>把 <code>LlmSettingsView</code> 搬进 <code>plugins/models/ui/</code>，让整条链路第一次跑通并被测住。它是唯一一个「单服务 + 单 UI + 已在手」的插件，所以拿它当切片。</dd>
+        <dt>落地结果</dt>
+        <dd>
+          <b>2026-10-04 完成</b>。全仓绿：shared 57 / sdk 54 / <b>plugin-models-ui 16</b> / client 224 / core 254 / services 151，smoke PASS。
+          <b>直接替换</b>，不留双份（见「没做」）。形状：<br>
+          ① <b><code>plugins/models/catalog.json</code></b>：12 家预设搬出 <span class="ref">shared/src/llm/vendors.ts</span>，
+          <code>shared</code> 只剩<b>契约</b>（<code>VendorPreset</code> 类型 + wire 映射 + env 覆盖规则）——
+          数据归插件，规则是跨进程契约。<code>shared</code> 里新增 <code>parseVendorCatalog</code>：
+          它现在有<b>两个读者</b>（服务端与 UI），两份校验逻辑必然漂移，而漂移的症状是
+          「UI 上有的厂商，服务不认」。校验器与类型放一起，谁读都跑同一条规则。<br>
+          ② <b>服务端读它</b>：<code>llm-provider-openai</code> 启动时经 <code>plugins.readFile</code> 读
+          <code>catalog.json</code> —— <b>P3 留下的那条链路在这里第一次被真实使用</b>。
+          三种失败三种处置：读不到 → 空表 + 警告（不让整个 LLM 能力位起不来）；
+          JSON 坏了 → 抛（静默继续等于把「这家怎么不出现」推到用户面前）；有条目坏了 → 逐条警告、其余照用。<br>
+          ③ <b>UI 读它</b>：<code>plugins/models/ui/</code> 是一个新的 workspace 包，vite 构建到
+          <code>plugins/models/dist/ui/</code>。<code>base</code> 必须是 <code>/plugins/models/ui/</code>，
+          且构建时把 <code>catalog.json</code> 复制进产物（挂在 vite 的 <code>closeBundle</code> 上，
+          于是「产物缺这份文件」在结构上不可能）。<br>
+          ④ <b>界面搬完，顺手摘掉三个包袱</b>：插件 UI 里<b>不挂 pinia / i18n / UiPlugin</b> ——
+          这个界面一个 store、一个 i18n key、一个全局组件都没用到。引入它们只会让
+          「一个插件的界面」变成「半个应用」。
+        </dd>
+        <dt>「一份数据，两个投递路径」是什么意思</dt>
+        <dd>
+          <code>plugins/models/catalog.json</code>（原件，服务端读）与
+          <code>dist/ui/catalog.json</code>（构建复制的副本，UI 读）内容必然相同 ——
+          副本由构建生成、没人手改。<b>一份被编写的文件</b>，不是两份各自维护。
+          真正的两份维护的症状是「界面上有的厂商，服务不认」，而那极难定位。
+        </dd>
+        <dt>四个坑，都留在了注释里</dt>
+        <dd>
+          <b>① <code>base</code> 不是默认值。</b>默认 <code>'/'</code> 会让 chunk 写成 <code>/assets/index-xxx.js</code>
+          —— 一个<b>全局</b>路径。两个插件各带一份 vue 时两边请求同一个 URL，
+          症状是「A 的界面加载到 B 的代码」，且<b>只在同时装两个插件时出现</b>。
+          <code>core/tests/plugin-ui-e2e.test.ts</code> 专门断言这条（改回 <code>'/'</code> 它就红，已实证）。<br>
+          <b>② pnpm 符号链接让 rollup 把 shared 的 CJS 当 ESM 解析。</b>
+          workspace 依赖是符号链接，vite 解析到真实路径后它<b>不在 node_modules 里</b>，
+          而 <code>@vitejs/plugin-commonjs</code> 的默认 include 只有 <code>/node_modules/</code> ——
+          于是报出那句很难定位的「<code>parseVendorCatalog is not exported by shared/dist/index.js</code>」。
+          <code>shared/src/index.ts</code> 里那段「具名再导出」注释是为同一种症状写的，
+          但它只解决「导出名不可见」，不解决「整个文件被当成 ESM」。<b>两件事都得做。</b><br>
+          <b>③ 厂商目录改成运行时读之后，「首屏同步有数据」这条约束要重新兑现。</b>
+          原来那份表是编译期常量；现在是 fetch。处置不是回到静态 import，而是
+          <code>&lt;link rel=preload as=fetch&gt;</code>（与 bundle 下载<b>并行</b>）
+          + 加载/失败/重试三态 —— 关键是「清单空着」有两种完全不同的原因（还在路上 / 读失败了），
+          界面上必须能区分。顺带：所有 <code>await nextTick()</code> 都要换成 <code>flushPromises()</code>
+          （fetch → json → 校验 → 写 ref 是一条 promise 链，一个 tick 推进不了）。<br>
+          <b>④ 设计令牌当时有两份（此决定已在 P6 作废，见 P6 记录）。</b>共享 workspace 包会被打进<b>每个</b>插件的 bundle，
+          于是「改一个颜色」要重新构建所有插件，漏构建的那个界面带着旧颜色且无人察觉。
+          当时选复制 + <code>core/tests/tokens-parity.test.ts</code> 对账：
+          <b>「界面颜色不一致」是用户看得见的，「令牌重复了两份」是读代码就看得见的。</b>
+          <br><b>P6 结算</b>：搬完 workbench 就有了第三个消费者，改一处要动三份、构建三个包，
+          而<b>对账保证得了「三份一致」，保证不了「三份都是新的」</b> —— 后者才是伤到用户的那一半。
+          令牌已随组件进 <code>@osteosome/ui</code>，对账测试改成<b>断言全仓没有副本</b>。
+          <br><b>留在注释里是因为这是个好教训</b>：一个当时看着很合理的取舍，在消费者从 2 变 3 时自动作废，
+          而作废的理由<b>不是它错了，是它的成本随消费者数量线性增长</b>。
+        </dd>
+        <dt>新增的守卫</dt>
+        <dd>
+          <b><code>core/tests/plugin-ui-e2e.test.ts</code></b> —— 跑<b>真实构建</b> → 起<b>真实 Core</b> → 真 HTTP 请求。
+          这条链路横跨三段（catalog → 构建复制 → Core 伺服 → 页面 fetch），<b>任一段单独测都可能「绿的但拼不起来」</b>：
+          只测构建时产物里没有 catalog.json（P5 之前正是这样，UI 根本不 fetch 它）；
+          只测路由时用的是手写临时 index.html（等于没测构建）；只测 UI 单测时 fetch 是 mock 的
+          （于是「Core 到底伺服不伺服那份文件」没人验）。<br>
+          <b><code>plugins/models/ui/tests/llm-settings.test.ts</code></b> —— 16 条随组件一起搬过来了。
+          测试跟着<b>被测物</b>走：留在 client 里的那份要么因 import 失效被误删，要么反过来 ——
+          有人改了搬过去的实现，client 的测试还在跑、还绿。
+        </dd>
+        <dt>没做</dt>
+        <dd>
+          <b>没有双份并存</b>（计划里的推荐项，已采纳）：直接替换。client 侧
+          <code>components[]</code> 里那条 <code>widget.llm-settings</code> 随之删除 ——
+          <b>id 没变</b>，所以用户保存的布局与几何原样生效，组件在原地换了实现。<br>
+          <b>浏览器内的实际渲染没有端到端验</b>（要 Playwright）。验的是
+          「Core 伺服的那份文件里真的有 12 家预设」—— 而 iframe 里的 Vue 渲染由插件包那 16 条用例守着。
+          这是这条链路唯一未覆盖的一段，如实记下。
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P6 -->
+  <div class="phase">
+    <div class="hd"><span class="id">P6</span><span class="ttl">其余四个插件的 UI 搬迁</span><span class="tag warn">进行中 · 6/9</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd>把剩下 9 个组件按插件归位。</dd>
+        <dt>触点</dt>
+        <dd>
+          <table style="margin:0">
+            <thead><tr><th>插件</th><th>视图</th><th>难点</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">workbench</td><td class="mono">widget.system-info<br>widget.command-palette<br>widget.settings<br>widget.event-stream<br>widget.service-manager<br>widget.service-status</td><td style="color:var(--success)"><b>6/6 已完成</b>。信息全部来自 Core（<code>/health</code> · <code>/events</code>）—— 同源 iframe 直接调，零通信需求</td></tr>
+              <tr><td class="mono">chat-workbench</td><td class="mono">widget.chat-timeline<br>widget.chat-composer<br>widget.session-list</td><td><b>剩下这一块，最大</b>：三个视图共享 <code>session.store</code>（② ③ 现在零直接通信、靠单例 store 同步 —— 跨 iframe 必须换成消息层，契约仍未定）</td></tr>
+              <tr><td class="mono">credentials</td><td class="mono">无 UI</td><td>纯服务；密钥入口已经在模型接入面板里</td></tr>
+              <tr><td class="mono">reliability</td><td class="mono">无 UI</td><td>纯服务</td></tr>
+            </tbody>
+          </table>
+        </dd>
+
+        <dt>workbench 那六个：搬完之后才看清的事</dt>
+        <dd>
+          <b>2026-10-04 完成</b>。全仓绿：shared 57 / sdk-ts 54 / <b>sdk-core-client 14</b> / <b>sdk-ui 48</b> /
+          <b>plugin-models-ui 16</b> / <b>plugin-workbench-ui 3</b> / client 175 / core 265 / services 151，smoke PASS。<br>
+          形状：<code>plugins/workbench/ui/</code> 独立 vite 包 → <code>plugins/workbench/dist/ui/</code>；
+          <code>plugin.json</code> 从 <code>components[]</code> 换成 <b>六个 <code>ui.views[]</code></b>，
+          于是宿主的 widget 注册表里再也扫不到这六个 id（<code>components</code> 只声明<b>归属</b>，<code>ui.views</code> 才声明<b>形态</b>）。
+        </dd>
+
+        <dt>三个「本来以为不用想」的发现</dt>
+        <dd>
+          <b>① 组件没有「属于宿主」还是「属于插件」这种归属 —— 只能用的人决定它住哪。</b><br>
+          计划里列的是「把 workbench 的六个视图搬进插件」，没人预料到第一步就会卡住：
+          <code>Button</code> / <code>EmptyState</code> / <code>Switch</code> 这些<b>宿主自己也在用</b>（顶栏、插件列表窗、面板头），
+          于是「搬进插件」立刻变成 client 编译不过。剩下两条路：各留一份 .vue，或抽共享包。
+          选后者 —— 与 P6 开头处理 <code>core-sdk</code> 副本是<b>同一条理由</b>，却在同一个提交里差点又犯一次。
+          <b>教训</b>：判定一份代码该住哪，看<b>谁在用</b>，不看<b>谁声明的</b> —— 前者决定代码形态，后者只决定归属。<br>
+          <b>边界</b>：<code>@osteosome/ui</code> 里只有<b>纯展示</b>组件（props 进、事件出）——
+          不 import store、不 import <code>core-client</code>、不自己 <code>fetch</code>。
+          这条边界是它能被插件直接用的前提：一个会自己去 <code>/api/command</code> 的组件，
+          在别人的 iframe 里跑就会产生你意料之外的副作用。需要取数的部分留给插件视图（那本来就是插件）。<br><br>
+          <b>② P5 那个「令牌复制两份」的决定，在三个消费者面前自动作废了。</b><br>
+          P5 只有两个消费者（宿主 + models），选「复制 + <code>tokens-parity.test.ts</code> 对账」，理由是
+          「界面颜色不一致是用户看得见的，令牌重复两份是读代码就看得见的」。
+          P6 搬完 workbench 就有了<b>第三个</b>消费者：每次调色要改三处、构建三个包，
+          而漏掉哪一个都<b>不立刻暴露</b>。<b>对账能保证「三份一致」，保证不了「三份都是新的」</b> ——
+          而后者才是真正会伤到用户的那一半。<br>
+          于是令牌连同组件一起进 <code>@osteosome/ui</code>：现在不存在漂移的可能，因为只有一份源码。
+          <code>tokens-parity.test.ts</code> 从「逐字比对两份」改成「<b>断言全仓没有副本</b>」——
+          它守的不再是「两份别漂」，而是「当初建立复制的那个理由消失之后，别有人再把副本引回来」。<br><br>
+          <b>③ 给组件库做 vite lib build，等于给每个消费者塞一份 vue。</b><br>
+          <code>sdk/ui</code> 起初也有 <code>build</code>，产物 94 KB 而 src 全部加起来只有 44 KB ——
+          差的 50 KB 是被打进去的 vue 运行时。后果是双份 vue 实例：组件内部的 <code>ref</code> 来自 dist 里那份 vue，
+          测试的 <code>@vue/test-utils</code> 用的是 node_modules 里那份，于是
+          <code>Cannot read properties of null (reading 'ce')</code> 这种看不懂的报错。<br>
+          处置：<b>不产运行时产物</b>，<code>exports</code> 直接指向 <code>src/*.vue</code>，由各消费方自己的打包器处理 SFC ——
+          vue 运行时因此在每个 bundle 里只有一份。代价是消费方要能处理 <code>.vue</code>（三个都是 vite）；
+          好处是组件库<b>不存在「产物与源码不同步」这种问题，因为它根本没有产物</b>。
+          <code>build</code> 退化成 <code>vue-tsc --noEmit</code>：挡「组件写坏了」，不产出什么。
+        </dd>
+
+        <dt>测试的归属，跟着被测物走</dt>
+        <dd>
+          <b><code>settings.test.ts</code> 一个文件拆成三份</b>：它原本把主题基础设施、i18n 基础设施、设置组件渲染
+          三件不相关的事塞在一起。P6 把设置组件搬走之后，剩下的两件本来就该分开 ——
+          主题归 <code>sdk/core-client</code>、i18n 归宿主、组件归 <code>plugins/workbench/ui</code>。
+          <b>一个文件同时测三处，等于三处里搬走任何一处都要回来改它。</b><br>
+          19 个组件的单测从 <code>client/tests/ui/</code> 搬到 <code>sdk/ui/tests/</code>；
+          留在 client 的那份会「因 import 失效被误删」，或反过来「改了搬走的实现、client 的测试还在跑还绿」。
+          <b>搬组件不改测试，等于把测试变成装饰。</b><br>
+          同时<b>修掉 8 条样本过期的测试</b>（registry / resolve / plugin-detail-window / layout.store）：
+          它们拿 <code>widget.service-status</code> 当「本地组件」的样本，而这个 id 在 P6 之后已经搬走了。
+          断言的<b>意图一条没变</b>，只是换了样本 —— 但顺手补了两条 P6 真正引入的行为：<br>
+          · <b>已搬走的 id 必须不在宿主注册表里</b>（否则 client 里留着第二份实现，而界面上看不出哪份是真的）；<br>
+          · <code>resolveWidget</code> 解析为 <code>missing</code> 时 <code>addWidget</code> <b>不建面板</b> ——
+          否则 <code>session.store</code> 里那种「点添加毫无反应」会变成「画一个空盒子」，
+          而空盒子的唯一症状是「用户以为组件坏了」。
+        </dd>
+
+        <dt>新增的守卫</dt>
+        <dd>
+          <b><code>core/tests/plugin-ui-e2e.test.ts</code> 扩到两个插件</b>。
+          P5 那版<b>只验一个插件 UI 时，命名空间写错也看不出问题</b> ——
+          <code>/assets/index-xxx.js</code> 全局唯一，A 插件与 B 插件请求到同一份文件，
+          而「那份文件恰好就是自己要的那个」，于是测试照绿。
+          现在它<b>构建两个插件 UI</b> 并比对两边的 <code>index.html</code>：各自只引用自己命名空间下的 asset、
+          且<b>互相不引用</b>。这是「<code>base</code> 必须命名空间化」这条纪律唯一的实际验证点 ——
+          写错了的症状是「A 的界面加载 B 的代码」。
+        </dd>
+
+        <dt>验收（workbench 部分已达成）</dt>
+        <dd>
+          <code>client/src/widgets/</code> 现在<b>只剩三盒</b>；六个 workbench 视图由 Core 伺服在
+          <code>/plugins/workbench/ui/</code>，六个 entry 拼出的 URL 逐个真 HTTP 验过。<br>
+          三盒预设仍可独立拖动摆位（那条几何测试未动）。
+        </dd>
+        <dt>风险（剩下这一块）</dt>
+        <dd>
+          <span class="tag risk">高</span> 跨 iframe 状态共享：三个视图共享 <code>session.store</code>。
+          <b>建议先用足 P5 已验证可用的那条路</b>（每个视图自己调同源 <code>/api/*</code>），
+          只在「视图之间要传命令」时才引入消息层 ——
+          多一层跨 iframe 通信就多一处「<b>消息丢了页面不报错</b>」的排障地，而这类症状（点了没反应）最难定位。
+          若最终仍需要消息层，契约必须定死<b>消息形状 + 来源校验</b>：同源不代表互信。
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P7 -->
+  <div class="phase">
+    <div class="hd"><span class="id">P7</span><span class="ttl">可选：插件 UI 自己的 HTTP 出口</span><span class="tag opt">按需</span></div>
+    <div class="bd">
+      <dl>
+        <dt>目标</dt>
+        <dd>插件服务若在 <code>plugin.json</code> 声明 <code>http.port</code>，Core 才开 <code>/plugins/&lt;id&gt;/api/*</code> 反代；不声明就不启用这条路由。</dd>
+        <dt>什么时候才做</dt>
+        <dd>当某个插件的 UI 需要<b>自己的服务端逻辑</b>（真正的 BFF），而不是把所有重活塞进 <code>/api/command</code> 时。现在没有一个插件有这个需求。</dd>
+        <dt>风险</dt>
+        <dd>反代 SSE 要处理 <code>flushHeaders</code> / 关缓冲 / upstream 断连清理；端口占用与冲突；服务重启期间 UI 白屏。<b>所以默认不开</b></dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- P8 -->
+  <div class="phase">
+    <div class="hd"><span class="id">P8</span><span class="ttl">分发形态与安装</span><span class="tag plan">待做（产物已就绪）</span></div>
+    <div class="bd">
+      <dl>
+        <dt>交付物</dt>
+        <dd><b>就是一个目录</b>，拷进 plugins 目录即用。<b>P2 之后，<code>dist/server/</code> 那一半已经是真的了</b>：
+            <code>service-distribution.test.ts</code> 每个用例都把产物拷到空目录跑一次，发不出 <code>initialize</code> 就红。
+            <code>dist/ui/</code> 那一半还是空的（P5）：</dd>
+      </dl>
+      <div class="tree">osteosome-plugin-models/
+├── plugin.json                   <span class="dim">← 清单（含 coreCompatibility）</span>
+├── catalog.json                  <span class="dim">← 插件自带数据</span>
+└── dist/
+    ├── server/&lt;sid&gt;/
+    │   ├── service.json          <span class="dim">← Core 校验 publishes/subscribes 白名单要用</span>
+    │   └── index.js              <span class="dim">← ★ 单文件、零外部依赖（esbuild bundle）</span>
+    └── ui/                       <span class="dim">← 静态产物：index.html + assets（自带 vue 副本）</span></div>
+      <dl>
+        <dt>开发 vs 分发</dt>
+        <dd>差别<b>只有一处</b> —— <code>--plugins</code> 指向哪：<br>
+            开发 <code>node core/dist/main.js --plugins ./plugins</code> ／ 分发 <code>node core/dist/main.js</code>（全缺省）</dd>
+        <dt>打包</dt>
+        <dd><code>pnpm --filter '@osteosome/plugin-models' pack</code> → <code>scripts/pack-plugin.mjs</code> 产出上面那个目录（跨平台，不依赖 shell）。<b>先不做 tar/zip，目录本身就是交付物。</b></dd>
+        <dt>安装</dt>
+        <dd>拷贝 + <b>五条校验</b>，难的不是拷贝而是「装坏了要说清哪里坏了」：<br>
+            ① <code>plugin.json</code> 过 schema（含 <code>ui</code> 与 <code>coreCompatibility</code>）<br>
+            ② <b>产物存在性</b>：<code>services[]</code> 每项都要有 <code>dist/server/&lt;sid&gt;/index.js</code>；
+               声明了 <code>ui.views</code> 却没 <code>dist/ui/index.html</code> → <code>degraded</code>「未构建」<br>
+            ③ <code>service.json</code> 的 <code>protocolVersion</code> 兼容（<span class="ref">manifest.ts</span> 已有校验）<br>
+            ④ <code>coreCompatibility</code> 满足（见 P2）<br>
+            ⑤ <code>publishes</code>/<code>subscribes</code> 必须在 Core 侧 EventMap/CommandMap 里（已有校验）</dd>
+        <dt>升级 / 回滚</dt>
+        <dd>覆盖安装前把旧目录改名 <code>&lt;id&gt;.bak-&lt;旧版本&gt;</code>，装完不删；新版本起不来就改回去。
+            <b>不做同 id 多版本共存</b> —— <code>preferences.plugins.uninstalled[id]</code> 这类状态全按 id 存，多版本会打架。</dd>
+        <dt>后置（明确不做）</dt>
+        <dd>zip 解包 + <code>plugin.install</code> 命令（解包时的路径校验沿用 <span class="ref">static.ts</span> 那套 zip-slip 防护）；
+            远端源 / 签名校验。等真有人要装第三方插件时再说。</dd>
+        <dt>仍需说清的限制</dt>
+        <dd><span class="tag risk">高</span> <b>这套分发仍要求用户机器上有 Node ≥ 24</b>（Core 自己就是 Node 跑的）。
+            要免掉 Node，就得把 Core 也打成单文件二进制、或塞进 Tauri sidecar —— 那是另一个题，不在这份计划里。</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<section>
+  <h2><span class="n">6</span>风险与代价台账</h2>
+  <table>
+    <thead><tr><th style="width:24%">项</th><th style="width:34%">代价</th><th>缓解</th></tr></thead>
+    <tbody>
+      <tr><td><b>开发体验掉档</b></td><td>现在 <code>pnpm dev</code> 一下全热更新；之后改一个插件 UI 要单独 build + 起那个 dev server</td><td>各插件 UI 的 <code>dev</code> 走 watch 模式；Core 已有 <code>rescan()</code> 可在插件产物变化后重扫</td></tr>
+      <tr><td><b>bundle 体积重复</b></td><td>每个<b>带 UI 的</b>插件一份 vue（models / workbench 各一份；chat-workbench 待搬）</td><td><b>P6 已做，且比预案便宜</b>：组件与令牌进 <code>@osteosome/ui</code>，
+          各插件从<b>源码</b>引 —— 产物里仍有各自的 vue（这是 iframe 共享不了内存的必然），
+          但「组件与样式只有一份源码」这件事被守住了。<br>
+          <b>踩过的坑</b>：组件库一旦做 vite lib build，就等于<b>给每个消费者塞一份 vue</b>（94 KB 产物 vs 44 KB 源码）。
+          症状是双份 vue 实例 → <code>Cannot read properties of null (reading 'ce')</code>。
+          处置：组件库不产运行时产物。</td></tr>
+      <tr><td><b>跨 iframe 状态</b></td><td>单例 store 失效；② ③ 零直接通信的架构要换传输层。<b>P6 的 workbench 六个视图全部不碰</b>（信息全来自 Core），所以这条<b>只在 chat-workbench 三盒兑现</b></td><td>尚未定。<b>建议先用足同源 <code>/api/*</code></b>，只在「视图之间要传命令」时才引入消息层 —— 多一层跨 iframe 通信就多一处「消息丢了页面不报错」的排障地。退路：把共享状态提到 Core 侧</td></tr>
+      <tr><td><b>构建 / 分发流程缺失</b></td><td>现在仓库里源码与产物混放，<code>dist/</code> 还被 gitignore</td><td>P2 是阻塞项：先定产物布局与「Core 只认产物」，再谈打包</td></tr>
+      <tr><td><b>theme / i18n 跨 bundle</b></td><td>CSS 变量与文案要各自保持一致；Core 的 i18n 机制对插件 UI 无效</td><td><b>theme 已解决</b>：令牌在 <code>@osteosome/ui</code>，各插件引同一份源码（同源 iframe 读同一份 <code>preferences.json</code> 的 <code>ui.theme</code>）。
+          <br><b>i18n 各带一份是必然</b> —— 跨 iframe 拿不到实例。但<b>宿主那份必须摘干净</b>：
+          P6 把 <code>settings.*</code> 从 client 的 i18n 里删掉，插件那侧留自己的。
+          留着就是一份没人读的第二份文案，且没人会发现它已经过时</td></tr>
+      <tr><td><b>迁移期双份代码</b></td><td>client 与插件各一份 UI</td><td>直接替换而非并行；每个组件搬完即删 client 侧。
+          <b>P6 结算</b>：搬 workbench 时真的差点留下双份 UI —— 因为 <code>Button</code> 等组件<b>宿主自己也在用</b>。
+          靠「宿主注册表里不再有这六个 id」与 <code>registry.test.ts</code> 的反向对账守住；
+          组件本体则收进共享包，从根上消除「两份」这个选项</td></tr>
+      <tr><td><b>分发仍要 Node</b></td><td>Core 是 Node 进程，插件服务也是 <code>node index.js</code> —— 用户机器上必须装 Node ≥ 24</td><td>接受（与现在同要求）；要免 Node 就是另一个题（Core 也打成单文件 / 塞进 Tauri sidecar）</td></tr>
+      <tr><td><b>安全面</b></td><td>插件 UI 在 iframe 里同源调用 Core 全套 API</td><td><b>不退步</b>：现在整个 client 也是这个权限。Core 的 Origin 白名单已允许自身 origin</td></tr>
+      <tr><td><b>Core 契约变更</b></td><td>改 <code>/api/command</code> 的 topic 名、<code>/api/preferences</code> 的键、<code>/events</code> 的 payload 形状，对已分发的插件都是破坏性变更</td><td>这些名字都在 <code>shared</code> 的事件表里；破坏性变更要配 <code>coreCompatibility.min</code> 抬版本号，而不是悄悄改</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════ 7 ══════════════ -->
+<section>
+  <h2><span class="n">7</span>不变式（重构中必须守住）</h2>
+  <ul>
+    <li><b>不新增进程间协议</b>：stdio JSON-RPC + <code>shared</code> 的 EventMap/CommandMap 白名单校验仍是唯一入口（<code>service-manifest-sync.test.ts</code> 继续拦漏声明）。</li>
+    <li><b>凭证值永不过总线、永不进 SSE</b>：插件 UI 也只能通过 <code>/api/credentials</code> 写，读走 Core 内部。</li>
+    <li><b>偏好写入仍要单一所有者</b>：<code>usePreferences.patch</code> 是<b>浅合并</b>，写 <code>llm</code> 就是整层替换 —— <code>llm.vendorOverrides / enabledModels / connectedVendors</code> 三个字段必须一起写、且只有一个写入点（<span class="ref">LlmSettingsView.vue:474</span>）。搬到插件 UI 后这条纪律照旧。</li>
+    <li><b>模型清单只有一份</b>：<code>plugins/models/catalog.json</code>，服务与 UI 读同一份；<code>shared</code> 不再持有它。</li>
+    <li><b>UI 组件与设计令牌各只有一份源码</b>（P6）：在 <code>@osteosome/ui</code>。宿主与所有插件 UI 从<b>源码</b>引，
+      由各自的打包器处理 SFC —— 于是 vue 运行时在每个 bundle 里只有一份，
+      而「改一次按钮样式要记得改两处」这件事不存在。<br>
+      产物形态：<b>组件库不产出运行时产物</b>（<code>exports</code> 指向 <code>src/*.vue</code>）。
+      这不是省事，是必需的 —— 一份 lib bundle 会把 vue 也打进去，每个消费者各得一份实例。</li>
+    <li><b>共享 UI 组件是纯展示的</b>：props 进、事件出，不 import store、不 import <code>core-client</code>、不自己 <code>fetch</code>。
+      这条边界是它能被插件直接用的前提；需要取数的部分属于插件视图。</li>
+    <li><b>一个 widget id 不能同时出现在 <code>components[]</code> 与 <code>ui.views[]</code></b>：
+      客户端不知道该用本地实现还是 iframe，而<b>两者都能渲染出东西</b>。</li>
+    <li><b>Core 不解析插件内容</b>：只搬运字节，不认识 catalog.json 里哪一家是哪一家。</li>
+    <li><b>服务只写自己插件的数据根</b> <code>userData/plugin/&lt;pluginId&gt;/</code>（Core 算好传下去，见 §4）；Core 自己的在 <code>userData/core/</code>。</li>
+    <li><b>Core 不解析插件数据的内容与格式</b> —— 它只给插件一个目录、并在 HTTP 层搬字节。目录约定只有「你有一个属于自己的目录」这一条；里面放什么是插件的事。这是「Core 不解析插件内容」那条不变式的直接延伸。</li>
+    <li><b>插件数据的写权限只属自己</b>；读别人的要在 <code>plugin.json</code> 的 <code>dataReadableBy[]</code> 里声明。权限边界靠机制而不是约定。</li>
+    <li><b>「Core 不知道插件存在」这条要守住</b>：<code>ServiceManager</code> 只收一张 <code>serviceDataDirs</code> 查表与 <code>allowedServiceIds</code>，不 import 任何插件概念。</li>
+  </ul>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<section>
+  <h2><span class="n">8</span>待决问题</h2>
+  <table>
+    <thead><tr><th style="width:30%">问题</th><th>选项与影响</th></tr></thead>
+    <tbody>
+      <tr><td>同插件多视图的状态共享用什么<br><span style="color:var(--warning)">← P6 唯一未决项</span></td><td>BroadcastChannel（同源同浏览器，最轻）／ postMessage 点对点（可控，但要维护引用与生命周期）／ 把共享状态提到 Core 侧（最干净，但要新增 API）。<br>
+          <b>已排除的选项</b>：<code>BroadcastChannel</code> 是「广播」不是「调用」，<b>没有返回值</b> ——
+          「会话列表 → 输入框：切到这个会话」是<b>命令</b>，需要<b>定向</b>，而 BroadcastChannel 谁都在听。<br>
+          <b>建议</b>：先把同源 <code>/api/*</code> 用足（已在 models 与 workbench 六个视图上验证），
+          只在确实需要跨视图传命令时才上消息层，且契约必须定死<b>消息形状 + 来源校验</b>。</td></tr>
+      <tr><td><code>components</code> 字段的归宿<br><span style="color:var(--warning)">← P6 已定一半</span></td><td><b>P6 的实践给出了答案</b>：不删，也不派生，而是<b>把两个字段的职责分开</b> ——
+          <code>components[]</code> 声明<b>归属</b>（插件停用时把这个本地组件一起藏起来），
+          <code>ui.views[]</code> 声明<b>形态</b>（它是插件页面，走 iframe）。
+          两者互斥。<br>
+          <b>为什么不是「Core 派生」</b>：派生意味着 Core 要知道「哪些组件是本地的」——
+          而 Core 对前端组件一无所知（§7「Core 不解析插件内容」的直接延伸）。
+          写清单的那一方才知道这件事。</td></tr>
+      <tr><td>插件 UI 的开发模式怎么起</td><td>每个插件一个 vite dev server + Core 反代（改动最小）／ 一个 vite 多入口（统一端口，但要处理模块重复与 HMR 边界）。<b>建议前者</b>，P5 时定。</td></tr>
+      <tr><td>旧 <code>widget.*</code> id 的迁移窗口</td><td>一次性映射表（<span class="ref">PanelContainer.vue:130</span> 已知 id 替换 + 不认识的清洗）／ 保留 N 个版本别名。建议一次性映射 + 清洗，P4 时定。</td></tr>
+      <tr><td><code>services/credentials</code> 插件的定位</td><td>P1 要连带决定：凭证归使用方插件之后，这个「凭证能力位」插件还剩什么。<b>退休</b>（服务已有 <code>dataDir</code>，自己读文件）／ <b>转型</b>成「帮用户管理各插件凭证文件格式」的库。前者更干净，后者保留一个跨插件统一的凭证视图（但那又回到 Core 集中管密钥，与 §4 冲突）。<b>建议退休</b>，P1 时定。</td></tr>
+      <tr><td>发行方式还没定</td><td>§4 已标「待确认」。免安装 zip（可写、升级不覆盖数据、用户能找到）／ 安装器（能写 Program Files，但数据要么退回用户目录、要么给安装器分配权限）。<b>建议免安装 zip</b>，并把「发行版判据」（exe 同级的标记文件）在 P1 一起定下来，否则开发期与发行期数据会分叉。</td></tr>
+      <tr><td>Core 版本号怎么定</td><td><b>已在 P2 定</b>：Core 用 <code>0.1.0</code>，从自己的 <code>package.json</code> 读（不 import —— import 会把版本冻在打包那一刻）；读不到退 <code>0.0.0</code> 并告警。插件声明 <code>coreCompatibility: { min, max }</code>，不写 = 不限。<b>剩下的政策问题</b>：将来破坏性变更时，是抬 Core 的 minor 还是 major —— 建议抬 minor 并同步抬依赖它的插件的 <code>min</code>。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  Osteosome · 插件化架构优化 · 2026-10-04 更新（<b>P6 workbench 六个视图已迁 · 剩 chat-workbench 三盒</b>）·
+  配套：<code>docs/ost-开发文档.md</code> · <code>docs/core开发文档.md</code> · <code>docs/开发进度/阶段追踪.md</code> ·
+  相关：<a href="对话界面架构.html" style="color:var(--primary)">对话界面架构</a>（P6 剩下的三盒的现状）
+</footer>
+</div>
+
+<script>
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+</script>
+</body>
+</html>

@@ -252,7 +252,7 @@ describe('P4 集成冒烟 · 模型目录 + 第二厂商实例 + 错误码化', 
     core = await startCore({
       argv: [],
       config: {
-        servicesDir: path.join(REPO_ROOT, 'services'),
+        pluginsDir: path.join(REPO_ROOT, 'plugins'),
         dataDir,
         distDir: path.join(dataDir, 'dist-client'),
         port: 0,

@@ -7,8 +7,10 @@ import { i18n, initLocale } from './i18n'
 import { initTheme } from './core-sdk/useTheme'
 import { usePreferences } from './core-sdk/usePreferences'
 import { initSnapFeedback } from './tauri/snap-feedback'
-import './styles/tokens.css'
-import './styles/base.css'
+// P6：tokens / base 随组件一起进了 `@osteosome/ui`（宿主与插件各引一份 CSS，
+// 值由 core/tests/tokens-parity.test.ts 对账）
+import '@osteosome/ui/styles/tokens.css'
+import '@osteosome/ui/styles/base.css'
 import 'dockview-vue/dist/styles/dockview.css'
 import 'vue-movable-box/style.css'
 

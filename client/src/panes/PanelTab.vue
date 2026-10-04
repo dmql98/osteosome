@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import Tab from '../components/ui/Tab.vue'
+import { Tab } from '@osteosome/ui'
 
 type PanelApi = {
   title?: string

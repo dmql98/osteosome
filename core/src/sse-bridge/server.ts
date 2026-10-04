@@ -6,6 +6,7 @@
  * - `POST /api/command`       → 202 + bus.publish（Origin 白名单）
  * - `GET/PUT /api/preferences`→ dataDir JSON（Origin 白名单）
  * - `GET  /health`            → `{ ok, uptime, services: list() }`（不查 Origin）
+ * - `GET  /plugins/<id>/ui/*` → 插件 WebUI 产物（P3；停用/未构建即 404）
  * - `GET  /*`                 → 静态资源 / 占位 index.html
  *
  * Origin 白名单（`/events` + 全部 `/api/*`）：
@@ -24,6 +25,7 @@ import { logger } from '../logger'
 import { handleCommand } from './command'
 import { handleCredentials } from './credentials'
 import { handlePlugins } from './plugins'
+import { handlePluginUi } from './plugin-ui'
 import { handlePreferences } from './preferences'
 import { handleStatic } from './static'
 import {
@@ -192,6 +194,21 @@ export class SseBridge {
         return
       }
       sendJson(res, 404, { error: 'not found' })
+      return
+    }
+
+    // 插件 WebUI 产物（P3）。**必须在 static.ts 之前**：static.ts 是兜底 handler，
+    // 它会对任何未知路径回 index.html —— 顺序反了，插件的 404 就永远说不出口了。
+    if (this.options.plugins && path.startsWith('/plugins/')) {
+      // 同样过 Origin 白名单（与 /api/* 同一套判定）。
+      // 注意它**不会**挡住 iframe 嵌入：iframe 与顶层导航按 Fetch 规范不带 Origin，
+      // 白名单本来就放行「无 Origin」。这条真正挡住的是别处网页用 fetch
+      // 去读插件界面（那个读到了也是一坨没有 CORS 头的 HTML，但没必要让人试）。
+      if (!this.originAllowed(req)) {
+        sendJson(res, 403, { error: 'origin not allowed' })
+        return
+      }
+      handlePluginUi(req, res, this.options.plugins, path)
       return
     }
 

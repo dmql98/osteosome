@@ -26,7 +26,7 @@
 import { useLayoutStore } from '../layout/layout.store'
 import { useServiceStatus } from '../core-sdk/useServiceStatus'
 import { openPluginWindow } from '../layout/window-manager'
-import Button from '../components/ui/Button.vue'
+import { Button } from '@osteosome/ui'
 import WindowControls from '../components/layout/WindowControls.vue'
 
 const layout = useLayoutStore()

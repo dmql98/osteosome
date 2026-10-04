@@ -25,6 +25,14 @@
  * 而 `layout.store.reconcilePlugins` 恰好就在组件外调它。
  */
 
+/** 插件声明的一个命名视图（`ui.views[]`，P3 起由 Core 原样透出） */
+export interface PluginUiView {
+  id: string
+  title: string
+  /** 相对 `dist/ui/` 的入口，惯例 `index.html` / `index.html#timeline` */
+  entry: string
+}
+
 /** Core `GET /api/plugins` 的响应（与 core/src/service-manager/plugin-registry-runtime.ts 对应） */
 export interface PluginManifest {
   id: string
@@ -39,6 +47,11 @@ export interface PluginManifest {
   capabilities?: { name: string; detail?: string }[]
   dependencies?: { pluginId: string; optional?: boolean }[]
   autoStart?: boolean
+  /**
+   * WebUI 产物（P3）。**缺省 = 纯服务插件**（credentials / reliability 就是），
+   * 别把「没有 ui」当成故障。
+   */
+  ui?: { views: PluginUiView[] }
 }
 
 export type PluginState = 'ready' | 'degraded' | 'stopped' | 'failed'
@@ -77,7 +90,17 @@ export interface PluginView {
   license?: string
   description: string
   capabilities: { name: string; detail?: string }[]
+  /**
+   * S7 起的**归属声明**：这些 widget id 属于本插件（本地组件）。
+   *
+   * 与 `views` 并存是过渡期的形态，不是两份真相源：
+   * `components` 管「id 归我」（停用时一起藏），`views` 管「这个 id 是一个插件页面」。
+   * 本地组件不可能出现在 `views` 里（它连 `dist/ui` 都没有），
+   * 所以 `components` 还得留着 —— P5 之后它会逐个归零。
+   */
   components: string[]
+  /** P3 起的形态：插件自带的页面。Core 伺服在 `/plugins/<id>/ui/<entry>` */
+  views: PluginUiView[]
   services: string[]
   dependencies: { pluginId: string; label: string; optional: boolean }[]
   state: PluginState
@@ -113,6 +136,7 @@ export function toPluginViews(snapshots: readonly PluginSnapshot[]): PluginView[
       description: m.description ?? '',
       capabilities: m.capabilities ?? [],
       components: m.components ?? [],
+      views: m.ui?.views ?? [],
       services: m.services ?? [],
       // 依赖的 label 取对方插件名 —— Core 只给 pluginId（依赖关系是数据，不是文案）
       dependencies: (m.dependencies ?? []).map((dep) => ({
@@ -133,10 +157,20 @@ export function toPluginViews(snapshots: readonly PluginSnapshot[]): PluginView[
   })
 }
 
-/** widget 归属哪个插件。列表由调用方传 —— 见文件头的说明 */
+/**
+ * widget 归属哪个插件。列表由调用方传 —— 见文件头的说明。
+ *
+ * 两份声明取并集、`views` 优先（见 `PluginView.components` 的注释）：
+ * 一个 id 可能是插件的**页面**（`ui.views`），也可能是还在 client 包里的
+ * **本地组件**而由 `components[]` 声明归属。两者都要能查到 ——
+ * 否则「停用这个插件」会漏藏它的本地组件。
+ */
 export function pluginForWidgetIn(
   plugins: readonly PluginView[],
   widgetId: string,
 ): PluginView | undefined {
-  return plugins.find((plugin) => plugin.components.includes(widgetId))
+  return (
+    plugins.find((plugin) => plugin.views.some((view) => view.id === widgetId)) ??
+    plugins.find((plugin) => plugin.components.includes(widgetId))
+  )
 }

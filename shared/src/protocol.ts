@@ -43,13 +43,23 @@ export interface InitializeParams {
   manifest: Record<string, unknown>
 }
 
-/** Core → 服务 initialize 响应（P1a §3.1 数据目录约定） */
+/** Core → 服务 initialize 响应（P1a §3.1 数据目录约定；P2 夹带 Core 版本） */
 export interface InitializeResult {
   sessionId: string
   /** Core 读 manifest.healthCheck.interval 回发，服务接受 Core 权威 */
   heartbeatInterval: number
-  /** 数据根目录（--data 传入）；服务只写 serviceDataDir(dataDir, serviceId)/ */
+  /**
+   * 数据根目录（--data 未传时由 Core 定）—— 服务只写**它所属插件**的那一份
+   * `userData/plugin/<pluginId>/`（P1 起是 plugin 级，见 shared/paths.ts 的 pluginDataDir）
+   */
   dataDir: string
+  /**
+   * Core 自己的语义版本（P2）—— 服务据此判断插件声明的 `coreCompatibility` 是否满足。
+   *
+   * 之前这个概念只存在于 `InitializeParams.coreVersion`（服务 → Core 那一侧），
+   * 于是**服务知道 Core 是谁、Core 不知道服务看不看得懂自己**。补这一半才对称。
+   */
+  coreVersion: string
 }
 
 /** 服务 → Core bus.publish 请求参数 */

@@ -1,0 +1,39 @@
+{
+  "name": "@osteosome/core-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Core 接口客户端（P6）：命令 / 偏好 / 事件 / 服务状态 / 模型目录。宿主与插件 UI 共用同一份源码。",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.6",
+    "@vue/test-utils": "^2.5.1",
+    "jsdom": "^30.1.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "vue": "^3.5.43"
+  }
+}

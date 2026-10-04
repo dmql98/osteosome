@@ -22,7 +22,7 @@ describe('/api/credentials（SSE 掩码通道）', () => {
     dataDir = mkdtempSync(join(tmpdir(), 'ost-cred-sse-'))
     core = await startCore({
       argv: [],
-      config: { servicesDir: path.join(REPO_ROOT, 'services'), dataDir, distDir: join(dataDir, 'dist'), port: 0 },
+      config: { pluginsDir: path.join(REPO_ROOT, 'plugins'), dataDir, distDir: join(dataDir, 'dist'), port: 0 },
       manager: { backoffBaseMs: 50, stopGraceMs: 1000 },
       bridge: { heartbeatMs: 0, zombieMs: 0 },
     })

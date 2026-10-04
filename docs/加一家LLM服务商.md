@@ -114,7 +114,7 @@ export async function* streamCompletions(req: StreamRequest): AsyncGenerator<Str
   "id": "llm-provider-opencode",
   "name": "OpenCode 接入",
   "services": ["llm-provider-opencode"],
-  "components": ["widget.llm-providers"],
+  "components": [],
   "dependencies": [{ "pluginId": "credentials", "optional": true }]
 }
 ```

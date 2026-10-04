@@ -53,8 +53,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import Button from '@/components/ui/Button.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
+import { Button } from '@osteosome/ui'
+import { EmptyState } from '@osteosome/ui'
 import WindowControls from '@/components/layout/WindowControls.vue'
 import { usePlugins } from '@/core-sdk/usePlugins'
 import { openPluginDetailWindow } from '@/layout/window-manager'

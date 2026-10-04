@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, readdirSync } from 'node:fs'
-import path from 'node:path'
+import { existsSync } from 'node:fs'
 import type { ServiceStatus } from '@osteosome/shared'
 import { Bus } from './bus/bus'
-import { ensureDir, loadConfig, type CoreConfig } from './config'
+import {
+  coreVersion,
+  ensureDir,
+  loadConfig,
+  migrateFlatLayout,
+  migrateLegacyDataDir,
+  type CoreConfig,
+} from './config'
 import { logger } from './logger'
 import { readPreferences } from './preferences'
 import { ServiceManager, type ServiceManagerOptions } from './service-manager'
@@ -11,20 +17,6 @@ import { PluginRegistry } from './service-manager/plugin-registry-runtime'
 import { SseBridge, type SseBridgeOptions } from './sse-bridge'
 import { CredentialApi } from './credentials/api'
 import { CredentialStore } from './credentials/store'
-
-/**
- * `services/<id>/` 里声明过的服务 id —— 用来校验插件 `services[]` 有没有指向不存在服务。
- *
- * 刻意**不复用** `loadServices`：那个是「全成功或抛」，这里只是拿个 id 集合做交叉校验。
- * 一个坏 service.json 不该顺带让插件层拒绝工作。代价是遍历逻辑有小幅重复，
- * 等 S7-2b 把两边并到一起再说。
- */
-function readDeclaredServiceIds(servicesDir: string): string[] {
-  if (!existsSync(servicesDir)) return []
-  return readdirSync(servicesDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(path.join(servicesDir, e.name, 'service.json')))
-    .map((e) => e.name)
-}
 
 /** `ServiceManager.list()`（ServiceInfo[]）→ 状态映射 */
 function serviceStateMap(list: { id: string; status: ServiceStatus }[]): Map<string, ServiceStatus> {
@@ -93,20 +85,55 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
   const base = loadConfig(options.argv, options.env, options.cwd)
   const config: CoreConfig = { ...base, ...options.config }
   ensureDir(config.dataDir)
+  // 数据根从仓库内的 `<cwd>/.data` 挪到用户目录之后的一次性迁移。
+  // 判据全在 `migrateLegacyDataDir` 里（只对缺省值、只对空目标、只复制文件）；
+  // 这里只负责把结果讲清楚 —— 密钥搬了家，用户必须知道它在哪。
+  //
+  // `options.config.dataDir` 也算「显式」：集成测试与 smoke 都是这样注入临时目录的，
+  // 若把它们当成「用缺省值」，本机的 `.data` 会被拷进测试的临时目录里。
+  const usingDefaultDataDir = options.config?.dataDir === undefined && (base.dataDirIsDefault ?? false)
+  const migrated = usingDefaultDataDir
+    ? migrateLegacyDataDir(config.dataDir, options.cwd ?? process.cwd(), true)
+    : []
+  if (migrated.length > 0) {
+    logger.warn(
+      `core: migrated legacy ./.data -> ${config.dataDir} (${migrated.join(', ')}). ` +
+        `数据现在跟着用户目录走；旧目录确认无用后可自行删除。`,
+    )
+  }
+  // 同一个根里的「扁平 → 三层」：P0 时代写下的 preferences/credentials 留在原地没人读，
+  // 用户的表现是「升级后配置与密钥全没了」。这条**不看** isDefault —— 它不是换根，
+  // 而是同一个根里换布局，判据在函数内部（目标已有新布局就什么都不做）。
+  const relaid = migrateFlatLayout(config.dataDir)
+  if (relaid.length > 0) {
+    logger.warn(
+      `core: moved flat layout -> userData/core + userData/plugin (${relaid.join(', ')}). ` +
+        `Core 自己的数据从今往后在 userData/core/ 下。`,
+    )
+  }
 
   const bus = new Bus()
-  // 凭证能力（P4 WS-1）：Core 特权数据（不走 P1a §3.1 服务 dataDir 约定）
+  // Core 自己的版本（P2）：判 `pluginCompatibility` 用，同时随握手发给服务。
+  const coreVer = coreVersion()
+  if (coreVer === '0.0.0') {
+    logger.warn(
+      'core: cannot read own version from package.json — coreCompatibility checks will treat every plugin as incompatible',
+    )
+  }
+  // 凭证能力（P4 WS-1）：Core 自己的数据，落在 userData/core/credentials.json
   const credentialStore = new CredentialStore(config.dataDir)
   const credentials = new CredentialApi(credentialStore, bus)
   if (credentialStore.isCorrupted()) {
     logger.warn('core: credentials.json corrupted — credential ops report error state (Core stays up)')
   }
   let managerRef: ServiceManager
-  // 插件层必须**先于** ServiceManager 构造（B 语义要由它算出「允许启动集合」），
+  // 插件层必须**先于** ServiceManager 构造（B 语义要由它算出「允许启动集合」，
+  // 以及 P1 之后的「服务目录在哪、每个服务的数据根在哪」），
   // 所以它不能在自己的构造期读服务状态 —— PluginRegistry 因此把首次聚合做成惰性的。
   const pluginRegistry = new PluginRegistry(bus, {
     pluginsDir: config.pluginsDir,
-    knownServiceIds: new Set(readDeclaredServiceIds(config.servicesDir)),
+    dataDir: config.dataDir,
+    coreVersion: coreVer,
     listServiceStates: () => serviceStateMap(managerRef.list()),
     uninstalledIds: () => readUninstalled(config.dataDir),
     disabledIds: () => readDisabled(config.dataDir),
@@ -118,9 +145,33 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     },
   })
 
+  /**
+   * 服务发现根：**显式 `--services` 优先，否则从插件清单算**。
+   *
+   * 两者的语义差别要说清：显式给出时插件目录一概不看（测试与逃生门），于是
+   * `serviceDataDirs` 也退成空表 —— 那些服务会拿到 `dataDir` 根目录（旧行为）。
+   * 生产路径永远走插件层，所以那张表永远是满的。
+   */
+  const usingExplicitServicesDir = options.config?.servicesDir ?? base.servicesDir
+  const serviceDirs = usingExplicitServicesDir ? [usingExplicitServicesDir] : pluginRegistry.serviceDirs()
+  const serviceDataDirs = usingExplicitServicesDir ? new Map<string, string>() : pluginRegistry.serviceDataDirs()
+  // P3：`plugins.readFile` 的边界（服务只能读自己插件目录）。显式 `--services` 模式下同样退成空表 ——
+  // 那些服务本来就不属于任何插件，于是它们调 readFile 会被拒（fail closed）而不是读到任意路径。
+  const servicePluginDirs = usingExplicitServicesDir
+    ? new Map<string, string>()
+    : pluginRegistry.servicePluginDirs()
+  if (serviceDirs.length === 0) {
+    logger.warn(
+      `core: no services found (pluginsDir=${config.pluginsDir ?? 'off'}) — nothing to start`,
+    )
+  }
+
   const manager = new ServiceManager({
-    servicesDir: config.servicesDir,
+    serviceDirs,
+    serviceDataDirs,
+    servicePluginDirs,
     dataDir: config.dataDir,
+    coreVersion: coreVer,
     sessionId: randomUUID(),
     bus,
     credentials,
@@ -188,8 +239,11 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     return stopPromise
   }
 
+  // 打印服务发现根而不是 `config.servicesDir`：P1 之后那项缺省不存在（从插件目录发现），
+// 打出来是 `undefined`，而排障要看的恰恰是**实际扫了哪几个目录**
   logger.info(
-    `core: started port=${port} services=${config.servicesDir} data=${config.dataDir}`,
+    `core: started port=${port} services=${serviceDirs.length ? serviceDirs.join(',') : '(none)'} ` +
+      `data=${config.dataDir}`,
   )
   return { config, bus, manager, bridge, credentials, plugins: pluginRegistry, port, stop }
 }

@@ -175,7 +175,7 @@ describe('S4 集成冒烟 · 思考流不泄漏进正文', () => {
     core = await startCore({
       argv: [],
       config: {
-        servicesDir: path.join(REPO_ROOT, 'services'),
+        pluginsDir: path.join(REPO_ROOT, 'plugins'),
         dataDir,
         distDir: path.join(dataDir, 'dist-client'),
         port: 0,

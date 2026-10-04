@@ -1,6 +1,6 @@
 {
   "name": "@osteosome/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Osteosome microkernel — Bus + ServiceManager + SseBridge",
   "main": "dist/main.js",

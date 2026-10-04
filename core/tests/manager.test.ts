@@ -62,7 +62,7 @@ function makeManager(
   for (const [k, v] of Object.entries(options.extraEnv ?? {})) process.env[k] = v
 
   const manager = new ServiceManager({
-    servicesDir: dir,
+    serviceDirs: [dir],
     dataDir: path.join(dir, 'data'),
     sessionId: 'test-session',
     bus,
@@ -273,7 +273,7 @@ describe('ServiceManager', () => {
       )
       const bus = new Bus()
       const manager = new ServiceManager({
-        servicesDir: dir,
+        serviceDirs: [dir],
         dataDir: path.join(dir, 'data'),
         sessionId: 's',
         bus,

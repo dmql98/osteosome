@@ -33,3 +33,7 @@ coverage/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# AOCI agent host integration (machine-bound; do not commit)
+opencode.json
+opencode.json.backup.*

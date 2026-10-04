@@ -11,9 +11,10 @@
     "test": "pnpm -r run build && pnpm -r run test",
     "smoke": "node scripts/smoke.mjs"
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^5.7.2",
-    "vitest": "^3.1.1"
+"devDependencies": {
+    "@types/node": "^24.13.6",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }

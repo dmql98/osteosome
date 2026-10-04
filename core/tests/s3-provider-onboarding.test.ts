@@ -204,7 +204,7 @@ describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效
     core = await startCore({
       argv: [],
       config: {
-        servicesDir: path.join(REPO_ROOT, 'services'),
+        pluginsDir: path.join(REPO_ROOT, 'plugins'),
         dataDir,
         distDir: path.join(dataDir, 'dist-client'),
         port: 0,

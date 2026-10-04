@@ -73,9 +73,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import Card from '@/components/ui/Card.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
-import Spinner from '@/components/ui/Spinner.vue'
+import { Card } from '@osteosome/ui'
+import { EmptyState } from '@osteosome/ui'
+import { Spinner } from '@osteosome/ui'
 import { useChatStore, type ChatRow } from '@/stores/chat.store'
 
 /**

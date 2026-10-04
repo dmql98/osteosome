@@ -1,0 +1,119 @@
+{
+  "version": "1.0.0",
+  "note": "models 插件自带数据：12 家厂商预设。UI 与 provider 服务读同一份文件（UI 走 GET /plugins/models/ui/catalog.json，服务走 plugins.readFile）。加一家 = 加一条 + 跑一次 build，不需要改任何代码。",
+  "vendors": [
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "api": "openai",
+      "credentialEnv": "OPENAI_API_KEY",
+      "defaultModel": "gpt-4o-mini",
+      "models": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "o4-mini"]
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "baseUrl": "https://api.deepseek.com",
+      "api": "openai",
+      "credentialEnv": "DEEPSEEK_API_KEY",
+      "defaultModel": "deepseek-chat",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "note": "deepseek-reasoner 恒思考，不接受 reasoning_effort"
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "api": "openai",
+      "credentialEnv": "OPENROUTER_API_KEY",
+      "defaultModel": "openai/gpt-4o-mini",
+      "models": ["openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", "google/gemini-2.0-flash"],
+      "note": "可经此调用 claude / gemini 等非 openai 原生模型"
+    },
+    {
+      "id": "moonshot",
+      "label": "Moonshot",
+      "baseUrl": "https://api.moonshot.cn/v1",
+      "api": "openai",
+      "credentialEnv": "MOONSHOT_API_KEY",
+      "defaultModel": "moonshot-v1-8k",
+      "models": ["moonshot-v1-8k", "moonshot-v1-32k"]
+    },
+    {
+      "id": "siliconflow",
+      "label": "硅基流动 SiliconFlow",
+      "baseUrl": "https://api.siliconflow.cn/v1",
+      "api": "openai",
+      "credentialEnv": "SILICONFLOW_API_KEY",
+      "defaultModel": "Qwen/Qwen2.5-7B-Instruct",
+      "models": ["Qwen/Qwen2.5-7B-Instruct", "deepseek-ai/DeepSeek-V3"]
+    },
+    {
+      "id": "groq",
+      "label": "Groq",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "api": "openai",
+      "credentialEnv": "GROQ_API_KEY",
+      "defaultModel": "llama-3.3-70b-versatile",
+      "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    },
+    {
+      "id": "together",
+      "label": "Together AI",
+      "baseUrl": "https://api.together.xyz/v1",
+      "api": "openai",
+      "credentialEnv": "TOGETHER_API_KEY",
+      "defaultModel": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "models": ["meta-llama/Llama-3.3-70B-Instruct-Turbo"]
+    },
+    {
+      "id": "xai",
+      "label": "xAI",
+      "baseUrl": "https://api.x.ai/v1",
+      "api": "openai",
+      "credentialEnv": "XAI_API_KEY",
+      "defaultModel": "grok-2-latest",
+      "models": ["grok-2-latest"]
+    },
+    {
+      "id": "mistral",
+      "label": "Mistral",
+      "baseUrl": "https://api.mistral.ai/v1",
+      "api": "openai",
+      "credentialEnv": "MISTRAL_API_KEY",
+      "defaultModel": "mistral-small-latest",
+      "models": ["mistral-small-latest", "mistral-large-latest"]
+    },
+    {
+      "id": "ollama",
+      "label": "Ollama（本地）",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "api": "openai",
+      "credentialEnv": "",
+      "defaultModel": "qwen2.5:7b",
+      "models": [],
+      "note": "本地端点，免凭证"
+    },
+    {
+      "id": "vllm",
+      "label": "vLLM（本地）",
+      "baseUrl": "http://127.0.0.1:8000/v1",
+      "api": "openai",
+      "credentialEnv": "",
+      "defaultModel": "",
+      "models": [],
+      "note": "本地端点，免凭证；模型名取决于你启了什么"
+    },
+    {
+      "id": "lm-studio",
+      "label": "LM Studio（本地）",
+      "baseUrl": "http://127.0.0.1:1234/v1",
+      "api": "openai",
+      "credentialEnv": "",
+      "defaultModel": "",
+      "models": [],
+      "note": "本地端点，免凭证"
+    }
+  ]
+}

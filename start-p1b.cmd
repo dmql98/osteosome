@@ -43,7 +43,7 @@ if not errorlevel 1 (
 )
 
 echo [P1b] Starting Core on port 1420...
-start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --services "%~dp0\services" --data "%~dp0\.data" --dist "%~dp0\core\dist\client"
+start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --plugins "%~dp0\plugins" --data "%~dp0\.data" --dist "%~dp0\core\dist\client"
 
 rem Wait for Core instead of opening the browser too early.
 for /l %%I in (1,1,20) do (

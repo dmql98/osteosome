@@ -1,12 +1,16 @@
 /**
- * 凭证存储（P4 WS-1）—— `dataDir/credentials.json`。
+ * 凭证存储（P4 WS-1）—— `userData/core/credentials.json`。
  *
- * 这是 Core 自己的数据（**不走 P1a §3.1 服务 dataDir 约定**——服务只写自己的
- * `serviceDataDir(dataDir, serviceId)`，`credentials.json` 是 Core 侧特权文件）。
+ * 这是 Core 自己的数据：与插件的 `userData/plugin/<id>/` **并列**而不是被它取代
+ * （Core 仍然解析 `preferences.json` 里的 `plugins.*` / `ui.theme`，所以它需要一个专属命名空间）。
+ *
+ * ⚠️ 插件化之后**密钥最终要归使用方插件**（llm-provider 的密钥该在它自己的目录里，
+ * 因为那是它的服务与 UI 都要读到的东西）。那一版随 UI 搬迁一起做（P5），
+ * 在此之前 Core 仍然替所有插件集中保管 —— 今天是这个状态，不假装已经改完。
  *
  * 结构：`{ [id]: { id, name, provider, kind: 'apiKey', value, createdAt, updatedAt } }`
  *
- * 安全红线（P4 §0.1 / §3.1）：**明文只存在本文件与请求内存中**；
+ * 安全红线（P4 §0.1 / §3.1）：**明文只存在本文件与请求内存中** ——
  * 事件（credential.saved/deleted）只带 `{ id, name, provider }`，**值永不入事件 / SSE / 前端**。
  */
 import { randomUUID } from 'node:crypto'
@@ -66,8 +70,10 @@ export class CredentialStore {
   private corrupted = false
 
   constructor(dataDir: string) {
-    mkdirSync(dataDir, { recursive: true })
-    this.file = join(dataDir, 'credentials.json')
+    // 落在 `userData/core/` 下（Core 自己的命名空间，见文件头）
+    const dir = join(dataDir, 'core')
+    mkdirSync(dir, { recursive: true })
+    this.file = join(dir, 'credentials.json')
     this.load()
   }
 

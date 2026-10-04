@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { usePreferences } from '@/core-sdk/usePreferences'
 import { useCommand } from '@/core-sdk/useCommand'
-import { toPluginViews, type PluginLayerStatus, type PluginView } from '@/plugins/registry'
+import { toPluginViews, pluginForWidgetIn, type PluginLayerStatus, type PluginView } from '@/plugins/registry'
 
 interface PluginPrefs {
   enabled?: Record<string, boolean>
@@ -70,7 +70,7 @@ export const usePluginStore = defineStore('plugins', {
     },
     /** widget 归属哪个插件。未登记归属的 widget 返回 undefined —— 调用方应视为「始终可用」 */
     pluginForWidget(): (widgetId: string) => PluginView | undefined {
-      return (widgetId) => this.all.find((plugin) => plugin.components.includes(widgetId))
+      return (widgetId) => pluginForWidgetIn(this.all, widgetId)
     },
     isInstalled(): (pluginId: string) => boolean {
       return (pluginId) => {

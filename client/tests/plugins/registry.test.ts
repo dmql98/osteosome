@@ -105,12 +105,12 @@ describe('toPluginViews', () => {
 describe('pluginForWidgetIn', () => {
   const views = toPluginViews([
     snapshot({ id: 'workbench', manifest: { id: 'workbench', name: '工作台', version: '1', services: [], components: ['widget.system-info', 'widget.settings'] } }),
-    snapshot({ id: 'models', manifest: { id: 'models', name: '模型接入', version: '1', services: [], components: ['widget.llm-providers'] } }),
+    snapshot({ id: 'models', manifest: { id: 'models', name: '模型接入', version: '1', services: [], components: ['widget.llm-settings'] } }),
   ])
 
   it('反查组件归属', () => {
     expect(pluginForWidgetIn(views, 'widget.settings')?.id).toBe('workbench')
-    expect(pluginForWidgetIn(views, 'widget.llm-providers')?.id).toBe('models')
+    expect(pluginForWidgetIn(views, 'widget.llm-settings')?.id).toBe('models')
   })
 
   it('未登记归属的组件返回 undefined —— 调用方必须视为「始终可用」', () => {
@@ -119,6 +119,57 @@ describe('pluginForWidgetIn', () => {
 
   it('空清单时返回 undefined，不抛错（store 还没 hydrate 的窗口）', () => {
     expect(pluginForWidgetIn([], 'widget.settings')).toBeUndefined()
+  })
+})
+
+/**
+ * P4：插件的 `ui.views`（P3 起的 WebUI 声明）进入视图模型，并参与归属查找。
+ *
+ * 这两件事必须一起验：`views` 摊平出来还不够 —— `pluginForWidgetIn` 若不认它，
+ * 「停用这个插件」就藏不住它的页面（框还留在面板上，点进去才发现 404）。
+ */
+describe('ui.views（P3 的 WebUI 声明）', () => {
+  it('摊平成 views；没有 ui 的插件给空数组而不是 undefined', () => {
+    const withUi = toPluginViews([
+      snapshot({
+        id: 'models',
+        manifest: {
+          id: 'models',
+          name: '模型接入',
+          version: '1.0.0',
+          services: [],
+          components: [],
+          ui: {
+            views: [
+              { id: 'widget.llm-settings', title: '模型设置', entry: 'index.html' },
+              { id: 'widget.timeline', title: '时间线', entry: 'index.html#timeline' },
+            ],
+          },
+        },
+      }),
+      snapshot({ id: 'credentials', manifest: { id: 'credentials', name: '凭证', version: '1.0.0', services: [], components: [] } }),
+    ])
+    expect(withUi[0]?.views).toHaveLength(2)
+    expect(withUi[0]?.views[1]).toEqual({ id: 'widget.timeline', title: '时间线', entry: 'index.html#timeline' })
+    // 纯服务插件「没有 ui」是正常状态，不是故障 —— 必须是空数组
+    expect(withUi[1]?.views).toEqual([])
+  })
+
+  it('归属查找认 ui.views 里的 id', () => {
+    const views = toPluginViews([
+      snapshot({
+        id: 'models',
+        manifest: {
+          id: 'models',
+          name: '模型接入',
+          version: '1.0.0',
+          services: [],
+          components: [],
+          ui: { views: [{ id: 'widget.llm-settings', title: '模型设置', entry: 'index.html' }] },
+        },
+      }),
+    ])
+    expect(pluginForWidgetIn(views, 'widget.llm-settings')?.id).toBe('models')
   })
 })
 

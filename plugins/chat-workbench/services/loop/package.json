@@ -1,0 +1,21 @@
+{
+  "name": "@osteosome/loop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "会话编排能力位（P3 WS-3）：loop.run → 读历史 → 发 llm.request → 流式回填 → message.append",
+  "buildOutput": "../../dist/server/loop/index.js",
+  "scripts": {
+    "build": "node ../../../../scripts/build-service.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}

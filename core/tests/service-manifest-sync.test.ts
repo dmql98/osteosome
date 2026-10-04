@@ -15,15 +15,29 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const SERVICES_DIR = path.join(REPO_ROOT, 'services')
+const PLUGINS_DIR = path.join(REPO_ROOT, 'plugins')
 
 const TOPIC_CALL = /service\.(subscribe|publish)\(\s*['"]([^'"]+)['"]/g
 
+/**
+ * 全部服务目录 —— P1 之后是 `plugins/<id>/services/<sid>/`（两级）。
+ *
+ * 这里刻意**不**复用 `loadServicesFrom`：那个是「全成功或抛」的装配路径，
+ * 而本测试要在服务目录坏掉时也能扫出其余服务并逐个报告（它拦的正是「漏声明 topic」
+ * 这类问题，不能因为另一个服务坏了就整体失效）。
+ */
 function serviceDirs(): string[] {
-  return readdirSync(SERVICES_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(SERVICES_DIR, entry.name))
-    .filter((dir) => existsSync(path.join(dir, 'service.json')))
+  const out: string[] = []
+  for (const plugin of readdirSync(PLUGINS_DIR, { withFileTypes: true })) {
+    if (!plugin.isDirectory()) continue
+    const root = path.join(PLUGINS_DIR, plugin.name, 'services')
+    if (!existsSync(root)) continue
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      const dir = path.join(root, entry.name)
+      if (entry.isDirectory() && existsSync(path.join(dir, 'service.json'))) out.push(dir)
+    }
+  }
+  return out
 }
 
 /** 只扫 `src/**`：`dist` 是构建产物，`node_modules` 是 SDK 自己的订阅 */

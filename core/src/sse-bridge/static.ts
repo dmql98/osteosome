@@ -3,22 +3,9 @@
  * 路径穿越防护：resolve 后必须仍在 distDir 内，否则 403。
  */
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { extname, join, resolve, sep } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import type { ServerResponse } from 'node:http'
-import { sendJson } from './util'
-
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-  '.map': 'application/json; charset=utf-8',
-  '.woff2': 'font/woff2',
-}
+import { contentTypeFor, sendJson } from './util'
 
 const PLACEHOLDER_HTML = `<!doctype html>
 <html lang="zh-CN">
@@ -69,7 +56,7 @@ export function handleStatic(res: ServerResponse, distDir: string, pathname: str
   try {
     if (existsSync(target) && statSync(target).isFile()) {
       const data = readFileSync(target)
-      const type = MIME[extname(target).toLowerCase()] ?? 'application/octet-stream'
+      const type = contentTypeFor(target)
       res.writeHead(200, { 'Content-Type': type, 'Content-Length': data.length })
       res.end(data)
       return
@@ -78,7 +65,7 @@ export function handleStatic(res: ServerResponse, distDir: string, pathname: str
     const indexFile = join(root, 'index.html')
     if (existsSync(indexFile)) {
       const data = readFileSync(indexFile)
-      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Content-Length': data.length })
+      res.writeHead(200, { 'Content-Type': contentTypeFor(indexFile), 'Content-Length': data.length })
       res.end(data)
       return
     }
