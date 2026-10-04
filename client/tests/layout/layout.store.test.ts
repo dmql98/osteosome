@@ -304,4 +304,56 @@ describe('layout.store', () => {
     // 现在它来自 HTTP，若把「查不到归属」当成「已卸载」就会在冷启动瞬间清空所有面板。
     expect(updateParameters).not.toHaveBeenCalled()
   })
+
+  /**
+   * 插件视图**只**存在于清单里 —— 本地注册表（P6 后为空）解析不出它。
+   *
+   * 所以主窗的 `views` 是不是空的，直接决定「加入窗口」这条链走不走得通：
+   * 空清单 → `resolveWidget` 落 `missing` → `layout.store.ts` 里那句
+   * `kind === 'missing'` 的 early return 是**静默**的 —— 这正是
+   * 「点加入窗口毫无反应」的根因。这里把「清单到位才放行」钉成行为，
+   * 免得以后有人把主窗的 `usePlugins()` 又删掉而测试全绿。
+   */
+  it('插件视图要等清单到位才放行（没清单时静默，有清单时真的加进去）', () => {
+    const store = useLayoutStore()
+    const api = fakeApi()
+    store.attachApi(api as never)
+
+    // 清单还没到：views 为空 -> resolveWidget 落 missing -> 什么都不加
+    store.addWidget('widget.chat-timeline')
+    expect(api.addPanel).not.toHaveBeenCalled()
+
+    usePluginStore().applyCatalog({
+      layer: 'ok',
+      problems: [],
+      cycles: [],
+      installOrder: ['chat-workbench'],
+      plugins: [
+        {
+          manifest: {
+            id: 'chat-workbench',
+            name: '对话工作台',
+            version: '1.0.0',
+            services: [],
+            components: [],
+            ui: { views: [{ id: 'widget.chat-timeline', title: '对话', entry: 'index.html' }] },
+            dependencies: [],
+          },
+          installed: true,
+          state: 'ready',
+          reason: '',
+          missingDependencies: [],
+          missingOptional: [],
+          unhealthyServices: [],
+          readyServiceCount: 0,
+          serviceStates: {},
+        },
+      ],
+    })
+
+    store.addWidget('widget.chat-timeline')
+    expect(api.addPanel).toHaveBeenCalledWith(
+      expect.objectContaining({ params: { widgets: ['widget.chat-timeline'] } }),
+    )
+  })
 })

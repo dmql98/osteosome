@@ -134,7 +134,7 @@
 
     <Modal v-model:open="confirmOpen" :title="`⚠ 卸载「${plugin?.name ?? ''}」？`" :closable="true">
       <div class="uninstall-warn">
-        卸载后：该插件组件会从所有窗口移除（共 {{ plugin?.components.length ?? 0 }} 个实例），以下能力将消失：
+        卸载后：该插件组件会从所有窗口移除（共 {{ plugin ? addableWidgetIds(plugin).length : 0 }} 个实例），以下能力将消失：
         <div class="uninstall-caps">
           <span v-for="cap in plugin?.capabilities ?? []" :key="cap.name">- {{ cap.name }}</span>
         </div>

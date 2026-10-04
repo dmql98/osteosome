@@ -26,6 +26,13 @@ function coreResponse(over: Partial<PluginListResponse> = {}): PluginListRespons
           description: '系统可观测性',
           services: [],
           components: ['widget.system-info', 'widget.settings'],
+          ui: {
+            views: [
+              { id: 'widget.system-info', title: '系统信息', entry: 'index.html#system-info' },
+              { id: 'widget.command-palette', title: '命令面板', entry: 'index.html#command-palette' },
+              { id: 'widget.event-stream', title: '事件流', entry: 'index.html#event-stream' },
+            ],
+          },
           dependencies: [],
         },
         installed: true,
@@ -45,7 +52,16 @@ function coreResponse(over: Partial<PluginListResponse> = {}): PluginListRespons
           icon: '💬',
           description: '会话 + 循环 + 路由',
           services: ['session', 'loop', 'llm'],
-          components: ['widget.chat-timeline', 'widget.chat-composer'],
+          // P5/P6 之后界面组件都声明在 ui.views 里，components 恒为空。
+          // 卡片上的「N 组件」如果只读 components，这一个插件就会显示 0 —— 那正是线上看到的症状。
+          components: [],
+          ui: {
+            views: [
+              { id: 'widget.session-list', title: '会话列表', entry: 'index.html' },
+              { id: 'widget.chat-timeline', title: '对话', entry: 'index.html' },
+              { id: 'widget.chat-composer', title: '输入框', entry: 'index.html' },
+            ],
+          },
           dependencies: [{ pluginId: 'models' }],
         },
         installed: true,
@@ -90,6 +106,17 @@ describe('PluginListWindow 插件列表独立窗', () => {
     expect(text).toContain('工作台外壳')
     expect(text).toContain('对话工作台')
     expect(text).toContain('v1.0.0')
+  })
+
+  it('组件数按 ui.views ∪ components 数（只数 components 会恒为 0）', async () => {
+    const wrapper = mountWindow()
+    await flushPromises()
+    const metas = wrapper.findAll('.plugin-card__meta').map((node) => node.text())
+    // workbench：components 2 个 + views 3 个，system-info 两边都有 → 去重后 4
+    expect(metas.some((text) => text.startsWith('4 组件'))).toBe(true)
+    // chat-workbench：components 已清空，3 个全来自 views —— 这条正是「0 组件」症状的回归
+    expect(metas.some((text) => text.startsWith('3 组件'))).toBe(true)
+    expect(metas.some((text) => text.startsWith('0 组件'))).toBe(false)
   })
 
   it('Core 说 installed=false 的不计入已安装数', async () => {

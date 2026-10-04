@@ -24,7 +24,7 @@
               {{ plugin.name }}
               <span class="plugin-card__badge">v{{ plugin.version }}</span>
             </div>
-            <div class="plugin-card__meta">{{ plugin.components.length }} 组件 · 依赖: {{ dependencyText(plugin) }}</div>
+            <div class="plugin-card__meta">{{ widgetCount(plugin) }} 组件 · 依赖: {{ dependencyText(plugin) }}</div>
             <div class="plugin-card__status">
               <span class="dot" :class="statusDot(plugin)"></span>
               {{ statusText(plugin) }}
@@ -59,6 +59,7 @@ import WindowControls from '@/components/layout/WindowControls.vue'
 import { usePlugins } from '@/core-sdk/usePlugins'
 import { openPluginDetailWindow } from '@/layout/window-manager'
 import { notifyPluginsChanged } from '@/layout/window-events'
+import { addableWidgetIds } from '@/widgets/registry'
 import type { PluginView } from './registry'
 
 const { store, reload } = usePlugins()
@@ -77,6 +78,17 @@ const filtered = computed(() => {
 
 function dependencyText(plugin: PluginView): string {
   return plugin.dependencies.length ? plugin.dependencies.map((item) => item.label).join('、') : '无'
+}
+
+/**
+ * 卡片上的「N 组件」必须数 `ui.views ∪ components`，不能只数 `components`。
+ *
+ * P5/P6 之后所有插件的界面都由 `ui.views` 声明，`components[]` 恒为空 ——
+ * 直接读它会让**每个插件都显示 0 组件**，而详情窗里明明列得出组件，
+ * 两处说法打架，用户无从判断哪个是真的。判据与详情窗的列表同源（`addableWidgetIds`）。
+ */
+function widgetCount(plugin: PluginView): number {
+  return addableWidgetIds(plugin).length
 }
 
 /**

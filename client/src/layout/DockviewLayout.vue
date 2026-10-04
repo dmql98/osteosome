@@ -41,14 +41,32 @@ let api: DockviewApi | null = null
 let disposers: Array<{ dispose(): void }> = []
 let unsubWindowEvents: (() => void) | null = null
 let applying = false
+/**
+ * 本次 `applyLayout()` 是不是拿**空清单**铺的默认布局。
+ *
+ * 启动时 `usePlugins()` 的 `GET /api/plugins` 是异步的，而 dockview 的 `@ready`
+ * 往往先到 —— 于是第一次 `applyDefaultLayout(api, [])` 只会铺出一个空面板。
+ * 清单到位后必须重铺一次，否则新装的用户永远看到「空面板」，
+ * 明明插件管理里列得出 6 个组件。
+ *
+ * 只在「确实铺过空默认布局」时才重铺：用户有保存布局（`store.snapshot` 非空）
+ * 的路径根本不会走 `applyDefaultLayout`，这里也就不该动它 —— 绝不能拿默认布局
+ * 覆盖用户拖好的位置。
+ */
+let defaultAppliedFromEmptyCatalog = false
 const dockHasPanels = ref(false)
 
 function applyLayout(): void {
   if (!api) return
   applying = true
   try {
-    if (store.snapshot) api.fromJSON(store.snapshot)
-    else applyDefaultLayout(api, plugins.views)
+    if (store.snapshot) {
+      api.fromJSON(store.snapshot)
+      defaultAppliedFromEmptyCatalog = false
+    } else {
+      applyDefaultLayout(api, plugins.views)
+      defaultAppliedFromEmptyCatalog = plugins.views.length === 0
+    }
   } finally {
     applying = false
   }
@@ -94,6 +112,28 @@ function onInnerLayoutChange(): void {
 watch(() => store.mode, (mode) => {
   if (api) applyModeToAllGroups(api, mode)
 })
+
+/**
+ * 清单比 dockview 晚到：把「空清单铺的默认布局」换成真正的默认布局。
+ * `previous !== 0` 挡住后续 revision 抖动（启停、状态跃迁都不改 views.length）。
+ */
+watch(
+  () => plugins.views.length,
+  (count, previous) => {
+    if (!api || !defaultAppliedFromEmptyCatalog || previous !== 0 || count === 0) return
+    applying = true
+    try {
+      api.clear()
+      applyDefaultLayout(api, plugins.views)
+    } finally {
+      applying = false
+    }
+    defaultAppliedFromEmptyCatalog = false
+    dockHasPanels.value = api.totalPanels > 0
+    applyModeToAllGroups(api, store.mode)
+    store.updateLayout(api.toJSON())
+  },
+)
 
 watch(() => store.hydrated, (hydrated) => {
   if (!hydrated || !api) return

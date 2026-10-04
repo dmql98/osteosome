@@ -16,13 +16,15 @@ import { computed, onMounted } from 'vue'
 import PanelContainer from './PanelContainer.vue'
 import WindowControls from '../components/layout/WindowControls.vue'
 import { sse } from '../core-sdk/sse'
-import { usePluginStore } from '../stores/plugin.store'
+import { usePlugins } from '../core-sdk/usePlugins'
 const props = defineProps<{ id: string; widgets?: string[] }>()
 const widgets = computed(() => props.widgets ?? [])
 
+// 独立面板窗是**另一个 JS 上下文**：清单与偏好都得自己拉，指望主窗没有用。
+// 少了 usePlugins()，这个窗里的 widget 会因为 `views` 为空而全部解析成「未知组件」。
+usePlugins()
 onMounted(() => {
   sse.ensureConnected()
-  void usePluginStore().bootstrap()
 })
 </script>
 
