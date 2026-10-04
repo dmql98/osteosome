@@ -46,6 +46,10 @@ export default defineConfig({
       '/events': coreProxy,
       '/api': coreProxy,
       '/runtime': coreProxy,
+      // 插件 WebUI 产物（P3）。少了这一条，iframe 的 `/plugins/<id>/ui/index.html`
+      // 会落在 Vite 的 SPA fallback 上 → 回宿主 index.html → 盒子里套一个完整工作台。
+      // 与 /api 同一套判定：Core 会查 Origin 白名单，必须由 configure 统一改写。
+      '/plugins': coreProxy,
     },
   },
   build: {
