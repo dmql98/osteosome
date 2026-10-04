@@ -48,7 +48,7 @@ function applyLayout(): void {
   applying = true
   try {
     if (store.snapshot) api.fromJSON(store.snapshot)
-    else applyDefaultLayout(api)
+    else applyDefaultLayout(api, plugins.views)
   } finally {
     applying = false
   }

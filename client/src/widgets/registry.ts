@@ -78,14 +78,73 @@ export function widgetComponents(): Record<string, Component> {
 }
 
 /**
- * 默认布局里放哪些 widget —— **只放本地组件**。
+ * 测试专用：往本地注册表里塞一个组件。
  *
- * 默认布局是「打开即是三盒对话」的引导，所以它必须是**确定的**：
- * 如果把插件视图也灌进来，一个 UI 产物还没构建的新装环境会得到一屏 404 框
- * （插件视图是用户在插件详情窗里**显式**加入的，不是默认送的）。
+ * P6 把 chat-workbench 三盒也搬进插件之后，`localWidgets` 是**空的** ——
+ * 于是 `resolveWidget` 的 `local` 分支在真实代码里再也走不到，
+ * 而「归属 ≠ 形态」「清单为空时降级 local」「component 是异步对象而非裸 loader」
+ * 这三条性质仍然必须守住（它们是 P4 的核心语义，将来加回本地组件照样适用）。
+ *
+ * 没有这个钩子就只能靠断言「注册表为空」，那等于把这三条性质的覆盖直接删掉。
+ * 与其删覆盖，不如给一个**明确标记为测试专用**的注入点 ——
+ * 它不改变任何生产路径（没有生产代码会调它）。
+ *
+ * 只在测试里用；生产代码不要 import 这个符号。
  */
-export function defaultWidgetIds(): string[] {
-  return listWidgets().map((widget) => widget.id)
+export function __registerLocalWidgetForTest(definition: WidgetDefinition): void {
+  if (!definition?.id || !definition.title) throw new Error('widget definition requires id and title')
+  localWidgets.set(definition.id, definition)
+}
+
+/** 测试专用：把注册表恢复成 glob 扫出来的初始状态 */
+export function __resetLocalWidgetsForTest(): void {
+  localWidgets.clear()
+  for (const module of Object.values(widgetModules)) {
+    const definition = module.default
+    if (!definition?.id || !definition.title) continue
+    localWidgets.set(definition.id, definition)
+  }
+}
+
+/**
+ * 默认布局里放哪些 widget —— **宿主本地组件 + 内置插件的视图**（P6 起）。
+ *
+ * ## 为什么要改：P6 之后宿主一个本地组件都没有了
+ *
+ * 这个函数原先只列本地组件，于是 P5 搬走 `widget.llm-settings` 之后它就漏了那一个，
+ * P6 搬走剩下六个之后它返回的是**空数组** ——
+ * 症状是新装 / 重置过布局的用户打开就是**一个空面板**，而老用户靠 `layout.json` 快照不受影响。
+ * 那是最坏的一种 bug：**大多数人看不出来，只有新用户撞上，且没有报错**。
+ *
+ * ## 但不能无脑把所有插件视图都灌进来
+ *
+ * 默认布局必须是**确定的**。若把任意插件的视图都算进来，
+ * 一个 UI 产物还没构建的环境会得到一屏 404 框（`PluginWidgetHost` 会画失败占位）。
+ * 用户打开应用看到的是一屏「组件加载失败」，而他什么都没做。
+ *
+ * ## 所以规则是「内置插件的视图」+「能解析成 iframe」
+ *
+ * · **内置插件** = Core 自己启的、不需要用户另行安装的那些。当前是 chat-workbench 与 models；
+ *   判定依据是它出现在 `installOrder` 里且状态就绪（而不是一张写死的名单 ——
+ *   名单会过期，而过期的方式是「新插件忘了加进名单，于是它的视图默认不出现」）。
+ * · **能解析成 iframe** = `plugin.json` 声明了 `ui.views`。
+ *   声明了但产物没构建时，Core 那边会 404；此时不纳入默认布局，
+ *   宁可少一个盒子也不要一屏报错。
+ *
+ * ## 为什么这个判定放在调用方而不是这里
+ *
+ * 「哪些插件是内置的」需要运行时状态（`/api/plugins` 的快照），
+ * 而本文件被 `default-layout.ts` 与测试直接调用、不该偷偷读 store ——
+ * 与 `resolveWidget` 收列表而不是自己读 store 是同一条规矩。
+ */
+export function defaultWidgetIds(plugins: readonly PluginView[] = []): string[] {
+  const ids = new Set(listWidgets().map((widget) => widget.id))
+  // 遍历顺序即布局里的顺序：先会话列表、再对话、最后输入 —— 与三盒几何一致
+  for (const plugin of plugins) {
+    if (!plugin.builtin) continue
+    for (const view of plugin.views) ids.add(view.id)
+  }
+  return [...ids]
 }
 
 /**

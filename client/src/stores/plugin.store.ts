@@ -102,10 +102,12 @@ export const usePluginStore = defineStore('plugins', {
         pluginsDir?: string | null
         problems: { where: string; reason: string }[]
         cycles: string[][]
+        /** Core 算的启停序。`builtin` 的判定要用它（见 PluginView.builtin） */
+        installOrder?: string[]
         plugins: Parameters<typeof toPluginViews>[0]
       },
     ): void {
-      this.views = toPluginViews(payload.plugins)
+      this.views = toPluginViews(payload.plugins, payload.installOrder ?? [])
       this.layer = payload.layer
       this.pluginsDir = payload.pluginsDir ?? null
       this.problems = payload.problems

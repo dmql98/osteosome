@@ -32,7 +32,30 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest'
  */
 const here = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(here, '..', '..')
-const UI_PKGS = [join(REPO_ROOT, 'plugins', 'models', 'ui'), join(REPO_ROOT, 'plugins', 'workbench', 'ui')]
+
+/**
+ * 所有带 UI 的插件（P6 收尾：三个）。
+ *
+ * 用**数组遍历**而不是每个插件写一组断言：第四个插件接入时，
+ * 「记得给它补测试」这件事不该依赖谁记得住 —— 漏补的症状是它完全没被这条链路覆盖。
+ */
+const UI_PLUGINS = [
+  { id: 'models', views: ['widget.llm-settings'] },
+  {
+    id: 'workbench',
+    views: [
+      'widget.system-info',
+      'widget.command-palette',
+      'widget.settings',
+      'widget.event-stream',
+      'widget.service-manager',
+      'widget.service-status',
+    ],
+  },
+  { id: 'chat-workbench', views: ['widget.session-list', 'widget.chat-timeline', 'widget.chat-composer'] },
+] as const
+
+const UI_PKGS = UI_PLUGINS.map((p) => join(REPO_ROOT, 'plugins', p.id, 'ui'))
 
 let core: import('node:child_process').ChildProcess
 let baseUrl: string
@@ -130,45 +153,59 @@ describe('GET /plugins/models/ui/*（真实 Core + 真实产物）', () => {
 })
 
 /**
- * P6 新增：两个插件 UI **同时**存在。
+ * P6：**多个插件 UI 同时**存在（P5 时只有一个，P6 加到三个）。
  *
- * ## 为什么 P5 的版本不够
+ * ## 为什么单插件版本不够
  *
  * 仓库里只有一个带 UI 的插件时，命名空间写错也看不出问题 ——
  * `/assets/index-xxx.js` 全局唯一，A 插件和 B 插件会请求到同一份文件，
  * 而「那份文件恰好就是自己要的那个」，于是测试照绿。
  *
- * P6 搬完 workbench 就有两个了。这组断言直接比对两边的 index.html：
- * 各自只引用自己命名空间下的 asset，且**互相不引用**。
- * 这是「base 必须命名空间化」这条纪律唯一的实际验证点 ——
- * 写错了，两个界面会加载对方的代码，而症状是「界面显示成另一个插件的样子」。
+ * 这组断言直接比对**所有**插件的 index.html：各自只引用自己命名空间下的 asset，
+ * 且互相不引用。这是「base 必须命名空间化」这条纪律唯一的实际验证点 ——
+ * 写错了，界面会加载另一个插件的代码，而症状是「界面显示成另一个插件的样子」。
+ *
+ * 断言全部按 `UI_PLUGINS` 遍历：再加一个插件 UI 时这里自动覆盖它。
  */
-describe('两个插件 UI 同时存在（真实 Core + 真实产物）', () => {
-  test('workbench 的 index.html 引用自己的命名空间', async () => {
-    const res = await fetch(`${baseUrl}/plugins/workbench/ui/`)
-    expect(res.status).toBe(200)
-    const html = await res.text()
-    expect(html).toContain('/plugins/workbench/ui/assets/')
-    expect(html).not.toMatch(/src="\/assets\//)
+describe('多个插件 UI 同时存在（真实 Core + 真实产物）', () => {
+  test.each(UI_PLUGINS.map((p) => [p.id] as const))(
+    '%s 的 index.html 可取，且引用的是命名空间下的 assets',
+    async (id) => {
+      const res = await fetch(`${baseUrl}/plugins/${id}/ui/`)
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain(`/plugins/${id}/ui/assets/`)
+      expect(html).not.toMatch(/src="\/assets\//)
+    },
+  )
+
+  test('任何两个插件的 asset 路径都不重叠', async () => {
+    const assetsByPlugin = await Promise.all(
+      UI_PLUGINS.map(async ({ id }) => {
+        const html = await (await fetch(`${baseUrl}/plugins/${id}/ui/`)).text()
+        return { id, assets: [...html.matchAll(/\/plugins\/[^/]+\/ui\/assets\/[^"']+/g)].map((m) => m[0]) }
+      }),
+    )
+    for (const { id, assets } of assetsByPlugin) {
+      expect(assets.length, `${id} 的 index.html 里没找到 asset`).toBeGreaterThan(0)
+      for (const asset of assets) {
+        // 用 startsWith 而不是 toMatch(字符串)：`toMatch` 传字符串是**子串**匹配，
+        // 把 `^` 写进字符串里它就成了字面量，断言永远为假（而报错信息看不出来）。
+        expect(asset.startsWith(`/plugins/${id}/ui/`), `${id} 引了别人命名空间的 asset：${asset}`).toBe(true)
+      }
+    }
+    // 若 base 写错成全局 /assets/，插件们会指向同一个文件 —— 那就是「A 的界面加载 B 的代码」
+    for (let i = 0; i < assetsByPlugin.length; i++) {
+      for (let j = i + 1; j < assetsByPlugin.length; j++) {
+        const a = assetsByPlugin[i]!
+        const b = assetsByPlugin[j]!
+        const shared = a.assets.filter((x) => b.assets.includes(x))
+        expect(shared, `${a.id} 与 ${b.id} 共用同一个 asset：${shared.join(', ')}`).toEqual([])
+      }
+    }
   })
 
-  test('两个插件的 asset 路径不重叠', async () => {
-    const [modelsHtml, workbenchHtml] = await Promise.all([
-      fetch(`${baseUrl}/plugins/models/ui/`).then((r) => r.text()),
-      fetch(`${baseUrl}/plugins/workbench/ui/`).then((r) => r.text()),
-    ])
-    const assetsOf = (html: string) => [...html.matchAll(/\/plugins\/(\w+)\/ui\/assets\/[^"']+/g)].map((m) => m[0])
-    const modelsAssets = assetsOf(modelsHtml)
-    const workbenchAssets = assetsOf(workbenchHtml)
-    expect(modelsAssets.length).toBeGreaterThan(0)
-    expect(workbenchAssets.length).toBeGreaterThan(0)
-    // 若 base 写错成全局 /assets/，两个插件会指向同一个文件 —— 那就是「A 的界面加载 B 的代码」
-    expect(modelsAssets.some((a) => workbenchAssets.includes(a)), '两个插件共用了同一个 asset').toBe(false)
-    for (const asset of modelsAssets) expect(asset).toMatch(/^\/plugins\/models\/ui\//)
-    for (const asset of workbenchAssets) expect(asset).toMatch(/^\/plugins\/workbench\/ui\//)
-  })
-
-  test('/api/plugins 里两个插件的 ui.views 互不重叠', async () => {
+  test('每个插件的 ui.views 与 components[] 都对（含「不许两处同声明」）', async () => {
     const body = (await (await fetch(`${baseUrl}/api/plugins`)).json()) as {
       plugins: Array<{
         manifest: {
@@ -178,54 +215,47 @@ describe('两个插件 UI 同时存在（真实 Core + 真实产物）', () => {
         }
       }>
     }
-    const workbench = body.plugins.find((p) => p.manifest.id === 'workbench')
-    const ids = workbench?.manifest.ui?.views.map((v) => v.id) ?? []
-    expect(ids).toEqual([
-      'widget.system-info',
-      'widget.command-palette',
-      'widget.settings',
-      'widget.event-stream',
-      'widget.service-manager',
-      'widget.service-status',
-    ])
-    // 六个都搬走了，所以 components[] 必须为空 —— 两处同时声明同一个 id
-    // 会让客户端不知道该用本地实现还是 iframe，而两者都能渲染出东西
-    expect(workbench?.manifest.components ?? []).toEqual([])
+    for (const { id, views } of UI_PLUGINS) {
+      const plugin = body.plugins.find((p) => p.manifest.id === id)
+      expect(plugin, `/api/plugins 里没有 ${id}`).toBeTruthy()
+      expect(plugin!.manifest.ui?.views.map((v) => v.id), `${id} 的 views`).toEqual([...views])
+      // 组件迁成 views 之后 components[] 必须为空 —— 两处同时声明同一个 id，
+      // 客户端就不知道该用本地实现还是 iframe，而两者都能渲染出东西
+      expect(plugin!.manifest.components ?? [], `${id} 的 components[]`).toEqual([])
+    }
   })
 
-  test('workbench 的每个 view entry 拼出的 URL 都真的能取到', async () => {
+  test('每个插件的每个 view entry 拼出的 URL 都真的能取到', async () => {
     const body = (await (await fetch(`${baseUrl}/api/plugins`)).json()) as {
       plugins: Array<{ manifest: { id: string; ui?: { views: Array<{ id: string; entry: string }> } } }>
     }
-    const views = body.plugins.find((p) => p.manifest.id === 'workbench')?.manifest.ui?.views ?? []
-    expect(views.length).toBeGreaterThan(0)
-    for (const view of views) {
-      // entry 形如 index.html#system-info —— fragment 不参与 HTTP，请求的是同一个 index.html
-      const [pathname] = view.entry.split('#')
-      const res = await fetch(`${baseUrl}/plugins/workbench/ui/${pathname}`)
-      expect(res.status, `${view.id} 的入口取不到：${view.entry}`).toBe(200)
+    for (const { id } of UI_PLUGINS) {
+      const views = body.plugins.find((p) => p.manifest.id === id)?.manifest.ui?.views ?? []
+      expect(views.length, `${id} 没有声明 view`).toBeGreaterThan(0)
+      for (const view of views) {
+        // entry 形如 index.html#chat-timeline —— fragment 不参与 HTTP，请求的是同一个 index.html
+        const [pathname] = view.entry.split('#')
+        const res = await fetch(`${baseUrl}/plugins/${id}/ui/${pathname}`)
+        expect(res.status, `${id}/${view.id} 的入口取不到：${view.entry}`).toBe(200)
+      }
     }
   })
 
-  test('共享 UI 包没有被打进两个 bundle 各自一份源码副本之外的东西', async () => {
+  test('每个插件的 CSS 都含共享令牌的变量定义', async () => {
     /**
-     * 这条断言测的是**产物形状**：两个 bundle 的 CSS 都含 tokens 的变量定义。
+     * 这条测的是**产物形状**：各 bundle 的 CSS 都含 tokens 的变量定义。
      *
      * 它们本来就该各有一份（iframe 互不共享样式表），而 CSS 变量的**值**
      * 由 core/tests/tokens-parity.test.ts 对账 —— 那条守「值不漂」。
-     * 这里守的是「变量名还在」，即 `sdk/ui/src/tokens.css` 真的被两个构建各引一次。
+     * 这里守的是「变量名还在」，即 `sdk/ui/src/tokens.css` 真的被每个构建各引一次。
      */
-    const [modelsCss, workbenchCss] = await Promise.all(
-      ['models', 'workbench'].map(async (id) => {
-        const html = await (await fetch(`${baseUrl}/plugins/${id}/ui/`)).text()
-        const href = /\/plugins\/\w+\/ui\/assets\/[^"']+\.css/.exec(html)?.[0]
-        expect(href, `${id} 的 index.html 里没找到 css`).toBeTruthy()
-        return (await fetch(`${baseUrl}${href}`)).text()
-      }),
-    )
-    // 挑一个两种主题下都定义的变量名，避免「这个变量恰好只在 light 里」
-    for (const css of [modelsCss, workbenchCss]) {
-      expect(css).toContain('--color-bg')
+    for (const { id } of UI_PLUGINS) {
+      const html = await (await fetch(`${baseUrl}/plugins/${id}/ui/`)).text()
+      const href = /\/plugins\/[^/]+\/ui\/assets\/[^"']+\.css/.exec(html)?.[0]
+      expect(href, `${id} 的 index.html 里没找到 css`).toBeTruthy()
+      const css = await (await fetch(`${baseUrl}${href}`)).text()
+      // 挑一个两种主题下都定义的变量名，避免「这个变量恰好只在 light 里」
+      expect(css, `${id} 的 CSS 里没有 --color-bg —— 它没有引共享令牌`).toContain('--color-bg')
     }
   })
 })

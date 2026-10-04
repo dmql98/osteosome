@@ -20,6 +20,7 @@
  */
 import type { DockviewApi } from 'dockview-core'
 import type { MovableBoxRect } from 'vue-movable-box'
+import type { PluginView } from '../plugins/registry'
 import { defaultWidgetIds } from '../widgets/registry'
 import { PANEL_COMPONENT } from './types'
 
@@ -81,12 +82,21 @@ export function chatThreeBoxRectsFor(element: { clientWidth?: number; clientHeig
   return chatThreeBoxRects(element?.clientWidth || FALLBACK_W, element?.clientHeight || FALLBACK_H)
 }
 
-/** 无持久化布局时，用 dockview 原生 addPanel 铺一个承载默认组件的面板 */
-export function applyDefaultLayout(api: DockviewApi): void {
+/**
+ * 无持久化布局时，用 dockview 原生 addPanel 铺一个承载默认组件的面板。
+ *
+ * ## 插件列表由调用方传（P6）
+ *
+ * P6 之后宿主没有任何本地组件，默认布局的三个盒子**全部来自 chat-workbench 插件**。
+ * 所以这里必须拿到插件清单 —— 而清单在 store 里（由 `/api/plugins` 填），
+ * 因此由调用方传入，与 `resolveWidget` / `pluginForWidgetIn` 是同一条规矩：
+ * **不在这里偷偷读 store**。
+ */
+export function applyDefaultLayout(api: DockviewApi, plugins: readonly PluginView[] = []): void {
   api.addPanel({
     id: 'panel.main',
     component: PANEL_COMPONENT,
     title: '工作台',
-    params: { widgets: defaultWidgetIds() },
+    params: { widgets: defaultWidgetIds(plugins) },
   })
 }

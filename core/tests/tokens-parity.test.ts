@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import * as path from 'node:path'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,9 +13,9 @@ import { describe, expect, it } from 'vitest'
  * 那时它是有用的 —— 复制一旦漂移，症状是「模型设置页的按钮和设置页颜色对不上」，
  * 而排查时人人都会去看组件，没人想到是令牌文件。
  *
- * P6 搬完 workbench 有了**三个**消费者，两份变三份：每次调色要改三处、
- * 构建三个包，漏掉哪一个都不立刻暴露。对账能保证「三份一致」，
- * 保证不了「三份都是新的」—— 而后者才是真正会伤到用户的那一半。
+ * P6 搬完 workbench 再搬完 chat-workbench 有了**四个**消费者（宿主 + 三个插件 UI）：
+ * 每次调色要改四处、构建四个包，漏掉哪一个都不立刻暴露。对账能保证「四份一致」，
+ * 保证不了「四份都是新的」—— 而后者才是真正会伤到用户的那一半。
  *
  * 于是令牌连同组件一起进了 `@osteosome/ui`。现在不存在漂移的可能，
  * 因为只有一份源码。于是本文件从「逐字比对」改成「**断言没有副本**」：
@@ -46,9 +46,9 @@ function findDuplicates(name: string): string[] {
   return hits
 }
 
-/** 收集源码里对 styles 的引用（.ts / .vue / .css 都算） */
-function styleImports(): string[] {
-  const hits: string[] = []
+/** 收集源码里对 styles 的引用（.ts / .vue / .css 都算）。带文件路径，便于按消费点断言 */
+function styleImports(): Array<{ file: string; spec: string }> {
+  const hits: Array<{ file: string; spec: string }> = []
   const walk = (dir: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (['node_modules', 'dist', '.git', '.aoci'].includes(entry.name)) continue
@@ -61,13 +61,26 @@ function styleImports(): string[] {
         for (const m of text.matchAll(
           /from\s+'([^']*\/(?:tokens|base)\.css)'|import\s+'([^']*\/(?:tokens|base)\.css)'/g,
         )) {
-          hits.push(m[1] ?? m[2] ?? '')
+          hits.push({ file: path.relative(REPO_ROOT, full).split(path.sep).join('/'), spec: m[1] ?? m[2] ?? '' })
         }
       }
     }
   }
   walk(REPO_ROOT)
   return hits
+}
+
+/** 令牌的消费点：宿主 + 每个有 `ui/src` 的插件 */
+function expectedConsumerDirs(): string[] {
+  const dirs = ['client']
+  const pluginsRoot = join(REPO_ROOT, 'plugins')
+  if (!existsSync(pluginsRoot)) return dirs
+  for (const entry of readdirSync(pluginsRoot, { withFileTypes: true })) {
+    if (entry.isDirectory() && existsSync(join(pluginsRoot, entry.name, 'ui', 'src'))) {
+      dirs.push(`plugins/${entry.name}/ui`)
+    }
+  }
+  return dirs
 }
 
 describe('设计令牌 · 单一来源（P6）', () => {
@@ -87,14 +100,28 @@ describe('设计令牌 · 单一来源（P6）', () => {
     ).toEqual([])
   })
 
-  it('宿主与两个插件 UI 都从共享包引令牌', () => {
+  it('宿主与每个插件 UI 都从共享包引令牌', () => {
     const imports = styleImports()
-    // 三处消费点各引一次 tokens 一次 base
-    expect(imports.filter((i) => i === '@osteosome/ui/styles/tokens.css')).toHaveLength(3)
-    expect(imports.filter((i) => i === '@osteosome/ui/styles/base.css')).toHaveLength(3)
-    // 没有任何人从相对路径引本地副本
-    const local = imports.filter((i) => !i.startsWith('@osteosome/ui/'))
-    expect(local, `这些引用指向本地副本：${local.join(', ')}`).toEqual([])
+    const consumers = expectedConsumerDirs()
+
+    // 不写死数量：P6 收尾时是 4 处（宿主 + 三个插件 UI），再加插件就自动算进去。
+    // 写死的话，每加一个插件 UI 就要有人记得改这里 —— 而忘改的后果是这条测试
+    // 静默地不再守新插件（数对不上才报错，数对得上就是空转）。
+    expect(consumers.length, '至少该有宿主一个消费点').toBeGreaterThanOrEqual(1)
+
+    for (const dir of consumers) {
+      const inDir = imports.filter((i) => i.file.startsWith(`${dir}/`))
+      for (const spec of ['@osteosome/ui/styles/tokens.css', '@osteosome/ui/styles/base.css']) {
+        expect(
+          inDir.some((i) => i.spec === spec),
+          `${dir} 没有引 ${spec} —— 它的界面会没有颜色变量（一片透明/黑）`,
+        ).toBe(true)
+      }
+    }
+
+    // 没有任何人从相对路径引本地副本（副本本身由上面两条 findDuplicates 守）
+    const local = imports.filter((i) => !i.spec.startsWith('@osteosome/ui/'))
+    expect(local, `这些引用指向本地副本：${local.map((l) => l.spec).join(', ')}`).toEqual([])
   })
 
   it('共享包里的令牌文件真的定义了变量（否则上面三条全在验空气）', () => {

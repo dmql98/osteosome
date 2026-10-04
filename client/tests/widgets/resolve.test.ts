@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import {
+  __registerLocalWidgetForTest,
+  __resetLocalWidgetsForTest,
   addableWidgetIds,
   resolveWidget,
   RETIRED_WIDGETS,
@@ -37,12 +39,31 @@ function plugin(over: Partial<PluginView> = {}): PluginView {
     totalServices: 0,
     serviceStates: {},
     ...over,
+    // P6：本地组件迁走后，缺省布局改从「builtin 插件的 views」里找盒子。
+    // `PluginView.builtin` 是**已装配视图**上的必填字段（manifest 没写就算 false），
+    // 所以这里必须收成 `boolean` —— 放在 `...over` 之后才不会被 `undefined` 覆盖。
+    builtin: over.builtin ?? false,
   }
 }
 
 function view(over: Partial<PluginUiView> = {}): PluginUiView {
   return { id: 'widget.x', title: 'X', entry: 'index.html', ...over }
 }
+
+/**
+ * 每条用例都从**同一个起点**开始：glob 扫出来的真实注册表（P6 之后是空的）。
+ *
+ * 需要「存在一个本地组件」的用例自己注入，见 `LOCAL_ID`。
+ * 不复位的话，一个用例注入的组件会留在下一个用例里 —— 而症状是
+ * 「只有从上往下跑才红」，那类失败最难查。
+ */
+beforeEach(() => {
+  __resetLocalWidgetsForTest()
+})
+
+afterEach(() => {
+  __resetLocalWidgetsForTest()
+})
 
 describe('resolveWidget · 插件视图 → iframe', () => {
   it('声明了 ui.views 的 id 解析成 iframe，src 指向 Core 的插件 UI 路由', () => {
@@ -71,38 +92,60 @@ describe('resolveWidget · 插件视图 → iframe', () => {
   })
 
   it('插件视图优先于同 id 的本地组件（迁移方向不能反）', () => {
-    // `widget.llm-settings` 现在**确实**存在本地组件（client/src/widgets/llm-settings）。
-    // 插件一旦声明同名视图就必须接管，否则搬完 UI 也不会生效 ——
-    // 而这种错会静默到有人去翻产物目录才发现。
-    const resolved = resolveWidget('widget.llm-settings', [
-      plugin({ id: 'models', views: [view({ id: 'widget.llm-settings', title: '模型设置（插件）' })] }),
+    // P6 之后宿主已经没有本地组件，真实冲突不会自然出现 —— 但规则仍然必须成立，
+    // 它是「搬完 UI 之后插件那份真的生效」的前提，也是将来加回本地组件时的前提。
+    // 所以这里**自己造一次冲突**：同名的本地定义 + 同名的插件视图。
+    __registerLocalWidgetForTest({
+      id: 'widget.collision',
+      title: '本地实现',
+      component: async () => ({ default: {} as never }),
+    })
+    const resolved = resolveWidget('widget.collision', [
+      plugin({ id: 'models', views: [view({ id: 'widget.collision', title: '模型设置（插件）' })] }),
     ])
-    expect(resolved.kind).toBe('iframe')
+    expect(resolved.kind, '插件视图必须赢，否则搬完 UI 也不会生效').toBe('iframe')
+    if (resolved.kind !== 'iframe') throw new Error('unreachable')
+    expect(resolved.title).toBe('模型设置（插件）')
   })
 
-  it('**归属 ≠ 形态**：只在 components[] 里声明的本地组件仍是 local，不是 iframe', () => {
+  it('**归属 ≠ 形态**：只在 components[] 里声明的 id 绝不能解析成 iframe', () => {
     // 这条是开发期真实踩过的坑：`components[]` 只声明「这个 id 归我」
     // （插件停用时要一起藏），它不声明形态。早期版本在这里把归属当形态，
     // 结果 10 个内置 widget 全变成 `/plugins/<id>/ui/` 的 404 框。
+    //
+    // 断言用 `not.toBe('iframe')` 而不是 `toBe('local')`：
+    // 本地注册表里有没有这个 id 是另一件事（P6 之后没有），
+    // 而这条坑的**唯一**判据就是「不能是 iframe」。
     const resolved = resolveWidget('widget.chat-timeline', [
       plugin({ id: 'chat-workbench', components: ['widget.chat-timeline'] }),
     ])
-    expect(resolved.kind).toBe('local')
+    expect(resolved.kind, 'components[] 是归属声明，不是形态声明').not.toBe('iframe')
   })
 })
 
 describe('resolveWidget · 本地组件', () => {
   /**
-   * P6 之后用来验证「本地组件」这条路径的样本换成了仍在宿主的 widget。
+   * 这三条测的是 `resolveWidget` 的**本地分支**：解析为 local、清单为空时仍降级为 local、
+   * component 是异步对象而非裸 loader。
    *
-   * 原来这三条用的是 `widget.service-status` / `widget.system-info`，
-   * 随设置等六个组件一起搬进了 workbench 插件。
+   * 样本换过两轮（先是 `widget.service-status` / `widget.system-info`，后是
+   * `widget.chat-timeline`），P6 收尾后**一个都不剩了** —— 宿主注册表是空的。
    *
-   * 三条断言**测的东西一点没变**（解析为 local、清单为空时仍降级为 local、
-   * component 是异步对象而非裸 loader），只是样本换了。降级那条尤其要留着：
-   * 插件清单拉不到时不该让整个工作台空掉 —— 这与 P6 无关，是 P4 就有的性质。
+   * 与其把这三条删掉（那就等于放弃 P4 的三条性质），不如注入一个合成组件：
+   * 本地分支的代码还在，将来加回本地组件时它必须照常工作。
+   *
+   * 「清单为空时降级 local」那条尤其要留着：插件清单拉不到时不该让整个工作台空掉
+   * —— 这与 P6 无关，是 P4 就有的性质。
    */
-  const LOCAL_ID = 'widget.chat-timeline'
+  const LOCAL_ID = 'widget.test-local-fixture'
+
+  beforeEach(() => {
+    __registerLocalWidgetForTest({
+      id: LOCAL_ID,
+      title: '本地组件（测试注入）',
+      component: () => Promise.resolve({ default: {} as never }),
+    })
+  })
 
   it('没有插件声明时解析为本地组件', () => {
     expect(resolveWidget(LOCAL_ID).kind).toBe('local')

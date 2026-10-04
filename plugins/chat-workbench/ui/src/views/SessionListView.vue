@@ -1,17 +1,17 @@
 <template>
   <Card title="会话" class="session-list">
     <div class="session-list__toolbar">
-      <Button size="sm" :loading="store.loading" @click="onCreate">新建会话</Button>
-      <Button v-if="store.current" size="sm" variant="ghost" @click="openRename">重命名</Button>
-      <Button v-if="store.current" size="sm" variant="ghost" @click="confirmDeleteOpen = true">删除</Button>
+      <Button size="sm" :loading="sessions.loading.value" @click="onCreate">新建会话</Button>
+      <Button v-if="currentMeta" size="sm" variant="ghost" @click="openRename">重命名</Button>
+      <Button v-if="currentMeta" size="sm" variant="ghost" @click="confirmDeleteOpen = true">删除</Button>
     </div>
 
-    <List v-if="store.list.length" :items="store.list" @select="onSelect">
+    <List v-if="sessions.list.value.length" :items="sessions.list.value" @select="onSelect">
       <template #item="{ item }">
         <div
           v-if="asMeta(item)"
           class="session-list__row"
-          :class="{ 'session-list__row--active': asMeta(item)!.id === store.curId }"
+          :class="{ 'session-list__row--active': asMeta(item)!.id === curId }"
         >
           <span class="session-list__title">{{ asMeta(item)!.title || '新会话' }}</span>
           <span class="session-list__time">{{ formatTime(asMeta(item)!.updatedAt) }}</span>
@@ -30,7 +30,7 @@
     </template>
   </Modal>
 
-  <Modal v-model:open="confirmDeleteOpen" :title="`⚠ 删除「${store.current?.title ?? ''}」？`">
+  <Modal v-model:open="confirmDeleteOpen" :title="`⚠ 删除「${currentMeta?.title ?? ''}」？`">
     <p>删除后会话及其消息将不可恢复。</p>
     <template #footer>
       <Button size="sm" variant="ghost" @click="confirmDeleteOpen = false">取消</Button>
@@ -40,17 +40,28 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { Button } from '@osteosome/ui'
-import { Card } from '@osteosome/ui'
-import { EmptyState } from '@osteosome/ui'
-import { Input } from '@osteosome/ui'
-import { List } from '@osteosome/ui'
-import { Modal } from '@osteosome/ui'
-import { useSessionStore } from '@/stores/session.store'
+/**
+ * ① 会话列表 —— 写 `curId` 的那一个视图。
+ *
+ * ## 它是「当前会话」的**唯一发起方**
+ *
+ * 三盒里只有这个视图的用户操作会改变「正在看哪个会话」（新建 / 切换 / 重命名 / 删除）。
+ * 它写 `curId` 进共享层，另外两个 iframe 通过 `storage` 事件知道。
+ *
+ * ## 为什么 `curId` 要用 `computed` 而不是直接写 store
+ *
+ * 它是共享层里的 ref（跨 iframe），不是本视图的状态。
+ * 包一层 computed 是为了让「读」在本视图内保持响应式 —— 直接 `.value` 也行，
+ * 但模板里 `curId` 直接就是 ref 值更清楚，少一次 `unref` 心智负担。
+ */
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Button, Card, EmptyState, Input, List, Modal } from '@osteosome/ui'
 import type { SessionMeta } from '@osteosome/shared'
+import { currentSessionId, useSessionState } from '../state'
 
-const store = useSessionStore()
+const sessions = useSessionState()
+const curId = currentSessionId()
+const currentMeta = computed(() => sessions.current())
 const renameOpen = ref(false)
 const confirmDeleteOpen = ref(false)
 const renameText = ref('')
@@ -71,31 +82,40 @@ function asMeta(item: unknown): SessionMeta | undefined {
 }
 
 function onSelect(index: number): void {
-  const meta = store.list[index] as SessionMeta | undefined
-  if (meta) store.select(meta.id)
+  const meta = sessions.list.value[index] as SessionMeta | undefined
+  if (meta) sessions.select(meta.id)
 }
 
 async function onCreate(): Promise<void> {
-  await store.create()
+  await sessions.create()
 }
 
 function openRename(): void {
-  renameText.value = store.current?.title ?? ''
+  renameText.value = currentMeta.value?.title ?? ''
   renameOpen.value = true
 }
 
 async function onRename(): Promise<void> {
-  if (store.current && renameText.value.trim()) await store.rename(store.current.id, renameText.value)
+  if (currentMeta.value && renameText.value.trim()) {
+    await sessions.rename(currentMeta.value.id, renameText.value)
+  }
   renameOpen.value = false
 }
 
 async function onDelete(): Promise<void> {
   confirmDeleteOpen.value = false
-  if (store.current) await store.remove(store.current.id)
+  if (currentMeta.value) await sessions.remove(currentMeta.value.id)
 }
 
 onMounted(() => {
-  if (!store.hydrated) void store.bootstrap()
+  if (!sessions.hydrated.value) void sessions.bootstrap()
+})
+
+onBeforeUnmount(() => {
+  // 事件退订。iframe 被移除时组件卸载 —— 不退订的话，SSE 客户端会一直往一个
+  // 已经不在文档里的组件写 ref，而症状是「关掉一个盒子之后内存涨、
+  // 切会话时偶发报 'cannot read properties of undefined'」。
+  sessions.dispose()
 })
 </script>
 

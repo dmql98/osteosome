@@ -119,10 +119,26 @@ export interface PluginView {
    * 前端若只拿 `state`（插件级聚合结果）就没法回答「哪个服务坏了」。
    */
   serviceStates: Record<string, string | undefined>
+  /**
+   * P6 起新增：**这是不是应用自带、装了就有的插件**。
+   *
+   * 判定依据是「Core 会不会自己启它」：`autoStart` 为真、或它排在 `installOrder`
+   * 里且状态不是未安装。这条只被「默认布局放哪些视图」用到 ——
+   * 见 `widgets/registry.ts` 的 `defaultWidgetIds`。
+   *
+   * 为什么不用一张写死的名单：名单会过期，而过期的方式很隐蔽
+   * （新插件忘了加进名单 → 它的视图默认不出现 → 只有新用户撞上）。
+   * 而 `autoStart` 是插件自己声明的、Core 已经拿来做启动决策的事实 ——
+   * 前端只是**读同一个事实**，不重新定义一遍「什么算内置」。
+   */
+  builtin: boolean
 }
 
 /** Core 快照 -> 模板视图 */
-export function toPluginViews(snapshots: readonly PluginSnapshot[]): PluginView[] {
+export function toPluginViews(
+  snapshots: readonly PluginSnapshot[],
+  installOrder: readonly string[] = [],
+): PluginView[] {
   const names = new Map(snapshots.map((p) => [p.manifest.id, p.manifest.name]))
   return snapshots.map((snapshot) => {
     const m = snapshot.manifest
@@ -153,6 +169,9 @@ export function toPluginViews(snapshots: readonly PluginSnapshot[]): PluginView[
       readyServiceCount: snapshot.readyServiceCount,
       totalServices: m.services?.length ?? 0,
       serviceStates: snapshot.serviceStates ?? {},
+      // `autoStart` 是插件自己说的；`installOrder` 是 Core 算的启停序。
+      // 两者取「或」：任一条成立就说明它不需要用户另行安装。
+      builtin: m.autoStart === true || (installOrder.includes(m.id) && snapshot.installed),
     }
   })
 }

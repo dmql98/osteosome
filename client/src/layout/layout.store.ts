@@ -129,7 +129,9 @@ export const useLayoutStore = defineStore('layout', {
       const api = this.api as DockviewApi | null
       if (!api) return
       api.clear()
-      applyDefaultLayout(api)
+      // P6：默认布局的三个盒子全来自 chat-workbench 插件的视图，
+      // 而插件清单在 plugin store 里 —— 不传的话默认面板会是空的
+      applyDefaultLayout(api, usePluginStore().views)
       this.updateLayout(api.toJSON())
     },
     /** 拉出独立窗：把面板从工作台摘除并记住状态，关闭独立窗时再放回原位。

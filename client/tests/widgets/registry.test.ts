@@ -27,20 +27,21 @@ function declaredComponents(): string[] {
 
 describe('widget registry', () => {
   /**
-   * P6 之后宿主还剩几个组件，全都是 chat-workbench 三盒。
+   * P6 收尾之后，宿主注册表是**空的**。
    *
-   * 这条断言的**内容**在 P6 里被换过一次：原先列的是六个 workbench 组件
-   * （系统信息 / 命令台 / 事件流 / 服务管理 / 服务状态 / 设置），它们搬进插件后
-   * 由 Core 伺服在 `/plugins/workbench/ui/`，不再是 client 包里的注册项。
+   * 这条断言的内容换过两次：先是六个 workbench 组件（系统信息 / 命令台 / 事件流 /
+   * 服务管理 / 服务状态 / 设置）搬进插件，现在连 chat-workbench 三盒也搬了。
+   * 每次换都把断言换成**当时真实的状态** —— 描述过去的断言会在某天开始毫无意义地绿着。
    *
-   * 与其保留一份「曾经有这六个」的注释，不如直接把断言换成 P6 之后真实剩下的那三个 ——
-   * 断言一旦描述的是过去的状态，它就会在某天开始毫无意义地绿着。
+   * 之所以敢让注册表空着：三个盒子由 Core 伺服在
+   * `/plugins/chat-workbench/ui/index.html#…`，走 `resolveWidget` 的 iframe 分支，
+   * 不再经过这里。这里留空不等于「没有盒子」。
    */
-  it('自动发现宿主自己剩下的组件（chat-workbench 三盒）', () => {
-    expect(getWidget('widget.session-list')?.title).toBeTruthy()
-    expect(getWidget('widget.chat-timeline')?.title).toBeTruthy()
-    expect(getWidget('widget.chat-composer')?.title).toBeTruthy()
-    expect(listWidgets().length).toBeGreaterThanOrEqual(3)
+  it('宿主已无本地组件：chat-workbench 三盒迁进插件（注册表为空）', () => {
+    expect(listWidgets(), 'P6 收尾：本地组件全部迁出').toEqual([])
+    expect(getWidget('widget.session-list')).toBeUndefined()
+    expect(getWidget('widget.chat-timeline')).toBeUndefined()
+    expect(getWidget('widget.chat-composer')).toBeUndefined()
   })
 
   /**
@@ -76,10 +77,14 @@ describe('widget registry', () => {
    *
    * S7-3 把这份断言的**对账两端换对了**：左边从「前端常量」改成「Core 的 plugin.json」。
    * 前端常量在手时，两端同源，改错了也自洽；现在才真的能查出断层。
+   *
+   * P6 收尾后左边很可能是**空集**（两个插件都把组件迁成了 `ui.views[]`），所以这里
+   * **不再要求 `declared.length > 0`** —— 那个要求在插件化完成时必然变假。
+   * 对账本身照旧：只要哪天有人在 `components[]` 里声明了一个本地组件，
+   * 而注册表的 glob 扫不到它，这条就红。空集时它安静通过，不是失效。
    */
   it('Core 清单里声明的每个组件都能被 getWidget 取到（跨端对账）', () => {
     const declared = declaredComponents()
-    expect(declared.length).toBeGreaterThan(0)
     for (const id of declared) {
       expect(getWidget(id), `组件未注册：${id}（Core 声明了但前端没有）`).toBeDefined()
       expect(widgetComponents()[id], `组件未挂载：${id}`).toBeTruthy()
@@ -93,14 +98,12 @@ describe('widget registry', () => {
     }
   })
 
-  it('widgetComponents 以 widget id 为键注册组件', () => {
-    // P5 搬走了 llm-settings，P6 搬走了六个 workbench 组件 —— 它们都不在这里，
-    // 现在是 Core 伺服在 `/plugins/<id>/ui/` 的插件页面。
-    // 这条断言守的是「宿主剩下的组件都挂上了」，插件视图那侧由
-    // plugins/<id>/ui 的测试与 Core 的 plugin-ui-e2e 各守一半。
-    expect(widgetComponents()['widget.chat-timeline']).toBeTruthy()
-    expect(widgetComponents()['widget.chat-composer']).toBeTruthy()
-    expect(widgetComponents()['widget.session-list']).toBeTruthy()
+  it('widgetComponents 以 widget id 为键注册组件 —— 现在没有可注册的了', () => {
+    // P5 搬走 llm-settings，P6 搬走六个 workbench 组件，收尾时又搬走 chat-workbench 三盒。
+    // 它们现在是 Core 伺服在 `/plugins/<id>/ui/` 的插件页面。
+    // 这条守的是「宿主不再有第二份实现」：glob 若又扫到一个 `-widget.vue`，
+    // 这里就会多出一条，与 registry.ts 的注册规则一并暴露。
+    expect(widgetComponents(), 'P6 收尾：宿主不该再挂任何本地组件').toEqual({})
   })
 
   it('已搬走的组件不在注册表里（否则 client 里会留着第二份实现）', () => {

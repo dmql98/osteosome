@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>对话工作台</title>
+    <!--
+      **一个页面，三个视图。** 宿主给三个盒子各一个带不同 hash 的 src：
+      `index.html#session-list` / `#chat-timeline` / `#chat-composer`。
+
+      为什么不是一个页面三个 iframe 各自独立的应用：那样要三份产物、
+      而且三份 Vue 运行时 —— 而三个视图之间本来就要共享状态。
+      一个 bundle + hash 切换是最省的形状（代价见 §6 风险台账「bundle 体积重复」）。
+
+      `#` 之后**根本不会发到服务器**，所以 Core 只当静态文件搬运工：
+      没有路由表、没有重写规则。深链与刷新能不能工作，全由这份 hash 状态决定。
+    -->
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

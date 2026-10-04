@@ -9,7 +9,7 @@
     </div>
 
     <template v-else>
-      <!-- 请求参数：provider / 模型 / 思考强度（与消息区无关，只写 store） -->
+      <!-- 请求参数：provider / 模型 / 思考强度（与消息区无关，只写本地） -->
       <div class="chat-composer__params">
         <Select
           :model-value="provider"
@@ -23,7 +23,7 @@
           :options="modelOptions"
           aria-label="选择模型"
           data-testid="composer-model"
-          @update:model-value="chat.setModel(String($event))"
+          @update:model-value="setModel(String($event))"
         />
         <span
           v-if="catalogKind === 'static'"
@@ -38,7 +38,7 @@
           :options="thinkingOptions"
           aria-label="思考强度"
           data-testid="composer-thinking"
-          @update:model-value="chat.setThinking(String($event))"
+          @update:model-value="setThinking(String($event))"
         />
       </div>
 
@@ -53,57 +53,75 @@
           data-testid="composer-input"
         />
         <div class="chat-composer__actions">
-          <Button v-if="sending" variant="danger" size="sm" data-testid="composer-stop" @click="chat.cancel">
-            停止
-          </Button>
+          <Button v-if="sending" variant="danger" size="sm" data-testid="composer-stop" @click="cancel">停止</Button>
           <Button v-else type="submit" size="sm" :disabled="!canSend" data-testid="composer-send">发送</Button>
         </div>
       </form>
+
+      <p v-if="failed" class="chat-composer__failed" data-testid="composer-failed">{{ failed }}</p>
     </template>
   </Card>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { Button } from '@osteosome/ui'
-import { Card } from '@osteosome/ui'
-import { EmptyState } from '@osteosome/ui'
-import { Select } from '@osteosome/ui'
-import { Textarea } from '@osteosome/ui'
-import { useLlmProviders } from '@/core-sdk/useLlmProviders'
-import { useModelCatalog } from '@/core-sdk/useModelCatalog'
-import { usePreferences } from '@/core-sdk/usePreferences'
-import { useChatStore } from '@/stores/chat.store'
-import { useSessionStore } from '@/stores/session.store'
-
 /**
  * ③ 输入区 —— 只管「输入」与「请求参数」。
  *
- * 与 ② timeline **零直接通信**：两者只共享 `chat.store`。
- * `disabled` / `canSend` 这些跨组件状态因此不需要组件间传参或事件桥。
+ * ## 状态全是本地的：provider / model / thinking / draft 只有这个视图读
  *
- * ## 为什么 provider 列表与模型目录在这里而不在 store
+ * 搬进插件之前它们在 `chat.store` 里，而 store 是 ② 也读的对象。现在不必了：
+ * ② 时间线只关心「这一轮说了什么」，不关心用什么模型发的。
+ * 把它们收成本地 ref 之后，这个视图与 ② 之间的耦合**降到了零** ——
+ * 它连 curId 都是只读的。
  *
- * `useLlmProviders` / `useModelCatalog` 是**每次调用新建 ref** 的 composable，靠 `onMounted`
- * 订阅 —— 放进 store 的 getter 里只会拿到空实例（详见 chat.store 的注释）。
- * 所以它们留在本组件的 setup 里（这里才是合法的调用上下文），
- * 选中后把结果写进 store，store 只接收「选了什么」。
+ * ## `sending` 来自 SSE，不是本地布尔
+ *
+ * 原来 `sending` 是本地状态：点发送置 true，等 `loop.state.changed{idle}` 置 false。
+ * 现在它由 `useRunState` 从事件派生 —— 于是**② ③ 两个 iframe 的 sending 必然一致**，
+ * 而不需要任何同步。少一个可能不同步的状态。
+ *
+ * ## provider 列表与模型目录为什么留在组件里
+ *
+ * `useLlmProviders` / `useModelCatalog` 是**每次调用新建 ref** 的 composable，
+ * 靠 `onMounted` 订阅 —— 放进 store 的 getter 里只会拿到空实例。
+ * 所以它们留在本组件的 setup 里（这里才是合法的调用上下文）。
  */
-const chat = useChatStore()
-const sessions = useSessionStore()
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Button, Card, EmptyState, Select, Textarea } from '@osteosome/ui'
+import { useLlmProviders, useModelCatalog, usePreferences } from '@osteosome/core-client'
+import type { ThinkingEffort } from '@osteosome/shared'
+import { cancelRun, currentSessionId, useComposerRun, useRunState, useSessionState } from '../state'
+
+const sessions = useSessionState()
+const curId = currentSessionId()
 const preferences = usePreferences()
 const { list } = useLlmProviders()
 const { models, catalog, load } = useModelCatalog()
+
+const run = useRunState({
+  curId: () => curId.value,
+  messages: () => sessions.messages.value,
+  onError: (message) => {
+    failed.value = message
+  },
+})
+
+// ── 请求参数（本地） ────────────────────────────────────────────
+const draft = ref('')
+const provider = ref('')
+const model = ref('')
+const thinking = ref<ThinkingEffort>('off')
+const failed = ref('')
+
+const sending = computed(() => run.sending.value)
+const canSend = computed(() => Boolean(draft.value.trim()) && !sending.value)
+const catalogKind = computed(() => catalog.value ?? '')
 
 /**
  * 设置页「逐模型开关」写进 `preferences.llm.enabledModels`，这里是它的**消费方**。
  *
  * 没有这一层过滤，设置页的开关就是个假开关：关掉了、下拉里还选得到 ——
  * 用户会以为功能坏了。格式同设置页：`${provider}::${model}`，空数组 = 全启用。
- *
- * 为什么只在挂载 + 目录到达时读：Core 没有「偏好已改」的 SSE 广播
- * （`PUT /api/preferences` 只回 `{ok:true}`），所以拿不到推送。
- * 目录到达正好是「用户刚可能动过设置」的时机 —— 切 provider、点获取模型列表都会触发。
  */
 const disabledModels = ref<string[]>([])
 
@@ -119,20 +137,6 @@ function refreshDisabledModels(): void {
       disabledModels.value = []
     })
 }
-
-// 直接双向绑 store 的字段（Pinia 的 writable state）
-const draft = computed({
-  get: () => chat.draft,
-  set: (v: string) => {
-    chat.draft = v
-  },
-})
-const provider = computed(() => chat.provider)
-const model = computed(() => chat.model)
-const thinking = computed(() => chat.thinking)
-const sending = computed(() => chat.sending)
-const canSend = computed(() => chat.canSend)
-const catalogKind = computed(() => catalog.value ?? '')
 
 /** 当前 provider 下没被关掉的模型 */
 const visibleModels = computed(() =>
@@ -163,22 +167,55 @@ function defaultModelOf(target: string): string {
   return list.value.find((p) => p.provider === target)?.defaultModel ?? ''
 }
 
+function setModel(value: string): void {
+  model.value = value
+}
+
+function setThinking(value: string): void {
+  if (value === 'off' || value === 'low' || value === 'medium' || value === 'high') {
+    thinking.value = value as ThinkingEffort
+  }
+}
+
 /** 切 provider：模型回落到该家声明默认模型，并拉它的模型目录（能力位：目录由 provider 自己回答） */
 async function onSelectProvider(value: string | number): Promise<void> {
   const name = String(value)
-  chat.setProvider(name, defaultModelOf(name))
+  provider.value = name
+  model.value = defaultModelOf(name)
   await load(name)
 }
 
-function submit(): void {
-  void chat.submit()
+const composer = useComposerRun({
+  curId: () => curId.value,
+  ensureSession: () => sessions.create(),
+  recent: () => sessions.recent(),
+  provider: () => provider.value,
+  model: () => model.value,
+  thinking: () => thinking.value,
+  onError: (message) => {
+    failed.value = message
+  },
+})
+
+async function submit(): Promise<void> {
+  const text = draft.value
+  if (!text.trim() || sending.value) return
+  // 先清空再发：这一轮的后续全部由 SSE 驱动，发出去的消息会经
+  // `message.appended` 回到时间线 —— 不清空的话用户会以为没发出去。
+  draft.value = ''
+  failed.value = ''
+  await composer.submit(text)
 }
 
-/** 首个 provider 注册后自动选中（原来在组件里，拆分后归 ③ —— 它是唯一持有 provider 列表的地方） */
+function cancel(): void {
+  cancelRun(run.activeA.value)
+}
+
+/** 首个 provider 注册后自动选中（这里是唯一持有 provider 列表的地方） */
 watch(
   list,
   (current) => {
-    if (!chat.provider && current.length > 0) void onSelectProvider(current[0].provider)
+    if (!provider.value && current.length > 0) void onSelectProvider(current[0].provider)
   },
   { immediate: true },
 )
@@ -188,23 +225,25 @@ watch(models, (items) => {
   refreshDisabledModels()
   if (items.length === 0) return
   const enabled = visibleModels.value
-  if (enabled.includes(chat.model)) return
+  if (enabled.includes(model.value)) return
   // 一家的模型全被关掉了：保持原选择（还能真发出去），下拉为空是明确的状态
   if (enabled.length === 0) return
-  const fallback = defaultModelOf(chat.provider)
-  chat.setModel(enabled.includes(fallback) ? fallback : enabled[0])
+  const fallback = defaultModelOf(provider.value)
+  setModel(enabled.includes(fallback) ? fallback : enabled[0])
 })
 
-// 切会话 → 重置本地 in-flight + 载入历史（② 也读同一个 store，两边自动同步）
-watch(
-  () => sessions.curId,
-  (sessionId) => void chat.onSessionChanged(sessionId),
-  { immediate: true },
-)
-
 onMounted(() => {
+  // 自己 bootstrap：`recent()` 是「没有 curId 时的兜底」，而 curId 也可能是空的
+  // （用户还没建过会话）。跨 iframe 拿 ① 的列表是我们要避免的形态，理由见
+  // `state/index.ts` 的纪律与 ChatTimelineView 里的同款注释。
+  void sessions.bootstrap()
   refreshDisabledModels()
-  chat.bindEvents()
+  run.bindEvents()
+})
+
+onBeforeUnmount(() => {
+  run.dispose()
+  sessions.dispose()
 })
 </script>
 
@@ -218,4 +257,8 @@ onMounted(() => {
 .chat-composer__form { display: grid; gap: var(--space-2); }
 .chat-composer__actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .chat-composer__no-provider { color: var(--color-text-muted); }
+.chat-composer__failed {
+  padding: var(--space-2) var(--space-3); border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm); color: var(--color-danger); font-size: var(--text-xs);
+}
 </style>

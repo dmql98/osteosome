@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import PluginDetailWindow from '../../src/plugins/PluginDetailWindow.vue'
 import type { PluginListResponse } from '../../src/plugins/registry'
+import { __registerLocalWidgetForTest, __resetLocalWidgetsForTest } from '../../src/widgets/registry'
 
 /**
  * S7-3：详情窗的数据改由 `/api/plugins` 提供，所以测试从「stub fetch」改成
@@ -93,6 +94,9 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+    // 注册了合成本地组件的用例在这里复位 —— 放 afterEach 是因为
+    // 断言失败时不会执行到用例末尾的复位，下一个用例就带着脏状态跑
+    __resetLocalWidgetsForTest()
   })
 
   it('渲染介绍 / 能力 / 组件 / 依赖 / 危险区', async () => {
@@ -134,6 +138,15 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
   })
 
   it('组件标题对本地 components 仍用前端注册表解析', async () => {
+    // P6 收尾后宿主注册表是空的（三盒也搬进插件了），所以这里**注入**一个本地组件 ——
+    // 这条断言测的是「查得到注册表时用注册表标题」这条分支，与注册表里恰好有谁无关。
+    const LOCAL_ID = 'widget.detail-title-fixture'
+    const LOCAL_TITLE = '注入组件标题'
+    __registerLocalWidgetForTest({
+      id: LOCAL_ID,
+      title: LOCAL_TITLE,
+      component: () => Promise.resolve({ default: {} as never }),
+    })
     const base = coreResponse()
     lastBody = {
       ...base,
@@ -143,8 +156,7 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
               ...p,
               manifest: {
                 ...p.manifest,
-                // 造一个「仍然在宿主注册表里」的本地组件
-                components: ['widget.chat-timeline'],
+                components: [LOCAL_ID],
                 ui: { views: [] },
               },
             }
@@ -153,9 +165,9 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
     }
     const wrapper = mountDetail('workbench')
     await flushPromises()
-    // '对话' 是 chat-timeline 在宿主注册表里的标题；查不到就会只剩裸 id，
-    // 而标题是**主标签**、id 是副标签，所以断言标题 + 分类为「内置组件」
-    expect(wrapper.text()).toContain('对话')
+    // 查不到注册表就只剩裸 id，而标题是**主标签**、id 是副标签，
+    // 所以断言标题 + 分类为「内置组件」
+    expect(wrapper.text()).toContain(LOCAL_TITLE)
     expect(wrapper.text()).toContain('内置组件')
   })
 

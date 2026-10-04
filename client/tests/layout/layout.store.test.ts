@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useLayoutStore } from '../../src/layout/layout.store'
+import { __registerLocalWidgetForTest, __resetLocalWidgetsForTest } from '../../src/widgets/registry'
 import { usePreferences } from '../../src/core-sdk/usePreferences'
 import { usePluginStore } from '../../src/stores/plugin.store'
 import { panelWindowExists } from '../../src/layout/window-manager'
@@ -67,23 +68,41 @@ describe('layout.store', () => {
     expect(put).toHaveBeenCalledWith(expect.objectContaining({ layout: expect.stringContaining('panel.changed') }))
   })
 
+  /**
+   * 这两条测的是 `addWidget` 的**几何与去重**，不是「哪些 widget 存在」。
+   *
+   * P6 收尾后宿主注册表是空的，随便挑一个真实 id 都会解析成 missing 而 early return
+   * （见下面那条专门守这个行为的用例）—— 那样这两条会因为与被测逻辑无关的原因失败。
+   * 所以这里注入一个**确定可解析**的本地组件，把变量固定住。
+   */
+  const ADDABLE = 'widget.test-addable-fixture'
+
+  beforeEach(() => {
+    __registerLocalWidgetForTest({
+      id: ADDABLE,
+      title: '可加入的组件（测试注入）',
+      component: () => Promise.resolve({ default: {} as never }),
+    })
+  })
+
+  afterEach(() => {
+    __resetLocalWidgetsForTest()
+  })
+
   it('addWidget 把组件加入当前激活面板 params', () => {
     const store = useLayoutStore()
     const panel = { id: 'panel.main', params: { widgets: ['widget.service-status'] }, api: { setActive: vi.fn(), updateParameters: vi.fn() } }
     store.attachApi(fakeApi(panel) as never)
-    store.addWidget('widget.session-list')
-    expect(panel.api.updateParameters).toHaveBeenCalledWith({ widgets: ['widget.service-status', 'widget.session-list'] })
+    store.addWidget(ADDABLE)
+    expect(panel.api.updateParameters).toHaveBeenCalledWith({ widgets: ['widget.service-status', ADDABLE] })
   })
 
   it('addWidget 无面板时新建承载该组件的面板', () => {
     const store = useLayoutStore()
     const api = fakeApi()
     store.attachApi(api as never)
-    // 样本换成仍在宿主注册表里的 widget：`widget.service-status` 随 P6 搬进了
-    // workbench 插件，在无插件清单时会解析为 missing，addWidget 直接 return
-    // （见下面那条专门守这个行为的用例）
-    store.addWidget('widget.chat-timeline')
-    expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ component: 'panel', params: { widgets: ['widget.chat-timeline'] } }))
+    store.addWidget(ADDABLE)
+    expect(api.addPanel).toHaveBeenCalledWith(expect.objectContaining({ component: 'panel', params: { widgets: [ADDABLE] } }))
   })
 
   /**

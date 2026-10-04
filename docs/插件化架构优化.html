@@ -159,10 +159,11 @@
       <tr>
         <td><b>组件声明与实现分离</b></td>
         <td class="mono" style="text-decoration:line-through;opacity:.65">manifest.components = ["widget.llm-settings"]<br>实现：client/src/widgets/llm-settings/<br>绑定点：client/src/widgets/registry.ts 的 import.meta.glob</td>
-        <td><b>已解决（P5 + P6）</b>：模型设置（P5）与 workbench 六个视图（P6）都已搬进各自的 <code>ui/</code>，
-            由 Core 伺服在 <code>/plugins/&lt;id&gt;/ui/*</code>。
-            <br><b>还剩 client/src/widgets/ 三盒</b>（chat-workbench 的）：它们<b>之间要通信</b>，
-            跨 iframe 的传输层契约至今未定 —— 这是 P6 剩下的全部工作量</td>
+        <td><b>已解决（P5 + P6 收尾）</b>：模型设置（P5）、workbench 六个视图与 chat-workbench 三盒（P6）
+            都已搬进各自的 <code>ui/</code>，由 Core 伺服在 <code>/plugins/&lt;id&gt;/ui/*</code>。
+            <br><code>client/src/widgets/</code> 的 widget 注册表现在是<b>空的</b> ——
+            跨 iframe 传输层没有成为问题，因为<b>结论是根本不需要传输层</b>
+            （详见 P6「跨 iframe 只共享一个字节」）</td>
       </tr>
       <tr>
         <td><b>组件本体无处安放</b><br><span style="color:var(--warning)">P6 新暴露</span></td>
@@ -298,17 +299,24 @@ sdk/
     <code>plugin.json</code> 声明它有哪些视图。这样<b>现有「多个组件在同一面板自由拖动摆位」的体验完整保留</b>：
   </p>
   <div class="tree">"ui": { "views": [
-  { "id": "widget.chat-timeline", "title": "消息",   "entry": "index.html#timeline" },
-  { "id": "widget.chat-composer", "title": "输入",   "entry": "index.html#composer" }
+  { "id": "widget.session-list",  "title": "会话", "entry": "index.html#session-list" },
+  { "id": "widget.chat-timeline", "title": "对话", "entry": "index.html#chat-timeline" },
+  { "id": "widget.chat-composer", "title": "输入", "entry": "index.html#chat-composer" }
 ]}</div>
   <div class="note">
-    代价：<b>同一插件的多个 iframe 之间要共享状态</b>。现在 <code>session.store.ts</code> 是单例 Pinia store，
-    跨 iframe 就得靠 <code>BroadcastChannel</code> 或 <code>postMessage</code>。这条只在同插件多视图时需要，
-    是 P6 剩下的全部工作量。<br>
-    <b>P6 已验证的事实</b>：workbench 的六个视图<b>一个都没碰</b>这条 —— 它们要的信息全部来自 Core
-    （<code>/health</code>、<code>/events</code>、<code>preferences</code>），而 iframe 与宿主同源，
-    直接调就行。<b>「需要通信」不是多视图的必然，是多视图之间共享客户端状态才需要。</b>
-    三盒正好是后者（② ③ 今天零直接通信、靠单例 store 同步）。
+    代价：<b>同一插件的多个 iframe 之间看起来要共享状态</b>。<b>P6 收尾时的结论是：不需要。</b><br>
+    先问「哪些状态真的需要跨？」—— 答案<b>只有 curId</b>，用 <code>sessionStorage</code> +
+    <code>storage</code> 事件共享（按 origin + 顶层浏览上下文隔离，正好是「一个窗口一份、三个 iframe 共享」）。
+    其余状态（会话索引 / 历史 / 在途行 / sending / failed）每个 iframe
+    <b>各自从 Core 的 SSE 事件流重建</b> —— 每个事件自带 <code>sessionId</code> + <code>requestId</code>，
+    按 curId 过滤即可。所以 <code>BroadcastChannel</code> / <code>postMessage</code> 一个都没用上，
+    Core 也不知道 curId 这个概念。<br><br>
+    <b>P6 验证过的两件事</b>：workbench 的六个视图<b>一个都没碰</b>这条 —— 它们要的信息全部来自 Core
+    （<code>/health</code>、<code>/events</code>、<code>preferences</code>），而 iframe 与宿主同源，直接调就行；
+    chat-workbench 的三盒确实是「共享客户端状态」那一类（② ③ 原本零直接通信、靠 pinia 单例同步），
+    而拆开之后才看清 <b>pinia 单例只是把「同一份数据」做成了「同一个对象」，
+    掩盖了「这些数据本来就有多个独立副本的来源」</b>。<br>
+    <b>「需要通信」不是多视图的必然，是多视图之间共享客户端状态才需要；而即便共享，也先看看能不能各自重建。</b>
   </div>
 </section>
 
@@ -776,7 +784,7 @@ sdk/
 
   <!-- P6 -->
   <div class="phase">
-    <div class="hd"><span class="id">P6</span><span class="ttl">其余四个插件的 UI 搬迁</span><span class="tag warn">进行中 · 6/9</span></div>
+    <div class="hd"><span class="id">P6</span><span class="ttl">其余四个插件的 UI 搬迁</span><span class="tag done">已完成 · 9/9</span></div>
     <div class="bd">
       <dl>
         <dt>目标</dt>
@@ -787,7 +795,7 @@ sdk/
             <thead><tr><th>插件</th><th>视图</th><th>难点</th></tr></thead>
             <tbody>
               <tr><td class="mono">workbench</td><td class="mono">widget.system-info<br>widget.command-palette<br>widget.settings<br>widget.event-stream<br>widget.service-manager<br>widget.service-status</td><td style="color:var(--success)"><b>6/6 已完成</b>。信息全部来自 Core（<code>/health</code> · <code>/events</code>）—— 同源 iframe 直接调，零通信需求</td></tr>
-              <tr><td class="mono">chat-workbench</td><td class="mono">widget.chat-timeline<br>widget.chat-composer<br>widget.session-list</td><td><b>剩下这一块，最大</b>：三个视图共享 <code>session.store</code>（② ③ 现在零直接通信、靠单例 store 同步 —— 跨 iframe 必须换成消息层，契约仍未定）</td></tr>
+              <tr><td class="mono">chat-workbench</td><td class="mono">widget.session-list<br>widget.chat-timeline<br>widget.chat-composer</td><td style="color:var(--success)"><b>3/3 已完成</b>。难点是三个视图原本靠 <code>session.store</code> / <code>chat.store</code> 两个 pinia 单例共享 —— 拆成三个 iframe 后单例不再跨得过去。<b>结论：唯一需要跨 iframe 的是 curId</b>，其余全部由同一批 SSE 事件各自派生（见下）</td></tr>
               <tr><td class="mono">credentials</td><td class="mono">无 UI</td><td>纯服务；密钥入口已经在模型接入面板里</td></tr>
               <tr><td class="mono">reliability</td><td class="mono">无 UI</td><td>纯服务</td></tr>
             </tbody>
@@ -835,6 +843,57 @@ sdk/
           <code>build</code> 退化成 <code>vue-tsc --noEmit</code>：挡「组件写坏了」，不产出什么。
         </dd>
 
+        <dt>chat-workbench 那三盒：跨 iframe 只共享<b>一个字节</b></dt>
+        <dd>
+          <b>2026-10-04 完成</b>。全仓绿：shared 57 / sdk-ts 54 / sdk-core-client 14 / sdk-ui 48 /
+          <b>core 265</b> / <b>plugin-chat-workbench-ui 46</b> / plugin-workbench-ui 3 / plugin-models-ui 16 /
+          client 139 / services 151，smoke PASS。<br>
+          形状与 workbench 一致：<code>plugins/chat-workbench/ui/</code> 独立 vite 包 →
+          <code>plugins/chat-workbench/dist/ui/</code>；<code>plugin.json</code> 从
+          <code>components[]</code> 换成<b>三个 <code>ui.views[]</code></b>（<code>#session-list</code> /
+          <code>#chat-timeline</code> / <code>#chat-composer</code>），<code>components</code> 清空。<br><br>
+
+          <b>这是 P6 里唯一真的动了架构的一块</b>，因为搬之前 ②③ 靠 pinia 单例做到「零直接通信」，
+          而单例<b>跨不过 iframe 边界</b>。问题是「哪些状态真的需要跨？」，
+          答案是<b>只有 curId：</b><br>
+          <table style="margin:6px 0">
+            <thead><tr><th>状态</th><th>从哪来</th><th>为什么不用共享</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">list（会话索引）</td><td class="mono">session.list.result + session.created/updated/deleted</td><td>三个 iframe 各订一份，收到同一批事件</td></tr>
+              <tr><td class="mono">messages（历史）</td><td class="mono">session.get.result + message.appended</td><td>事件自带 <code>sessionId</code>，按 curId 过滤</td></tr>
+              <tr><td class="mono">in-flight 行</td><td class="mono">loop.token.streamed / loop.tool.executed</td><td>事件自带 <code>requestId</code> + <code>sessionId</code></td></tr>
+              <tr><td class="mono">sending / activeA</td><td class="mono">loop.state.changed</td><td>同上；谁先看到 running 谁认领</td></tr>
+              <tr><td class="mono">failed</td><td class="mono">loop.run.failed</td><td>同上</td></tr>
+              <tr><td class="mono">draft / provider / model / thinking</td><td>③ 输入框自己</td><td>别的视图不读</td></tr>
+            </tbody>
+          </table>
+          也就是说：<b>服务端事件流本来就是那个「共享层」</b>，只是它一直在那里而没人注意到 ——
+          之前 pinia 单例把「同一份数据」做成了「同一个对象」，于是掩盖了
+          「这些数据本来就有多个独立副本的来源」这个事实。拆开之后才看清，需要自己传的东西只有一个字节。<br><br>
+
+          <b>curId 怎么传（三个候选都否过）</b>：<br>
+          · <code>BroadcastChannel</code> —— 能传，但它是<b>全应用广播</b>，Tauri 多窗口下两个窗口的会话列表会互相抢 curId；
+          而 curId 的语义明确是「本地态、各窗独立」（P3 §3.4）。<br>
+          · <code>postMessage</code> —— 要与宿主约定握手与消息形状，凭空多一层协议。<br>
+          · <b><code>sessionStorage</code> + <code>storage</code> 事件</b> —— 语义<b>正好</b>对上：
+          按 origin + <b>顶层浏览上下文</b>隔离（同窗口三个 iframe 共享，一个窗口一份命名空间），刷新后还在，
+          且有现成的 <code>storage</code> 事件通知同上下文的其它文档，<b>零新增协议</b>。<br>
+          Core 完全不知情（与 §7「Core 不解析插件内容」一致）。<br>
+          <b>必踩的坑</b>：<code>storage</code> 事件<b>不在写入方自己身上触发</b> ——
+          所以 <code>setCurrentSessionId</code> 必须<b>本地先赋值、再写盘</b>。
+          反过来的话写入方要等一次永远不会来的事件，那一下点击就没反应了。<br><br>
+
+          <b>顺带改掉的两处语义</b>：<br>
+          · <b>去掉乐观 user 行</b>。原来 ③ 一发问就本地造出 user 行（因为 ② 读同一个 store 看得见）；
+          现在 user 行等 <code>message.appended</code>，即服务端真的落了库才显示。
+          代价是几十毫秒 SSE 往返，换来<b>「界面上有的东西一定存下来了」</b> ——
+          请求被拒、loop 崩了、断网时，那行字再也不会出现。<br>
+          · <b>assistant 占位行换成「认领」</b>：三个 iframe 各自订阅
+          <code>loop.state.changed{state:'running'</code>}，谁先看到谁把 <code>requestId</code> 记成 <code>activeA</code> ——
+          同一个事件所以三个 iframe 认领到的是<b>同一个 A</b>；之后所有 handler 第一件事就是
+          <code>if (requestId !== activeA) return</code>，防上一轮迟到 token 污染新一轮。
+        </dd>
+
         <dt>测试的归属，跟着被测物走</dt>
         <dd>
           <b><code>settings.test.ts</code> 一个文件拆成三份</b>：它原本把主题基础设施、i18n 基础设施、设置组件渲染
@@ -855,28 +914,41 @@ sdk/
 
         <dt>新增的守卫</dt>
         <dd>
-          <b><code>core/tests/plugin-ui-e2e.test.ts</code> 扩到两个插件</b>。
+          <b><code>core/tests/plugin-ui-e2e.test.ts</code> 扩到三个插件</b>，断言全部按
+          <code>UI_PLUGINS</code> 数组遍历 —— <b>第四个插件接入时这里自动覆盖它</b>，
+          「记得给它补测试」这件事不该依赖谁记得住（漏补的症状是它完全没被这条链路覆盖）。<br>
           P5 那版<b>只验一个插件 UI 时，命名空间写错也看不出问题</b> ——
           <code>/assets/index-xxx.js</code> 全局唯一，A 插件与 B 插件请求到同一份文件，
           而「那份文件恰好就是自己要的那个」，于是测试照绿。
-          现在它<b>构建两个插件 UI</b> 并比对两边的 <code>index.html</code>：各自只引用自己命名空间下的 asset、
-          且<b>互相不引用</b>。这是「<code>base</code> 必须命名空间化」这条纪律唯一的实际验证点 ——
+          现在它<b>构建三个插件 UI</b> 并两两比对 <code>index.html</code>：各自只引用自己命名空间下的 asset、
+          且<b>互不重叠</b>；另外逐插件验 <code>ui.views</code> 与 <code>components[]</code>、
+          每个 entry 拼出的 URL 真 HTTP 可取、每个 bundle 的 CSS 含 <code>--color-bg</code>。
+          这是「<code>base</code> 必须命名空间化」这条纪律唯一的实际验证点 ——
           写错了的症状是「A 的界面加载 B 的代码」。
         </dd>
 
-        <dt>验收（workbench 部分已达成）</dt>
+        <dt>验收（全部达成）</dt>
         <dd>
-          <code>client/src/widgets/</code> 现在<b>只剩三盒</b>；六个 workbench 视图由 Core 伺服在
-          <code>/plugins/workbench/ui/</code>，六个 entry 拼出的 URL 逐个真 HTTP 验过。<br>
-          三盒预设仍可独立拖动摆位（那条几何测试未动）。
+          <code>client/src/widgets/</code> 现在<b>只剩三个纯登记文件</b>
+          （<code>definition.ts</code> / <code>registry.ts</code> / <code>types.ts</code> + <code>PluginWidgetHost.vue</code>）——
+          <code>listWidgets()</code> 返回 <code>[]</code>，宿主的 widget 注册表是空的。<br>
+          九个视图全部由 Core 伺服在 <code>/plugins/&lt;id&gt;/ui/</code>，
+          每个 <code>ui.views[].entry</code> 拼出的 URL 都做了真 HTTP 请求验证。<br>
+          三盒预设仍可独立拖动摆位（那条几何测试未动）。<br>
+          <span class="tag risk">注意</span> <code>resolveWidget</code> 的 <code>local</code> 分支现在
+          <b>在生产代码里走不到</b>（没有本地组件了），但分支<b>保留</b>：它是将来加回本地组件的路，
+          也是「清单为空时降级」的兜底。为了不丢掉这三条性质的覆盖，
+          <code>registry.ts</code> 加了两个<b>明确标记为测试专用</b>的注入点
+          （<code>__registerLocalWidgetForTest</code> / <code>__resetLocalWidgetsForTest</code>）。
         </dd>
-        <dt>风险（剩下这一块）</dt>
+        <dt>风险</dt>
         <dd>
-          <span class="tag risk">高</span> 跨 iframe 状态共享：三个视图共享 <code>session.store</code>。
-          <b>建议先用足 P5 已验证可用的那条路</b>（每个视图自己调同源 <code>/api/*</code>），
-          只在「视图之间要传命令」时才引入消息层 ——
-          多一层跨 iframe 通信就多一处「<b>消息丢了页面不报错</b>」的排障地，而这类症状（点了没反应）最难定位。
-          若最终仍需要消息层，契约必须定死<b>消息形状 + 来源校验</b>：同源不代表互信。
+          <span class="tag done">已解决</span> 跨 iframe 状态共享 —— 见上面
+          「chat-workbench 那三盒：跨 iframe 只共享一个字节」。
+          <b>最终没有引入任何消息层</b>：不需要 <code>BroadcastChannel</code>、不需要 <code>postMessage</code>、
+          Core 也不知道 curId 这个概念，只用了浏览器自带的 <code>sessionStorage</code> + <code>storage</code> 事件。<br>
+          当初担心的「多一层跨 iframe 通信就多一处『消息丢了页面不报错』的排障地」因此<b>没有发生</b> ——
+          因为<b>根本没有新增通信</b>：三个 iframe 各自跟 Core 说话，而 Core 本来就在广播。
         </dd>
       </dl>
     </div>
@@ -950,13 +1022,17 @@ sdk/
     <thead><tr><th style="width:24%">项</th><th style="width:34%">代价</th><th>缓解</th></tr></thead>
     <tbody>
       <tr><td><b>开发体验掉档</b></td><td>现在 <code>pnpm dev</code> 一下全热更新；之后改一个插件 UI 要单独 build + 起那个 dev server</td><td>各插件 UI 的 <code>dev</code> 走 watch 模式；Core 已有 <code>rescan()</code> 可在插件产物变化后重扫</td></tr>
-      <tr><td><b>bundle 体积重复</b></td><td>每个<b>带 UI 的</b>插件一份 vue（models / workbench 各一份；chat-workbench 待搬）</td><td><b>P6 已做，且比预案便宜</b>：组件与令牌进 <code>@osteosome/ui</code>，
+      <tr><td><b>bundle 体积重复</b></td><td>每个<b>带 UI 的</b>插件一份 vue（models / workbench / chat-workbench 各一份）</td><td><b>P6 已做，且比预案便宜</b>：组件与令牌进 <code>@osteosome/ui</code>，
           各插件从<b>源码</b>引 —— 产物里仍有各自的 vue（这是 iframe 共享不了内存的必然），
           但「组件与样式只有一份源码」这件事被守住了。<br>
           <b>踩过的坑</b>：组件库一旦做 vite lib build，就等于<b>给每个消费者塞一份 vue</b>（94 KB 产物 vs 44 KB 源码）。
           症状是双份 vue 实例 → <code>Cannot read properties of null (reading 'ce')</code>。
           处置：组件库不产运行时产物。</td></tr>
-      <tr><td><b>跨 iframe 状态</b></td><td>单例 store 失效；② ③ 零直接通信的架构要换传输层。<b>P6 的 workbench 六个视图全部不碰</b>（信息全来自 Core），所以这条<b>只在 chat-workbench 三盒兑现</b></td><td>尚未定。<b>建议先用足同源 <code>/api/*</code></b>，只在「视图之间要传命令」时才引入消息层 —— 多一层跨 iframe 通信就多一处「消息丢了页面不报错」的排障地。退路：把共享状态提到 Core 侧</td></tr>
+      <tr><td><b>跨 iframe 状态</b></td><td>单例 store 失效；② ③ 零直接通信的架构要换传输层。<b>workbench 六个视图不碰</b>（信息全来自 Core），这条<b>只在 chat-workbench 三盒兑现</b></td><td><span style="color:var(--success)"><b>P6 已解决，且解法是「不引入传输层」</b></span>：唯一需要跨的 <code>curId</code> 用 <code>sessionStorage</code> + <code>storage</code> 事件（按 origin + 顶层浏览上下文隔离，正好是「一窗一份、三 iframe 共享」）；
+          其余状态每个 iframe 各自从 SSE 事件重建（事件自带 <code>sessionId</code> + <code>requestId</code>）。
+          <br>当初担心的「多一层通信就多一处『消息丢了页面不报错』的排障地」因此<b>没有发生</b> ——
+          因为根本没有新增通信：三个 iframe 各自跟 Core 说话，而 Core 本来就在广播。
+          <br><b>坑</b>：<code>storage</code> 事件不在写入方触发，写入方必须本地先赋值再写盘</td></tr>
       <tr><td><b>构建 / 分发流程缺失</b></td><td>现在仓库里源码与产物混放，<code>dist/</code> 还被 gitignore</td><td>P2 是阻塞项：先定产物布局与「Core 只认产物」，再谈打包</td></tr>
       <tr><td><b>theme / i18n 跨 bundle</b></td><td>CSS 变量与文案要各自保持一致；Core 的 i18n 机制对插件 UI 无效</td><td><b>theme 已解决</b>：令牌在 <code>@osteosome/ui</code>，各插件引同一份源码（同源 iframe 读同一份 <code>preferences.json</code> 的 <code>ui.theme</code>）。
           <br><b>i18n 各带一份是必然</b> —— 跨 iframe 拿不到实例。但<b>宿主那份必须摘干净</b>：
@@ -1004,12 +1080,20 @@ sdk/
   <table>
     <thead><tr><th style="width:30%">问题</th><th>选项与影响</th></tr></thead>
     <tbody>
-      <tr><td>同插件多视图的状态共享用什么<br><span style="color:var(--warning)">← P6 唯一未决项</span></td><td>BroadcastChannel（同源同浏览器，最轻）／ postMessage 点对点（可控，但要维护引用与生命周期）／ 把共享状态提到 Core 侧（最干净，但要新增 API）。<br>
-          <b>已排除的选项</b>：<code>BroadcastChannel</code> 是「广播」不是「调用」，<b>没有返回值</b> ——
-          「会话列表 → 输入框：切到这个会话」是<b>命令</b>，需要<b>定向</b>，而 BroadcastChannel 谁都在听。<br>
-          <b>建议</b>：先把同源 <code>/api/*</code> 用足（已在 models 与 workbench 六个视图上验证），
-          只在确实需要跨视图传命令时才上消息层，且契约必须定死<b>消息形状 + 来源校验</b>。</td></tr>
-      <tr><td><code>components</code> 字段的归宿<br><span style="color:var(--warning)">← P6 已定一半</span></td><td><b>P6 的实践给出了答案</b>：不删，也不派生，而是<b>把两个字段的职责分开</b> ——
+      <tr><td>同插件多视图的状态共享用什么<br><span style="color:var(--success)">← P6 已决：什么都没用上</span></td><td><b>最终答案：不引入任何消息层。</b>先问「哪些状态真的需要跨 iframe？」，
+          答案是<b>只有 curId</b> —— 其余（会话索引 / 历史 / 在途行 / sending / failed）
+          每个 iframe 都能<b>各自从 Core 的 SSE 事件流重建</b>，因为每个事件自带
+          <code>sessionId</code> + <code>requestId</code>，按 curId 过滤即可。
+          <b>服务端事件流本来就是那个共享层</b>，只是它一直在那里而没人注意到。<br>
+          curId 用 <code>sessionStorage</code> + <code>storage</code> 事件：
+          按 origin + 顶层浏览上下文隔离，<b>正好对上「一个窗口一份、三个 iframe 共享」</b>的语义，
+          刷新后还在，且零新增协议。<br>
+          <b>已排除的选项</b>：<code>BroadcastChannel</code> 是全应用广播，Tauri 多窗口下会互相抢 curId
+          （curId 语义是「各窗独立」，P3 §3.4）；<code>postMessage</code> 要维护引用与握手；
+          「共享状态提到 Core 侧」会让 Core 知道「会话」这个概念，与 §7 冲突。<br>
+          <b>注意</b>：<code>storage</code> 事件<b>不在写入方自己触发</b>，所以写入方必须
+          <b>本地先赋值再写盘</b>，否则那一下点击没反应。</td></tr>
+      <tr><td><code>components</code> 字段的归宿<br><span style="color:var(--success)">← P6 已定</span></td><td><b>P6 的实践给出了答案</b>：不删，也不派生，而是<b>把两个字段的职责分开</b> ——
           <code>components[]</code> 声明<b>归属</b>（插件停用时把这个本地组件一起藏起来），
           <code>ui.views[]</code> 声明<b>形态</b>（它是插件页面，走 iframe）。
           两者互斥。<br>
@@ -1026,9 +1110,9 @@ sdk/
 </section>
 
 <footer>
-  Osteosome · 插件化架构优化 · 2026-10-04 更新（<b>P6 workbench 六个视图已迁 · 剩 chat-workbench 三盒</b>）·
+  Osteosome · 插件化架构优化 · 2026-10-04 更新（<b>P6 完成 9/9 —— 九个视图全部迁入插件，宿主 widget 注册表已空</b>）·
   配套：<code>docs/ost-开发文档.md</code> · <code>docs/core开发文档.md</code> · <code>docs/开发进度/阶段追踪.md</code> ·
-  相关：<a href="对话界面架构.html" style="color:var(--primary)">对话界面架构</a>（P6 剩下的三盒的现状）
+  相关：<a href="对话界面架构.html" style="color:var(--primary)">对话界面架构</a>（三盒现状与跨 iframe 的状态划分）
 </footer>
 </div>
 
