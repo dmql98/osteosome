@@ -1,0 +1,9 @@
+{
+  "name": "@osteosome/plugin-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "工作台外围 —— 插件根包。只有 pack 一个脚本：纯 UI 插件（无 services/），源码与产物在 ui/。",
+  "scripts": {
+    "pack": "node ../../scripts/pack-plugin.mjs"
+  }
+}

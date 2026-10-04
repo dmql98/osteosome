@@ -191,10 +191,21 @@ export function scanPlugins(pluginsDir: string | undefined, knownServiceIds?: Re
     // 这条检查是「服务到底会不会被启动」的唯一依据：缺了它，用户看到的症状是
     // 「插件显示 ready 但服务没起来」，而 ready 是从服务状态派生的，压根不会 ready。
     const pluginDir = path.join(pluginsDir, entry.name)
-    const missingSource = manifest.services.filter(
-      (s) => !existsSync(path.join(pluginDir, 'services', s, 'service.json')),
-    )
-    const missingBuild = existsSync(path.join(pluginDir, 'services'))
+    //
+    // 有没有 `services/` 源码树，决定「源码侧缺失」这句话成不成立：
+    // - 源码树在（开发仓）→ 缺某个 `services/<sid>/service.json` = 插件写错了
+    //   （打错服务 id、忘了建目录）→ 改代码；
+    // - 源码树不在（**发行版**，P8 的交付物只带 `plugin.json` + 数据 + `dist/`）
+    //   → 压根没有源码侧可言，报「没有对应目录」等于对每个服务说一次谎。
+    //   实测过：五个插件的交付物扫出来全是这条，而它们一个都没坏。
+    //
+    // 所以源码侧的检查**只在源码树存在时**才跑；产物侧的检查另有 `knownServiceIds`
+    // 兜底（服务没产物就不会被加载 → 不在已知集合里），两条不必互相借用。
+    const hasSourceTree = existsSync(path.join(pluginDir, 'services'))
+    const missingSource = hasSourceTree
+      ? manifest.services.filter((s) => !existsSync(path.join(pluginDir, 'services', s, 'service.json')))
+      : []
+    const missingBuild = hasSourceTree
       ? manifest.services.filter((s) => !existsSync(path.join(pluginDir, 'dist', 'server', s, 'service.json')))
       : []
     if (missingSource.length > 0) {

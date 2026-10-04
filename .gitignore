@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# P8：打包产物（可随时重新装配，不入库）
+pack/
 src-tauri/target/
 coverage/
 *.tsbuildinfo

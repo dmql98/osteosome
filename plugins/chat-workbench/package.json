@@ -1,0 +1,9 @@
+{
+  "name": "@osteosome/plugin-chat-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "对话工作台 —— 插件根包。只有 pack 一个脚本：源码与产物在 ui/ 与 services/。",
+  "scripts": {
+    "pack": "node ../../scripts/pack-plugin.mjs"
+  }
+}

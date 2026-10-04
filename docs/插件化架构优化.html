@@ -66,6 +66,7 @@
   .tag.done { background:var(--success); }
   .tag.next { background:var(--primary); }
   .tag.plan { background:var(--warning); }
+  .tag.warn { background:var(--warning); }
   .tag.opt  { background:var(--muted); }
   .tag.risk { background:var(--danger); }
   .ref { font-family:var(--mono); font-size:12px; color:var(--primary); white-space:nowrap; }
@@ -121,35 +122,63 @@
 <div class="wrap">
 
 <div class="lead">
-  <b>一句话结论</b>：现在 <code>plugins/</code> 里只有一张清单，代码全在 <code>services/</code> 与
-  <code>client/src/widgets/</code>，所以「插件」不是可分发单元。本计划把它改成
-  <b>插件 = 一个编译好的服务（后端进程 + 前端产物）</b>；OST 里的组件是
-  <b>打开该插件 WebUI 的一个小窗口（iframe 视图）</b>；Core 只做三件事：
+  <b>一句话结论（已达成）</b>：<b>插件 = 一个编译好的服务（后端进程 + 前端产物）</b>。
+  OST 里的组件是<b>打开该插件 WebUI 的一个小窗口（iframe 视图）</b>；Core 只做三件事：
   <b>扫插件目录 → 起服务 → 伺服各插件的 UI 产物</b>。
-  <br><b>最大的好消息</b>：进程间协议一行都不用新增 —— 现在的 client 本身就是一个「通过 HTTP/SSE 跟 Core 说话的编译好的 UI」，
-  那四条通路（<code>/api/command</code> · <code>/events</code> · <code>/api/preferences</code> · <code>/api/credentials</code>）直接沿用。
-</div>
+  <br><span style="color:var(--muted)">原状（写这份计划时）：<code>plugins/</code> 里只有一张清单，
+    代码全在仓库根 <code>services/</code> 与 <code>client/src/widgets/</code>，所以「插件」不是可分发单元 ——
+    这两处<b>都已不存在</b>，代码归位见 §1。</span>
+  <br><b>最大的好消息</b>：进程间协议一行都没有新增 —— client 本身就是一个「通过 HTTP/SSE 跟 Core 说话的编译好的 UI」，
+    那四条通路（<code>/api/command</code> · <code>/events</code> · <code>/api/preferences</code> · <code>/api/credentials</code>）直接沿用。
+  </div>
+
+  <div class="note ok">
+    <b>进度（2026-10-04）</b>：<b>P0–P6 与 P8 全部完成，P7 按需未开</b>。
+    九个组件已全部迁入各自插件的 <code>ui/</code>，<code>client/src/widgets/</code> 的 widget 注册表<b>是空的</b>；
+    进程协议确实<b>一行未新增</b>。
+    <br>原本标为<b>高风险、且是 P6 唯一未决项</b>的「跨 iframe 状态共享」已经解决 —— 结论是<b>根本不需要传输层</b>：
+    只用 <code>sessionStorage</code> + <code>storage</code> 事件共享 curId，其余状态各 iframe 自己从 SSE 派生（详见 P6 那一节）。
+    <br>P8 已给出 <code>scripts/pack-plugin.mjs</code>：5 个插件各装配出一份可分发目录，并用 Core 自己的
+    <code>scanPlugins</code> 复验（<span class="ref">pack-plugin.test.ts</span>），顺带修掉
+    <code>scanPlugins</code> 对发行版必然误报的那个 bug（详见 P8 那一节）。
+    <br><span style="color:var(--muted)">验证基线：typecheck 15 包全绿 · 803 tests 全过 · build exit 0 · smoke PASS</span>
+  </div>
 
 <!-- ══════════════ 1 ══════════════ -->
 <section>
-  <h2><span class="n">1</span>现状：目录不是插件</h2>
+  <h2><span class="n">1</span>原状：目录不是插件</h2>
 
-  <p>四个目录各管一段，没有一个是「插件」这个单元：</p>
+  <p>四个目录各管一段，没有一个是「插件」这个单元 —— <b>下面这张图是写这份计划时的原状</b>
+    （仓库根 <code>services/</code> 与 <code>client/src/widgets/&lt;name&gt;/</code> 已经<b>不存在</b>，
+    紧接着那张「现在」的图对照着看）：</p>
 
-  <div class="tree">osteosome/
+  <div class="tree">osteosome/  <span class="dim">（原状，P1 / P5 / P6 之后已消灭）</span>
 ├── plugins/&lt;id&gt;/plugin.json      <span class="dim">← 只有清单，一行代码都没有</span>
-├── services/&lt;id&gt;/                <span class="own">← 真正的后端代码</span>（package.json / tsconfig / src / dist / service.json）
-├── client/src/widgets/&lt;name&gt;/     <span class="own">← 真正的组件代码</span>（defineWidget 壳 + Vue 实现）
+├── services/&lt;id&gt;/                <span class="bad">← 真正的后端代码</span>（package.json / tsconfig / src / dist / service.json）
+├── client/src/widgets/&lt;name&gt;/     <span class="bad">← 真正的组件代码</span>（defineWidget 壳 + Vue 实现）
 └── shared/src/                       <span class="dim">← 跨进程契约 + 12 家预设表（数据）</span></div>
 
-  <h3>四个具体的乱点</h3>
+  <div class="tree">osteosome/  <span class="dim">（现在）</span>
+├── plugins/&lt;id&gt;/                 <span class="own">← 代码与产物都在这，可直接分发（P8 的交付物就是它的一个子集）</span>
+│   ├── plugin.json                 <span class="own">← 清单</span>
+│   ├── services/&lt;sid&gt;/            <span class="own">← 后端源码（P1）</span>
+│   ├── ui/                         <span class="own">← 前端源码（P5 / P6）</span>
+│   └── dist/                       <span class="own">← 编译产物，Core 只认它（P2）</span>
+├── core/ · shared/ · client/ · sdk/
+└── scripts/pack-plugin.mjs         <span class="own">← 把上面那个目录装配成交付物（P8）</span></div>
+
+  <h3>六个乱点（各自在哪一阶段消失，看后果那一列）</h3>
   <table>
     <thead><tr><th style="width:22%">问题</th><th style="width:44%">证据</th><th>后果</th></tr></thead>
     <tbody>
       <tr>
-        <td><b>插件目录不含代码</b></td>
-        <td class="mono">plugins/models/ 下只有 plugin.json；服务在 services/llm-provider-openai/</td>
-        <td>插件永远不是可分发单元；<code>models</code> 这个名字只是个人工标签</td>
+        <td><b>插件目录不含代码</b><br><span style="color:var(--success)">已解决</span></td>
+        <td class="mono" style="text-decoration:line-through;opacity:.65">plugins/models/ 下只有 plugin.json；服务在 services/llm-provider-openai/</td>
+        <td><b>已解决（P1 / P2 / P5 / P6）</b>：服务与 UI 的源码都搬进 <code>plugins/&lt;id&gt;/</code>，
+            产物落它的 <code>dist/</code>，仓库根 <code>services/</code> 已删除。
+            <b>今天它是可分发单元了</b> —— <code>pnpm run pack:plugins</code> 装配出的
+            <code>pack/&lt;id&gt;/</code> 就是它的一个子集（P8）。
+            <code>models</code> 这个名字从此对应一个真实目录，不再只是人工标签</td>
       </tr>
       <tr>
         <td><b>名字不对应</b></td>
@@ -174,9 +203,13 @@
           组件与设计令牌各<b>一份源码</b>，宿主与全部插件 UI 从源码引</td>
       </tr>
       <tr>
-        <td><b>数据目录约定没落地</b></td>
-        <td class="mono">manager.ts:542 传的是根 dataDir（不是 serviceDataDir）<br>结果：session 写在 ${dataDir}/sessions/<br>.data/ 下从无 services/ 子目录</td>
-        <td>P1a §3.1 的「每个服务只写自己的目录」写在文档里但没实现；<b>插件化正好是第一次把它真正落地</b>（→ <code>${dataDir}/plugin/&lt;id&gt;/</code>）</td>
+        <td><b>数据目录约定没落地</b><br><span style="color:var(--success)">P1 已落地</span></td>
+        <td class="mono" style="text-decoration:line-through;opacity:.65">manager.ts:542 传的是根 dataDir（不是 serviceDataDir）<br>结果：session 写在 ${dataDir}/sessions/<br>.data/ 下从无 services/ 子目录</td>
+        <td><b>已解决（P1）</b>：<span class="ref">manager.ts:191</span> 的 <code>dataDirOf()</code> 按
+            <code>serviceDataDirs</code> 查表，缺省才回退根 <code>dataDir</code>；
+            <code>shared/src/paths.ts</code> 的 <code>pluginDataDir()</code> 是单一真相源。
+            smoke 输出里可见 <code>dataDir=…\plugin\chat-workbench\</code>。
+            <b>「每个服务只写自己的目录」这条从 P1a 写进文档却一直没实现的约定，是插件化第一次真正落地它</b></td>
       </tr>
       <tr>
         <td><b>数据混进契约包</b></td>
@@ -210,12 +243,12 @@
 ├── plugin.json           <span class="own">← 清单：services[] / ui.views[] / capabilities[] / dependencies[]</span>
 ├── catalog.json 等        <span class="own">← 插件自带数据（models 的 12 家预设搬到这里）</span>
 ├── services/&lt;sid&gt;/       <span class="own">← 后端源码（已落地 P1）；构建产物在 dist/server/&lt;sid&gt;/（P2 已落地）</span>
-├── ui/                   <span class="own">← 前端源码（models 已落地 P5 · workbench 已落地 P6 · chat-workbench 待做）</span>
+├── ui/                   <span class="own">← 前端源码（models P5 · workbench P6 · chat-workbench P6 —— 九个组件全部已迁）</span>
 └── dist/                 <span class="own">← 编译产物，Core 只认它（P2）</span>
     ├── server/&lt;sid&gt;/       <span class="dim">← index.js（单文件、零外部依赖）+ service.json</span>
     └── ui/                  <span class="dim">← index.html + assets；base 必须命名空间化（P5）</span>
 
-client/src/                <span class="dim">← 只剩壳：面板容器 / 布局 / iframe 宿主 / chat-workbench 三盒</span>
+client/src/                <span class="dim">← 只剩壳：面板容器 / 布局 / iframe 宿主；widgets 注册表已空（P6）</span>
 core/                      <span class="dim">← 扫插件目录 · 起服务 · 伺服插件 UI · 路由命令到总线</span>
 shared/                    <span class="dim">← 只剩跨进程契约：协议类型 / 事件表 / wire 解析（不再持有厂商清单）</span>
 
@@ -253,12 +286,16 @@ sdk/
     <br><b>Core 不规定插件数据里有什么。</b>那是每个插件自己的事 —— 目录约定只有「你有一个属于自己的目录」这一条。
   </div>
 
-  <div class="note">
-    <b>「插件数据根」这条约定今天并没有实现</b>：<span class="ref">core/src/service-manager/manager.ts:542</span> 传给服务的是<b>根目录</b>
-    （<code>dataDir: this.options.dataDir</code>），所以 session 实际写在 <code>${dataDir}/sessions/</code>
-    （<span class="ref">services/session/src/store.ts:86</span>），而 <code>.data/</code> 里从来不存在 <code>services/</code> 子目录。
-    其余 5 个服务完全不落盘。<b>所以这不是「换个位置」，而是一条没落地的约定第一次真正落地</b> —— 没有历史包袱要迁。
-  </div>
+  <div class="note ok">
+    <b>「插件数据根」这条约定已经实现（P1）</b>：<span class="ref">core/src/service-manager/manager.ts:191</span> 的
+    <code>dataDirOf(serviceId)</code> 从 <code>serviceDataDirs</code> 查表，<b>查不到才回退</b>根 <code>dataDir</code>；
+    表由 <code>main.ts</code> 拿插件清单算出（与 <code>allowedServiceIds</code> 同一处）。
+    session 因此写在 <code>userData/plugin/chat-workbench/sessions/</code>。
+    <br><b>顺带说明这条当初的性质</b>：它不是「换个位置」，而是一条
+    <b>写进 P1a 文档却始终没实现的约定第一次真正落地</b> —— 所以没有历史包袱要迁，
+    也没有「老数据放哪」这个问题。
+    <span style="color:var(--muted)">（写这份计划时这里还是空的：那时传的是根 <code>dataDir</code>，
+    <code>.data/</code> 里从来不存在 <code>services/</code> 子目录。）</span></div>
 
   <div class="arch">
     <div class="arch-col">
@@ -414,7 +451,7 @@ sdk/
   </div>
 
   <!-- P1 -->
-  <div class="phase">
+  <div class="phase done">
     <div class="hd"><span class="id">P1</span><span class="ttl">Core 从插件目录发现服务 + 三层数据归属</span><span class="tag done">已完成</span></div>
     <div class="bd">
       <dl>
@@ -474,19 +511,20 @@ sdk/
           前端早就为同一个坑做过这件事（<code>useLlmProviders.ts</code>），现在主位自己上线也问一次，
           <b>启动顺序不再是任何人的隐式依赖</b>。
         </dd>
-        <dt>没做（留给 P5 / P8）</dt>
+        <dt>没做</dt>
         <dd>
           <code>llm.*</code> 偏好与凭证<b>仍在 Core 那一侧</b>（<code>userData/core/</code>）：搬它们要 UI 与 provider 服务同时搬
-          （客户端还住着 <code>client/</code>），所以属于 P5。<code>preferences.get</code> 服务 RPC 因此也留到那时再退休。<br>
-          <b>运行期装插件不会启动它的服务</b>（<code>rescan()</code> 只更新清单与状态，ServiceManager 的服务目录表是构造时定的）
-          —— 那是 P8「装插件」那条线的事。
+          （客户端还住着 <code>client/</code>）。<code>preferences.get</code> 服务 RPC 因此还在服役 ——
+          <span class="ref">plugins/models/ui</span> 的设置面板正是调它（<span class="tag warn">原计划归 P5，P5 未做，事实未变</span>）。<br>
+          <b>运行期装插件不会启动它的服务</b>（<code>rescan()</code> 只更新清单与状态，ServiceManager 的服务目录表是构造时定的）——
+          要真做，得先有 <code>plugin.install</code> 命令，而那在 P8 里<b>明确后置</b>（见 P8「后置（明确不做）」）。
         </dd>
       </dl>
     </div>
   </div>
 
   <!-- P2 -->
-  <div class="phase">
+  <div class="phase done">
     <div class="hd"><span class="id">P2</span><span class="ttl">编译产物、分发约定、coreCompatibility</span><span class="tag done">已完成</span></div>
     <div class="bd">
       <dl>
@@ -636,7 +674,10 @@ sdk/
     <div class="bd">
       <dl>
         <dt>目标</dt>
-        <dd>组件来源分两路：<b>Core/工作台自己的</b>继续编译期 glob（住 <code>client/src/widgets/</code>），<b>插件的</b>改为运行时来自 <code>/api/plugins</code> 的 <code>ui.views</code>，渲染成 iframe。</dd>
+        <dd>组件来源分两路：<b>Core/工作台自己的</b>继续编译期 glob（住 <code>client/src/widgets/</code>），<b>插件的</b>改为运行时来自 <code>/api/plugins</code> 的 <code>ui.views</code>，渲染成 iframe。<br>
+          <span style="color:var(--muted)">P6 之后第一路<b>实际为空</b>：九个组件全部迁走，注册表扫不到任何本地组件。
+          <code>local</code> 分支保留（它是「清单为空时的兜底」，也是将来加回本地组件的路），
+          但在生产代码里已走不到 —— 覆盖靠 registry.ts 里两个明确标记为测试专用的注入点，详见 P6「新增的守卫」。</span></dd>
         <dt>落地结果</dt>
         <dd>
           <b>2026-10-04 完成</b>。client 242（+20），全仓绿，smoke PASS。形状：<br>
@@ -783,7 +824,7 @@ sdk/
   </div>
 
   <!-- P6 -->
-  <div class="phase">
+  <div class="phase done">
     <div class="hd"><span class="id">P6</span><span class="ttl">其余四个插件的 UI 搬迁</span><span class="tag done">已完成 · 9/9</span></div>
     <div class="bd">
       <dl>
@@ -846,7 +887,7 @@ sdk/
         <dt>chat-workbench 那三盒：跨 iframe 只共享<b>一个字节</b></dt>
         <dd>
           <b>2026-10-04 完成</b>。全仓绿：shared 57 / sdk-ts 54 / sdk-core-client 14 / sdk-ui 48 /
-          <b>core 265</b> / <b>plugin-chat-workbench-ui 46</b> / plugin-workbench-ui 3 / plugin-models-ui 16 /
+          <b>core 267</b> <span style="color:var(--muted)">(P6 当时；P8 加了 8 个，现 275)</span> / <b>plugin-chat-workbench-ui 46</b> / plugin-workbench-ui 3 / plugin-models-ui 16 /
           client 139 / services 151，smoke PASS。<br>
           形状与 workbench 一致：<code>plugins/chat-workbench/ui/</code> 独立 vite 包 →
           <code>plugins/chat-workbench/dist/ui/</code>；<code>plugin.json</code> 从
@@ -970,40 +1011,68 @@ sdk/
   </div>
 
   <!-- P8 -->
-  <div class="phase">
-    <div class="hd"><span class="id">P8</span><span class="ttl">分发形态与安装</span><span class="tag plan">待做（产物已就绪）</span></div>
+  <div class="phase done">
+    <div class="hd"><span class="id">P8</span><span class="ttl">分发形态与安装</span><span class="tag done">已完成 · 5 插件</span></div>
     <div class="bd">
       <dl>
         <dt>交付物</dt>
-        <dd><b>就是一个目录</b>，拷进 plugins 目录即用。<b>P2 之后，<code>dist/server/</code> 那一半已经是真的了</b>：
-            <code>service-distribution.test.ts</code> 每个用例都把产物拷到空目录跑一次，发不出 <code>initialize</code> 就红。
-            <code>dist/ui/</code> 那一半还是空的（P5）：</dd>
+        <dd><b>就是一个目录</b>，拷进 plugins 目录即用。<b>两半都已经是真的了</b>：
+            <code>service-distribution.test.ts</code> 把每个用例的产物拷到空目录跑一次，发不出 <code>initialize</code> 就红；
+            <code>dist/ui/</code> 由各插件的 Vite 构建产出，<code>pack-plugin.mjs</code> 连同 <code>dist/server/</code> 一起装进去，
+            <span class="ref">pack-plugin.test.ts</span> 再把 <code>pack/</code> 当 pluginsDir 交给 <code>scanPlugins</code> 复验。</dd>
       </dl>
-      <div class="tree">osteosome-plugin-models/
+      <div class="tree">pack/models/                      <span class="dim">← 目录名必须等于 plugin id，否则 Core 报 id != 目录名</span>
 ├── plugin.json                   <span class="dim">← 清单（含 coreCompatibility）</span>
-├── catalog.json                  <span class="dim">← 插件自带数据</span>
+├── catalog.json                  <span class="dim">← 插件自带数据（不是每个插件都有）</span>
 └── dist/
     ├── server/&lt;sid&gt;/
     │   ├── service.json          <span class="dim">← Core 校验 publishes/subscribes 白名单要用</span>
     │   └── index.js              <span class="dim">← ★ 单文件、零外部依赖（esbuild bundle）</span>
     └── ui/                       <span class="dim">← 静态产物：index.html + assets（自带 vue 副本）</span></div>
       <dl>
+        <dt>不含什么，为什么</dt>
+        <dd><code>services/</code>、<code>ui/</code>（源码）；<code>package.json</code>、<code>tsconfig*.json</code>、<code>pnpm-lock.yaml</code>（构建元数据）；
+            <code>node_modules/</code>；<code>.data/</code>（运行期数据，不随包走）；
+            <b><code>*.map</code></b> —— Core 用 <code>node index.js</code> 启动、没开 <code>--enable-source-maps</code>，运行期读不到，
+            却占交付物约七成体积，还把源码原文带出去。</dd>
         <dt>开发 vs 分发</dt>
         <dd>差别<b>只有一处</b> —— <code>--plugins</code> 指向哪：<br>
             开发 <code>node core/dist/main.js --plugins ./plugins</code> ／ 分发 <code>node core/dist/main.js</code>（全缺省）</dd>
         <dt>打包</dt>
-        <dd><code>pnpm --filter '@osteosome/plugin-models' pack</code> → <code>scripts/pack-plugin.mjs</code> 产出上面那个目录（跨平台，不依赖 shell）。<b>先不做 tar/zip，目录本身就是交付物。</b></dd>
+        <dd><code>pnpm run pack:plugins</code>（全部）／<code>pnpm --filter '@osteosome/plugin-models' run pack</code>（单个）<br>
+            → <code>scripts/pack-plugin.mjs</code> 装配上面那个目录（跨平台，不依赖 shell）。
+            <b>先不做 tar/zip，目录本身就是交付物。</b><br>
+            <b><span class="tag warn">注意</span> 必须带 <code>run</code></b>：少写 <code>run</code> 时
+            <code>pnpm --filter … pack</code> 命中 pnpm <b>内置</b>的 <code>pack</code>，在仓库根生成一个
+            <code>osteosome-plugin-&lt;id&gt;-1.0.0.tgz</code> —— 里面是<b>全部源码</b>，跟交付物没关系，别误用。</dd>
         <dt>安装</dt>
-        <dd>拷贝 + <b>五条校验</b>，难的不是拷贝而是「装坏了要说清哪里坏了」：<br>
+        <dd>拷贝 + <b>五条校验</b>，难的不是拷贝而是「装坏了要说清哪里坏了」。这五条<b>全部已在 Core 扫盘期
+            <code>scanPlugins</code> 里实现</b>，各有测试；<code>pack-plugin.mjs</code> 不复制这套规则，只做
+            装配前「产物齐不齐」预检 + 装配后对<b>输出</b>再跑一遍同一套（失败即删除重来），
+            真正的验收证据仍是把产物交给 <code>scanPlugins</code> 跑一遍：<br>
             ① <code>plugin.json</code> 过 schema（含 <code>ui</code> 与 <code>coreCompatibility</code>）<br>
             ② <b>产物存在性</b>：<code>services[]</code> 每项都要有 <code>dist/server/&lt;sid&gt;/index.js</code>；
                声明了 <code>ui.views</code> 却没 <code>dist/ui/index.html</code> → <code>degraded</code>「未构建」<br>
             ③ <code>service.json</code> 的 <code>protocolVersion</code> 兼容（<span class="ref">manifest.ts</span> 已有校验）<br>
             ④ <code>coreCompatibility</code> 满足（见 P2）<br>
             ⑤ <code>publishes</code>/<code>subscribes</code> 必须在 Core 侧 EventMap/CommandMap 里（已有校验）</dd>
+        <dt>这一轮真正修掉的</dt>
+        <dd>三个只有真去打包才会暴露的问题：<br>
+            ① <code>shippable</code> 一度把 <code>dist/</code> 整个排进黑名单（只想排源码），于是 preflight 全绿、
+               输出<b>零产物</b> —— 「检查通过」和「东西在」被写成了两套规则；<br>
+            ② <code>services/session/.data/sessions/</code> 下 234 个会话文件混进交付物，根因是
+               <code>services/session/src/index.ts:13</code> 的
+               <code>service.dataDir || process.env.DS_DATA_DIR || '.data'</code> ——
+               <b>相对路径回退</b>，构建时落进 <code>dist/</code>。<code>.data/</code> 已在过滤器里挡掉，
+               但这个回退本身仍应改成绝对路径或启动即失败（未动，另行处理）；<br>
+            ③ <code>scanPlugins</code> 对<b>发行版</b>必然报「services 在插件内没有对应目录」——
+               源码侧检查没区分「有 <code>services/</code> 源码树」与「只有 <code>dist/</code> 的交付物」。
+               已修：源码侧检查只在源码树存在时跑（<span class="ref">plugin-registry.ts</span>）。
+               <b>装好了却报错，比装坏了更难查</b>，因为没人会去查一个正常的东西。</dd>
         <dt>升级 / 回滚</dt>
         <dd>覆盖安装前把旧目录改名 <code>&lt;id&gt;.bak-&lt;旧版本&gt;</code>，装完不删；新版本起不来就改回去。
-            <b>不做同 id 多版本共存</b> —— <code>preferences.plugins.uninstalled[id]</code> 这类状态全按 id 存，多版本会打架。</dd>
+            <b>不做同 id 多版本共存</b> —— <code>preferences.plugins.uninstalled[id]</code> 这类状态全按 id 存，多版本会打架。
+            <code>&lt;id&gt;.bak-*</code> 不带 <code>plugin.json</code>，不会被扫盘当成第二个插件。</dd>
         <dt>后置（明确不做）</dt>
         <dd>zip 解包 + <code>plugin.install</code> 命令（解包时的路径校验沿用 <span class="ref">static.ts</span> 那套 zip-slip 防护）；
             远端源 / 签名校验。等真有人要装第三方插件时再说。</dd>
@@ -1033,7 +1102,9 @@ sdk/
           <br>当初担心的「多一层通信就多一处『消息丢了页面不报错』的排障地」因此<b>没有发生</b> ——
           因为根本没有新增通信：三个 iframe 各自跟 Core 说话，而 Core 本来就在广播。
           <br><b>坑</b>：<code>storage</code> 事件不在写入方触发，写入方必须本地先赋值再写盘</td></tr>
-      <tr><td><b>构建 / 分发流程缺失</b></td><td>现在仓库里源码与产物混放，<code>dist/</code> 还被 gitignore</td><td>P2 是阻塞项：先定产物布局与「Core 只认产物」，再谈打包</td></tr>
+      <tr><td><b>构建 / 分发流程缺失</b></td><td>源码与产物混放，<code>dist/</code> 被 gitignore；发行物此前根本不存在</td><td><b>已解决</b>：P2 定了「Core 只认 <code>dist/</code>」，P8 给出
+          <code>pnpm run pack:plugins</code> → <code>pack/&lt;id&gt;/</code>，并由 <code>scanPlugins</code> 复验。
+          <br><span class="tag risk">仍开放</span> 升级 / 回滚只有一条手工规程（改名 <code>&lt;id&gt;.bak-&lt;版本&gt;</code>），没有工具；zip 与安装器明确后置</td></tr>
       <tr><td><b>theme / i18n 跨 bundle</b></td><td>CSS 变量与文案要各自保持一致；Core 的 i18n 机制对插件 UI 无效</td><td><b>theme 已解决</b>：令牌在 <code>@osteosome/ui</code>，各插件引同一份源码（同源 iframe 读同一份 <code>preferences.json</code> 的 <code>ui.theme</code>）。
           <br><b>i18n 各带一份是必然</b> —— 跨 iframe 拿不到实例。但<b>宿主那份必须摘干净</b>：
           P6 把 <code>settings.*</code> 从 client 的 i18n 里删掉，插件那侧留自己的。
@@ -1100,17 +1171,36 @@ sdk/
           <b>为什么不是「Core 派生」</b>：派生意味着 Core 要知道「哪些组件是本地的」——
           而 Core 对前端组件一无所知（§7「Core 不解析插件内容」的直接延伸）。
           写清单的那一方才知道这件事。</td></tr>
-      <tr><td>插件 UI 的开发模式怎么起</td><td>每个插件一个 vite dev server + Core 反代（改动最小）／ 一个 vite 多入口（统一端口，但要处理模块重复与 HMR 边界）。<b>建议前者</b>，P5 时定。</td></tr>
-      <tr><td>旧 <code>widget.*</code> id 的迁移窗口</td><td>一次性映射表（<span class="ref">PanelContainer.vue:130</span> 已知 id 替换 + 不认识的清洗）／ 保留 N 个版本别名。建议一次性映射 + 清洗，P4 时定。</td></tr>
-      <tr><td><code>services/credentials</code> 插件的定位</td><td>P1 要连带决定：凭证归使用方插件之后，这个「凭证能力位」插件还剩什么。<b>退休</b>（服务已有 <code>dataDir</code>，自己读文件）／ <b>转型</b>成「帮用户管理各插件凭证文件格式」的库。前者更干净，后者保留一个跨插件统一的凭证视图（但那又回到 Core 集中管密钥，与 §4 冲突）。<b>建议退休</b>，P1 时定。</td></tr>
-      <tr><td>发行方式还没定</td><td>§4 已标「待确认」。免安装 zip（可写、升级不覆盖数据、用户能找到）／ 安装器（能写 Program Files，但数据要么退回用户目录、要么给安装器分配权限）。<b>建议免安装 zip</b>，并把「发行版判据」（exe 同级的标记文件）在 P1 一起定下来，否则开发期与发行期数据会分叉。</td></tr>
+      <tr><td>旧 <code>widget.*</code> id 的迁移窗口<br><span style="color:var(--success)">← P4 已决：不需要映射表</span></td><td><b>最终答案：两种方案都没用上。</b>
+          因为 <b>P4 决定 id 不加命名空间</b> —— 插件视图仍叫 <code>widget.llm-settings</code>，
+          和它顶替的本地组件<b>同名</b>。id 是 <code>params.widgets[]</code> 与 <code>layout[id]</code> 的持久化主键，
+          改名 = 用户拖好的位置全丢；同名 = 组件在原地换了实现，<b>零迁移</b>。<br>
+          真正需要的不是映射表而是<b>退役表</b>（<code>RETIRED_WIDGETS</code>，记标题与 <code>replacedBy</code>）：
+          删掉一个组件等于让用户的布局悄悄少一个框，占位要说清它叫什么、为什么没了。<code>widget.llm-providers</code> 是第一个进表的。</td></tr>
+      <tr><td>插件 UI 的开发模式怎么起</td><td><b>构建期已定</b>（P5 / P6）：每个插件一个独立 vite 包，<code>base</code> 命名空间化
+          <code>/plugins/&lt;id&gt;/ui/</code>，产物落 <code>dist/ui/</code> 由 Core 伺服。
+          <b>仍未定的是热更新那半</b>：每个插件一个 vite dev server + Core 反代（改动最小）／
+          一个 vite 多入口（统一端口，但要处理模块重复与 HMR 边界）。
+          <b>建议前者</b> —— 见 §6「开发体验掉档」，这是那份代价里唯一还没兑现缓解的部分。</td></tr>
+      <tr><td><code>plugins/credentials</code> 插件的定位<br><span style="color:var(--warning)">← P1 没定，仍然开放</span></td><td>凭证归使用方插件之后，这个「凭证能力位」插件还剩什么。
+          <b>退休</b>（服务已有 <code>dataDir</code>，自己读文件）／ <b>转型</b>成「帮用户管理各插件凭证文件格式」的库。
+          前者更干净，后者保留一个跨插件统一的凭证视图（但那又回到 Core 集中管密钥，与 §4 冲突）。
+          <b>现状</b>：既没退休也没转型 —— 它还在，纯服务无 UI，<code>/api/credentials</code> 与
+          <code>credentials.resolve</code> 都在服役（§3、§7 仍依赖）。
+          <b>建议退休</b>，但那是独立的一刀，不该塞进任何已完成阶段的收尾里。</td></tr>
+      <tr><td>发行方式还没定</td><td>§4 已标「待确认」，指的是 <b>OST 这个应用</b>怎么发。
+          <b>P8 只解决了其中一半</b>：插件这一层的交付物已经是确定的（一个目录，<code>pnpm run pack:plugins</code>）。
+          剩下的仍是「应用怎么装」：免安装 zip（可写、升级不覆盖数据、用户能找到）／ 安装器（能写 Program Files，
+          但数据要么退回用户目录、要么给安装器分配权限）。<b>建议免安装 zip</b>，
+          并把「发行版判据」（exe 同级的标记文件）一起定下来，否则开发期与发行期数据会分叉。</td></tr>
       <tr><td>Core 版本号怎么定</td><td><b>已在 P2 定</b>：Core 用 <code>0.1.0</code>，从自己的 <code>package.json</code> 读（不 import —— import 会把版本冻在打包那一刻）；读不到退 <code>0.0.0</code> 并告警。插件声明 <code>coreCompatibility: { min, max }</code>，不写 = 不限。<b>剩下的政策问题</b>：将来破坏性变更时，是抬 Core 的 minor 还是 major —— 建议抬 minor 并同步抬依赖它的插件的 <code>min</code>。</td></tr>
     </tbody>
   </table>
 </section>
 
 <footer>
-  Osteosome · 插件化架构优化 · 2026-10-04 更新（<b>P6 完成 9/9 —— 九个视图全部迁入插件，宿主 widget 注册表已空</b>）·
+  Osteosome · 插件化架构优化 · 2026-10-04 更新（<b>P0–P6 与 P8 完成，P7 按需未开</b> ——
+  九个视图全部迁入插件、宿主 widget 注册表已空、5 个插件可装配为交付物）·
   配套：<code>docs/ost-开发文档.md</code> · <code>docs/core开发文档.md</code> · <code>docs/开发进度/阶段追踪.md</code> ·
   相关：<a href="对话界面架构.html" style="color:var(--primary)">对话界面架构</a>（三盒现状与跨 iframe 的状态划分）
 </footer>

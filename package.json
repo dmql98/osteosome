@@ -9,6 +9,7 @@
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run build && pnpm -r run test",
+    "pack:plugins": "node scripts/pack-plugin.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
 "devDependencies": {

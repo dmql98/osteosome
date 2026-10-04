@@ -7,6 +7,8 @@ packages:
   - sdk/core-client
   # P6：共享 UI 组件库（宿主与插件 UI 共用的那一份）
   - sdk/ui
+  # P8：插件根包 —— 只有 pack 一个脚本，把 plugin.json + 自带数据 + dist/ 装配成可分发目录
+  - plugins/*
   # P1：服务搬进插件 —— 每个插件的 services/ 下是它的服务包（可后置 plugins/*/ui）
   - plugins/*/services/*
   # P5：插件的 WebUI 也是一个包（构建产物落在插件的 dist/ui/）

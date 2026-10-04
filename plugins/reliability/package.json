@@ -1,0 +1,9 @@
+{
+  "name": "@osteosome/plugin-reliability",
+  "version": "1.0.0",
+  "private": true,
+  "description": "可靠性层 —— 插件根包。只有 pack 一个脚本：纯服务插件（无 ui/），源码与产物在 services/。",
+  "scripts": {
+    "pack": "node ../../scripts/pack-plugin.mjs"
+  }
+}
