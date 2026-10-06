@@ -1,0 +1,1308 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>插件标准 · Plugin Standard（OST 实施稿 · 修订版）</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family: var(--mono); }
+  .wrap { max-width:1240px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:20; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  section { margin:var(--s6) 0 0; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background:var(--surface); }
+  td.mono { font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.bus { border-left-color:var(--bus); background:var(--bus-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); white-space:nowrap; }
+  .tag.have { background:var(--success); }
+  .tag.todo { background:var(--danger); }
+  .tag.part { background:var(--warning); }
+  .tag.spec { background:var(--primary); }
+  .tag.no { background:var(--danger); }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.8;
+    margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .std { color:var(--primary); font-weight:600; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .free { color:var(--warning); }
+  .tree .dim { color:var(--muted); }
+
+  .board { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s3); box-shadow:var(--shadow-sm); }
+  svg { display:block; width:100%; height:auto; }
+
+  /* ══ 动效 ══════════════════════════════════ */
+  @keyframes dashflow { to { stroke-dashoffset:-48; } }
+  @keyframes pulseRing { 0% { r:34; opacity:.55 } 70% { r:54; opacity:0 } 100% { r:54; opacity:0 } }
+  @keyframes glow { 0%,100% { filter:drop-shadow(0 0 0 transparent) } 50% { filter:drop-shadow(0 0 10px var(--primary)) } }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @keyframes sweep { 0% { transform:translateX(-70px) } 100% { transform:translateX(1160px) } }
+  @keyframes riseIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+
+  .edge { fill:none; stroke:var(--border-strong); stroke-width:2; }
+  .edge.busline { stroke:var(--bus); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.httpline { stroke:var(--success); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.fileline { stroke:var(--warning); stroke-dasharray:4 5; animation:dashflow 1.8s linear infinite; }
+  .edge.branch { stroke:var(--warning); stroke-dasharray:4 5; }
+  .edge.on { stroke-width:3.4; animation-duration:.5s; filter:drop-shadow(0 0 6px currentColor); }
+  .edge.dim { opacity:.2; }
+
+  .node { opacity:.5; transition:opacity .25s; }
+  .node .r { fill:var(--surface); stroke:var(--border-strong); stroke-width:1.6; }
+  .node.svc .r { fill:var(--bus-soft); stroke:var(--bus); }
+  .node.ui  .r { fill:var(--success-soft); stroke:var(--success); }
+  .node.host .r { fill:var(--warning-soft); stroke:var(--warning); }
+  .node.on { opacity:1; }
+  .node.on .r { stroke-width:2.6; animation:glow 1.1s ease-in-out infinite; }
+  .node.dim { opacity:.18; }
+  .ring { fill:none; stroke:var(--primary); stroke-width:2; opacity:0; }
+  .node.on .ring { animation:pulseRing 1.4s ease-out infinite; }
+
+  .ctl { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; margin:var(--s3) 0 var(--s2); }
+  .step-pill { font-family:var(--mono); font-size:12px; color:var(--muted); padding:4px 10px;
+    border:1px solid var(--border); border-radius:var(--r-full); background:var(--surface); }
+  .stage { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2);
+    padding:var(--s3); font-size:var(--sm); min-height:104px; }
+  .stage .who { font-weight:700; color:var(--primary); font-size:12px; letter-spacing:.3px; text-transform:uppercase; }
+  .stage .txt { margin-top:4px; }
+  .stage .code { font-family:var(--mono); font-size:12px; margin-top:6px; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--r-sm); padding:6px 8px; white-space:pre-wrap; }
+  .rail { display:flex; gap:4px; margin:var(--s3) 0 0; flex-wrap:wrap; }
+  .rail i { width:22px; height:5px; border-radius:var(--r-full); background:var(--surface-3);
+    display:block; transition:background .2s; }
+  .rail i.on { background:var(--primary); }
+  .rail i.done { background:var(--success); }
+
+  .scan { position:relative; overflow:hidden; border:1px solid var(--border); border-radius:var(--r-md);
+    background:var(--surface); padding:var(--s3); }
+  .scan .bar { position:absolute; top:0; bottom:0; width:70px; left:0;
+    background:linear-gradient(90deg,transparent,var(--primary-soft),transparent);
+    pointer-events:none; opacity:0; }
+  .scan.running .bar { opacity:1; animation:sweep 1.7s linear infinite; }
+  .pkgrow { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--s2); }
+  .pkg { border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s2) var(--s3);
+    background:var(--surface); font-size:var(--sm); transition:all .25s; }
+  .pkg .nm { font-weight:700; font-size:13px; }
+  .pkg .rs { font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .pkg.pass { border-color:var(--success); background:var(--success-soft); }
+  .pkg.fail { border-color:var(--danger); background:var(--danger-soft); }
+  .pkg.hit  { transform:translateY(-2px); box-shadow:var(--shadow-md); }
+
+  .gate { display:grid; gap:var(--s2); margin:var(--s3) 0; }
+  .gate .g { display:grid; grid-template-columns:34px 1fr; gap:var(--s3); align-items:start;
+    border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s2) var(--s3);
+    background:var(--surface); font-size:var(--sm); animation:riseIn .3s both; }
+  .gate .g .num { width:26px; height:26px; border-radius:var(--r-full); background:var(--primary); color:#fff;
+    font-size:12px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .gate .g .t { font-weight:600; }
+  .gate .g .d { color:var(--muted); font-size:12.5px; }
+
+  .lifecycle { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:var(--s3); }
+  .lc { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+    padding:var(--s3); font-size:var(--sm); transition:all .3s; }
+  .lc .t { font-weight:700; font-size:13px; }
+  .lc .d { color:var(--muted); font-size:12.5px; margin-top:4px; }
+  .lc.live { border-color:var(--primary); box-shadow:var(--shadow-md); transform:translateY(-2px); }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); }
+  @media (max-width:900px){ .two{grid-template-columns:1fr} }
+
+  .no-list { border:2px dashed var(--danger); border-radius:var(--r-lg); background:var(--danger-soft);
+    padding:var(--s4); margin:var(--s3) 0; }
+  .no-list h4 { margin:0 0 var(--s2); color:var(--danger); font-size:var(--md); }
+  .no-list ul { margin:0; }
+  .no-list li { font-size:var(--sm); }
+
+  footer { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+
+  /* ══ §7 requires 体检三态 ══════════════════ */
+  .req { display:grid; gap:var(--s2); margin:var(--s3) 0; }
+  .req .row { display:grid; grid-template-columns:22px 210px 1fr 128px; gap:var(--s3); align-items:center;
+    border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s2) var(--s3);
+    background:var(--surface); font-size:var(--sm); transition:border-color .3s, background .3s; }
+  .req .lamp { width:13px; height:13px; border-radius:var(--r-full); background:var(--surface-3);
+    justify-self:center; transition:background .3s, box-shadow .3s; }
+  .req .what { font-family:var(--mono); font-size:12px; }
+  .req .why { color:var(--muted); font-size:12.5px; }
+  .req .state { font-family:var(--mono); font-size:11.5px; text-align:right; white-space:nowrap; }
+  .req .row[data-s="detected"] { border-color:var(--warning); }
+  .req .row[data-s="detected"] .lamp { background:var(--warning); box-shadow:0 0 0 4px var(--warning-soft); }
+  .req .row[data-s="detected"] .state { color:var(--warning); }
+  .req .row[data-s="verified"] { border-color:var(--success); }
+  .req .row[data-s="verified"] .lamp { background:var(--success); box-shadow:0 0 0 4px var(--success-soft); }
+  .req .row[data-s="verified"] .state { color:var(--success); }
+  .req .row[data-s="missing"] { border-color:var(--danger); background:var(--danger-soft); }
+  .req .row[data-s="missing"] .lamp { background:var(--danger); box-shadow:0 0 0 4px var(--danger-soft); }
+  .req .row[data-s="missing"] .state { color:var(--danger); }
+  .req .row[data-s="unknown"] .lamp { background:var(--muted); animation:blink 1.1s infinite; }
+  .req .row[data-s="unknown"] .state { color:var(--muted); }
+  .reqnote { font-size:12.5px; color:var(--muted); margin-top:var(--s2); }
+  @media (max-width:780px) {
+    .req .row { grid-template-columns:22px 1fr; }
+    .req .why, .req .state { grid-column:2; text-align:left; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge, .node.on .r, .node.on .ring, .scan.running .bar, .gate .g,
+    .req .row[data-s="unknown"] .lamp { animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>插件标准 · Plugin Standard</h1>
+    <span class="sp"></span>
+    <span class="sub">OST 实施稿 · 修订版：标准只管归属与接口，其余一律不管</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>一句话标准</b>：<b>插件 = 一个自带前后端的目录</b>；<code>plugin.json</code> 是它唯一的身份，
+  <code>service.json</code> 是它唯一的接口契约，<code>dist/</code> 是 Core 唯一认的东西。
+  <b>除了这三样，插件目录里放什么，标准一概不管。</b>
+  <br><b>本版修订</b>：上一稿错误地把 <code>prompts/</code>、<code>skills/&lt;name&gt;/</code>、<code>tools.json</code>
+  写成了每个插件的标准槽位。那违反了
+  <code>docs/插件化架构优化.html</code> §7 的不变式
+  「<b>目录约定只有「你有一个属于自己的目录」这一条；里面放什么是插件的事</b>」。
+  正确说法见 §2 与 §9。
+  <br><span style="color:var(--muted)">标注：<span class="tag have">已有</span> 已落地并被测试守住 ·
+    <span class="tag part">半有</span> 形状在、机制缺 · <span class="tag todo">待建</span> 本轮要实现</span>
+</div>
+
+<!-- ══════════════ 1 ══════════════ -->
+<section>
+  <h2><span class="n">1</span>标准定义：插件目录里只有三样是标准的</h2>
+
+  <div class="tree">plugins/&lt;plugin-id&gt;/            <span class="dim">← 目录名必须等于 plugin.json 的 id</span>
+│
+├── <span class="std">plugin.json</span>               <span class="std">← 标准① 身份 + 归属 + 依赖</span>
+├── <span class="std">services/&lt;sid&gt;/service.json</span>  <span class="std">← 标准② 一个进程怎么起、说什么话</span>
+├── <span class="std">dist/</span>                    <span class="std">← 标准③ Core 只认产物</span>
+│   ├── server/&lt;sid&gt;/index.js      单文件 · 零外部依赖
+│   └── ui/index.html + assets         base 必须命名空间化
+│
+├── services/&lt;sid&gt;/src/            <span class="dim">← 源码，不在标准内（Core 不读）</span>
+├── ui/                            <span class="dim">← 源码，不在标准内</span>
+└── <span class="free">…任何别的文件…</span>              <span class="free">← ★ 不在标准内。catalog.json 只是「恰好有一个」</span>
+
+userData/plugin/&lt;plugin-id&gt;/     <span class="free">← 同样完全自由：里面有什么、什么格式，由插件自己定</span></div>
+
+  <div class="note ok">
+    <b>「插件自带数据」是开放式的。</b> 原文写的是
+    <code>plugin.json</code> 旁边「<b>catalog.json 等</b>」—— 那个「等」字就是标准的态度：
+    <b>插件可以带任意数据文件，Core 只按「只读 · 只限本插件目录」授权，不校验名字、不校验形状。</b>
+    <code>catalog.json</code> 是 models 插件<b>自己的</b>约定（它的 12 家厂商预设），
+    不是所有插件都要有的槽位。
+    <br>实现上这条落在 <code>plugins.readFile</code>：服务打成一个文件后没有任何 <code>require</code>
+    能解析到 <code>plugins/&lt;id&gt;/xxx</code>，于是 Core 授予「读自己插件目录里的只读文件」这条点对点特权。
+    <b>路径由那个服务自己定，Core 不查。</b>
+  </div>
+
+  <div class="note">
+    <b>「自带前后端」三个精确含义</b>，每条都有代价：
+    <br><b>① 后端 = 一个独立进程</b>，stdio JSON-RPC 与 Core 说话，<b>不开 HTTP 端口</b>。
+    代价：进程数 = 服务数；收益：崩一个不拖垮全部。
+    <br><b>② 前端 = 一个静态产物目录</b>，Core 代伺服在 <code>/plugins/&lt;id&gt;/ui/*</code>，同源 iframe。
+    代价：<code>base</code> 必须命名空间化，否则两插件请求同一个全局 asset 路径（症状「A 的界面加载到 B 的代码」）。
+    <br><b>③ 产物必须能脱离本仓库运行</b>：esbuild bundle，产物里不允许出现任何非 Node 内置 <code>require</code>。
+    这条要有测试守（拷到空目录跑一次），因为它极易被无声破坏 —— 哪天 build 里加一个 <code>external</code>，
+    产出会退化成「仓库里能跑、拷出去不能跑」，CI 全绿、用户装上才发现。
+  </div>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<section>
+  <h2><span class="n">2</span>插件标准「不」规定什么 <span class="tag no">核心</span></h2>
+
+  <div class="no-list">
+    <h4>以下四样<b>不是</b>插件标准的组成部分，任何插件都不必认识它们</h4>
+    <ul>
+      <li><b>提示词 / system prompt</b> —— 它是<b>每轮重新装配的运行时值</b>，不是交付物。</li>
+      <li><b>技能 / SKILL.md</b> —— 它是<b>懒加载资源</b>，索引是全系统一份，不是「每个插件各自的索引」。</li>
+      <li><b>工具目录 / ToolSpec</b> —— 工具是<b>有副作用的执行体</b>，在 OST 里执行体的容器是<b>服务</b>。</li>
+      <li><b>角色</b> —— 角色是<b>一组绑定</b>（选哪些提示词 / 技能 / 工具 / 模型），是用户数据。</li>
+    </ul>
+  </div>
+
+  <div class="note bad">
+    <b>上一稿错在哪：把「运行时能力的来源」写成了「插件目录的标准槽位」。</b>
+    这带来四个具体后果：
+    <br><b>① 每个插件被迫理解它。</b> 一个纯服务的可靠性插件凭什么要有 <code>prompts/</code> 目录？
+    <br><b>②「不提供」与「提供了但是空的」无法区分。</b> 前者该静默，后者是配置错误 ——
+    而目录存在性检查读不出这个区别。
+    <br><b>③ 把「来源」和「归属」绑死了。</b> 插件化的原则是<b>归属是数据、状态是事实</b>；
+    而提示词片段可以有多种来源（插件自带文件、别的服务动态发布、用户自己编辑），
+    一旦规定成目录，就等于宣布「插件自带文件」是唯一来源。
+    <br><b>④ 用户编辑的那份没有位置。</b> 它是用户数据，天然在 <code>userData/plugin/&lt;id&gt;/</code>，
+    不该也不可能塞进插件的交付物目录里。
+  </div>
+
+  <h3>那它们从哪来？—— 只有两条既有的面</h3>
+  <table>
+    <thead><tr><th style="width:16%">来源</th><th style="width:30%">通路</th><th style="width:20%">边界</th><th>适合</th></tr></thead>
+    <tbody>
+      <tr><td><b>插件自带文件</b></td>
+        <td class="mono">plugins.readFile<br><span class="dim">（文件名与路径由那个服务自己定）</span></td>
+        <td>只读 · 只限本插件目录 · 无根即拒 · ≤2 MiB</td>
+        <td><b>静态</b>的东西：厂商预设、技能包、示例配置</td></tr>
+      <tr><td><b>总线（新 topic）</b></td>
+        <td class="mono">服务运行时 publish<br>→ 收集方组装</td>
+        <td>topic 必须在共享事件表里；<b>值不进 Core</b></td>
+        <td><b>依赖运行期事实</b>的东西：当前可用工具、当前角色绑定的技能</td></tr>
+    </tbody>
+  </table>
+  <div class="note ok">
+    <b>两条面都已经是既有的。</b> 第一条已由 models 插件读自己的 <code>catalog.json</code> 验证过；
+    第二条是所有服务之间唯一的通道。<b>所以「让角色带提示词 / 技能 / 工具」这件事，
+    不需要扩展插件标准，只需要扩展服务与事件表。</b>
+  </div>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<section>
+  <h2><span class="n">3</span>注册：插件如何进入 Core 的视野</h2>
+
+  <p>注册<b>没有 API、没有中心注册表</b> —— 它是<b>拷一个目录</b>。刻意如此：
+  分发物天然是一个文件夹，升级就是覆盖安装。</p>
+
+  <div class="ctl">
+    <button class="btn" id="scanPlay">▶ 播放扫盘过程</button>
+    <span class="step-pill" id="scanPill">4 个真实插件 + 1 个反例 · 5 道闸门 · 任何一道不过只降级不抛错</span>
+  </div>
+  <div class="scan" id="scanBox">
+    <div class="bar"></div>
+    <div class="pkgrow" id="pkgRow"></div>
+  </div>
+  <div class="gate" id="gateList"></div>
+
+  <div class="note">
+    <b>为什么扫盘「不抛错」，而服务 manifest 校验「全成功或抛」。</b>
+    性质不同：<code>service.json</code> 是<b>代码</b>，里面坏一个就是部署坏了，不该装作没事；
+    而<b>插件清单是数据</b>，拷目录进来就可能不合法 —— 而且<b>一个插件坏掉不该让 Core 起不来</b>。
+    所以每个问题收进 <code>problems[]</code>，其余插件照常加载。
+    <br>症状对比：全抛 → 一个坏插件让整个应用打不开；收进 problems → 界面照常，
+    那个插件在详情页显示「装好了但用不了」并说明原因。
+  </div>
+
+  <div class="tree">// plugins/&lt;id&gt;/plugin.json —— 契约（Zod；未声明字段会被剥掉，所以不写就没这个能力）
+{
+  "id": "models",                          <span class="dim">// 必须等于目录名</span>
+  "name": "模型接入", "version": "1.1.0", "icon": "🧠",
+  "services": ["llm-provider-openai"],     <span class="dim">// 归属：哪些进程算一件东西</span>
+  "components": [],                         <span class="dim">// 归属：哪些本地组件归我（迁移期字段）</span>
+  "ui": { "views": [                       <span class="dim">// 形态：可独立摆位的插件页面</span>
+    { "id": "widget.llm-settings", "title": "模型设置", "entry": "index.html" } ] },
+  "capabilities": [ { "name": "…", "detail": "…" } ],   <span class="dim">// ⚠ 纯展示，不参与判定</span>
+  "dependencies": [],                        <span class="dim">// 只影响顺序与状态</span>
+  "dataReadableBy": [],                      <span class="dim">// 已声明，但需先有数据面才生效</span>
+  "coreCompatibility": { "min": "0.1.0" },   <span class="dim">// 不写 = 不限</span>
+  "autoStart": true
+}
+<span class="free">← 注意这里没有 prompts / skills / tools 字段。它们不在这张表里，因为它们不是归属信息。</span></div>
+
+  <div class="note">
+    <b>两条容易被误读的细节</b>：
+    <br><b>① <code>capabilities[]</code> 永远只给人看。</b> 一旦有代码依赖它做判断，它就变成第二个真源 ——
+    真源是 <code>service.json</code> 的 topic 白名单。所以「A 声明了某能力，B 就能调」<b>不成立</b>。
+    <br><b>② 同一个 widget id 不许同时出现在 <code>components[]</code> 与 <code>ui.views[]</code>。</b>
+    客户端不知道该用本地实现还是 iframe，而<b>两者都能渲染出东西</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<section>
+  <h2><span class="n">4</span>发现：Core 如何知道插件列表</h2>
+
+  <div class="tree">plugins/*/plugin.json
+   → <span class="std">Zod 校验 + 环检测 + 拓扑排序</span> → problems[]
+   → <span class="std">喂进真实服务状态</span> → 派生 ready/degraded/failed/stopped
+   → <span class="std">GET /api/plugins</span>（manifest 原样透出 + 状态聚合）
+   → 前端 usePlugins() 摊平成视图模型（不留第二份数据）</div>
+
+  <h3>状态的定义顺序（有意的）</h3>
+  <table>
+    <thead><tr><th style="width:16%">状态</th><th style="width:34%">判据</th><th>为什么不是别的</th></tr></thead>
+    <tbody>
+      <tr><td><b>degraded</b></td><td>缺必需依赖，或有服务未 ready</td>
+        <td><b>不是 failed</b>：缺 provider 时对话工作台仍该显示、仍该让用户看见缺什么，只是发不出请求。</td></tr>
+      <tr><td><b>failed</b></td><td>声明的服务里有 failed</td><td>比「未就绪」更严重：进程在但死了。</td></tr>
+      <tr><td><b>stopped</b></td><td>未安装 / 未启动 / <code>autoStart:false</code> 且一个都没起</td>
+        <td><b>不是 degraded</b> —— 它没坏，是没开。混在一起，用户会去「修」一个没坏的东西。</td></tr>
+      <tr><td><b>ready</b></td><td>依赖都在 + 声明的服务全 ready</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>状态是派生的，所以事件只在变化时发。</b>
+    它由「服务真实状态 + 依赖满足」算出来，<b>没有自己的存储</b>。Core 记住上次结果，
+    <b>只在真的变了才 publish</b>：一直发 → 每次心跳抖动都推一遍、前端得自己去重；
+    一次都不发 → 前端永远拿不到 <code>starting → ready</code> 的跃迁。
+    <br>刷新时机挂在 <code>service.*</code> 生命周期事件上，<b>不轮询</b>。
+  </div>
+
+  <div class="note">
+    <b>环检测必须跑在拓扑排序<b>之前</b>。</b> 顺序不能反：<code>topoSort</code> 对环只是「不死循环」的降级处理，
+    它<b>不是</b>检测手段。反过来跑，有环时会先排出一份<b>看似正常的部分顺序</b>，照着启就会互相等待直到一起超时。
+    <br>环内成员：<b>仍然出现在列表里</b>（用户看得见「装了但起不来」），但<b>不进启动顺序</b> ——
+    宁可少列，也不列一个假的顺序。
+  </div>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<section>
+  <h2><span class="n">5</span>启停：Core 如何管理生命周期</h2>
+
+  <div class="ctl">
+    <button class="btn" id="lcPlay">▶ 播放 plugin.stop → plugin.start</button>
+    <span class="step-pill" id="lcPill">停之前先收尾；启停不重扫盘</span>
+  </div>
+  <div class="lifecycle" id="lcRow"></div>
+
+  <div class="tree">allowedServiceIds(): ReadonlySet&lt;serviceId&gt; | undefined
+├─ 插件层未配置 / 目录不存在 / 目录里零清单 → <span class="own">undefined = 不限制（照旧全启 + 告警）</span>
+└─ 正常读到清单，四条「不 spawn」（或关系）：
+   ① <span class="dim">已卸载</span>（目录在，但用户说卸了）
+   ② <span class="dim">显式停用</span>（preferences.plugins.enabled[id] === false）
+   ③ <span class="own">autoStart: false</span>
+   ④ <span class="dim">环内</span>（不在启动顺序里，依赖无解）
+   ⑤ <span class="dim">coreCompatibility 不满足</span> → 不启动，但插件<b>仍然可见</b>
+
+<span class="dim">刻意【不】包含：依赖未满足【不】阻止 spawn。</span>
+<span class="dim">  只装 session 不装 models 时用户仍要看得到会话列表 —— 仅因缺 provider 就杀掉 session 是真实的功能回退。</span></div>
+
+  <div class="note bad">
+    <b>四个真实踩过的坑</b>：
+    <br><b>① 停插件前必须先收尾。</b> 若插件含 <code>loop</code>，先发一次 <code>loop.cancel</code>。
+    直接杀会留下半截 assistant 消息 —— 而<b>会话历史是 append-only 的，那半截永远留在那里</b>。
+    <br><b>②「运行期生效」与「重启生效」必须共用同一份判定。</b>
+    只在运行期处理停用、启动路径只看「已卸载」→ 症状是「禁用某插件，当天正常，<b>重启后它自己回来了</b>」。
+    <br><b>③ 重扫盘<b>不</b>能把新插件的服务接进 ServiceManager</b> —— 服务目录表是构造时定的。
+    <code>rescan()</code> 只更新清单与状态。症状：「插件显示 ready 但服务没起来」。
+    <br><b>④ 一个服务停不下来不该让整条命令失败。</b> 否则「停 reliability」会因为某服务卡住而连别的也不停。
+  </div>
+
+  <div class="note">
+    <b>「插件」不是进程，所以启停必须展开。</b> Core 没有插件的进程句柄，只有服务的。
+    规则：<b>按启动顺序逐个启停它声明的服务；停之前先 <code>loop.cancel</code> 收尾；单个失败只告警不中断。</b>
+    <br><span class="tag part">已知前提</span> 当前四个插件的服务互不重叠，没有做引用计数。
+    将来一旦「同一个服务被多个插件声明」，必须改成<b>只有声明它的插件都没装才真停</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<section>
+  <h2><span class="n">6</span>服务与接口：Core 如何知道插件能提供什么、能被调什么</h2>
+
+  <p>这是整个标准里<b>唯一真正有约束力</b>的部分。两份清单，职责正交：</p>
+
+  <table>
+    <thead><tr><th style="width:22%">文件</th><th style="width:32%">回答的问题</th><th style="width:16%">谁读</th><th>校验</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">plugin.json</td><td><b>哪些进程与页面算一件东西</b>（归属 / 依赖）</td>
+        <td>Core 编排 + 前端展示</td><td>Zod；id=目录名；服务目录存在；产物已构建</td></tr>
+      <tr><td class="mono">service.json</td><td><b>一个进程怎么起、它说什么话</b>（entry / protocolVersion / topics）</td>
+        <td>Core 管生命周期时</td><td><b>topic 必须在共享事件表里</b>，否则<b>进程起不来</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>直接收益</b>：<b>加一个插件不用改任何 <code>service.json</code>，加一种能力不用改任何 <code>plugin.json</code>。</b>
+    两份清单各答一个正交问题，没有重叠。
+  </div>
+
+  <h3>可调用接口的唯一真相源：共享事件表</h3>
+  <div class="tree">shared/src/events.ts
+├── interface EventMap    { … }   <span class="dim">// 事实：已经发生的事（过去式）</span>
+├── interface CommandMap  { … }   <span class="dim">// 请求：要别人做事</span>
+├── const EVENT_TOPICS    = […] as const satisfies readonly EventKey[]
+└── const COMMAND_TOPICS  = […] as const satisfies readonly CommandKey[]
+
+<span class="dim">Core 启动每个服务前：拿 service.json 的 publishes/subscribes 去这两张表里查。</span>
+<span class="dim">查不到 → 该服务不 spawn → 插件降级并说明「声明了不存在的话题」。</span></div>
+
+  <div class="note bad">
+    <b>这张表「只增不改」，所以它是破坏性变更的防火墙。</b>
+    加字段 ✅ ／ 改字段类型 ／ 改语义 ❌（升 topic 版本）。
+    理由：这些 topic 名已经进到<b>已分发的插件产物</b>里了 —— 悄悄改一个 payload 字段的含义，
+    症状是「升级之后老插件某个功能静默失效」，极难定位。
+    <br>所以破坏性变更要配 <code>coreCompatibility.min</code> 抬版本号，<b>而不是悄悄改</b>。
+  </div>
+
+  <h3>三层声明，三种用途，互不越界</h3>
+  <table>
+    <thead><tr><th style="width:22%">声明</th><th style="width:26%">回答</th><th style="width:18%">消费方</th><th>能被代码用来判定吗</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">services[]</td><td>归属：哪些进程属于我</td><td>Core（编排）</td><td><b>能</b> —— 决定 spawn 与数据根</td></tr>
+      <tr><td class="mono">ui.views[]</td><td>形态：哪些可独立摆位的页面</td><td>前端（iframe）</td><td><b>能</b> —— 决定摆什么</td></tr>
+      <tr><td class="mono">publishes / subscribes</td><td>接口：我说什么 / 我听什么</td><td>Core（校验）+ 总线</td><td><b>能</b> —— 唯一有约束力的接口声明</td></tr>
+      <tr><td class="mono">capabilities[]</td><td>说明：我大致能干什么</td><td>只有详情页给人看</td><td><b>绝对不能</b></td></tr>
+      <tr><td class="mono">dependencies[]</td><td>顺序：谁先起、缺了会怎样</td><td>Core（排序 + 状态）</td><td><b>不能</b>产生运行时耦合</td></tr>
+      <tr><td class="mono">（插件目录里的其它文件）</td><td>它自己的事</td><td>只有那个插件自己</td><td><b>不能</b> —— Core 不解析</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════ 7 ══════════════ -->
+<section>
+  <h2><span class="n">7</span>环境依赖：<code>plugin.json</code> 的 <code>requires</code> <span class="tag todo">待建</span></h2>
+
+  <div class="note bad">
+    <b>为什么现在需要它。</b> 一旦 OST 开源、分发物只有 <code>dist/</code>，
+    <code>plugin.json</code> 就成了<b>唯一的信息载体</b> ——
+    <code>package.json</code> 不进交付物（所以用户看不到作者的 npm 依赖）、
+    <code>node_modules</code> 不进（所以任何 external 出去的依赖就是不存在）、
+    <b>作者的 CI 也不在</b>（所以 OST 仓库里那道「拷到空目录跑一次」的守卫保护不到第三方插件）。
+    <br><b>今天的实测</b>：<code>pack-plugin.mjs</code> 的 <code>preflight</code> 只查<b>文件存在性</b>，
+    <b>完全不检查产物里有没有外部 require</b>。所以一个带 accidental external 的第三方插件，
+    跑 <code>pnpm pack</code> 会产出一个「合法」的交付物，一路顺到用户手上才炸。
+  </div>
+
+  <h3>先筛选：依赖有七类，各归各的机制</h3>
+  <table>
+    <thead><tr><th style="width:20%">依赖类型</th><th style="width:22%">例子</th><th style="width:24%">归谁</th><th>现状</th></tr></thead>
+    <tbody>
+      <tr><td>产物完整性</td><td class="mono">dist/index.js 缺了<br>entry 还指着源码</td><td>打包期 preflight</td><td><span class="tag have">已有</span></td></tr>
+      <tr><td>接口合法性</td><td class="mono">topic 不在共享事件表<br>protocolVersion 不合</td><td>扫盘期 scanPlugins</td><td><span class="tag have">已有</span></td></tr>
+      <tr><td>Core 版本</td><td class="mono">需要 Core ≥ 0.2</td><td class="mono">coreCompatibility</td><td><span class="tag have">已有</span></td></tr>
+      <tr><td>另一个插件</td><td class="mono">需要 models 提供 provider</td><td class="mono">dependencies[]</td><td><span class="tag have">已有</span></td></tr>
+      <tr style="background:var(--warning-soft)"><td><b>用户机器上的程序</b></td><td class="mono">需要 git / codegraph / 某个 CLI</td><td class="mono"><b>requires</b>（新）</td><td><span class="tag todo">缺</span></td></tr>
+      <tr style="background:var(--warning-soft)"><td><b>Node 版本</b></td><td class="mono">插件要用 node:sqlite<br>（需要 Node ≥ 22.5）</td><td class="mono"><b>requires</b>（新）</td><td><span class="tag todo">缺</span></td></tr>
+      <tr><td>Node 侧 npm 包 / 原生模块</td><td class="mono">better-sqlite3 …</td><td><b>不该在 plugin.json</b></td><td>见下</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>新增字段只该覆盖「Core 判不了的东西」。</b>
+    上面七行里只有两行是新需求，其余五条都已有机制 —— 而「Native 模块」那一行<b>根本不该出现在这张表里</b>。
+    <br>顺带：<span class="tag part">注意第 6 行的严重性</span> <code>插件化架构优化.html</code> §5 P8 明写
+    「这套分发仍要求用户机器上有 Node ≥ 24」，而实测 <code>engines</code> 字段<b>不存在</b>（根与 core 都没有）、
+    <code>.node-version</code> / <code>.nvmrc</code> 也没有。<b>整条硬性运行前提既没声明也没检查</b> ——
+    那是应用级的，应该由 Core 自己判，而不是让每个插件各写一遍。
+  </div>
+
+  <h3>为什么没有 <code>kind: "module"</code></h3>
+  <div class="note bad">
+    「插件需要某个原生模块」这件事<b>在 OST 的模型里是自相矛盾的</b>：
+    <br>· 能 bundle 的包 → <b>必须</b> bundle。<code>service-distribution.test.ts</code> 那条静态守卫已经在强制这件事
+    （产物里出现任何非 <code>node:</code> 前缀的 <code>require</code> 就红）。
+    <br>· 不能 bundle 的（<code>.node</code> 二进制）→ 它<b>不是插件的依赖，是运行环境的能力</b>。
+    <br>而「运行环境提供某种能力」在 OST 里已经有正确表达了：<b>能力位 / 另一个插件</b>。
+    所以它应该走 <code>dependencies[]</code> 或总线，而不是伪装成一条依赖声明 ——
+    否则这条声明永远只是「我需要 X」，却<b>没有任何办法说明「谁提供 X」</b>，
+    那是一条<b>无法兑现的承诺</b>，比不写更糟。
+  </div>
+
+  <h3>形状</h3>
+  <div class="tree">// plugins/&lt;id&gt;/plugin.json
+"requires": [
+  { "kind": "node", "version": "&gt;=22.5" },
+  { "kind": "executable", "name": "git", "why": "读写仓库快照" }
+]
+<span class="dim">// 不写 = 不限（与 coreCompatibility / dataReadableBy 同一条缺省纪律）</span></div>
+
+  <div class="tree"><span class="dim">// shared/src/plugin-manifest.ts —— 沿用 PluginDependencySchema 的风格</span>
+const RequiresSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('node'),
+    <span class="dim">/** 版本区间。留空 = 只要「有 Node」*/</span>
+    version: z.string().optional(),
+    why: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal('executable'),
+    name: z.string().min(1),
+    <span class="dim">/** 先只做存在性。版本区间要引入「输出怎么解析」，那是个 DSL —— 等真需要再加 */</span>
+    version: z.string().optional(),
+    why: z.string().optional(),
+    optional: z.boolean().default(false),
+  }),
+]).array().default([])</div>
+
+  <div class="note ok">
+    <b>为什么用「带 <code>kind</code> 判别符的扁平数组」而不是分组对象</b>：
+    加一种新 kind 是往 union 里<b>加一个值</b>，结构不变；而分组对象加一种就得改顶层形状。
+    且 <code>optional</code> 在每个 entry 上语义统一，前端渲染也能走一条分支。
+  </div>
+
+  <h3>不能从 <code>package.json</code> 推导，但<b>可以和产物对账</b></h3>
+  <table>
+    <thead><tr><th style="width:34%">做法</th><th>评价</th></tr></thead>
+    <tbody>
+      <tr><td>读 <code>package.json</code> 的 dependencies 自动填</td>
+        <td><b>不可行</b>：<code>package.json</code> 不进 dist → 用户读不到；pnpm workspace 依赖指向
+          <b>仓库内的工作区包</b> → 推导出来是噪声；devDependencies 与分发完全无关。</td></tr>
+      <tr><td style="background:var(--success-soft)"><b>扫产物里的 <code>require(...)</code> 与 <code>requires</code> 对账</b></td>
+        <td><b>这才是真相</b>：产物是 esbuild 打完之后的实际状态，而 <code>package.json</code> 里大部分依赖
+          <b>已经被打进去了</b>。<br>
+          规则：<b>产物里出现非 <code>node:</code> 前缀的 require，但没有在 <code>requires</code> 里声明它 → 报错。</b><br>
+          这条能自动抓住 95% 的真实事故（作者忘了 bundle、或误加了 <code>external</code>），
+          <b>而且不需要作者自觉</b>。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>检查放在哪：扫盘期只做零成本的</h3>
+  <div class="note bad">
+    <b>最要小心的一点</b>：<code>scanPlugins</code> 是<b>同步</b>的、在 Core 构造期调用。
+    如果在里面 spawn 子进程探测 PATH，四个插件 × 2 个 CLI × 1.5s ≈ <b>Core 启动卡 12 秒</b>。
+    <br>而且某些 Windows 环境的 CLI 会<b>弹 GUI 框</b>（凭据管理器之类）然后卡死 30 秒。
+  </div>
+  <table>
+    <thead><tr><th style="width:16%">时机</th><th style="width:40%">手段</th><th style="width:14%">成本</th><th>会不会崩</th></tr></thead>
+    <tbody>
+      <tr><td><b>扫盘期</b><br><span class="dim">同步</span></td>
+        <td><code>node</code> 版本字符串比较</td><td>近零</td><td>不崩</td></tr>
+      <tr><td><b>扫盘期</b><br><span class="dim">同步</span></td>
+        <td><b>PATH 目录扫描</b>判 executable 存在<br>
+          <span class="dim"><code>existsSync(dir/name)</code> + Windows 再试 <code>.exe/.cmd/.bat</code></span></td>
+        <td>近零</td><td><b>不崩</b></td></tr>
+      <tr><td><b>doctor</b><br><span class="dim">异步 · 一次性</span></td>
+        <td>真跑 <code>--version</code>、真加载模块</td><td>慢一点，可接受</td><td>有超时保护</td></tr>
+    </tbody>
+  </table>
+  <div class="note ok">
+    <b>「PATH 扫描代替 spawn」是这里的关键。</b> 纯 fs 操作、零子进程，所以放在扫盘期同步做也安全 ——
+    而且比 spawn <b>更准</b>（不会碰到「某个 CLI 在无 TTY 下弹窗卡死」这类问题）。
+  </div>
+
+  <h3>三态可信度：不要用一盏灯骗人</h3>
+  <p>声明得再细，检查也<b>永远只是近似</b>：<b>文件在 ≠ 能加载</b>（原生模块装错平台/ABI 时文件在但 <code>dlopen</code> 会失败）；
+  声明了 <code>version</code> 但不真跑，就<b>无法知道真实版本</b>。
+  所以 UI 上要区分三态，而不是用一盏绿的灯宣称「依赖满足」。</p>
+
+  <div class="ctl">
+    <button class="btn" id="reqPlay">▶ 播放两轮体检</button>
+    <span class="step-pill" id="reqPill">扫盘期（零成本同步）→ doctor（真跑一次）</span>
+  </div>
+  <div class="req" id="reqList"></div>
+  <p class="reqnote" id="reqNote"></p>
+
+  <div class="note">
+    <b>三态各自意味着什么</b>：
+    <br><code>detected</code> —— <b>静态推断</b>：文件存在 / 版本号可解析。它<b>不能</b>证明「能用」，
+    但足以把「缺」与「有」分开，而这已经能回答用户绝大多数问题。
+    <br><code>verified</code> —— <b>真的跑了 / 真的加载了</b>。只有 doctor 给得起。
+    <br><code>unknown</code> —— <b>没检</b>：超时、崩溃、非致命错误。
+    <span class="tag risk">关键</span> <b>绝不能把 <code>unknown</code> 显示成绿色</b> ——
+    那等于对用户撒了一个关于他自己机器的谎。
+  </div>
+
+  <h3>不满足时映射到 <code>degraded</code>，不发明第五种状态</h3>
+  <div class="note">
+    环境不满足该映射到哪个？答案是 <b><code>degraded</code></b>，理由和「缺必需插件依赖」完全一致：
+    它<b>没坏</b>（不是 <code>failed</code>），它<b>装了也在跑</b>（不是 <code>stopped</code>），
+    就是「装好了、缺 X、用不了」。
+    <br>发明第五种状态的下游全部要改：前端渲染、图标、筛选、状态聚合、<code>plugin.state.changed</code> 契约 ——
+    <b>而语义上它就是 degraded</b>。
+  </div>
+
+  <h3>呈现三层（缺的时候报，满足的时候也要报）</h3>
+  <table>
+    <thead><tr><th style="width:24%">层次</th><th style="width:30%">作用</th><th>为什么必须有</th></tr></thead>
+    <tbody>
+      <tr><td>插件详情页</td><td>体检报告（✓ / ✗ + 人话原因）</td>
+        <td>已有 <code>PluginDetailWindow</code>，<code>missingDependencies</code> 字段现成</td></tr>
+      <tr><td>服务状态面板</td><td>「这个服务为什么没起来」</td>
+        <td>用户遇到症状时第一个看的地方</td></tr>
+      <tr><td>启动日志</td><td>一行 warn</td><td>排障的最后一道</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>要双向显示。</b> 不只缺的时候报，<b>满足时也要显示 ✓</b> ——
+    用户会去详情页确认「我装的东西是全的」。只报缺，用户无法区分「全绿」和「没检查过」。
+    <br>reason 要是人话：「<b>缺少可执行程序 <code>git</code></b>（用于：读写仓库快照）」而不是 <code>env_check_failed</code>。
+  </div>
+
+  <h3>诚实的保证边界</h3>
+  <div class="note bad">
+    <b>能保证的</b>：B 的机器满足全部 <code>requires</code> + Core 版本 → 服务一定能起、握手能完成。
+    <br><b>不能保证的</b>：网络不通、磁盘满、能力位被别人抢、用户自己停用了插件。
+    <br>所以准确的说法是：<b><code>requires</code> + 自检把「不可发现的问题」变成「可发现的问题」，而不是消灭问题。</b>
+    <br>这个措辞很重要。一旦对外承诺「保证能用」，某天做不到时用户会当成 bug 报，
+    而真实原因是环境 —— 然后整套声明机制会被当成不可信。<b>过度承诺是这类设计最常见的失败方式。</b>
+  </div>
+
+  <h3>兼容性</h3>
+  <div class="note">
+    <code>plugin.json</code> 里<b>所有新字段都必须有缺省值</b> ——
+    理由和 <code>coreCompatibility</code> / <code>dataReadableBy</code> 一样：<b>不写 = 不限</b>，
+    现有四个插件零改动就能过，而「没声明」永远是安全的缺省。
+    <br>同时 Zod 默认会剥掉未声明字段，所以<b>不写进 schema 就等于丢了</b> ——
+    加上 <code>requires</code> 之前，别指望有人手写这个字段能生效。
+  </div>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<section>
+  <h2><span class="n">8</span>Agent Loop 闭环：一轮对话怎么穿过几个插件</h2>
+
+  <p>核心动效。按 <b>▶ 播放</b> 看一个数据包走完 10 步，或点单步前进。
+  每步标了落在哪个面：<span class="mono">🌐</span> 同源 HTTP/SSE ·
+  <span class="mono">🔌</span> 服务与 Core 的 stdio 管道 · <span class="mono">🔁</span> 总线 ·
+  <span class="mono">📁</span> 本地文件 · <span class="mono">📖</span> 只读特权。</p>
+
+  <div class="ctl">
+    <button class="btn" id="lpPlay">▶ 播放</button>
+    <button class="btn ghost" id="lpPrev">◀ 上一步</button>
+    <button class="btn ghost" id="lpNext">下一步 ▶</button>
+    <button class="btn ghost" id="lpReset">⟲ 重置</button>
+    <span class="step-pill" id="lpPill">1 / 10</span>
+  </div>
+
+  <div class="board">
+  <svg viewBox="0 0 1120 680" role="img" aria-label="一轮对话在插件之间的闭环">
+    <defs>
+      <marker id="mB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--bus)"/></marker>
+      <marker id="mH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--success)"/></marker>
+      <marker id="mW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--warning)"/></marker>
+    </defs>
+
+    <text x="18" y="30" font-size="12" font-weight="700" fill="var(--muted)">去程 · 请求</text>
+    <text x="18" y="428" font-size="12" font-weight="700" fill="var(--muted)">回程 · 事件与落库</text>
+    <line x1="18" y1="40" x2="1100" y2="40" stroke="var(--border)" stroke-dasharray="3 4"/>
+    <line x1="18" y1="438" x2="1100" y2="438" stroke="var(--border)" stroke-dasharray="3 4"/>
+
+    <!-- ① UI -->
+    <g class="node ui" id="n1">
+      <circle class="ring" cx="110" cy="180" r="34"/>
+      <rect class="r" x="25" y="124" width="170" height="112" rx="10"/>
+      <text x="41" y="149" font-size="13" font-weight="700">🪟 插件 UI</text>
+      <text x="41" y="171" font-size="11" fill="var(--muted)">🌐 界面（三盒之一）</text>
+      <text x="41" y="192" font-size="11" fill="var(--muted)" font-family="var(--mono)">POST /api/command</text>
+      <text x="41" y="210" font-size="11" fill="var(--muted)" font-family="var(--mono)">loop.run{A,…}</text>
+      <text x="41" y="227" font-size="10" fill="var(--muted)">A = 对外 requestId</text>
+    </g>
+    <!-- ② loop -->
+    <g class="node svc" id="n2">
+      <circle class="ring" cx="315" cy="180" r="34"/>
+      <rect class="r" x="230" y="124" width="170" height="112" rx="10"/>
+      <text x="246" y="149" font-size="13" font-weight="700">⚙️ loop</text>
+      <text x="246" y="171" font-size="11" fill="var(--muted)">🔌 受理 + 唯一写者</text>
+      <text x="246" y="192" font-size="11" fill="var(--muted)" font-family="var(--mono)">core.accept(A) 占位</text>
+      <text x="246" y="210" font-size="11" fill="var(--muted)" font-family="var(--mono)">message.append(user)</text>
+      <text x="246" y="227" font-size="10" fill="var(--muted)">先落库，再发请求</text>
+    </g>
+    <!-- ③ 装配 -->
+    <g class="node host" id="n3">
+      <circle class="ring" cx="520" cy="180" r="34"/>
+      <rect class="r" x="435" y="124" width="170" height="112" rx="10"/>
+      <text x="451" y="149" font-size="13" font-weight="700">🧩 装配器</text>
+      <text x="451" y="171" font-size="11" fill="var(--warning)">🔌 loop 进程内 · 本轮要建</text>
+      <text x="451" y="192" font-size="11" fill="var(--muted)" font-family="var(--mono)">提示词片段</text>
+      <text x="451" y="210" font-size="11" fill="var(--muted)" font-family="var(--mono)">工具目录</text>
+      <text x="451" y="227" font-size="11" fill="var(--muted)" font-family="var(--mono)">（技能索引）</text>
+    </g>
+    <!-- ④ llm 主位 -->
+    <g class="node svc" id="n4">
+      <circle class="ring" cx="725" cy="180" r="34"/>
+      <rect class="r" x="640" y="124" width="170" height="112" rx="10"/>
+      <text x="656" y="149" font-size="13" font-weight="700">⚙️ llm 主位</text>
+      <text x="656" y="171" font-size="11" fill="var(--muted)">🔁 路由表（事件喂起）</text>
+      <text x="656" y="192" font-size="11" fill="var(--muted)" font-family="var(--mono)">unsupported_provider</text>
+      <text x="656" y="210" font-size="11" fill="var(--muted)" font-family="var(--mono)">注入 credentialRef</text>
+      <text x="656" y="227" font-size="10" fill="var(--muted)">主位自己不解析凭证</text>
+    </g>
+    <!-- ⑤ provider -->
+    <g class="node svc" id="n5">
+      <circle class="ring" cx="930" cy="180" r="34"/>
+      <rect class="r" x="845" y="124" width="170" height="112" rx="10"/>
+      <text x="861" y="149" font-size="13" font-weight="700">🧠 provider</text>
+      <text x="861" y="171" font-size="11" fill="var(--muted)">📖 读自带数据</text>
+      <text x="861" y="192" font-size="11" fill="var(--muted)" font-family="var(--mono)">resolveApiKey(ref)</text>
+      <text x="861" y="210" font-size="11" fill="var(--muted)" font-family="var(--mono)">上游 SSE → chunk</text>
+      <text x="861" y="227" font-size="10" fill="var(--muted)">明文只在此进程</text>
+    </g>
+
+    <!-- session -->
+    <g class="node svc" id="nS">
+      <rect class="r" x="230" y="286" width="170" height="94" rx="10"/>
+      <text x="246" y="310" font-size="13" font-weight="700">📚 session</text>
+      <text x="246" y="332" font-size="11" fill="var(--muted)" font-family="var(--mono)">session.get → result</text>
+      <text x="246" y="352" font-size="11" fill="var(--muted)">📁 sessions/&lt;id&gt;.json</text>
+      <text x="246" y="370" font-size="10" fill="var(--muted)">append-only，不可变</text>
+    </g>
+
+    <!-- ⑥ 翻块 -->
+    <g class="node svc" id="n6">
+      <circle class="ring" cx="930" cy="508" r="34"/>
+      <rect class="r" x="845" y="452" width="170" height="112" rx="10"/>
+      <text x="861" y="477" font-size="13" font-weight="700">⚙️ 主位翻块</text>
+      <text x="861" y="499" font-size="11" fill="var(--muted)">🔁 wire → 中立事件</text>
+      <text x="861" y="520" font-size="11" fill="var(--muted)" font-family="var(--mono)">llm.token.streamed{B}</text>
+      <text x="861" y="538" font-size="11" fill="var(--muted)" font-family="var(--mono)">llm.request.tool_call{B}</text>
+      <text x="861" y="555" font-size="10" fill="var(--muted)">块闭合即发，不等 finish</text>
+    </g>
+    <!-- ⑦ loop 收尾 -->
+    <g class="node svc" id="n7">
+      <circle class="ring" cx="725" cy="508" r="34"/>
+      <rect class="r" x="640" y="452" width="170" height="112" rx="10"/>
+      <text x="656" y="477" font-size="13" font-weight="700">⚙️ loop 收尾</text>
+      <text x="656" y="499" font-size="11" fill="var(--muted)">🔌 换发 A（B 不泄前端）</text>
+      <text x="656" y="520" font-size="11" fill="var(--muted)" font-family="var(--mono)">loop.token.streamed{A}</text>
+      <text x="656" y="538" font-size="11" fill="var(--muted)" font-family="var(--mono)">message.append</text>
+      <text x="656" y="555" font-size="10" fill="var(--muted)">state.changed{A, idle}</text>
+    </g>
+    <!-- ⑧ SSE -->
+    <g class="node ui" id="n8">
+      <circle class="ring" cx="520" cy="508" r="34"/>
+      <rect class="r" x="435" y="452" width="170" height="112" rx="10"/>
+      <text x="451" y="477" font-size="13" font-weight="700">🌐 SSE 事件流</text>
+      <text x="451" y="499" font-size="11" fill="var(--muted)">GET /events?topics=…</text>
+      <text x="451" y="520" font-size="11" fill="var(--muted)" font-family="var(--mono)">loop.* / message.*</text>
+      <text x="451" y="538" font-size="11" fill="var(--muted)">三个 iframe 各收一份</text>
+      <text x="451" y="555" font-size="10" fill="var(--muted)">按 curId 过滤后重建</text>
+    </g>
+
+    <!-- 旁挂：能力来源（不是插件标准槽位） -->
+    <g class="node host" id="nP">
+      <rect class="r" x="660" y="286" width="300" height="94" rx="10"/>
+      <text x="676" y="310" font-size="13" font-weight="700">⚡ 能力来源 · 各服务自愿提供</text>
+      <text x="676" y="331" font-size="11" fill="var(--muted)" font-family="var(--mono)">📖 插件自带数据（文件名由服务自己定）</text>
+      <text x="676" y="350" font-size="11" fill="var(--muted)" font-family="var(--mono)">🔁 或：服务经总线 publish 出来</text>
+      <text x="676" y="370" font-size="10" fill="var(--warning)">不在 plugin.json 里声明 —— 那是归属信息，不是内容</text>
+    </g>
+
+    <path id="e1" class="edge httpline" d="M195 180 L230 180" marker-end="url(#mH)"/>
+    <path id="e2" class="edge busline" d="M400 180 L435 180" marker-end="url(#mB)"/>
+    <path id="e3" class="edge busline" d="M605 180 L640 180" marker-end="url(#mB)"/>
+    <path id="e4" class="edge busline" d="M810 180 L845 180" marker-end="url(#mB)"/>
+    <path id="e5" class="edge busline" d="M930 236 L930 452" marker-end="url(#mB)"/>
+    <path id="e6" class="edge busline" d="M845 508 L810 508" marker-end="url(#mB)"/>
+    <path id="e7" class="edge httpline" d="M640 508 L605 508" marker-end="url(#mH)"/>
+    <path id="e8" class="edge httpline" d="M435 508 L110 508 L110 236" marker-end="url(#mH)"/>
+    <path id="eS1" class="edge busline" d="M315 236 L315 286" marker-end="url(#mB)"/>
+    <path id="eS2" class="edge busline" d="M400 333 L520 333 L520 508 L640 508" marker-end="url(#mB)"/>
+    <path id="eP"  class="edge fileline" d="M660 333 L570 333 L570 240" marker-end="url(#mW)"/>
+    <path id="eT"  class="edge branch" d="M725 452 L725 380 L520 380 L520 236" marker-end="url(#mW)"/>
+    <text x="737" y="404" font-size="11" fill="var(--warning)" font-family="var(--mono)">工具轮续跑</text>
+    <text x="737" y="420" font-size="10" fill="var(--warning)">finishReason=tool_calls · state 保持 running</text>
+    <text x="410" y="277" font-size="11" fill="var(--bus)" font-family="var(--mono)">拉历史后才 start(B)</text>
+    <text x="122" y="384" font-size="11" fill="var(--success)" font-family="var(--mono)">SSE 回三个视图</text>
+    <text x="122" y="400" font-size="10" fill="var(--success)">闭环：这一轮的最后一字节</text>
+  </svg>
+  </div>
+
+  <div class="rail" id="lpRail"></div>
+  <div class="stage" id="lpStage"></div>
+
+  <div class="note bus">
+    <b>黄色那格「能力来源」是本版的关键修正。</b>
+    它<b>不在</b> <code>plugin.json</code> 里、不在插件目录标准里。它是<b>各服务自愿</b>通过两条既有的面
+    （<code>📖</code> 自己插件目录里的只读文件 ／ <code>🔁</code> 总线 publish）交给装配器的。
+    <br>装配器<b>不关心它们从哪来</b>，只按 <code>{ id, priority, content }</code> 这样的统一形状收集。
+    所以「装一个能力位 → 提示词与工具同时增减」是自然结果，而不是某条目录规则的效果。
+  </div>
+
+  <div class="note">
+    <b>A / B 两层 requestId 是闭环的关键设计。</b>
+    A = <code>loop.run</code>（前端只见 A），B = <code>llm.request</code> 内部 id，映射只活在 loop 内存 ——
+    所以回程事件必须<b>换发成 A</b>，B 永不泄前端。
+    <br>推论：<b>每个前端状态只能按 A 认领一次</b>。三个 iframe 各自订阅 <code>loop.state.changed{running}</code>，
+    谁先看到谁认领 —— 它们认领到<b>同一个 A</b>，所以三个视图的「正在生成」必然一致。
+    所有 handler 第一件事都是 <code>if (requestId !== activeA) return</code>，防上一轮迟到 token 污染新一轮。
+  </div>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<section>
+  <h2><span class="n">9</span>提示词 / 技能 / 工具 / 角色 各自归谁</h2>
+
+  <p>四样东西<b>都不在插件标准里</b>。那它们是什么？各有一条归属线：</p>
+
+  <table>
+    <thead><tr>
+      <th style="width:12%">东西</th><th style="width:16%">本质</th><th style="width:20%">宿主容器</th>
+      <th style="width:22%">怎么进上下文</th><th>谁决定它存不存在</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><b>提示词</b></td>
+        <td>每轮重算的<br><b>运行时值</b></td>
+        <td class="mono">装配器（在 loop 内）</td>
+        <td class="mono">拼进 system 首位<br><span class="dim">历史里的 system 一律丢弃 → 下一轮即生效，历史不用迁移</span></td>
+        <td><b>有没有服务 publish 片段</b></td>
+      </tr>
+      <tr>
+        <td><b>技能</b></td>
+        <td>懒加载资源<br><b>索引全系统一份</b></td>
+        <td class="mono">一个<b>服务</b>管<br><span class="dim">扫描 / 校验 / 索引 / 按需读</span></td>
+        <td class="mono">只有 name+description 进提示词<br>正文经一个读工具按需回填</td>
+        <td><b>那个技能服务在位且扫到了</b></td>
+      </tr>
+      <tr>
+        <td><b>工具</b></td>
+        <td>有副作用的<br><b>执行体</b></td>
+        <td class="mono"><b>一个服务</b>（跨进程能力位）</td>
+        <td class="mono">走 API <code>tools</code> 参数<br><b>不进 system 文本</b>（前缀缓存）</td>
+        <td><b>那个工具服务注册了</b><br><span class="dim">「注册」= 经总线声明自己</span></td>
+      </tr>
+      <tr>
+        <td><b>角色</b></td>
+        <td>一组绑定<br><b>用户数据</b></td>
+        <td class="mono"><b>一个服务</b>管档案</td>
+        <td class="mono">切角色 = 换一组绑定<br>→ 装配器下一轮用新的</td>
+        <td>角色服务在位 + 用户创建了角色</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>为什么工具不能是一份声明文件</h3>
+  <div class="note bad">
+    工具最要紧的信息<b>不在 ToolSpec 里</b>：会不会写文件？要不要审批？会不会调网络？沙箱边界在哪？超时多久？
+    <br>这些<b>只有执行者知道</b>。把它们从执行体里剥出来单独放一个 JSON，会立刻产生「谁执行」的二义性 ——
+    而答案是唯一的：<b>执行体就是一个服务</b>。
+    <br>模型看到的<b>声明</b>（名称 / 描述 / 参数 schema）是那个服务<b>顺手发布</b>的，
+    和它发布「我叫什么名字」是同一次动作 —— <b>声明与执行同源，不可能漂移</b>。
+    <br><span class="tag spec">这正是 P7 WS-2 写的终态</span>「工具 = 可插拔能力位（跨进程）」。
+  </div>
+
+  <h3>为什么技能不能挂在插件目录上</h3>
+  <div class="note bad">
+    技能是<b>懒加载</b>的：启动时全系统只有一份索引（每个技能一行），正文按需读。
+    <b>参与选择的是「当前角色绑了哪些技能」，不是「装了哪些插件」。</b>
+    <br>同一个技能要被多个角色、多个插件<b>引用</b> —— 它需要独立的命名空间与独立的选择机制；
+    一旦放进某个插件目录，它就变成那个插件的私有物，而角色绑定别人的技能就变成了跨插件耦合。
+    <br>而且索引的<b>形状</b>由「谁在用」决定（模型的上下文预算），不由「谁分发」决定。
+  </div>
+
+  <h3>契约提案：全部只是共享事件表上的新行</h3>
+  <div class="tree"><span class="dim">// 提示词片段 —— 发布方重播整份，收集方上线时问一次</span>
+'prompt.fragment.registered'   { pluginId, id, priority, text }     <span class="dim">// 事件</span>
+'prompt.fragment.unregistered' { pluginId, id }                     <span class="dim">// 事件</span>
+'prompt.fragments.list'        Record&lt;string, never&gt;             <span class="dim">// 命令</span>
+
+<span class="dim">// 工具 —— 声明与执行同源</span>
+'tool.registered'              { serviceId, tools: ToolSpec[] }     <span class="dim">// 事件（发布者 = 执行者）</span>
+'tool.unregistered'            { serviceId }                        <span class="dim">// 事件</span>
+'tools.list'                   Record&lt;string, never&gt;             <span class="dim">// 命令</span>
+'tool.execute'                 { requestId /*=toolCallId*/, sessionId, name, arguments }  <span class="dim">// 命令</span>
+'tool.execute.result'          { requestId, ok, content, summary }   <span class="dim">// 事件</span>
+'tool.approval.requested'      { requestId, toolName, summary, risk } <span class="dim">// 事件</span>
+'tool.approval.resolved'       { requestId, approved, reason? }      <span class="dim">// 命令</span>
+
+<span class="free">// 技能不需要新 topic：索引 = 一个提示词片段（name+description）</span>
+<span class="free">// 正文 = 一个工具（读某个服务自己目录下它自己定的路径）</span></div>
+
+  <div class="note ok">
+    <b>五条纪律，全部沿用已有机制</b>：
+    <br><b>① 重播整份而不是发增量。</b> 订阅方可能晚于发布方启动，那批增量早发完了。<b>拿到全量就不需要补偿逻辑。</b>
+    <br><b>② 缺失是合法的。</b> 没有片段 / 没有工具 / 没有技能的插件完全正常 —— 订阅失败要<b>忽略</b>，
+    不能让装饰性内容打死主链路。
+    <br><b>③ 顺序必须确定。</b> 同优先级按发布者 id 字典序。同一个系统两次启动得到不同提示词，
+    症状是「模型行为随机」，几乎无法排查。
+    <br><b>④ 有长度上限并告警。</b> 提示词片段变长会挤占历史预算，症状是「能力装上之后模型变笨」——
+    它看起来像模型问题，不像预算问题。<b>静默截断是最坏的一种。</b>
+    <br><b>⑤ 每个新能力都要自带重播命令。</b> 插件化落地时 provider 早于主位启动导致路由表空、
+    所有请求 <code>unsupported_provider</code>，修法是让主位自己上线时问一次。
+    <b>启动顺序不该是任何人的隐式依赖。</b>
+  </div>
+
+  <div class="note bad">
+    <b>工具跨进程化会引入三个新问题，必须同一批解决，否则只是把问题挪了位置</b>：
+    <br><b>① 超时与孤儿。</b> 执行者崩溃 → 结果永远不来 → loop 卡在 running → 用户看到「一直转圈」。
+    必须有<b>超时兜底（失败结果，不是静默）</b>。
+    <br><b>② 审批期间用户停掉了这一轮。</b> 结果到达时若 A 已释放 → <b>静默丢弃</b>，不许补发。
+    <br><b>③ 沙箱边界随执行者走。</b> 今天 loop 用自己插件的 dataDir 算只读沙箱根；
+    工具分散后<b>每个执行者各自算自己的</b>（它有 dataDir + 只读特权），loop 手里不该再有路径。
+  </div>
+</section>
+
+<!-- ══════════════ 9 ══════════════ -->
+<section>
+  <h2><span class="n">10</span>不变式（实施时不得破坏）</h2>
+  <ul>
+    <li><b>Core 不解析插件数据的内容与格式</b> —— 它只给插件一个目录、并在 HTTP 层搬字节。
+      <b>目录约定只有「你有一个属于自己的目录」这一条</b>；里面放什么是插件的事。
+      <span class="tag no">本版新增为第一条</span></li>
+    <li><b>不新增进程间协议</b>：stdio JSON-RPC + 共享事件表仍是唯一入口。新增能力一律是<b>表上新行</b>。</li>
+    <li><b><code>requires</code> 只能是数据，不能是可执行逻辑</b> <span class="tag spec">新</span>。
+      如果清单能写检查逻辑（如 <code>"check": "git --version &amp;&amp; test -d /foo"</code>），
+      那就等于<b>给插件在 Core 进程里执行任意命令的能力</b> —— 既打破「Core 不解析插件内容」，
+      也是个洞。所以<b>声明是结构化的值，执行逻辑由 Core 提供有限几种类型</b>，插件只能填值。
+      <br>同理<b>永远不新增第五种插件状态</b>：环境不满足映射到 <code>degraded</code>。</li>
+    <li><b>凭证明文永不过总线、永不进 SSE、永不进日志</b>：主位只转发不透明引用，只有执行者解引用。</li>
+    <li><b>Core 不知道插件存在</b>：ServiceManager 只收一张「服务 id → 数据根」查表与一个「允许启动集合」，
+      不 import 任何插件概念。</li>
+    <li><b>插件数据写权限只属自己</b>：服务握手只拿到自己插件那一份路径，跨插件写在<b>结构上</b>不可能。</li>
+    <li><b>一个插件坏掉不能让 Core 起不来</b>：清单是数据，问题收进 <code>problems[]</code>。</li>
+    <li><b>存在性由服务决定，不由目录决定</b>：没装 provider 就等于没有那个模型；
+      没有服务 publish 片段就等于那段提示词不存在。<b>能力存在性 = 谁注册了，不 = 谁的目录里有个文件。</b></li>
+    <li><b>测试跟着被测物走</b>：装配器测试留在 loop 包；每个插件自带数据的校验留在那个插件包里
+      （真构建 → 真 Core → 真请求）。</li>
+  </ul>
+</section>
+
+<!-- ══════════════ 10 ══════════════ -->
+<section>
+  <h2><span class="n">11</span>实施顺序</h2>
+  <div class="tree"><span class="dim">每一步独立验收、独立可 revert。全部只动服务与事件表，不动插件标准。</span>
+
+<span class="own">W0 · 补三个配置缺口</span>   <span class="dim">零新协议。默认 provider/model/thinking 落 models 服务自己的用户数据，</span>
+                        <span class="dim">回落链 = loop.run 参数 → 该默认 → env。消掉「配置了却发不出去」。</span>
+                        <span class="dim">今天 loop 硬编码 env||'deepseek'，只接 OpenAI 兼容端点的用户第一次发问就失败。</span>
+
+<span class="std">W0.5 · requires 两条</span>  <span class="std">见 §7。① plugin.json 加 requires 字段 + Zod schema + 单测；</span>
+                        <span class="std">② 产物对账守卫：扫产物里非 node: 前缀的 require，与 requires 比对。</span>
+                        <span class="std">这条【保护生态】—— 第三方作者不会跑 OST 的测试文件。</span>
+                        <span class="std">两件都不含任何探测逻辑，可独立落地。</span>
+
+<span class="own">W1 · 提示词片段装配</span>   <span class="dim">3 个 topic + 一个装配函数。片段来源 = 各服务经总线 publish（或自己带文件），</span>
+                        <span class="dim">装配器不关心来源。它顺带验证「装配器放 loop」这个决定对不对，</span>
+                        <span class="dim">并且是 W2/W3 的地基。</span>
+
+<span class="own">W2 · 角色服务</span>        <span class="dim">档案 + 绑定（人设 / 模型 / 工具 / 技能）+ character.changed。</span>
+                        <span class="dim">它是一个服务（可属于任意插件），<b>不是一个插件标准槽位</b>。</span>
+
+<span class="own">W3 · 技能服务</span>        <span class="dim">扫描 + 校验 + 全系统索引（进提示词片段）+ 一个读正文的工具。</span>
+                        <span class="dim">零新机制：索引是片段、正文是工具。</span>
+
+<span class="own">W4 · 工具跨进程化</span>    <span class="dim">执行者 = 服务；声明与执行同源；聚合复用 W1 的收集器。</span>
+                        <span class="dim">带一个真插件当切片：把内置只读工具抽成独立工具插件。</span>
+
+<span class="own">W5 · 审批位 + MCP</span>   <span class="dim">W5 之后才开脚本型技能（那等于进程执行）。MCP 服务是</span>
+                        <span class="dim">「运行时从协议生成 tool.registered 的执行者」，走同一条路，装配器零改动。</span></div>
+
+  <div class="note">
+    <b>为什么 W0 排在最前</b>：零新协议、改一个文件、消掉一个用户可见故障。
+    而 W1 之后每一步都会让<b>提示词与工具面同时变化</b> —— 如果没有一个稳定的默认模型回落，
+    你分不清「模型变笨了」是提示词改动还是模型选错了。<b>先把地基修平再改上层。</b>
+  </div>
+</section>
+
+<!-- ══════════════ 附录 ══════════════ -->
+<section>
+  <h2><span class="n">A</span>附录 · 「角色作为插件」的正确形态</h2>
+  <p>你最初的想法是「把角色做成插件，能编辑提示词、带技能、带工具」。
+  按本标准，这句话<b>可以成立，但要分清哪部分由标准负责、哪部分由那个插件自己负责</b>：</p>
+
+  <table>
+    <thead><tr><th style="width:22%">诉求</th><th style="width:26%">由谁负责</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>角色能<b>分发</b>、能独立启停、能自带界面</td><td><b>标准</b>：做成一个普通插件</td>
+        <td><code>plugin.json</code> 声明 id / 依赖 / <code>ui.views[]</code>；一份 <code>dist/</code>。
+          它和 models 插件享有完全同等的待遇，没有任何特殊之处。</td></tr>
+      <tr><td>角色的<b>提示词</b>可编辑</td><td><b>那个插件自己</b>：一份自带数据文件 + 一个服务读它</td>
+        <td>标准只提供 <code>📖 只读特权</code>（读自己目录）与 <code>🔁 总线</code>（发片段）。
+          <b>文件名与形状由它自己定</b> —— 就像 <code>catalog.json</code> 是 models 插件自己的约定。</td></tr>
+      <tr><td>用户的编辑<b>存哪</b></td><td>约定：<b>用户数据</b> <code>userData/plugin/&lt;id&gt;/</code></td>
+        <td>与插件交付物<b>物理隔离</b>，升级覆盖安装不会冲掉用户编辑。这是三层归属的用武之地。</td></tr>
+      <tr><td>角色<b>带技能</b></td><td><b>技能服务</b> + 角色服务里的<b>绑定</b></td>
+        <td>技能包是技能服务管的事；角色只存「绑了哪些技能」。<b>引用，不是拥有。</b></td></tr>
+      <tr><td>角色<b>带工具</b></td><td><b>工具服务</b> + 角色服务里的<b>绑定</b></td>
+        <td>工具是独立的能力位服务；角色只存「绑了哪些工具」。<b>这样工具可被多个角色共享。</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>这条路线最好的结果：角色的「存在性」与「能力」统一了，而且没有为此扩展标准。</b>
+    装一个角色插件 → 它的服务启动 → publish 它的提示词片段 → 装配器下一轮拼进去；
+    它的界面可摆位；它绑定的技能与工具因为对应服务在位而可用。
+    卸掉 → 服务停 → 片段随之消失 → <b>模型不再假装拥有那些能力</b>。
+    <br>而这个效果<b>不来自任何目录规则</b>，来自「服务注册了什么」——
+    也就是插件化最初那条原则：<b>存在性由能力提供者决定。</b>
+  </div>
+
+  <div class="note bad">
+    <b>一个必须提前防的失败模式</b>：如果角色插件把「绑了哪些工具」当成自己的<b>实现</b>
+    （比如把工具代码打包进自己的 <code>dist/server/</code>），那么<b>工具就退回到「进程内注册表」</b>，
+    而那份注册表是今天的现状 —— 它的文件头明确写着「这是最小工具循环的种子，<b>不是终态</b>」。
+    症状会是：装第二个角色时工具列表互相污染，且无法共享。<b>守住边界：角色存引用，工具归服务。</b>
+  </div>
+</section>
+
+<footer>
+  Osteosome · 插件标准（OST 实施稿 · 修订版）· 2026-10-05 ·
+  规范依据 <code>docs/插件化架构优化.html</code> §2 目标模型 / §3 运行时链路 / §4 已定决策 / §7 不变式 ·
+  代码依据 <code>shared/src/{events,plugin-manifest,paths}.ts</code> ·
+  <code>core/src/service-manager/{plugin-registry,plugin-registry-runtime,manifest,manager}.ts</code> ·
+  <code>core/src/sse-bridge/{server,command,plugin-ui}.ts</code> ·
+  <code>plugins/*/{plugin,service}.json</code> ·
+  配套 <code>docs/插件-Core通讯图.html</code> · <code>docs/插件协作与AI能力装配.html</code>
+</footer>
+</div>
+
+<script>
+(function () {
+  var themeBtn = document.getElementById('theme');
+  themeBtn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    themeBtn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ══ §3 扫盘 ══ */
+  var PKGS = [
+    { nm:'🧠 models',        ok:true,  rs:'5/5 通过 · 1 服务 · 1 视图' },
+    { nm:'💬 chat-workbench', ok:true,  rs:'5/5 通过 · 3 服务 · 3 视图' },
+    { nm:'🛟 reliability',    ok:true,  rs:'5/5 通过 · 1 服务 · 0 视图' },
+    { nm:'🧭 workbench',      ok:true,  rs:'5/5 通过 · 0 服务 · 6 视图' },
+    { nm:'📦 demo-bundle',    ok:false, rs:'闸门③ 不过：id ≠ 目录名' }
+  ];
+  var GATES = [
+    { t:'闸门① 目录里有 plugin.json', d:'没有 → 完全看不见这个目录。空目录不是故障，是「没装」。' },
+    { t:'闸门② 过 Zod schema', d:'不过 → 收进 problems[]，其余插件照常加载。一条坏清单不该让应用打不开。' },
+    { t:'闸门③ id == 目录名', d:'不过 → 以 id 为准并告警。最常见的后果是「拷目录时有人改过 id」，依赖方按旧 id 找不到它。' },
+    { t:'闸门④ 声明的产物存在', d:'源码侧缺失 = 插件写错了（改代码）；产物缺失 = 忘了构建（跑一次 build）。<b>必须分开报</b>，否则用户以为跑一次 build 就全好了。' },
+    { t:'闸门⑤ coreCompatibility 满足', d:'不过 → 不 spawn，但插件<b>仍然可见</b>。用户要看得见「我装了它」，而不是「插件凭空消失」。' }
+  ];
+  var pkgRow = document.getElementById('pkgRow');
+  PKGS.forEach(function (p) {
+    var d = document.createElement('div'); d.className = 'pkg';
+    d.innerHTML = '<div class="nm">' + p.nm + '</div><div class="rs">' + p.rs + '</div>';
+    pkgRow.appendChild(d);
+  });
+  var gateList = document.getElementById('gateList');
+  GATES.forEach(function (g, i) {
+    var d = document.createElement('div'); d.className = 'g';
+    d.style.animationDelay = (i*90) + 'ms';
+    d.innerHTML = '<span class="num">' + (i+1) + '</span><div><div class="t">' + g.t + '</div><div class="d">' + g.d + '</div></div>';
+    gateList.appendChild(d);
+  });
+  var scanBox = document.getElementById('scanBox'), scanPill = document.getElementById('scanPill'), scanTimer = null;
+  document.getElementById('scanPlay').addEventListener('click', function () {
+    if (scanTimer) { clearInterval(scanTimer); scanTimer = null; scanBox.classList.remove('running');
+      scanPill.textContent = '4 个真实插件 + 1 个反例 · 5 道闸门 · 任何一道不过只降级不抛错';
+      for (var i=0;i<pkgRow.children.length;i++) pkgRow.children[i].classList.remove('hit');
+      return; }
+    var k = 0; scanBox.classList.add('running'); scanPill.textContent = '扫盘中…';
+    scanTimer = setInterval(function () {
+      k++;
+      PKGS.forEach(function (p, i) {
+        var el = pkgRow.children[i], order = p.ok ? i : i + 1;
+        if (k >= order + 1) el.classList.add(p.ok ? 'pass' : 'fail');
+        el.classList.toggle('hit', k === order + 1);
+      });
+      scanPill.textContent = '闸门 ' + Math.min(k,5) + ' / 5 · 正在校验 ' + PKGS[Math.min(k,5)-1].nm;
+      if (k > PKGS.length + 2) { clearInterval(scanTimer); scanTimer = null; scanBox.classList.remove('running');
+        scanPill.textContent = '完成：4 个通过 · 1 个 id≠目录名（已告警，仍可见）'; }
+    }, 520);
+  });
+
+  /* ══ §5 生命周期 ══ */
+  var LC = [
+    { t:'① 前端发 plugin.stop', d:'Core 展开成「停它带的那些服务」。插件不是进程，没有自己的句柄。' },
+    { t:'② 若含 loop：先 loop.cancel', d:'让在途的一轮正常收尾。直接杀会留下半截 assistant 消息，而历史 append-only，那半截永远留在那里。' },
+    { t:'③ 逐个停服务', d:'单个服务停不下来只告警、不中断 —— 否则停 A 会因为 B 卡住而连 C 也不停。' },
+    { t:'④ refresh() 重算状态', d:'挂在 service.* 事件上，变了才 publish。不重扫盘：盘是慢的、告警是吵的。' },
+    { t:'⑤ plugin.start 反向展开', d:'按启动顺序逐个 spawn → 握手 → 拿到自己的数据根。' },
+    { t:'⑥ 能力位重播', d:'新起的服务要重播自己的「现在都有谁」，否则晚启动的收集方永远看不到它。' }
+  ];
+  var lcRow = document.getElementById('lcRow');
+  LC.forEach(function (s) {
+    var d = document.createElement('div'); d.className = 'lc';
+    d.innerHTML = '<div class="t">' + s.t + '</div><div class="d">' + s.d + '</div>';
+    lcRow.appendChild(d);
+  });
+  var lcPill = document.getElementById('lcPill'), lcTimer = null;
+  document.getElementById('lcPlay').addEventListener('click', function () {
+    if (lcTimer) { clearInterval(lcTimer); lcTimer = null; lcPill.textContent = '停之前先收尾；启停不重扫盘';
+      for (var i=0;i<lcRow.children.length;i++) lcRow.children[i].classList.remove('live'); return; }
+    var k = 0;
+    lcTimer = setInterval(function () {
+      for (var i=0;i<LC.length;i++) lcRow.children[i].classList.toggle('live', i === k);
+      lcPill.textContent = LC[k].t; k++;
+      if (k >= LC.length) { clearInterval(lcTimer); lcTimer = null; lcPill.textContent = '完成 · 当前无插件处于停用状态'; }
+    }, reduced ? 1600 : 1000);
+  });
+
+  /* ══ §7 requires 体检三态 ══ */
+  /* 每行的 [扫盘期, doctor] 两档 —— 演示「detected 能升级成 verified，missing 与 unknown 不动」 */
+  var REQ = [
+    { what: '{ kind:"node", version:">=22.5" }', why: '插件用了 node:sqlite',
+      s: ['detected', 'verified'], note: '扫盘期字符串比较就够；doctor 读 process.versions 复核一次。' },
+    { what: '{ kind:"executable", name:"git" }', why: '读写仓库快照',
+      s: ['detected', 'verified'], note: 'PATH 扫描判存在（零成本）；doctor 真跑 --version 才给得起 verified。' },
+    { what: '{ kind:"executable", name:"codegraph" }', why: '代码图索引',
+      s: ['missing', 'missing'], note: '两档都是 missing —— 这种要报人话原因「缺少可执行程序 codegraph（用于：代码图索引）」。' },
+    { what: '{ kind:"executable", name:"vault-cli", version:">=1.0" }', why: '读密钥库',
+      s: ['unknown', 'unknown'], note: '探测超时 → unknown。绝不能显示成绿色：那等于对用户撒了一个关于他自己机器的谎。' }
+  ];
+  var LABELS = { detected: 'detected · 文件在', verified: 'verified · 真跑过',
+                 missing: 'missing · 缺失', unknown: 'unknown · 没检成' };
+  var PHASE_TXT = [
+    '阶段 1 / 2 · 扫盘期（同步 · 零 spawn · PATH 扫描代替子进程）',
+    '阶段 2 / 2 · doctor（异步 · 真跑一次 · 超时保护）'
+  ];
+  var reqList = document.getElementById('reqList');
+  if (reqList) {
+    REQ.forEach(function (r) {
+      var d = document.createElement('div');
+      d.className = 'row'; d.dataset.s = 'unknown'; d.dataset.ph = '0';
+      d.innerHTML = '<span class="lamp"></span><span class="what"></span>' +
+        '<span class="why"></span><span class="state"></span>';
+      d.querySelector('.what').textContent = r.what;
+      d.querySelector('.why').textContent = r.why;
+      reqList.appendChild(d);
+    });
+  }
+  var reqPill = document.getElementById('reqPill'), reqNote = document.getElementById('reqNote');
+  var reqPhase = 0, reqTimer = null;
+  function renderReq() {
+    if (!reqList) return;
+    for (var i = 0; i < REQ.length; i++) {
+      var row = reqList.children[i], st = REQ[i].s[reqPhase];
+      row.dataset.s = st; row.dataset.ph = String(reqPhase);
+      row.querySelector('.state').textContent = LABELS[st];
+    }
+    reqPill.textContent = PHASE_TXT[reqPhase];
+    reqNote.textContent = '▸ ' + REQ[Math.min(reqPhase, 1) === 0 ? 0 : 1].note;
+  }
+  var reqBtn = document.getElementById('reqPlay');
+  if (reqBtn) reqBtn.addEventListener('click', function () {
+    if (reqTimer) { clearInterval(reqTimer); reqTimer = null; reqBtn.textContent = '▶ 播放两轮体检'; reqPhase = 0; renderReq(); return; }
+    reqBtn.textContent = '⟲ 重来';
+    reqPhase = 0; renderReq();
+    reqTimer = setInterval(function () {
+      reqPhase++;
+      if (reqPhase > 1) {
+        clearInterval(reqTimer); reqTimer = null;
+        reqBtn.textContent = '▶ 播放两轮体检'; reqPhase = 0; renderReq(); return;
+      }
+      renderReq();
+    }, reduced ? 2000 : 1300);
+  });
+  renderReq();
+
+  /* ══ §8 loop 闭环 stepper ══ */
+  var STEPS = [
+    { n:'①', nodes:['n1'], edges:['e1'], who:'插件 UI → Core', face:'🌐 同源 HTTP',
+      txt:'用户点发送。界面把本轮参数（provider / model / thinking）与 sessionId、text 一起发成一条命令。HTTP 回执只表示「命令收到了」—— 后面所有进展都由事件驱动。',
+      code:'POST /api/command { topic:"loop.run", payload:{ requestId:"A", sessionId, text, provider?, model?, thinking? } } → 202' },
+    { n:'②', nodes:['n2'], edges:[], who:'loop 受理', face:'🔌 总线',
+      txt:'两件事，顺序不能反：先 accept(A) 占位防重入（运行中再发直接回 busy），再把 user 消息落库。用户行要「服务端真的存下来了」才出现，而不是乐观地先画上去。',
+      code:'core.accept(A) → message.append{role:"user"}\nloop.state.changed{A, running}' },
+    { n:'③', nodes:['n2','nS'], edges:['eS1','eS2'], who:'拉历史', face:'🔌 总线 → 📁 本地文件',
+      txt:'会话历史是唯一的数据源，loop 不直读文件 —— 服务之间只经总线。拿到历史才发第一次请求（起内部 id B）。历史拉取失败或会话已删，都有降级成一问一答的兜底，不会卡在 running。',
+      code:'publish session.get{hg-A} → session.get.result\n→ buildMessages(历史, prompt, 20) → core.start(B)' },
+    { n:'④', nodes:['n3','nP'], edges:['e2','eP'], who:'★ 装配器：从两条面收集', face:'🔌 总线 + 📖 只读特权',
+      txt:'本轮最该改的一格。片段与工具目录由同一个装配点、同一时刻收集 —— 它们必须同步增减：工具在位但提示词没说明它存在，模型不会去调一个它不知道存在的工具。来源是各服务自愿给的（自己目录里的文件，或总线 publish），<b>装配器不关心从哪来</b>。',
+      code:'composePrompt(片段，按 priority 稳定排序)\n+  toolSpecs()\n→ publish llm.request{ B, messages, tools }' },
+    { n:'⑤', nodes:['n4'], edges:['e3'], who:'llm 主位查路由', face:'🔁 总线',
+      txt:'路由表由注册事件喂起来，查询失败立刻回明确错误，不让请求悬着。主位自己不 import 任何 provider —— 「装了什么」决定「有什么模型」，这是能力位的核心。',
+      code:'route = resolve(provider) → 无则 llm.request.failed{unsupported_provider}\n有则 publish llm.request.started' },
+    { n:'⑥', nodes:['n4','n5'], edges:['e4'], who:'主位 → provider', face:'🔁 总线',
+      txt:'主位把路由里的凭证引用与重试策略当不透明字符串注入并透传。引用形如 env:NAME 或 file:cred_x —— 主位不解引用，因此明文永远不过总线。',
+      code:'publish llm.provider.request{ B, model, messages, tools, credentialRef, retryPolicy }' },
+    { n:'⑦', nodes:['n5'], edges:[], who:'provider 发流', face:'📖 读自带数据 · 📁 解引用凭证',
+      txt:'只有这一个进程把引用解成明文并放进 Authorization 头，然后向上游发流、逐块回吐。引用格式坏了在这里就抛 —— 空 apiKey 打过去换来 401，那条报错会指向「厂商配错了」，而真实原因是指向错的方向更难查。',
+      code:'resolveApiKey(ref) → streamCompletions(baseURL)\n→ publish llm.provider.chunk{ B, chunk }' },
+    { n:'⑧', nodes:['n6'], edges:['e5'], who:'主位翻块', face:'🔁 总线',
+      txt:'wire 形状不出 provider 边界，中立块结构在这里翻译成对外事件。工具调用按块 id 拼装完整参数，块闭合即发、不等 finish —— 上层能在模型还在续答时就开始渲染工具。思维链与正文必须分流，否则思维链会混进回答正文。',
+      code:'delta → llm.token.streamed{B, blockType}\nblock-end(tool_call) → llm.request.tool_call{B}\nfinish → finished / failed' },
+    { n:'⑨', nodes:['n7'], edges:['e6','eS2'], who:'loop 收尾', face:'🔌 总线 → 📁 落库',
+      txt:'累积正文与思维链，换发成 A（B 永不泄前端），然后落 assistant 消息并把状态回 idle。失败走另一条事件、取消走成功路径且不留半截 —— 三个出口的事件不同，界面才知道该怎么显示。',
+      code:'publish loop.token.streamed{A, sessionId}\nmessage.append{assistant, reasoning, usage} → loop.state.changed{A, idle}' },
+    { n:'⑩', nodes:['n8','n1'], edges:['e7','e8'], who:'★ 闭环：回到界面', face:'🌐 SSE',
+      txt:'同一批事件投递给同一插件的三个独立 iframe，它们各自按 curId 过滤后重建自己的视图。没有消息层、没有共享内存 —— 服务端事件流本来就是那个共享层。若模型这轮发起了工具调用，则回到 ④ 续跑，且状态保持 running、不发 idle。',
+      code:'GET /events?topics=loop.*,message.*,session.*\n→ 三个 iframe 各自 rebuild\n｜ 工具轮：nextRound(B→B′) 回 ④' }
+  ];
+  var rail = document.getElementById('lpRail');
+  STEPS.forEach(function () { rail.appendChild(document.createElement('i')); });
+  var stage = document.getElementById('lpStage'), pill = document.getElementById('lpPill');
+  var idx = -1, lpTimer = null;
+  function render() {
+    for (var i=0;i<STEPS.length;i++) {
+      var s = STEPS[i], on = i === idx;
+      var vis = idx < 0 ? false : (on || i === idx-1 || i === idx+1);
+      s.nodes.forEach(function (id) {
+        var g = document.getElementById(id);
+        g.classList.toggle('on', on); g.classList.toggle('dim', idx>=0 && !vis);
+      });
+      s.edges.forEach(function (id) {
+        var e = document.getElementById(id);
+        e.classList.toggle('on', on); e.classList.toggle('dim', idx>=0 && !vis);
+      });
+      rail.children[i].className = on ? 'on' : (i < idx ? 'done' : '');
+    }
+    if (idx < 0) {
+      pill.textContent = '1 / ' + STEPS.length;
+      stage.innerHTML = '<div class="who">准备就绪</div><div class="txt">按 ▶ 播放，看一个数据包走完一轮对话的 10 步。' +
+        '每步都标了落在哪个面 —— 注意全程没有任何一条新协议，也没有任何一个目录规则参与。</div>';
+      return;
+    }
+    var s = STEPS[idx];
+    pill.textContent = (idx+1) + ' / ' + STEPS.length + ' · ' + s.face;
+    stage.innerHTML = '<div class="who">' + s.n + ' ' + s.who + ' · ' + s.face + '</div>' +
+      '<div class="txt">' + s.txt + '</div><div class="code">' + s.code.replace(/</g,'&lt;') + '</div>';
+  }
+  function go(n) { idx = Math.max(-1, Math.min(STEPS.length-1, n)); render(); }
+  document.getElementById('lpPlay').addEventListener('click', function () {
+    if (lpTimer) { clearInterval(lpTimer); lpTimer = null; return; }
+    if (idx >= STEPS.length-1) idx = -1;
+    lpTimer = setInterval(function () {
+      if (idx >= STEPS.length-1) { clearInterval(lpTimer); lpTimer = null; return; }
+      go(idx+1);
+    }, reduced ? 3200 : 2100);
+  });
+  document.getElementById('lpNext').addEventListener('click', function () { if (lpTimer) { clearInterval(lpTimer); lpTimer = null; } go(idx+1); });
+  document.getElementById('lpPrev').addEventListener('click', function () { if (lpTimer) { clearInterval(lpTimer); lpTimer = null; } go(idx-1); });
+  document.getElementById('lpReset').addEventListener('click', function () { if (lpTimer) { clearInterval(lpTimer); lpTimer = null; } go(-1); });
+  render();
+  if (!reduced) setTimeout(function(){ go(0); }, 600);
+})();
+</script>
+</body>
+</html>

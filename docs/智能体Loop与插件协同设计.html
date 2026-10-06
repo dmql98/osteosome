@@ -1,0 +1,2464 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>智能体 Loop 与插件协同设计 · OST</title>
+<style>
+  /* 令牌与 docs/插件化架构优化.html / 插件协作与AI能力装配.html 同一套（sdk/ui/src/tokens.css） */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-2:#0b3f74; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec; --warning:#9a6700; --warning-soft:#fdf6e3;
+    --bus:#7c4dff; --bus-soft:#efe9ff;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 12px rgba(16,22,26,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-2:#093460; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f; --warning:#d29922; --warning-soft:#33280f;
+    --bus:#a683ff; --bus-soft:#251d3d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--s5) var(--s6); }
+
+  header.bar { position: sticky; top:0; z-index:10; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding-top:10px; padding-bottom:10px; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  header.bar button:hover { filter:brightness(1.08); }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+
+  section { margin: var(--s6) 0 0; }
+  h2 { font-size:var(--lg); margin: 0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+       border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size: var(--md); margin: var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin: 0 0 var(--s3); }
+  ul, ol { margin: 0 0 var(--s3); padding-left: 1.25em; }
+  li { margin: 4px 0; }
+
+  table { width:100%; border-collapse: collapse; margin: var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th, td { text-align:left; padding: 8px 10px; border-bottom:1px solid var(--border); vertical-align: top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background: var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.ok { border-left-color: var(--success); background: var(--success-soft); }
+  .note.info { border-left-color: var(--primary); background: var(--primary-soft); }
+  .note.bus { border-left-color: var(--bus); background: var(--bus-soft); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); vertical-align:middle; white-space:nowrap; }
+  .tag.have { background:var(--success); }
+  .tag.new  { background:var(--primary); }
+  .tag.risk { background:var(--danger); }
+  .tag.warn { background:var(--warning); }
+  .tag.opt  { background:var(--muted); }
+  .ref { font-family:var(--mono); font-size:12px; color:var(--primary); white-space:nowrap; }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.85; margin:0 0 var(--s4);
+    white-space:pre; overflow-x:auto; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .add { color:var(--primary); font-weight:600; }
+  .tree .bad { color:var(--danger); }
+  .tree .dim { color:var(--muted); }
+  .tree .free { color:var(--warning); }
+
+  .board { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s3); box-shadow:var(--shadow-sm); }
+  svg { display:block; width:100%; height:auto; }
+
+  .ctl { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; margin:var(--s3) 0 var(--s2); }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:var(--surface); color:var(--text); border:1px solid var(--border-strong); }
+  .btn.on { background:var(--bus); }
+  .step-pill { font-family:var(--mono); font-size:12px; color:var(--muted); padding:4px 10px;
+    border:1px solid var(--border); border-radius:var(--r-full); background:var(--surface); }
+  .stage { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface-2);
+    padding:var(--s3); font-size:var(--sm); min-height:104px; }
+  .stage .who { font-weight:700; color:var(--primary); font-size:12px; letter-spacing:.3px; text-transform:uppercase; }
+  .stage .txt { margin-top:4px; }
+  .stage .code { font-family:var(--mono); font-size:12px; margin-top:6px; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--r-sm); padding:6px 8px; white-space:pre-wrap; }
+  .rail { display:flex; gap:4px; margin:var(--s3) 0 0; flex-wrap:wrap; }
+  .rail i { width:20px; height:5px; border-radius:var(--r-full); background:var(--surface-3);
+    display:block; transition:background .2s; }
+  .rail i.on { background:var(--primary); }
+  .rail i.done { background:var(--success); }
+
+  /* ══ 动效 ══ */
+  @keyframes dashflow { to { stroke-dashoffset:-48; } }
+  @keyframes pulseRing { 0% { r:26; opacity:.55 } 70% { r:46; opacity:0 } 100% { r:46; opacity:0 } }
+  @keyframes glow { 0%,100% { filter:drop-shadow(0 0 0 transparent) } 50% { filter:drop-shadow(0 0 9px var(--primary)) } }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @keyframes riseIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+  @keyframes slidex { 0%,100% { transform:translateX(0) } 50% { transform:translateX(6px) } }
+
+  .edge { fill:none; stroke:var(--border-strong); stroke-width:2; }
+  .edge.busline { stroke:var(--bus); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.httpline { stroke:var(--success); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.fileline { stroke:var(--warning); stroke-dasharray:4 5; animation:dashflow 1.8s linear infinite; }
+  .edge.loopback { stroke:var(--warning); stroke-dasharray:8 5; animation:dashflow 1.6s linear infinite; }
+  .edge.on { stroke-width:3.6; animation-duration:.5s; filter:drop-shadow(0 0 6px currentColor); }
+  .edge.dim { opacity:.16; }
+
+  .node { opacity:.5; transition:opacity .25s; }
+  .node .r { fill:var(--surface); stroke:var(--border-strong); stroke-width:1.6; }
+  .node.plug .r { fill:var(--success-soft); stroke:var(--success); }
+  .node.new  .r { fill:var(--primary-soft); stroke:var(--primary); stroke-dasharray:6 4; }
+  .node.svc  .r { fill:var(--bus-soft); stroke:var(--bus); }
+  .node.host .r { fill:var(--warning-soft); stroke:var(--warning); }
+  .node.ui   .r { fill:var(--surface); stroke:var(--success); }
+  .node.on { opacity:1; }
+  .node.on .r { stroke-width:2.8; animation:glow 1.1s ease-in-out infinite; }
+  .node.dim { opacity:.14; }
+  .ring { fill:none; stroke:var(--primary); stroke-width:2; opacity:0; }
+  .node.on .ring { animation:pulseRing 1.4s ease-out infinite; }
+  .fade { transition:opacity .25s, filter .25s; }
+
+  /* 分层聚焦 */
+  .layerBtn { font-size:var(--sm); }
+  .laneG { transition:opacity .3s; }
+
+  /* 序列图 */
+  .seqmsg { opacity:.28; transition:opacity .25s; }
+  .seqmsg.on { opacity:1; }
+  .seqmsg.on path { stroke-width:2.8; filter:drop-shadow(0 0 5px currentColor); }
+  .seqlabel { opacity:.3; transition:opacity .25s; }
+  .seqlabel.on { opacity:1; font-weight:700; }
+  .seqnum { font-size:9.5px; fill:var(--muted); font-family:var(--mono); }
+  .seqnum.on { fill:var(--primary); font-weight:700; }
+  .laneHead { font-size:11px; font-weight:700; fill:var(--text); }
+
+  /* 装配预览 */
+  .asm { display:grid; grid-template-columns: 250px 1fr; gap:var(--s4); align-items:start; }
+  @media (max-width:860px){ .asm{grid-template-columns:1fr} }
+  .pick { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); padding:var(--s3); }
+  .pick h4 { margin:0 0 var(--s2); font-size:var(--sm); }
+  .optrow { display:flex; align-items:center; gap:var(--s2); font-size:var(--sm); padding:4px 0; cursor:pointer;
+    border-radius:var(--r-sm); transition:background .18s; }
+  .optrow:hover { background:var(--surface-2); }
+  .optrow.sel { background:var(--primary-soft); }
+  .optrow .nm { flex:1; }
+  .optrow .risk { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+  .layers { display:grid; gap:6px; }
+  .layer { display:grid; grid-template-columns:18px 1fr auto; gap:var(--s2); align-items:center;
+    border:1px solid var(--border); border-left-width:4px; border-radius:var(--r-sm);
+    padding:6px 8px; background:var(--surface); font-size:12.5px; animation:riseIn .28s both; }
+  .layer .p { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+  .layer .b { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .layer.dropped { opacity:.42; border-left-color:var(--danger) !important; text-decoration:line-through; }
+  .bar { height:8px; border-radius:var(--r-full); background:var(--surface-3); overflow:hidden; margin:var(--s2) 0; }
+  .bar > i { display:block; height:100%; background:var(--success); transition:width .35s ease, background .35s; }
+  .bar.warn > i { background:var(--warning); }
+  .bar.over > i { background:var(--danger); }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
+  .chip { font-family:var(--mono); font-size:11px; padding:2px 7px; border-radius:var(--r-full);
+    border:1px solid var(--border-strong); background:var(--surface); animation:riseIn .25s both; }
+  .chip.ro { border-color:var(--success); color:var(--success); }
+  .chip.net { border-color:var(--warning); color:var(--warning); }
+  .chip.proc { border-color:var(--danger); color:var(--danger); }
+  .chip.none { border-style:dashed; color:var(--muted); }
+  .chip.skill { border-color:var(--bus); color:var(--bus); }
+  .warnline { font-size:12.5px; color:var(--warning); margin-top:6px; }
+  .badline { font-size:12.5px; color:var(--danger); margin-top:6px; }
+  .okline { font-size:12.5px; color:var(--success); margin-top:6px; }
+
+  /* 三段式重播 */
+  .three { display:grid; gap:6px; margin:var(--s3) 0; }
+  .three .t { display:grid; grid-template-columns:26px 150px 1fr; gap:var(--s3); align-items:center;
+    border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s2) var(--s3);
+    background:var(--surface); font-size:var(--sm); transition:all .28s; }
+  .three .t .i { width:22px; height:22px; border-radius:var(--r-full); background:var(--surface-3);
+    color:var(--muted); font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .three .t .w { font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+  .three .t .d { font-size:12.5px; }
+  .three .t.live { border-color:var(--primary); background:var(--primary-soft); box-shadow:var(--shadow-md);
+    animation:slidex .6s ease-in-out infinite; }
+  .three .t.live .i { background:var(--primary); color:#fff; }
+  .three .t.done { border-color:var(--success); }
+  .three .t.done .i { background:var(--success); color:#fff; }
+
+  /* 状态机 */
+  .fsm { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:var(--s3) 0; }
+  .st { border:1px solid var(--border-strong); border-radius:var(--r-md); padding:6px 12px; font-size:12.5px;
+    background:var(--surface); font-family:var(--mono); transition:all .3s; }
+  .st.on { border-color:var(--bus); background:var(--bus-soft); box-shadow:var(--shadow-md);
+    transform:translateY(-2px); animation:glow 1.2s ease-in-out infinite; }
+  .st.ok { border-color:var(--success); background:var(--success-soft); }
+  .st.bad { border-color:var(--danger); background:var(--danger-soft); }
+  .arw { color:var(--muted); font-size:13px; }
+
+  .kv { display:grid; grid-template-columns:210px 1fr; gap:5px var(--s3); font-size:var(--sm); margin:0 0 var(--s4); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  .check { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); margin:0 0 var(--s3); overflow:hidden; }
+  .check > .hd { display:flex; align-items:center; gap:var(--s2); padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .check > .hd .id { font-family:var(--mono); font-weight:700; color:var(--primary); }
+  .check > .hd .ttl { font-weight:600; }
+  .check > .bd { padding:var(--s3) var(--s4); }
+  .check > .bd table { margin:0; }
+
+  .phase { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    margin:0 0 var(--s3); overflow:hidden; }
+  .phase > .hd { display:flex; align-items:center; gap:var(--s2); padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .phase > .hd .id { font-family:var(--mono); font-weight:700; color:var(--primary); }
+  .phase > .hd .ttl { font-weight:600; }
+  .phase > .bd { padding:var(--s3) var(--s4); font-size:var(--sm); }
+  .phase > .bd > dl { margin:0; display:grid; grid-template-columns:88px 1fr; gap:6px var(--s3); font-size:var(--sm); }
+  .phase > .bd dt { color:var(--muted); font-size:var(--xs); font-weight:600; padding-top:2px; }
+  .phase > .bd dd { margin:0; }
+
+  footer { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  footer a { color:var(--primary); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge, .node.on .r, .node.on .ring, .three .t.live, .st.on { animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>智能体 Loop 与插件协同设计</h1>
+    <span class="sp"></span>
+    <span class="sub">2026-10-06 · 8 插件 / 10 服务 / 一次完整 agent loop 的协同设计</span>
+    <button id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>这份文档回答两件事</b>：① 新增四个插件（<b>技能管理 / 工具管理 / MCP 管理 / 智能体角色</b>）之后，
+  <b>8 个插件 10 个服务各自负责什么、怎么协同</b>；② <b>一次完整的 agent loop（含工具轮与审批）是怎么走完的</b>。
+  <br><b>最重要的一条结论先给</b>：<b>这四个插件没有一个需要扩展插件标准。</b>
+  它们全是普通插件 —— 一个 <code>plugin.json</code> + 若干 <code>services/&lt;sid&gt;/</code> + 一个 <code>dist/</code>。
+  角色、技能、工具这三样东西<b>不在 <code>plugin.json</code> 里</b>，它们是<b>运行期由服务注册出来的</b>：
+  装一个插件 → 它的服务起来 → publish 自己的提示词片段与工具目录 → 装配器下一轮就多了一份。
+  <br><b>不新增任何进程间协议</b>：本文新增的 11 个 topic 全部是 <code>shared/src/events.ts</code>
+  那两张表上的<b>新行</b>，不是新机制；Core 一行都不用改（<b>Core 不解析插件内容</b>）。
+  <br><span style="color:var(--muted)">配套：
+    <code>docs/插件标准.html</code>（归属与接口标准）·
+    <code>docs/插件化架构优化.html</code>（目录与分发形态）·
+    <code>docs/插件协作与AI能力装配.html</code>（prompt / 技能 / 工具的契约种子）</span>
+</div>
+
+<div class="note bad">
+  <b>开始之前先钉死五条会被反复引用的既有事实</b>（下面每一节都靠它们，错了整篇就塌）：
+  <br><b>① <code>plugin.json</code> 的 <code>capabilities[]</code> 永远只给人看</b>，一旦有代码依赖它做判断，
+  它就变成第二个真源（真源是 <code>service.json</code> 的 topic 白名单）。所以「A 声明了某能力，B 就能调」<b>不成立</b>。
+  <br><b>② <code>dependencies[]</code> 不产生运行时耦合</b>，只影响启动顺序与状态聚合；
+  缺必需依赖是 <code>degraded</code> 而不是不启动。
+  <br><b>③ 服务之间只经总线与 <code>plugins.readFile</code></b>。
+  <code>plugins.readFile</code> 的边界是全部内容：<b>只读 · 只限自己插件目录 · 无根即拒 · ≤2 MiB</b>。
+  <b>所以没有任何服务能读别的插件目录</b> —— 下面「插件自带技能包」怎么处理，全靠这一条推出来。
+  <br><b>④ 历史里的 <code>system</code> 消息一律丢弃</b>（<code>buildMessages</code> 的既有性质），
+  于是 prompt <b>每轮重新装配</b>，装/卸插件<b>立即生效且不需要迁移任何历史数据</b>。这是整个设计最省事的一处地基。
+  <br><b>⑤ 命令的应答一律走 <code>&lt;cmd&gt;.result</code> 事件</b>，总线不提供返回值。
+  所以每一次「问模型某件事」都是「发一条命令 + 等一条结果事件」两跳，本文的时间估算都按这个来。
+</div>
+
+<!-- ══════════════ 1 ══════════════ -->
+<section>
+  <h2><span class="n">1</span>四个新插件：诉求 → 形态</h2>
+
+  <p>原始诉求是四句话。它们<b>都能成立</b>，但每句都要拆成「谁负责」才落得了地：</p>
+
+  <table>
+    <thead><tr><th style="width:19%">诉求</th><th style="width:20%">落成什么</th><th style="width:20%">谁负责</th><th>不负责</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>技能管理插件</b><br>管理装了哪些技能</td>
+        <td><code>plugins/skills/</code><br>1 服务 <code>skills</code> · 1 视图</td>
+        <td><b>用户技能的主人</b>（<code>userData/plugin/skills/custom/</code>）+ <b>全系统索引的持有者</b></td>
+        <td><b>不</b>负责「读别的插件目录里的技能包」—— 结构上不可能（<code>readFile</code> 只限自己）。<br>
+          插件自带技能由<b>那个插件自己的服务</b>读并注册。</td>
+      </tr>
+      <tr>
+        <td><b>工具管理插件</b><br>管理装了哪些工具</td>
+        <td><code>plugins/tools/</code><br>2 服务：<code>tools</code>（目录 + 审批）+ <code>fs-tools</code>（只读文件工具执行体）</td>
+        <td><b>工具目录的聚合视图 + 审批仲裁</b> + 一个真工具执行体当切片</td>
+        <td><b>不</b>是「所有工具的宿主」。执行体归<b>各自注册工具的服务</b>；
+          tools 服务自己也是一个执行者（它带 <code>fs-tools</code>）。</td>
+      </tr>
+      <tr>
+        <td><b>MCP 管理插件</b><br>管理 MCP 连接</td>
+        <td><code>plugins/mcp/</code><br>1 服务 <code>mcp</code> · 1 视图</td>
+        <td><b>服务器配置 + 协议桥</b>：spawn 子进程、<code>tools/list</code> → 生成 <code>tool.registered</code></td>
+        <td><b>零新增 topic</b>。它就是 <code>tool.registered</code> 的一个生产者，
+          所以装配器（loop）对 MCP <b>零改动</b>。</td>
+      </tr>
+      <tr>
+        <td><b>智能体角色插件</b><br>选角色 / 配提示词+技能+工具</td>
+        <td><code>plugins/agents/</code><br>1 服务 <code>agent</code> · 1 视图</td>
+        <td><b>角色档案 + 绑定解析</b>（提示词片段 / 技能 id / 工具名 / 模型偏好）</td>
+        <td><b>不</b>拥有技能与工具 —— 角色存<b>引用</b>。
+          绝不把工具代码打进角色插件自己的 <code>dist/server/</code>（见 §10 的失败模式）。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>为什么这四个是「插件」而不是「Core 的四个功能」。</b>
+    因为它们各自都满足插件标准的全部三条：<b>身份</b>（能独立启停、能被依赖、能升级覆盖安装）·
+    <b>接口契约</b>（<code>service.json</code> 的 publishes/subscribes 就是它们的能力声明）·
+    <b>界面</b>（<code>ui.views[]</code>，可独立摆位）。
+    <br>而反过来说：<b>「用户自己的技能放哪」这件事必须有一个主人</b>（<code>skills</code> 插件）。
+    没有主人的 <code>userData/</code> 子目录迟早出问题 —— 那是凭证插件已经退役过一次的教训。
+  </div>
+
+  <h3>依赖图（只影响启动顺序与状态，不产生运行时耦合）</h3>
+  <div class="tree">models            <span class="dim">（无依赖）</span>
+ ▲
+ │ dependencies:[{pluginId:"models"}]
+ chat-workbench    <span class="dim">session · loop · llm —— 装配器在这里</span>
+ ▲            ▲          ▲            ▲
+ │            │          │            │
+ │            │          │            └── reliability  <span class="dim">llm-retry（旁路重发 llm.request）</span>
+ │            │          └── tools          <span class="dim">tools · fs-tools</span>
+ │            └── agents                <span class="dim">agent（角色档案）</span>
+ └── skills                <span class="dim">skills（技能索引）</span>
+
+mcp                <span class="add">（无插件依赖！）</span>  <span class="dim">它只依赖 chat-workbench 的 topic 存在，不依赖那个插件在位</span>
+workbench          <span class="dim">（无依赖 —— 只碰 Core：/health · /events · /api/command）</span>
+
+<span class="dim">★ 注意 mcp 与 skills 都不在 dependencies 里。</span>
+<span class="dim">它们是「可选能力」：没装 skills → 装配器没有技能索引这一层，模型少一批技能，</span>
+<span class="dim">对话照常；没装 mcp → 工具目录里没有 MCP 来的工具。<b>缺失必须是合法的。</b></span></div>
+
+  <div class="note">
+    <b>「依赖」与「可选能力」的区别值得单独说。</b>
+    <code>dependencies[]</code> 声明的是「我需要你才能正常工作」，缺了我是 <code>degraded</code>；
+    而 skills / mcp / tools 提供的是「<b>有它我多一份能力</b>」，缺了我只是少一点。
+    <br>写成依赖的后果很具体：<b>只装 chat-workbench 的用户会看到一堆 degraded 插件</b>，
+    而 degraded 在 UI 上是橙色的、写着「缺依赖」—— 那是在对用户说谎，<b>它什么都没缺</b>。
+    <br>反向的代价也要认：<b>不写依赖就得不到启动顺序保证</b>。缓解办法不是依赖，是 §9 的<b>重播三段式</b>——
+    每个「能力存在性」都自带一条「现在都有谁」的查询通路，于是<b>启动顺序不再是任何人的隐式依赖</b>。
+    <span class="tag have">这条已在 llm 主位与 provider 两侧落地</span>
+  </div>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<section>
+  <h2><span class="n">2</span>全景：8 插件 / 10 服务 / 1 条装配线</h2>
+
+  <p>核心图。点下面任一按钮<b>只高亮那一层</b>（其余压暗），或点「全部」看整张协同图。</p>
+
+  <div class="ctl">
+    <button class="btn layerBtn on" data-layer="all">全部</button>
+    <button class="btn ghost layerBtn" data-layer="ui">① 前端层</button>
+    <button class="btn ghost layerBtn" data-layer="core">② Core + 总线</button>
+    <button class="btn ghost layerBtn" data-layer="svc">③ 服务层</button>
+    <button class="btn ghost layerBtn" data-layer="asm">④ 装配输入</button>
+    <button class="btn ghost layerBtn" data-layer="exe">⑤ 执行层</button>
+    <button class="btn ghost layerBtn" data-layer="llm">⑥ 模型层</button>
+    <span class="step-pill" id="lanePill">9 个前端视图 · 10 个服务 · 4 类用户数据目录</span>
+  </div>
+
+  <div class="board">
+  <svg viewBox="0 0 1180 782" role="img" aria-label="八个插件十个服务的协同全景泳道图">
+    <defs>
+      <marker id="mB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--bus)"/></marker>
+      <marker id="mH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--success)"/></marker>
+      <marker id="mW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--warning)"/></marker>
+    </defs>
+
+    <text x="14" y="22" font-size="11" font-weight="700" fill="var(--muted)" class="layerTag" data-l="ui">① 前端层 · 插件 UI 产物（Core 代伺服，同源 iframe）</text>
+    <text x="14" y="180" font-size="11" font-weight="700" fill="var(--muted)" class="layerTag" data-l="core">② Core · 扫盘 / spawn / 伺服字节 / 路由命令 —— 不解析任何插件内容</text>
+    <text x="14" y="254" font-size="11" font-weight="700" fill="var(--bus)" class="layerTag" data-l="core">🔁 总线 · 唯一交互面（stdio JSON-RPC · shared 事件表）</text>
+    <text x="14" y="322" font-size="11" font-weight="700" fill="var(--muted)" class="layerTag" data-l="svc">③ 服务层 · 一个服务 = 一个进程 = 一份能力</text>
+    <text x="14" y="520" font-size="11" font-weight="700" fill="var(--muted)" class="layerTag" data-l="exe">④ 执行层 · 有副作用的进程之外的地方</text>
+    <text x="14" y="650" font-size="11" font-weight="700" fill="var(--muted)" class="layerTag" data-l="llm">⑤ 模型层</text>
+
+    <!-- ══ ① 前端层 ══ -->
+    <g class="laneG" data-l="ui">
+      <g class="node plug" id="u1">
+        <rect class="r" x="30" y="30" width="176" height="98" rx="10"/>
+        <text x="44" y="54" font-size="12.5" font-weight="700">💬 输入框</text>
+        <text x="44" y="73" font-size="10.5" fill="var(--muted)">chat-workbench</text>
+        <text x="44" y="91" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">widget.chat-composer</text>
+        <text x="44" y="108" font-size="10.5" fill="var(--muted)">角色下拉 + 模型下拉</text>
+        <text x="44" y="122" font-size="10" fill="var(--success)">新增：角色选择器</text>
+      </g>
+      <g class="node plug" id="u2">
+        <rect class="r" x="220" y="30" width="176" height="98" rx="10"/>
+        <text x="234" y="54" font-size="12.5" font-weight="700">🕓 对话 / 会话</text>
+        <text x="234" y="73" font-size="10.5" fill="var(--muted)">chat-workbench</text>
+        <text x="234" y="91" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">timeline · session-list</text>
+        <text x="234" y="108" font-size="10.5" fill="var(--muted)">工具块 / 审批弹窗</text>
+        <text x="234" y="122" font-size="10" fill="var(--success)">新增：审批裁决 UI</text>
+      </g>
+      <g class="node new" id="u3">
+        <rect class="r" x="410" y="30" width="176" height="98" rx="10"/>
+        <text x="424" y="54" font-size="12.5" font-weight="700">🎭 智能体角色</text>
+        <text x="424" y="73" font-size="10.5" fill="var(--primary)">agents · 新插件</text>
+        <text x="424" y="91" font-size="10.5" fill="var(--muted)">角色列表 / 编辑</text>
+        <text x="424" y="108" font-size="10.5" fill="var(--muted)">绑：提示词·技能·工具</text>
+        <text x="424" y="122" font-size="10.5" fill="var(--muted)">绑：模型 / 思考强度</text>
+      </g>
+      <g class="node new" id="u4">
+        <rect class="r" x="600" y="30" width="176" height="98" rx="10"/>
+        <text x="614" y="54" font-size="12.5" font-weight="700">📚 技能管理</text>
+        <text x="614" y="73" font-size="10.5" fill="var(--primary)">skills · 新插件</text>
+        <text x="614" y="91" font-size="10.5" fill="var(--muted)">已装 / 启用 / 来源</text>
+        <text x="614" y="108" font-size="10.5" fill="var(--muted)">自建技能目录树</text>
+        <text x="614" y="122" font-size="10.5" fill="var(--muted)">上下文预算占用</text>
+      </g>
+      <g class="node new" id="u5">
+        <rect class="r" x="790" y="30" width="176" height="98" rx="10"/>
+        <text x="804" y="54" font-size="12.5" font-weight="700">🔧 工具管理</text>
+        <text x="804" y="73" font-size="10.5" fill="var(--primary)">tools · 新插件</text>
+        <text x="804" y="91" font-size="10.5" fill="var(--muted)">工具目录 + 来源插件</text>
+        <text x="804" y="108" font-size="10.5" fill="var(--muted)">风险等级 / 审批策略</text>
+        <text x="804" y="122" font-size="10.5" fill="var(--muted)">手工试调</text>
+      </g>
+      <g class="node new" id="u6">
+        <rect class="r" x="980" y="30" width="176" height="98" rx="10"/>
+        <text x="994" y="54" font-size="12.5" font-weight="700">🔌 MCP 管理</text>
+        <text x="994" y="73" font-size="10.5" fill="var(--primary)">mcp · 新插件</text>
+        <text x="994" y="91" font-size="10.5" fill="var(--muted)">服务器清单 / 启停</text>
+        <text x="994" y="108" font-size="10.5" fill="var(--muted)">连接态 / 工具数</text>
+        <text x="994" y="122" font-size="10.5" fill="var(--muted)">stdio / sse</text>
+      </g>
+      <g class="node plug" id="u7">
+        <rect class="r" x="410" y="140" width="746" height="30" rx="8"/>
+        <text x="424" y="160" font-size="11" fill="var(--muted)">🧭 workbench 6 视图 · system-info / command-palette / settings / event-stream / service-manager / service-status —— 新增第 7 个视图「能力」：当前所有片段 + 工具 + 技能索引，带来源插件</text>
+      </g>
+    </g>
+
+    <!-- ══ ② Core ══ -->
+    <g class="laneG" data-l="core">
+      <rect class="r" x="30" y="188" width="1126" height="50" rx="10" fill="var(--primary-soft)" stroke="var(--primary)"/>
+      <text x="46" y="209" font-size="12.5" font-weight="700">Core（127.0.0.1）</text>
+      <text x="150" y="209" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">/api/command 白名单路由 · /events SSE · /plugins/&lt;id&gt;/ui/* · /api/plugins 快照</text>
+      <text x="46" y="228" font-size="10.5" fill="var(--muted)">扫 plugins/*/plugin.json → 环检测 → 拓扑排序 → spawn dist/server/&lt;sid&gt; → 握手给 dataDir → 按 manifest 决定不 spawn 哪些</text>
+
+      <rect class="r" x="30" y="256" width="1126" height="40" rx="8" fill="var(--bus-soft)" stroke="var(--bus)" stroke-dasharray="8 5"/>
+      <text x="46" y="281" font-size="12" font-weight="700" fill="var(--bus)">总线 · stdio JSON-RPC 管道（每个服务一条）· 事件/命令的 topic 必须先在 shared/src/events.ts 那两张表里，否则进程起不来</text>
+    </g>
+
+    <!-- Core ⇄ 前端 / 总线 ⇄ 服务 的短连线 -->
+    <g class="laneG" data-l="core">
+      <path class="edge httpline" d="M118 128 V184" marker-end="url(#mH)"/>
+      <path class="edge httpline" d="M308 128 V184" marker-end="url(#mH)"/>
+      <path class="edge httpline" d="M498 128 V184" marker-end="url(#mH)"/>
+      <path class="edge httpline" d="M688 128 V184" marker-end="url(#mH)"/>
+      <path class="edge httpline" d="M878 128 V184" marker-end="url(#mH)"/>
+      <path class="edge httpline" d="M1068 128 V184" marker-end="url(#mH)"/>
+      <path class="edge busline" d="M118 238 V252" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M308 238 V252" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M498 238 V252" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M688 238 V252" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M878 238 V252" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M1068 238 V252" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M118 296 V326" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M308 296 V326" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M498 296 V326" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M688 296 V326" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M878 296 V326" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M1068 296 V326" marker-end="url(#mB)"/>
+    </g>
+
+    <!-- ══ ③ 服务层 ══ -->
+    <g class="laneG" data-l="svc">
+      <g class="node svc" id="s1">
+        <rect class="r" x="30" y="328" width="176" height="112" rx="10"/>
+        <text x="44" y="351" font-size="12.5" font-weight="700">📚 session</text>
+        <text x="44" y="370" font-size="10.5" fill="var(--muted)">chat-workbench</text>
+        <text x="44" y="388" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">session.get/.append</text>
+        <text x="44" y="404" font-size="10.5" fill="var(--muted)">唯一写者之外只读</text>
+        <text x="44" y="424" font-size="9.5" fill="var(--warning)" font-family="var(--mono)">📁 …/chat-workbench/sessions/</text>
+        <text x="44" y="436" font-size="9.5" fill="var(--muted)">append-only · 不可变</text>
+      </g>
+      <g class="node svc" id="s2">
+        <rect class="r" x="220" y="328" width="176" height="112" rx="10"/>
+        <text x="234" y="351" font-size="12.5" font-weight="700">⚙️ loop</text>
+        <text x="234" y="370" font-size="10.5" fill="var(--bus)">装配器在这里 ★</text>
+        <text x="234" y="388" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">loop.run / loop.cancel</text>
+        <text x="234" y="404" font-size="10.5" fill="var(--muted)">编排 · 工具轮上限</text>
+        <text x="234" y="420" font-size="10.5" fill="var(--muted)">prompt+tools 同一装配点</text>
+        <text x="234" y="434" font-size="9.5" fill="var(--warning)" font-family="var(--mono)">📁 …/chat-workbench/tool-root/</text>
+      </g>
+      <g class="node new" id="s3">
+        <rect class="r" x="410" y="328" width="176" height="112" rx="10"/>
+        <text x="424" y="351" font-size="12.5" font-weight="700">🎭 agent</text>
+        <text x="424" y="370" font-size="10.5" fill="var(--primary)">agents · 新服务</text>
+        <text x="424" y="388" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">agent.resolve</text>
+        <text x="424" y="404" font-size="10.5" fill="var(--muted)">角色 → 绑定</text>
+        <text x="424" y="420" font-size="10.5" fill="var(--muted)">publish 角色提示词片段</text>
+        <text x="424" y="434" font-size="9.5" fill="var(--warning)" font-family="var(--mono)">📁 …/agents/characters.json</text>
+      </g>
+      <g class="node new" id="s4">
+        <rect class="r" x="600" y="328" width="176" height="112" rx="10"/>
+        <text x="614" y="351" font-size="12.5" font-weight="700">📚 skills</text>
+        <text x="614" y="370" font-size="10.5" fill="var(--primary)">skills · 新服务</text>
+        <text x="614" y="388" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">skills.state / .list</text>
+        <text x="614" y="404" font-size="10.5" fill="var(--muted)">索引 → 提示词片段</text>
+        <text x="614" y="420" font-size="10.5" fill="var(--muted)">skill_read 工具执行体</text>
+        <text x="614" y="434" font-size="9.5" fill="var(--warning)" font-family="var(--mono)">📁 …/skills/{skills.json,custom/}</text>
+      </g>
+      <g class="node new" id="s5">
+        <rect class="r" x="790" y="328" width="176" height="112" rx="10"/>
+        <text x="804" y="351" font-size="12.5" font-weight="700">🔧 tools</text>
+        <text x="804" y="370" font-size="10.5" fill="var(--primary)">tools + fs-tools</text>
+        <text x="804" y="388" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">tools.list / tool.execute</text>
+        <text x="804" y="404" font-size="10.5" fill="var(--muted)">目录聚合 + 审批仲裁</text>
+        <text x="804" y="420" font-size="10.5" fill="var(--muted)">fs-tools = 只读文件工具</text>
+        <text x="804" y="434" font-size="9.5" fill="var(--warning)" font-family="var(--mono)">📁 …/tools/{approvals,workspace}/</text>
+      </g>
+      <g class="node new" id="s6">
+        <rect class="r" x="980" y="328" width="176" height="112" rx="10"/>
+        <text x="994" y="351" font-size="12.5" font-weight="700">🔌 mcp</text>
+        <text x="994" y="370" font-size="10.5" fill="var(--primary)">mcp · 新服务</text>
+        <text x="994" y="388" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">tools/list → 注册</text>
+        <text x="994" y="404" font-size="10.5" fill="var(--muted)">tools/call 转发</text>
+        <text x="994" y="420" font-size="10.5" fill="var(--muted)">子进程崩溃 → 目录注销</text>
+        <text x="994" y="434" font-size="9.5" fill="var(--warning)" font-family="var(--mono)">📁 …/mcp/servers.json</text>
+      </g>
+    </g>
+
+    <!-- ══ ④ 装配输入 ══ -->
+    <g class="laneG" data-l="asm">
+      <rect x="430" y="460" width="726" height="30" rx="8" fill="var(--warning-soft)" stroke="var(--warning)" stroke-dasharray="7 5"/>
+      <text x="444" y="480" font-size="11.5" font-weight="700" fill="var(--warning)">⚡ 装配输入 · 各服务自愿经总线 publish（不是 plugin.json 的槽位 —— 那是归属信息，不是内容）</text>
+      <path class="edge busline" d="M498 440 V456" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M688 440 V456" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M878 440 V456" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M1068 440 V456" marker-end="url(#mB)"/>
+      <path class="edge busline" d="M430 475 H410 V390 H400" marker-end="url(#mB)"/>
+      <text x="416" y="466" font-size="10.5" fill="var(--bus)" font-family="var(--mono)">装配器收集</text>
+      <text x="700" y="505" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">prompt.fragment.registered · tool.registered · skill.registered · 全部「重播整份」，收集方上线时主动问一次 *.list</text>
+    </g>
+
+    <!-- ══ ④ 执行层 ══ -->
+    <g class="laneG" data-l="exe">
+      <path class="edge busline" d="M308 445 V496 H550 V520" marker-end="url(#mB)"/>
+      <text x="322" y="490" font-size="10.5" fill="var(--bus)" font-family="var(--mono)">tool.execute{T}</text>
+      <path class="edge busline" d="M878 445 V498 H900 V520" marker-end="url(#mB)"/>
+      <text x="916" y="512" font-size="10.5" fill="var(--bus)" font-family="var(--mono)">需审批的走这道</text>
+      <path class="edge fileline" d="M1068 445 V498 H1058 V520" marker-end="url(#mW)"/>
+
+      <g class="node host" id="x1">
+        <rect class="r" x="430" y="520" width="240" height="94" rx="10"/>
+        <text x="444" y="543" font-size="12.5" font-weight="700">📄 fs-tools</text>
+        <text x="444" y="561" font-size="10.5" fill="var(--muted)">tools 插件的第二个服务</text>
+        <text x="444" y="578" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">read_file · list_dir</text>
+        <text x="444" y="595" font-size="10.5" fill="var(--muted)">沙箱 = 自己的 workspace/</text>
+        <text x="444" y="610" font-size="9.5" fill="var(--warning)">边界随执行者走，不在 loop 手里</text>
+      </g>
+      <g class="node host" id="x2">
+        <rect class="r" x="790" y="520" width="176" height="94" rx="10"/>
+        <text x="804" y="543" font-size="12.5" font-weight="700">🙋 审批闸门</text>
+        <text x="804" y="561" font-size="10.5" fill="var(--muted)">tools 服务内策略</text>
+        <text x="804" y="578" font-size="10.5" fill="var(--muted)">裁决来自前端弹窗</text>
+        <text x="804" y="595" font-size="10.5" fill="var(--muted)">只读可免审</text>
+        <text x="804" y="610" font-size="9.5" fill="var(--warning)">写/网络/进程逐次审</text>
+      </g>
+      <g class="node host" id="x3">
+        <rect class="r" x="980" y="520" width="176" height="94" rx="10"/>
+        <text x="994" y="543" font-size="12.5" font-weight="700">🧩 MCP 子进程</text>
+        <text x="994" y="561" font-size="10.5" fill="var(--muted)">stdio JSON-RPC</text>
+        <text x="994" y="578" font-size="10.5" fill="var(--muted)">用户机器上的外部程序</text>
+        <text x="994" y="595" font-size="10.5" fill="var(--muted)">超时 / 崩溃 / 断连</text>
+        <text x="994" y="610" font-size="9.5" fill="var(--warning)">协议形状不出这一层</text>
+      </g>
+      <path class="edge busline" d="M980 566 H970" marker-end="url(#mB)"/>
+      <text x="974" y="558" font-size="10" fill="var(--warning)" font-family="var(--mono)">进程类 → 必审</text>
+    </g>
+
+    <!-- ══ ⑤ 模型层 ══ -->
+    <g class="laneG" data-l="llm">
+      <path class="edge busline" d="M308 445 V492 H226 V650" marker-end="url(#mB)"/>
+      <text x="238" y="486" font-size="10.5" fill="var(--bus)" font-family="var(--mono)">llm.request{B}</text>
+      <path class="edge busline" d="M1058 618 V634 H420 V696 H426" marker-end="url(#mB)"/>
+
+      <g class="node svc" id="m1">
+        <rect class="r" x="110" y="650" width="220" height="94" rx="10"/>
+        <text x="124" y="673" font-size="12.5" font-weight="700">⚙️ llm 主位</text>
+        <text x="124" y="691" font-size="10.5" fill="var(--muted)">chat-workbench</text>
+        <text x="124" y="708" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">路由表 · 翻块 · 换发</text>
+        <text x="124" y="725" font-size="10.5" fill="var(--muted)">credentialRef 不解引用</text>
+        <text x="124" y="740" font-size="9.5" fill="var(--warning)">只有 provider 知道明文</text>
+      </g>
+      <g class="node svc" id="m2">
+        <rect class="r" x="430" y="650" width="240" height="94" rx="10"/>
+        <text x="444" y="673" font-size="12.5" font-weight="700">🧠 provider</text>
+        <text x="444" y="691" font-size="10.5" fill="var(--muted)">models 插件</text>
+        <text x="444" y="708" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">resolveApiKey(ref)</text>
+        <text x="444" y="725" font-size="10.5" fill="var(--muted)">streamCompletions(baseURL)</text>
+        <text x="444" y="740" font-size="9.5" fill="var(--warning)">📖 读 catalog.json · 📁 解引用</text>
+      </g>
+      <g class="node plug" id="m3">
+        <rect class="r" x="790" y="650" width="330" height="94" rx="10"/>
+        <text x="804" y="673" font-size="12.5" font-weight="700">🛟 llm-retry · 旁路</text>
+        <text x="804" y="691" font-size="10.5" fill="var(--muted)">reliability 插件</text>
+        <text x="804" y="708" font-size="10.5" fill="var(--muted)">llm.request.failed → 退避 → <b>重发同一条 llm.request</b></text>
+        <text x="804" y="725" font-size="10.5" fill="var(--muted)">finished → llm.metrics.usage</text>
+        <text x="804" y="740" font-size="9.5" fill="var(--muted)">零新协议：retry 就是「重发命令」，不是「改状态」</text>
+      </g>
+      <path class="edge busline" d="M330 697 H426" marker-end="url(#mB)"/>
+      <text x="352" y="689" font-size="10" fill="var(--bus)" font-family="var(--mono)">provider.request</text>
+      <text x="382" y="642" font-size="10" fill="var(--bus)" font-family="var(--mono)">重发 llm.request（整条链重跑一遍）</text>
+    </g>
+
+    <text x="14" y="770" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">图例：<tspan fill="var(--success)">┄ HTTP / SSE</tspan> · <tspan fill="var(--bus)">┄ 总线（唯一交互面）</tspan> · <tspan fill="var(--warning)">┄ 文件 / 只读特权 / 旁路</tspan> · 📁 = 该服务自己的 userData/plugin/&lt;id&gt;/ 子目录</text>
+  </svg>
+  </div>
+
+  <div class="note bus">
+    <b>这张图最重要的三个读法</b>：
+    <br><b>① 竖着看是「谁提供什么」，横着看是「一轮对话走过谁」。</b>
+    竖着看第 ③ 层到 ④ 层那段：agent / skills / tools / mcp 四个服务都<b>只往那条黄色装配线里 publish 一份东西</b>，
+    而<b>没有任何一条线是它们直接指向 loop 的代码调用</b>。装配器<b>不关心它们从哪来</b>。
+    <br><b>② loop 是唯一的编排者，也是唯一知道「这一轮」的服务。</b>
+    它做四件事：装配、执行工具轮、换发 requestId（A/B）、管轮上限。
+    <b>谁都不该能绕过它</b> —— 所以工具轮上限 <code>MAX_TOOL_ROUNDS</code> 留在 loop 手里，
+    而<b>不是</b>分给各个工具宿主。
+    <br><b>③ 沙箱边界跟着执行者走。</b> 今天 loop 用<b>自己插件的</b> dataDir 算只读沙箱根；
+    工具分散到多个插件后<b>每个执行者各自算自己的</b>（它有 dataDir + <code>plugins.readFile</code>），
+    loop 手里<b>不该再有路径</b>。这是「拆开之后反而更简单」的一处。
+  </div>
+
+  <div class="note">
+    <b>8 插件 / 10 服务的账</b>：
+    <span class="mono">models</span> 1 服务 ·
+    <span class="mono">chat-workbench</span> 3 服务 ·
+    <span class="mono">reliability</span> 1 服务 ·
+    <span class="mono">workbench</span> 0 服务 ·
+    <b class="mono" style="color:var(--primary)">skills</b> 1 ·
+    <b class="mono" style="color:var(--primary)">tools</b> 2 ·
+    <b class="mono" style="color:var(--primary)">mcp</b> 1 ·
+    <b class="mono" style="color:var(--primary)">agents</b> 1 = <b>10</b>。
+    <br><b>10 个进程</b>，崩溃隔离度换来的代价是<b>10 次握手 + 10 条 stdio 管道</b>。
+    而每增加一个能力位服务，那个能力就<b>可以被独立启停、独立升级、独立授权</b> —— 这是这笔交换划算的判据。
+    <br><span style="color:var(--muted)">顺带：<code>plugins/credentials/</code> 在仓库里还留着一个空目录
+    （凭证插件退役后留下的）。扫盘期「目录在但零清单」按既定语义等于<b>没装</b>，不报错 —— 但它该被清掉，
+    否则读代码的人会以为凭证还在。</span>
+  </div>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<section>
+  <h2><span class="n">3</span>逐个设计：四个新插件</h2>
+
+  <h3>3.1 <code>skills</code> 技能管理</h3>
+  <div class="tree">plugins/skills/
+├── <span class="std">plugin.json</span>
+│     services: ["skills"] · dependencies: [] · ui.views: [ widget.skills ]
+├── services/skills/
+│     └── <span class="std">service.json</span>
+│         publishes : skill.registered · skill.unregistered · skills.state · skills.list · tool.registered · tool.unregistered
+│         subscribes: skills.list · tool.execute
+├── ui/  → dist/ui/                      <span class="dim">widget.skills 技能库</span>
+└── （无自带数据：技能包是<b>别人</b>的东西）</div>
+
+  <div class="tree"><span class="dim">// skills 服务的职责，只有两件：</span>
+<span class="own">①</span> 持有全系统<b>一份</b>技能索引（name + description + 来源 + 启用态）→ publish 成<b>一个提示词片段</b>
+<span class="own">②</span> 执行 <span class="add">skill_read</span> —— 模型要全文时才给正文（懒加载 / 渐进披露）
+
+<span class="dim">// 「插件自带的技能包」怎么办 —— readFile 只限自己插件目录，所以：</span>
+   每个<b>带技能包的插件自己</b>用 plugins.readFile 读 plugins/&lt;自己&gt;/skills/&lt;name&gt;/SKILL.md，
+   解析 frontmatter，然后 publish skill.registered{ ownerPluginId:"&lt;自己&gt;", name, description, enabled }。
+   <span class="add">skills</span> 服务只是<b>收集方</b> —— 它从不读别人的目录（结构上不可能，也不该）。
+<span class="dim">// 用户自建技能住 skills 插件自己的数据目录：</span>
+   userData/plugin/skills/custom/&lt;name&gt;/SKILL.md   <span class="dim">← skills 服务是它唯一的主人</span>
+   userData/plugin/skills/skills.json              <span class="dim">← 启用开关 + 插件技能的本地覆盖</span></div>
+
+  <div class="note ok">
+    <b>这个分工是 <code>readFile</code> 的边界直接推出来的，不是设计偏好。</b>
+    任何服务想读<b>另一个</b>插件目录里的技能包都做不到（唯一的通路是 HTTP 数据面，而那条面不存在且
+    <code>dataReadableBy[]</code> 那条不生效的授权声明建议直接删掉）。
+    <br>于是「技能 = 跨插件可引用的一等公民」这个诉求<b>只能</b>靠
+    <b>「每个插件 publish 自己那份，skills 服务聚合成全系统一份」</b>来实现。
+    <span class="tag have">好处</span>这恰好与「工具 = 可插拔能力位」完全同构 —— 一处收集器管两类东西。
+  </div>
+
+  <div class="note bad">
+    <b>技能的四条硬边界</b>（否则「技能插件」就是一个装了就等于装了任意代码执行的后门）：
+    <br><b>① <code>scripts/</code> 的执行必须等审批位落地。</b>
+    今天的内置工具是<b>纯只读</b>、路径锁在自己的沙箱根内、单文件 ≤64 KB、目录 ≤200 项，
+    而且源码注释里明确写了「<b>没有写 / 删 / 网络 / 进程类工具，那些必须先有审批 listener 才允许存在</b>」。
+    脚本执行直接违反这条：<b>它就是进程执行</b>。
+    <br><b>② 同名冲突拒绝第二个</b>（fail fast），不「后者覆盖前者」。
+    症状差别很大：后者覆盖的症状是「我改了技能却不生效」，而原因在另一个插件里，几乎无法排查。
+    <br><b>③ <code>description</code> 是契约不是注释。</b>
+    渐进披露意味着模型必须先决定「要不要读这个技能」。写得含糊 = <b>技能装了也不会被读</b>，而 UI 上它明明是绿的。
+    所以 skills 管理视图要给「description 长度 / 是否含 when 触发条件」一个显式的体检提示。
+    <br><b>④ 卸载不回溯历史。</b>
+    历史里那条 <code>role:'tool'</code> 的技能正文还在（append-only，不改）。
+    <b>数据保留、只是不再可用；重装即恢复。不要级联删。</b>
+  </div>
+
+  <h3>3.2 <code>tools</code> 工具管理</h3>
+  <div class="tree">plugins/tools/
+├── <span class="std">plugin.json</span>
+│     services: ["tools", "fs-tools"] · dependencies: []
+│     ui.views: [ widget.tools ]
+├── services/tools/
+│     └── <span class="std">service.json</span>
+│         publishes : tool.registered · tool.unregistered · tools.state · tools.list · tool.approval.requested
+│         subscribes: tools.list · tool.execute · tool.approval.resolved · tool.execute.result（失败时兜底回执）
+│         <span class="dim">★ 它是「审批仲裁 + 目录聚合视图」，不是所有工具的宿主</span>
+├── services/fs-tools/
+│     └── <span class="std">service.json</span>
+│         publishes : tool.registered · tool.unregistered · tool.execute.result
+│         subscribes: tools.list · tool.execute
+│         <span class="dim">执行体：read_file · list_dir（从 loop 迁出来的切片）</span>
+└── ui/  → dist/ui/                      <span class="dim">widget.tools</span></div>
+
+  <div class="tree"><span class="dim">// 工具目录的唯一真相源：注册事件的并集（不是某份 JSON）</span>
+tool.registered{ serviceId, tools: ToolSpec[], risk?: 'read'|'net'|'proc'|'write' }
+
+<span class="own">★ 关键设计：声明与执行同源。</span>
+  模型看到的 name / description / parameters schema，是<b>那个执行者顺手 publish 的</b>，
+  和它 publish「我叫什么名字」是同一次动作 —— <b>不可能漂移</b>。
+  把 ToolSpec 从执行体里剥出来单独放一个 JSON，会立刻产生「谁执行」的二义性，而答案是唯一的：<b>执行体就是一个服务</b>。</div>
+
+  <div class="note ok">
+    <b>为什么把内置的 <code>read_file</code>/<code>list_dir</code> 从 loop 迁到 <code>fs-tools</code>。</b>
+    三条理由，一条比一条重：
+    <br><b>① 只有一条执行代码路径。</b> loop 里保留一个「宿主就是我自己」的单进程特例看着省事，
+    但那意味着<b>两条</b>执行路径要各自测、各自修 bug，跨进程那条出问题时会怀疑错对象。
+    <br><b>② loop 手里不该再有路径。</b> 今天 <code>TOOL_ROOT</code> 由 loop 用自己的 dataDir 算出来；
+    工具分散后沙箱边界必须随执行者走，否则「谁有权读哪个目录」就永远只有一个答案。
+    <br><b>③ 它是 W4 的验收切片。</b> 把一个<b>已经在跑的</b>工具搬过去，就能在不加任何新功能的前提下验证
+    <code>tool.execute</code> / <code>tool.execute.result</code> 这条新通路是否真的通。
+    <br><b>loop 侧保留发布权不变</b>（<code>loop.tool.executed</code> + <code>message.append{role:'tool'}</code>），
+    所以<b>对话界面一行都不用改</b> —— 变的只是「谁真正执行」。
+  </div>
+
+  <div class="tree"><span class="dim">// userData/plugin/tools/</span>
+approvals.json    <span class="dim">← 审批策略：per-tool { mode:'auto'|'ask'|'deny', remember? }</span>
+workspace/        <span class="dim">← fs-tools 的沙箱根（替代今天的 chat-workbench/tool-root/）</span>
+<span class="warn">★ 策略放这里，不放 Core —— Core 不该知道有哪些工具，更不该知道哪些危险。</span></div>
+
+  <h3>3.3 <code>mcp</code> MCP 管理</h3>
+  <div class="tree">plugins/mcp/
+├── <span class="std">plugin.json</span>   services: ["mcp"] · dependencies: [] · ui.views: [ widget.mcp ]
+├── services/mcp/service.json
+│     publishes : tool.registered · tool.unregistered · mcp.server.state
+│     subscribes: tools.list · tool.execute · service.failed（清理残骸）
+└── ui/  → dist/ui/  <span class="dim">widget.mcp：服务器清单 / 连接态 / 工具数 / 手工试调</span>
+
+<span class="dim">// 运行期行为</span>
+启动：读 servers.json → 对每个 enabled 的服务器 spawn 子进程 → MCP initialize → tools/list
+     → <span class="add">publish tool.registered{ serviceId:"mcp", tools:[…该 server 的全部工具] }</span>
+调用：loop 发 tool.execute{ name:"mcp__fs__read_file", … }
+     → mcp 服务认领这个名字 → tools/call → tool.execute.result
+失联：子进程退出 / tools/list 超时 → <span class="add">publish tool.unregistered{ serviceId:"mcp" }</span> → 目录里那一批消失
+
+<span class="warn">★ 零新增 topic。mcp 就是 tool.registered 的第二个生产者，所以 loop 侧对 MCP 零改动。</span>
+<span class="warn">  这就是「把工具做成能力位而不是做进 loop」的<b>全部回报</b>。</span></div>
+
+  <div class="note bad">
+    <b>MCP 引入的三个新问题（都和工具跨进程化是同一批，只是一起解决）</b>：
+    <br><b>① 命名空间不能由模型猜。</b> 多台 MCP server 都有 <code>read_file</code> 时，
+    必须有一层<b>确定的</b>命名规则（推荐 <code>mcp__&lt;serverId&gt;__&lt;toolName&gt;</code>）。
+    让模型在两个同名工具里挑，是把「协议歧义」转成「模型随机选」，症状是「同样的问题两次结果不同」。
+    <br><b>② 一个 server 崩了不能拖垮其他 server。</b> 每个子进程独立超时、独立注销；
+    <code>tool.execute</code> 要有<b>超时兜底（失败结果，不是静默）</b>，否则用户看到的就是「模型一直转圈」。
+    <br><b>③ 令牌 / 环境变量不能进总线。</b> 很多 MCP server 要 API key。
+    正确做法是它们<b>只存在 mcp 插件自己的 <code>servers.json</code> 与子进程环境里</b>；
+    事件里只出现 <code>serverId</code>。<b>与「凭证明文永不过总线」是同一条红线。</b>
+  </div>
+
+  <h3>3.4 <code>agents</code> 智能体角色</h3>
+  <div class="tree">plugins/agents/
+├── <span class="std">plugin.json</span>   services: ["agent"] · dependencies: [] · ui.views: [ widget.agents ]
+├── services/agent/service.json
+│     publishes : agent.state（角色列表·重播整份） · prompt.fragment.registered · prompt.fragment.unregistered
+│     subscribes: prompt.fragments.list · agent.state（自身重播）
+├── ui/  → dist/ui/  <span class="dim">widget.agents：列表 / 编辑器 / 绑定选择器</span>
+└── （无自带数据：角色是<b>用户数据</b>，不进交付物目录）</div>
+
+  <div class="tree">// userData/plugin/agents/characters.json —— <span class="own">角色 = 一组绑定</span>
+[
+ { "id": "reviewer", "name": "代码评审员",
+   "prompt": "你是资深代码评审员。只指出会导致故障、丢数据或难以回退的问题，不评论风格。",
+   "skills": ["git-diff"],                        <span class="dim">// 引用 skills 服务的 name</span>
+   "tools":  ["read_file","list_dir"],            <span class="dim">// 引用工具的 name；"*" = 全部</span>
+   "provider": "deepseek", "model": "deepseek-chat", "thinking": "medium",
+   "params": { "temperature": 0.2 } },
+ { "id": "bare", "name": "裸会话", "prompt": "", "skills": [], "tools": "*" }
+]
+
+<span class="dim">// 模型偏好可省略 —— 省略即「不覆盖」，回落链：</span>
+loop.run 参数  →  <span class="add">角色偏好</span>  →  models 插件的 preferences.json 默认  →  env  →  硬编码</div>
+
+  <div class="note ok">
+    <b>角色服务只做一件事：把「角色」这份用户数据解析成一组具体的绑定。</b>
+    它<b>不认识</b>技能的实现，也<b>不认识</b>工具的执行体 —— 那是各自服务的事。
+    它回给 loop 的是一份纯数据的「配方」：<code>fragments[] / skills[] / tools[] / provider / model / thinking</code>。
+    <br>所以 <b>loop 侧零新增 topic</b>：角色那份提示词片段是<b>普通片段</b>，
+    通过既有的 <code>prompt.fragment.registered</code> 进来，和 reliability 插件发的那条一模一样。
+    <br><b>而这正是这条路线最好的结果</b>：角色的「存在性」与「能力」统一了，而且<b>没有为此扩展任何标准</b>。
+    装一个角色插件 → 它的服务启动 → publish 它的片段 → 装配器下一轮拼进去；
+    卸掉 → 服务停 → 片段随之消失 → <b>模型不再假装拥有那些能力</b>。
+  </div>
+
+  <div class="note bad">
+    <b>必须提前防的一个失败模式</b>：如果角色插件把「绑了哪些工具」当成自己的<b>实现</b>
+    —— 把工具代码打包进自己的 <code>dist/server/</code>，那工具就退回到<b>进程内注册表</b>，
+    而那份注册表的文件头明确写着「这是最小工具循环的种子，<b>不是终态</b>」。
+    <br>症状：装第二个角色时工具列表互相污染、无法共享、进程数不降反升。
+    <b>守住边界：角色存引用，工具归服务。</b>
+    <br>同样地，<b>角色也不该打包技能包</b> —— 技能包是 skills 服务与其他插件的自带数据，
+    角色只存 skill 的 name。
+  </div>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<section>
+  <h2><span class="n">4</span>五样东西的归属线</h2>
+
+  <p>「提示词 / 技能 / 工具 / MCP / 角色」<b>没有一样在插件标准里</b>。它们各有一条归属线，
+  而这张表是本文所有 topic 提案的依据：</p>
+
+  <table>
+    <thead><tr>
+      <th style="width:11%">东西</th><th style="width:15%">本质</th><th style="width:18%">宿主容器</th>
+      <th style="width:24%">怎么进上下文</th><th>存在性由谁决定</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><b>提示词</b></td>
+        <td>每轮重算的<br><b>运行时值</b></td>
+        <td class="mono">装配器<br><span class="dim">在 loop 进程内</span></td>
+        <td class="mono">拼进 system 首位<br><span class="dim">历史里的 system 一律丢弃 → 装/卸立即生效，历史不用迁移</span></td>
+        <td><b>有没有服务 publish 片段</b></td>
+      </tr>
+      <tr>
+        <td><b>技能</b></td>
+        <td>懒加载资源<br><b>索引全系统一份</b></td>
+        <td class="mono">索引 = <b>skills 服务</b><br>正文 = <b>skills 服务</b>的<br><code>skill_read</code> 工具</td>
+        <td class="mono">只有 name+description 进提示词（<b>一个片段</b>）<br>正文经 <code>skill_read</code> 按需回填（<b>一个工具</b>）</td>
+        <td>skills 服务在位 <b>且</b><br>有服务注册了那份技能<br><span class="dim">（插件包由各自服务读）</span></td>
+      </tr>
+      <tr>
+        <td><b>工具</b></td>
+        <td>有副作用的<br><b>执行体</b></td>
+        <td class="mono"><b>一个服务</b><br>（fs-tools / mcp / …）</td>
+        <td class="mono">走 API <code>tools</code> 参数<br><b>不进 system 文本</b>（前缀缓存友好）</td>
+        <td><b>那个服务注册了</b><br><span class="dim">「注册」= 经总线声明自己</span></td>
+      </tr>
+      <tr>
+        <td><b>MCP</b></td>
+        <td>工具的一个<br><b>运行时来源</b></td>
+        <td class="mono">mcp 服务<br>（→ 子进程）</td>
+        <td class="mono"><b>完全不特殊</b>：它生成的那批 <code>tool.registered</code> 与别的工具走同一条路</td>
+        <td>mcp 服务在位 <b>且</b><br>服务器连上了</td>
+      </tr>
+      <tr>
+        <td><b>角色</b></td>
+        <td>一组绑定<br><b>用户数据</b></td>
+        <td class="mono">agent 服务<br>（档案）+ loop<br>（配方求值）</td>
+        <td class="mono">切角色 = 换一组绑定<br>→ 装配器下一轮用新的</td>
+        <td>agent 服务在位 <b>且</b><br>用户创建了角色</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>「存在性由服务决定，不由目录决定」这条贯穿全表。</b>
+    没装 provider 就等于没有那个模型；没有服务 publish 片段就等于那段提示词不存在；
+    没有服务注册工具就等于模型不知道那个工具存在。
+    <br><b>这条的直接好处</b>：<b>不存在「声明了但用不了」的第二种状态</b>。
+    用户看到的每个能力都是真的在那儿，因为「在那儿」的定义就是「有人说了它在」。
+    <br><b>直接代价</b>：<b>必须为每种能力各做一次重播通路</b>（§9 第一条），
+    否则晚启动的收集方会永远看不到早启动的发布方。
+  </div>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<section>
+  <h2><span class="n">5</span>契约提案：共享事件表上的 11 行新记录</h2>
+
+  <p>Core <b>一行都不用改</b>：它的校验逻辑是「拿 <code>service.json</code> 的
+  <code>publishes/subscribes</code> 去共享表里查」，表变宽它自动覆盖。
+  要动的只有 <code>shared/src/events.ts</code> 两个 interface。</p>
+
+  <div class="tree">// ── shared/src/events.ts · EventMap 新增 6 行 ────────────────────────
+<span class="add">'agent.state'</span>              { characters: CharacterBrief[] }   <span class="dim">// 重播整份，composer 的下拉数据源</span>
+
+<span class="add">'skill.registered'</span>           { ownerPluginId, name, description, source, enabled }
+<span class="add">'skill.unregistered'</span>         { ownerPluginId, name }
+<span class="add">'skills.state'</span>               { skills: SkillIndexEntry[] }      <span class="dim">// 重播整份（含用户自建 + 插件自带）</span>
+
+<span class="add">'tool.registered'</span>             { serviceId, tools: ToolSpec[], risk?: 'read'|'net'|'proc'|'write' }
+<span class="add">'tool.unregistered'</span>           { serviceId }
+<span class="add">'tool.execute.result'</span>         { requestId, ok, content, summary }
+<span class="add">'tool.approval.requested'</span>     { requestId, toolName, summary, risk, arguments }
+<span class="add">'mcp.server.state'</span>            { serverId, connected, toolCount, reason? }
+
+<span class="add">'prompt.fragment.registered'</span>   { pluginId, id, priority, text }   <span class="dim">// 角色那一份走这条</span>
+<span class="add">'prompt.fragment.unregistered'</span> { pluginId, id }
+<span class="add">'tools.state'</span>                 { tools: ToolSummary[] }           <span class="dim">// 给「能力」视图用；装配器用工具名原始目录</span>
+
+// ── shared/src/events.ts · CommandMap 新增 9 行 ──────────────────────────
+<span class="add">'agent.resolve'</span>          { requestId, characterId }
+<span class="add">'agent.state.set'</span>       { patch }                          <span class="dim">// 合并式：没给的键不变</span>
+<span class="add">'skills.list'</span>            Record&lt;string, never&gt;          <span class="dim">// 重播 · reannounce 同款</span>
+<span class="add">'skill.enabled.set'</span>      { name, enabled, ownerPluginId }
+<span class="add">'tools.list'</span>             Record&lt;string, never&gt;
+<span class="add">'tool.execute'</span>           { requestId /*= toolCallId */, sessionId, name, arguments }
+<span class="add">'tool.approval.resolved'</span>  { requestId, approved, reason? }
+<span class="add">'mcp.servers.list'</span>       Record&lt;string, never&gt;
+<span class="add">'mcp.server.set'</span>         { patch }                          <span class="dim">// 启停 / 加删服务器</span></div>
+
+  <div class="note ok">
+    <b>新 topic 数量的诚实算法</b>：本文标题写「11 行」，实际是 <b>6 个事件 + 9 个命令</b>。
+    但其中 <b>真正必须新造的只有两族</b>：
+    <br><b>① 工具执行三件套</b>（<code>tool.execute</code> / <code>tool.execute.result</code> /
+    <code>tool.approval.*</code>）—— 这是<b>唯一真正需要新协议的一段</b>，
+    理由只有一条：<b>loop 与工具宿主是不同进程，loop 不能直接调别人的代码</b>。
+    <br><b>② 角色解析一对</b>（<code>agent.resolve</code> / <code>agent.resolve.result</code>）——
+    因为<b>总线不提供返回值</b>，「问模型某件事」必然是两跳。这不是新机制，是既有纪律。
+    <br>其余全部是<b>同构复刻</b>：每个服务一种「重播整份」事件 + 一个「*.list」命令，
+    照抄 <code>llm.provider.registered</code> / <code>llm.provider.reannounce</code> / <code>models.prefs.state</code>
+    这对已经在跑的东西。零新发明。
+  </div>
+
+  <div class="note info">
+    <b>为什么这条表「只增不改」，以及它为什么是破坏性变更的防火墙。</b>
+    这些 topic 名已经进到<b>已分发的插件产物</b>里去了 —— 悄悄改一个 payload 字段的含义，
+    症状是「升级之后老插件某个功能静默失效」，极难定位。
+    <br>加字段 ✅ ／ 改字段类型 ❌ ／ 改语义 ❌（升 topic 版本 + 抬 <code>coreCompatibility.min</code>）。
+  </div>
+
+  <h3>各服务的 publishes / subscribes 汇总（<code>service.json</code> 是唯一有约束力的接口声明）</h3>
+  <table>
+    <thead><tr><th style="width:15%">服务</th><th style="width:26%">publishes</th><th style="width:26%">subscribes</th><th>它凭什么被信任</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">loop<span class="dim">（既有，扩容）</span></td>
+        <td class="mono">loop.run.* · loop.state.changed<br>loop.token.streamed · loop.tool.executed<br>message.append · session.get · llm.request · llm.cancel</td>
+        <td class="mono">loop.run · loop.cancel<br>llm.token.streamed · llm.request.finished<br>llm.request.failed · llm.request.tool_call<br>session.get.result<br><b>agent.resolve.result · skills.list · tools.list · tool.execute · tool.execute.result · tool.approval.resolved</b></td>
+        <td class="dim">topic 全在共享表里</td></tr>
+      <tr><td class="mono">agent<span class="add"> 新</span></td>
+        <td class="mono">agent.state · prompt.fragment.registered/unregistered</td>
+        <td class="mono">prompt.fragments.list · agent.resolve · agent.state.set</td>
+        <td class="dim">同上</td></tr>
+      <tr><td class="mono">skills<span class="add"> 新</span></td>
+        <td class="mono">skills.state · skill.registered/unregistered<br><b>prompt.fragment.registered</b>（索引）· <b>tool.registered</b>（skill_read）</td>
+        <td class="mono">skills.list · skill.enabled.set · tool.execute</td>
+        <td class="dim">它自己就是一个「服务即能力位」的实例</td></tr>
+      <tr><td class="mono">tools<span class="add"> 新</span></td>
+        <td class="mono">tools.state · tool.approval.requested</td>
+        <td class="mono">tools.list · tool.execute · tool.approval.resolved</td>
+        <td class="dim">审批策略在它自己的用户数据里</td></tr>
+      <tr><td class="mono">fs-tools<span class="add"> 新</span></td>
+        <td class="mono">tool.registered/unregistered · tool.execute.result</td>
+        <td class="mono">tools.list · tool.execute</td>
+        <td class="dim">沙箱根 = 握手给的 dataDir + workspace/</td></tr>
+      <tr><td class="mono">mcp<span class="add"> 新</span></td>
+        <td class="mono">tool.registered/unregistered<br>mcp.server.state</td>
+        <td class="mono">tools.list · tool.execute · mcp.servers.list · mcp.server.set</td>
+        <td class="dim">协议形状不出这一层</td></tr>
+      <tr><td class="mono">llm<span class="dim">（既有，零改动）</span></td>
+        <td class="mono">llm.request.* · llm.provider.* · llm.token.streamed</td>
+        <td class="mono">llm.request · llm.cancel · llm.provider.registered/unregistered/chunk</td>
+        <td class="dim"><b>它对 prompt / tools / 角色 / MCP 一无所知</b></td></tr>
+      <tr><td class="mono">session<span class="dim">（既有，零改动）</span></td>
+        <td class="mono">session.* · message.append.result · session 领域事件</td>
+        <td class="mono">session.* · message.append</td>
+        <td class="dim">唯一写者</td></tr>
+      <tr><td class="mono">llm-provider-openai<span class="dim">（既有，零改动）</span></td>
+        <td class="mono">llm.provider.registered/unregistered/chunk<br>models.prefs.state · models.credentials.state</td>
+        <td class="mono">llm.provider.request/cancel · llm.models.list<br>models.prefs.get/set · models.credentials.*</td>
+        <td class="dim">凭证明文只在这里</td></tr>
+      <tr><td class="mono">llm-retry<span class="dim">（既有，零改动）</span></td>
+        <td class="mono">llm.metrics.usage</td>
+        <td class="mono">llm.request.failed · llm.request.finished</td>
+        <td class="dim">旁路，不参与编排</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>这张表里最有价值的一行是最后那句。</b>
+    <code>llm</code> 与 <code>session</code> 对 prompt / tools / 角色 / MCP <b>一无所知，零改动</b>。
+    <br>也就是说<b>「让 agent 带上技能与工具」这件事没有波及模型层与存储层</b> ——
+    它只是让 loop 在发 <code>llm.request</code> 之前多做了一次装配。
+    <b>这就是把能力做成能力位、而不是做进主链路的回报。</b>
+  </div>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<section>
+  <h2><span class="n">6</span>★ 一次完整 agent loop：18 步</h2>
+
+  <p>核心动效。按 <b>▶ 播放</b>看一个数据包走完一轮<b>含工具调用与审批</b>的完整对话，
+  或点单步前进。<b>⑤⑥⑦⑭⑮</b> 是本轮新增/改造的五格；每步都标了落在哪个面：
+  <span class="mono">🌐</span> 同源 HTTP/SSE · <span class="mono">🔌</span> 服务与 Core 的 stdio 管道 ·
+  <span class="mono">🔁</span> 总线 · <span class="mono">📖</span> 只读特权 · <span class="mono">📁</span> 本地文件。</p>
+
+  <div class="ctl">
+    <button class="btn" id="lpPlay">▶ 播放</button>
+    <button class="btn ghost" id="lpPrev">◀ 上一步</button>
+    <button class="btn ghost" id="lpNext">下一步 ▶</button>
+    <button class="btn ghost" id="lpReset">⟲ 重置</button>
+    <span class="step-pill" id="lpPill">1 / 18</span>
+    <span class="step-pill">实线 = 本轮主线 · <span style="color:var(--warning)">虚线回边 = 工具轮</span></span>
+  </div>
+
+  <div class="board">
+  <svg viewBox="0 0 1160 650" role="img" aria-label="一次完整 agent loop 的十八步">
+    <defs>
+      <marker id="sB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--bus)"/></marker>
+      <marker id="sW" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--warning)"/></marker>
+    </defs>
+
+    <text x="14" y="40" font-size="11" font-weight="700" fill="var(--muted)">Ⅰ 装配与请求</text>
+    <text x="14" y="222" font-size="11" font-weight="700" fill="var(--muted)">Ⅱ 模型往返</text>
+    <text x="14" y="404" font-size="11" font-weight="700" fill="var(--muted)">Ⅲ 工具轮与收尾</text>
+
+    <!-- 步骤节点 s1..s18 -->
+    <g class="node svc" id="s1"><rect class="r" x="40" y="52" width="166" height="100" rx="10"/>
+      <text x="54" y="76" font-size="12" font-weight="700">① 选角色 · 发消息</text>
+      <text x="54" y="96" font-size="10.5" fill="var(--muted)">🌐 插件 UI</text>
+      <text x="54" y="116" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">loop.run{A,</text>
+      <text x="54" y="132" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">  characterId}</text>
+      <text x="54" y="148" font-size="10" fill="var(--muted)">A = 对外 requestId</text></g>
+
+    <g class="node svc" id="s2"><rect class="r" x="226" y="52" width="166" height="100" rx="10"/>
+      <text x="240" y="76" font-size="12" font-weight="700">② loop 受理</text>
+      <text x="240" y="96" font-size="10.5" fill="var(--muted)">🔌 唯一写者</text>
+      <text x="240" y="116" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">accept(A) 占位</text>
+      <text x="240" y="132" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">message.append</text>
+      <text x="240" y="148" font-size="10" fill="var(--muted)">先落库，再发请求</text></g>
+
+    <g class="node svc" id="s3"><rect class="r" x="412" y="52" width="166" height="100" rx="10"/>
+      <text x="426" y="76" font-size="12" font-weight="700">③ 拉历史</text>
+      <text x="426" y="96" font-size="10.5" fill="var(--muted)">🔌 → 📁 session</text>
+      <text x="426" y="116" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">session.get{hg-A}</text>
+      <text x="426" y="132" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">→ .result</text>
+      <text x="426" y="148" font-size="10" fill="var(--muted)">拿到才 start(B)</text></g>
+
+    <g class="node new" id="s4"><rect class="r" x="598" y="52" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="681" cy="102" r="26"/>
+      <text x="612" y="76" font-size="12" font-weight="700">★ ④ 解析角色</text>
+      <text x="612" y="96" font-size="10.5" fill="var(--primary)">🔌 agent 服务 · 新</text>
+      <text x="612" y="116" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">agent.resolve</text>
+      <text x="612" y="132" font-size="10.5" fill="var(--muted)">→ 一份配方</text>
+      <text x="612" y="148" font-size="10" fill="var(--muted)">绑定 ≠ 实现</text></g>
+
+    <g class="node new" id="s5"><rect class="r" x="784" y="52" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="867" cy="102" r="26"/>
+      <text x="798" y="76" font-size="12" font-weight="700">★ ⑤ 装配提示词</text>
+      <text x="798" y="96" font-size="10.5" fill="var(--primary)">四层合成 · 每轮重算</text>
+      <text x="798" y="116" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">身份 0 · 角色 5</text>
+      <text x="798" y="132" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">技能 10 · 能力 30~</text>
+      <text x="798" y="148" font-size="10" fill="var(--muted)">history 的 system 丢弃</text></g>
+
+    <g class="node new" id="s6"><rect class="r" x="970" y="52" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="1053" cy="102" r="26"/>
+      <text x="984" y="76" font-size="12" font-weight="700">★ ⑥ 装配工具</text>
+      <text x="984" y="96" font-size="10.5" fill="var(--primary)">并集 ∩ 角色绑定</text>
+      <text x="984" y="116" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">ToolSpec[]</text>
+      <text x="984" y="132" font-size="10.5" fill="var(--muted)">走 API tools 参数</text>
+      <text x="984" y="148" font-size="10" fill="var(--muted)">不进 system 文本</text></g>
+
+    <g class="node new" id="s7"><rect class="r" x="970" y="238" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="1053" cy="288" r="26"/>
+      <text x="984" y="262" font-size="12" font-weight="700">★ ⑦ 预算闸门</text>
+      <text x="984" y="282" font-size="10.5" fill="var(--primary)">🧮 loop 进程内</text>
+      <text x="984" y="302" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">8 KB / 20 条</text>
+      <text x="984" y="318" font-size="10.5" fill="var(--muted)">按优先级整块丢</text>
+      <text x="984" y="334" font-size="10" fill="var(--warning)">丢弃必须告警</text></g>
+
+    <g class="node svc" id="s8"><rect class="r" x="784" y="238" width="166" height="100" rx="10"/>
+      <text x="798" y="262" font-size="12" font-weight="700">⑧ llm.request{B}</text>
+      <text x="798" y="282" font-size="10.5" fill="var(--muted)">🔁 总线</text>
+      <text x="798" y="302" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">messages + tools</text>
+      <text x="798" y="318" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">provider? model?</text>
+      <text x="798" y="334" font-size="10" fill="var(--muted)">B 只活在 loop 内存</text></g>
+
+    <g class="node svc" id="s9"><rect class="r" x="598" y="238" width="166" height="100" rx="10"/>
+      <text x="612" y="262" font-size="12" font-weight="700">⑨ llm 查路由</text>
+      <text x="612" y="282" font-size="10.5" fill="var(--muted)">🔁 路由表由事件喂起</text>
+      <text x="612" y="302" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">unsupported_provider</text>
+      <text x="612" y="318" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">.request.started</text>
+      <text x="612" y="334" font-size="10" fill="var(--muted)">查不到立刻回错</text></g>
+
+    <g class="node svc" id="s10"><rect class="r" x="412" y="238" width="166" height="100" rx="10"/>
+      <text x="426" y="262" font-size="12" font-weight="700">⑩ 主位 → provider</text>
+      <text x="426" y="282" font-size="10.5" fill="var(--muted)">🔁 透传不透明引用</text>
+      <text x="426" y="302" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">credentialRef</text>
+      <text x="426" y="318" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">retryPolicy</text>
+      <text x="426" y="334" font-size="10" fill="var(--muted)">主位不解引用</text></g>
+
+    <g class="node svc" id="s11"><rect class="r" x="226" y="238" width="166" height="100" rx="10"/>
+      <text x="240" y="262" font-size="12" font-weight="700">⑪ provider 发流</text>
+      <text x="240" y="282" font-size="10.5" fill="var(--muted)">📖 📁 唯一解引用处</text>
+      <text x="240" y="302" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">resolveApiKey(ref)</text>
+      <text x="240" y="318" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">chunk{B}</text>
+      <text x="240" y="334" font-size="10" fill="var(--muted)">明文只在此进程</text></g>
+
+    <g class="node svc" id="s12"><rect class="r" x="40" y="238" width="166" height="100" rx="10"/>
+      <text x="54" y="262" font-size="12" font-weight="700">⑫ 主位翻块</text>
+      <text x="54" y="282" font-size="10.5" fill="var(--muted)">🔁 wire → 中立事件</text>
+      <text x="54" y="302" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">token.streamed{B}</text>
+      <text x="54" y="318" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">tool_call{B}</text>
+      <text x="54" y="334" font-size="10" fill="var(--muted)">块闭合即发</text></g>
+
+    <g class="node svc" id="s13"><rect class="r" x="40" y="424" width="166" height="100" rx="10"/>
+      <text x="54" y="448" font-size="12" font-weight="700">⑬ B → A 换发</text>
+      <text x="54" y="468" font-size="10.5" fill="var(--muted)">🔌 → 🌐 SSE</text>
+      <text x="54" y="488" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">loop.token{A}</text>
+      <text x="54" y="504" font-size="10.5" fill="var(--muted)">思维链/正文分流</text>
+      <text x="54" y="520" font-size="10" fill="var(--muted)">if (id≠activeA) return</text></g>
+
+    <g class="node new" id="s14"><rect class="r" x="226" y="424" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="309" cy="474" r="26"/>
+      <text x="240" y="448" font-size="12" font-weight="700">★ ⑭ 派发执行</text>
+      <text x="240" y="468" font-size="10.5" fill="var(--primary)">🔌 loop 不执行工具</text>
+      <text x="240" y="488" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">tool.execute{T}</text>
+      <text x="240" y="504" font-size="10.5" fill="var(--muted)">T = toolCallId</text>
+      <text x="240" y="520" font-size="10" fill="var(--muted)">路由到注册方</text></g>
+
+    <g class="node new" id="s15"><rect class="r" x="412" y="424" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="495" cy="474" r="26"/>
+      <text x="426" y="448" font-size="12" font-weight="700">★ ⑮ 审批闸门</text>
+      <text x="426" y="468" font-size="10.5" fill="var(--primary)">🔌 → 🌐 前端裁决</text>
+      <text x="426" y="488" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">approval.requested</text>
+      <text x="426" y="504" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">.resolved{approved}</text>
+      <text x="426" y="520" font-size="10" fill="var(--muted)">只读可策略免审</text></g>
+
+    <g class="node new" id="s16"><rect class="r" x="598" y="424" width="166" height="100" rx="10"/>
+      <text x="612" y="448" font-size="12" font-weight="700">⑯ 结果回填</text>
+      <text x="612" y="468" font-size="10.5" fill="var(--muted)">🔁 → 📁 落库</text>
+      <text x="612" y="488" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">execute.result{T}</text>
+      <text x="612" y="504" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">role:'tool'</text>
+      <text x="612" y="520" font-size="10" fill="var(--warning)">失败也回填，不重试</text></g>
+
+    <g class="node svc" id="s17"><rect class="r" x="784" y="424" width="166" height="100" rx="10"/>
+      <text x="798" y="448" font-size="12" font-weight="700">⑰ 工具轮续跑</text>
+      <text x="798" y="468" font-size="10.5" fill="var(--muted)">🔁 编排决策在 loop</text>
+      <text x="798" y="488" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">MAX_TOOL_ROUNDS</text>
+      <text x="798" y="504" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">nextRound(B→B′)</text>
+      <text x="798" y="520" font-size="10" fill="var(--muted)">状态保持 running</text></g>
+
+    <g class="node svc" id="s18"><rect class="r" x="970" y="424" width="166" height="100" rx="10"/>
+      <circle class="ring" cx="1053" cy="474" r="26"/>
+      <text x="984" y="448" font-size="12" font-weight="700">★ ⑱ 收尾闭环</text>
+      <text x="984" y="468" font-size="10.5" fill="var(--primary)">🌐 三个 iframe 重建</text>
+      <text x="984" y="488" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">append{assistant}</text>
+      <text x="984" y="504" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">state.changed{idle}</text>
+      <text x="984" y="520" font-size="10" fill="var(--muted)">失败/取消/成功三出口</text></g>
+
+    <!-- 审批裁决旁挂 chip -->
+    <g class="node new" id="apx">
+      <rect class="r" x="534" y="368" width="212" height="34" rx="8"/>
+      <text x="546" y="383" font-size="11" font-weight="700">🌐 前端审批弹窗</text>
+      <text x="546" y="396" font-size="10.5" fill="var(--muted)">tools 服务发 requested → 用户裁决</text>
+    </g>
+
+    <!-- 工具轮回边 -->
+    <path id="lb" class="edge loopback" d="M867 528 V586 H16 V196 H681 V234" marker-end="url(#sW)"/>
+    <text x="120" y="188" font-size="11" fill="var(--warning)" font-family="var(--mono)">↺ 工具轮：nextRound(B→B′) 回到 ⑧，预算闸门与装配都重跑一遍</text>
+
+    <!-- 主线边 -->
+    <path id="h1" class="edge busline" d="M206 102 H222" marker-end="url(#sB)"/>
+    <path id="h2" class="edge busline" d="M392 102 H408" marker-end="url(#sB)"/>
+    <path id="h3" class="edge busline" d="M578 102 H594" marker-end="url(#sB)"/>
+    <path id="h4" class="edge busline" d="M764 102 H780" marker-end="url(#sB)"/>
+    <path id="h5" class="edge busline" d="M950 102 H966" marker-end="url(#sB)"/>
+    <path id="v1" class="edge busline" d="M1053 152 V234" marker-end="url(#sB)"/>
+    <path id="h6" class="edge busline" d="M970 288 H954" marker-end="url(#sB)"/>
+    <path id="h7" class="edge busline" d="M784 288 H768" marker-end="url(#sB)"/>
+    <path id="h8" class="edge busline" d="M598 288 H582" marker-end="url(#sB)"/>
+    <path id="h9" class="edge busline" d="M412 288 H396" marker-end="url(#sB)"/>
+    <path id="h10" class="edge busline" d="M226 288 H210" marker-end="url(#sB)"/>
+    <path id="v2" class="edge busline" d="M123 338 V420" marker-end="url(#sB)"/>
+    <path id="h11" class="edge busline" d="M206 474 H222" marker-end="url(#sB)"/>
+    <path id="h12" class="edge busline" d="M392 474 H408" marker-end="url(#sB)"/>
+    <path id="h13" class="edge busline" d="M578 474 H594" marker-end="url(#sB)"/>
+    <path id="h14" class="edge busline" d="M764 474 H780" marker-end="url(#sB)"/>
+    <path id="h15" class="edge busline" d="M950 474 H966" marker-end="url(#sB)"/>
+    <path id="ap" class="edge fileline" d="M495 424 V385 H530" marker-end="url(#sW)"/>
+
+    <text x="14" y="632" font-size="10.5" fill="var(--muted)" font-family="var(--mono)">★ = 本轮新增或改造的格子 · A = 前端可见的 requestId · B = llm 内部 id · T = toolCallId</text>
+  </svg>
+  </div>
+
+  <div class="rail" id="lpRail"></div>
+  <div class="stage" id="lpStage"></div>
+
+  <div class="note bad">
+    <b>⑤⑥ 与 ⑭⑮ 之间的那个空档，是这份设计里最容易做错的地方。</b>
+    <b>prompt 与 tools 必须由同一个装配点、同一时刻收集。</b>
+    <br>工具在位但提示词没说明它存在 → <b>模型不会去调一个它不知道存在的工具</b>，
+    而症状是「工具明明装了却不生效」，看起来像工具坏了。
+    <br>反过来，提示词提到了工具而它没注册 → 模型调一个不存在的名字 → 拿到失败结果 →
+    <b>模型会自我纠正</b>（这正是我们想要的），所以这个方向的错<b>是可恢复</b>的。
+    <b>所以选择同源收集不是「整洁」，是让错误方向朝可恢复那边倒。</b>
+  </div>
+
+  <div class="note">
+    <b>A / B / T 三个 id 的分工，与「每个前端状态只能按 A 认领一次」。</b>
+    <br><b>A</b> = <code>loop.run</code>（前端只见 A）· <b>B</b> = <code>llm.request</code> 内部 id，
+    每个工具轮换一个（<code>B→B′</code>），映射只活在 loop 内存 · <b>T</b> = <code>toolCallId</code>，
+    同时用作 <code>tool.execute</code> 的 requestId（<b>一对一，不需要新关联表</b>）。
+    <br>推论：三个 iframe 各自订阅 <code>loop.state.changed{running}</code>，谁先看到谁认领，
+    而它们认领到<b>同一个 A</b>，所以三个视图的「正在生成」必然一致。
+    所有 handler 第一件事都是 <code>if (requestId !== activeA) return</code>，
+    防上一轮迟到的 token 污染新一轮 —— <b>在有工具轮之后这条更关键</b>，因为现在一条 A 会对应多个 B。
+  </div>
+</section>
+
+<!-- ══════════════ 7 ══════════════ -->
+<section>
+  <h2><span class="n">7</span>时序图：一次含工具调用的完整轮</h2>
+
+  <p>同一件事的另一种读法。<b>横着看 = 时间</b>，所以这张图能回答上面那张回答不了的问题：
+  <b>「哪一步是本地的，哪一步是跨进程的，失败会怎么传播」</b>。</p>
+
+  <div class="ctl">
+    <button class="btn" id="sqPlay">▶ 播放</button>
+    <button class="btn ghost" id="sqPrev">◀ 上一步</button>
+    <button class="btn ghost" id="sqNext">下一步 ▶</button>
+    <button class="btn ghost" id="sqReset">⟲ 重置</button>
+    <span class="step-pill" id="sqPill">0 / 0</span>
+  </div>
+
+  <div class="board">
+    <svg id="seqSvg" viewBox="0 0 1160 1030" role="img" aria-label="一次含工具调用的对话时序图"></svg>
+  </div>
+
+  <div class="stage" id="sqStage"></div>
+
+  <div class="note info">
+    <b>这张图上最该盯的三段空白</b>：
+    <br><b>① ⑦⑧⑨ 之间。</b> skills 问一次拿全量、tools 问一次拿全量 —— 这是<b>每轮</b>都发生的三跳往返，
+    不是启动时一次性的。原因很简单：<b>目录是会变的</b>（用户装了插件、启用了 MCP、禁用了技能），
+    而 prompt 每轮重算 —— 所以<b>装配必须每轮重做</b>。
+    <br>能不能缓存？可以，缓存键 = 「<code>tool.registered</code>/<code>skill.registered</code>/<code>prompt.fragment.registered</code>
+    的版本号之和」，任一事件到达就失效。<b>但先别做</b>：三跳总线往返是微秒级，
+    而缓存会引入「缓存与事件不一致」这一类最难查的 bug。优化留到有实测数据再说。
+    <br><b>② ⑳ 与 ㉑ 之间。</b> 审批是<b>唯一一处时间不可控</b>的位置 —— 它等的是人。
+    用户可以挂着去干别的事，也可以关掉对话面板。所以 ⑮ 的实现里<b>必须有超时与孤儿处置</b>（§10）。
+    <br><b>③ ⑲ 之后的每一次重发。</b> 跨进程执行意味着可能<b>永远没有结果</b>。
+    超时兜底必须是<b>失败结果</b>而不是静默 —— 否则用户看到的就是「模型一直转圈」。
+  </div>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<section>
+  <h2><span class="n">8</span>装配器详解：四层提示词 + 工具过滤 + 预算闸门</h2>
+
+  <p>这是 ⑤⑥⑦ 三格的实际逻辑。下面的交互器可以<b>直接切换角色看装配结果变化</b> ——
+  这不是装饰：<b>「装一个能力位 → 提示词与工具同时增减」</b>这条性质在实现里最容易被破坏，
+    而破坏它的症状（模型变笨、工具不被调）最难查。</p>
+
+  <div class="asm">
+    <div>
+      <div class="pick">
+        <h4>🎭 选一个角色</h4>
+        <div id="rolePick"></div>
+      </div>
+      <div class="pick" style="margin-top:var(--s3)">
+        <h4>⚡ 装了哪些能力位服务</h4>
+        <div id="capPick"></div>
+      </div>
+    </div>
+    <div>
+      <div class="stage" style="min-height:0">
+        <div class="who">composePrompt() 结果 · 按 priority 稳定排序</div>
+        <div class="bar" id="pBar"><i style="width:0"></i></div>
+        <div id="pMeta" style="font-family:var(--mono);font-size:11.5px;color:var(--muted)"></div>
+        <div class="layers" id="pLayers" style="margin-top:var(--s3)"></div>
+        <div id="pWarn"></div>
+      </div>
+
+      <div class="stage" style="min-height:0;margin-top:var(--s3)">
+        <div class="who">工具目录 · 注册并集 ∩ 角色绑定 → 进 API tools 参数</div>
+        <div class="chips" id="tChips" style="margin-top:var(--s2)"></div>
+        <div id="tWarn"></div>
+      </div>
+
+      <div class="stage" style="min-height:0;margin-top:var(--s3)">
+        <div class="who">技能索引片段 · 只有 name + description 进提示词</div>
+        <div class="chips" id="sChips" style="margin-top:var(--s2)"></div>
+        <div id="sWarn"></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>四层提示词：顺序必须确定</h3>
+  <table>
+    <thead><tr><th style="width:11%">priority</th><th style="width:19%">层</th><th style="width:24%">来源</th><th>约束</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0</td><td><b>身份层</b></td><td class="mono">loop 内置常量</td>
+        <td><b>恒在、不可被覆盖、不可被卸。</b>否则模型不知道自己是什么、不知道自己有哪些能力。
+          它也是 prompt 里<b>唯一不该被用户编辑</b>的一段 —— 可编辑的部分属于角色层。</td></tr>
+      <tr><td class="mono">5</td><td><b>角色层</b></td><td class="mono">agent 服务 publish</td>
+        <td>一条角色一个片段。角色不存在（没选 / 已删）→ 这一层为空，<b>不是错误</b>。
+          回落是「裸会话」，不是报错。</td></tr>
+      <tr><td class="mono">10</td><td><b>技能索引层</b></td><td class="mono">skills 服务 publish 一条</td>
+        <td><b>全系统一份</b>，但<b>按角色绑定过滤</b>后再拼。
+          过滤器放在 skills 服务侧（它知道启用态），<b>不在装配器侧</b>。</td></tr>
+      <tr><td class="mono">30~90</td><td><b>能力层</b></td><td class="mono">各服务自愿 publish</td>
+        <td>reliability 的「工具失败不得美化」、mcp 的「你有外部工具」之类。
+          <b>缺失合法</b>：没装 reliability 就没这条，订阅失败要<b>忽略</b>。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>顺序必须确定，否则症状是「模型行为随机」。</b>
+    规则：<b>priority 数字小的在前；同 priority 按发布者 id 字典序、同发布者内按片段 id 字典序。</b>
+    <br>这不是洁癖 —— 一个系统两次启动得到两份不同的提示词，而唯一症状是「模型有时听指令有时不听」，
+    <b>几乎无法排查</b>。而且它会伪装成「模型问题」，于是你会去调温度、调模型、换厂商，浪费一整天。
+    <br><b>同一条纪律也适用于工具目录</b>：<code>ToolSpec[]</code> 的顺序同样要确定
+    （按 <code>serviceId</code> 字典序，serviceId 内按 <code>name</code> 字典序）。
+    <b>为什么这条对工具尤其重要</b>：部分厂商的 prompt 缓存按 <code>tools</code> 数组内容命中，
+    顺序抖动会让<b>缓存全部失效</b> —— 症状是「同样的对话 token 费用翻了十倍」，而没有任何报错。
+  </div>
+
+  <div class="note">
+    <b>预算闸门为什么必须「整块丢弃 + 告警」，不能「静默截断」。</b>
+    <code>buildMessages</code> 保留最近 20 条并把截断点对齐到 <code>user</code> 边界
+    （孤立 tool 消息会让上游 400）。
+    <b>能力层片段变长时，20 条历史里真正的对话占比会变少</b>，而症状是「插件装上之后模型变笨」——
+    它看起来像模型问题，不像预算问题。
+    <br>所以规则是：<b>超字节上限（默认 8 KB）时按 priority 从低到高整块丢弃，每丢一条打一条
+    <code>logger.warn</code></b>；<b>不要</b>「截半条」—— 半条指令比没有更糟，模型会照着半条做。
+    <br><b>整块丢弃也可能让一个必需片段消失</b>（行为突变）。所以规则还配一条：
+    <b>丢了就要在界面上看得见</b> —— 往 <code>loop.run</code> 的关联上下文里发一条
+    「本轮有 N 个提示词片段因超预算被丢弃」，让「能力」视图能列出被丢了哪些。
+  </div>
+</section>
+
+<!-- ══════════════ 9 ══════════════ -->
+<section>
+  <h2><span class="n">9</span>五个必须一起解决的机制</h2>
+
+  <h3>9.1 重播三段式：每一种「能力存在性」都必须自带</h3>
+  <p>这条是本文<b>最重要的一条纪律</b>，它的来源是一次真实事故：
+  插件化落地时服务遍历顺序从「平铺目录字母序」变成「按插件」，
+  <code>llm-provider-openai</code> 于是<b>先于</b> <code>llm</code> 启动 → 主位订阅时注册事件已经发完 →
+  <b>路由表空</b> → 所有请求 <code>unsupported_provider</code>。
+  修法不是把顺序排回去，而是让 <b><code>llm</code> 启动后自己发一次 <code>llm.provider.reannounce</code></b>。</p>
+
+  <div class="ctl">
+    <button class="btn" id="rpPlay">▶ 播放三段式</button>
+    <span class="step-pill" id="rpPill">发布方重播 / 收集方问一次 / 前端等 connected 后再问</span>
+  </div>
+  <div class="three" id="rpList"></div>
+
+  <div class="note ok">
+    <b>三条纪律，全部沿用已有机制，没有发明：</b>
+    <br><b>① 「重播整份」而不是发增量。</b>
+    订阅方可能晚于发布方启动，那批增量事件早就发完了。<b>拿到全量就不需要 diff、不需要补偿逻辑</b> ——
+    这条性质比省字节重要得多。
+    <br><b>② 每个 <code>*.list</code> 命令空载荷。</b>「现在都有谁」不需要参数。
+    <br><b>③ 缺失合法，订阅失败要忽略。</b>
+    一个不带片段 / 不带工具 / 不带技能的插件完全正常。让装饰性内容打死主链路是本末倒置。
+    <br><span class="tag have">已守住的三处</span>
+    <code>llm.provider.registered</code> ↔ <code>llm.provider.reannounce</code> ·
+    <code>models.prefs.state</code> ↔ <code>models.prefs.get</code> ·
+    <code>models.credentials.state</code> ↔ <code>models.credentials.list</code>
+    —— <b>新增的每一族照抄这个三段式。</b>
+  </div>
+
+  <h3>9.2 工具执行与审批：一个显式状态机</h3>
+  <div class="fsm" id="fsm"></div>
+  <p style="font-size:12.5px;color:var(--muted)">
+    按 ▶ 走一遍。<b>注意四个状态上的三条纪律</b>：
+    ① <code>timeout</code> 与 <code>failed</code> <b>都必须产生一次失败结果</b>，不许静默 ——
+    静默的等价物是用户看着「模型一直转圈」；
+    ② <code>orphaned</code>（结果到达时这一轮已被取消）<b>静默丢弃，不许补发</b>，
+    与既有「<code>nextRound</code> 对未知 B 返回 null」同一处置；
+    ③ <code>rejected</code> 也<b>回填给模型</b> —— 告诉它「这个操作被用户拒绝了，请用别的办法」，
+    而不是直接失败整轮。
+  </p>
+
+  <div class="note">
+    <b>审批策略放哪、为什么。</b>
+    放 <b>宿主插件自己的</b> <code>userData/plugin/tools/approvals.json</code>，
+    <b>不放 Core</b> —— Core 不该知道有哪些工具、更不该知道哪些危险。
+    <br>三级：<code>auto</code>（策略免审，只读类默认）· <code>ask</code>（逐次审，带「记住这次」）·
+    <code>deny</code>（永久拒）。<b>默认必须是 <code>ask</code> 而不是 <code>auto</code></b>：
+    一个新装的工具在<b>第一次</b>执行前就免审，等于「装了就等于装了」——
+    而用户装它时并没有读它的代码。
+    <br><b>「记住这次」要带作用域</b>：记住 <code>会话级</code> 或 <code>工具级</code>，
+    不要记成全局 —— 否则第一次的「这次允许」会变成永久通行证。
+  </div>
+
+  <h3>9.3 沙箱边界随执行者走</h3>
+  <div class="tree">今天：loop 用<b>自己插件的</b> dataDir 算 TOOL_ROOT
+   userData/plugin/chat-workbench/tool-root/     <span class="dim">← loop 手里有路径</span>
+
+终态：<b>每个执行者各自算自己的</b>
+   fs-tools → userData/plugin/<span class="own">tools</span>/workspace/
+   mcp      → 子进程自己的沙箱（协议/容器决定，我们管不着，只做超时与审批）
+   skills   → userData/plugin/<span class="own">skills</span>/custom/&lt;name&gt;/  （skill_read 只能读这里）
+   角色     → 只存<b>引用</b>，永远不持有路径
+
+<span class="own">★ loop 手里不再有任何文件系统路径。</span>
+<span class="dim">  这不是洁癖：它让「新增一个工具执行者」这件事不需要改 loop 一行，
+  而 loop 是这条主链路上唯一被所有能力方依赖的服务。</span></div>
+
+  <div class="note bad">
+    <b>为什么 loop 不该再有路径，这条要讲透。</b>
+    今天 <code>loop</code> 同时是「编排者」和「工具宿主」，于是它需要知道「读文件能读到哪里」。
+    一旦工具分散到 5 个插件，loop 若还要做沙箱裁定，就得知道<b>每种工具的边界规则</b> ——
+    那是一条必然会长歪的耦合：某个执行者改了边界规则，loop 不知道，于是它给出的判定是过时的。
+    <br><b>正确形态是「谁执行谁负责」</b>：执行者有 <code>dataDir</code> + <code>plugins.readFile</code>，
+    它自己算自己的根；<b>loop 只需要知道「这个 toolCall 该发给谁」</b>，而那是从
+    <code>tool.registered</code> 的并集里查出来的 —— <b>一份数据，不是一条规则</b>。
+  </div>
+
+  <h3>9.4 超时、孤儿、残留：三件事必须同一批做</h3>
+
+  <table>
+    <thead><tr><th style="width:20%">问题</th><th style="width:30%">触发场景</th><th style="width:26%">症状（不处理的话）</th><th>处置</th></tr></thead>
+    <tbody>
+      <tr><td><b>超时</b></td>
+        <td>执行者进程崩溃 / 卡死 / MCP 子进程不响应</td>
+        <td>用户看到<b>「模型一直转圈」</b>，无错误、无日志提示</td>
+        <td>每个 <code>tool.execute</code> 带一个<b>硬超时</b>（默认 30 s，MCP 按服务器配）。
+          超时<b>产生一次失败结果</b>（<code>ok:false</code> + 人话原因）回填给模型，让它换个办法。</td></tr>
+      <tr><td><b>孤儿结果</b></td>
+        <td>审批期间用户 <code>loop.cancel</code>；或这一轮已被取消而结果才到</td>
+        <td>补发一条 <code>loop.tool.executed</code> 到一个已结束的状态 → 界面出现「幽灵工具块」</td>
+        <td><b>静默丢弃</b>。判据：结果到达时 A 已释放或轮次不匹配。
+          与既有「<code>nextRound</code> 对未知 B 返回 null」同一处置。</td></tr>
+      <tr><td><b>残留注册</b></td>
+        <td>宿主进程被<b>强杀</b>（崩溃 / 插件被停用）→ 它来不及发 <code>tool.unregistered</code></td>
+        <td>loop 内存里留着一个指向<b>已经不在的进程</b>的工具 → 每轮都 <code>tool.execute</code> 到空气，
+          然后超时。表现为「工具偶尔失灵」</td>
+        <td>订阅既有 <code>service.failed</code> / <code>service.stopped</code>，
+          <b>按 <code>serviceId</code> 清掉它注册的一切</b>。
+          <span class="tag risk">这是本文新增的一条硬要求</span>
+          ——「进程退了，内存里的注册表就空了」这个假设在<b>正常退出</b>时成立，在<b>被强杀</b>时不成立。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「残留注册」是最容易被漏掉的一条，而且它的症状最有欺骗性。</b>
+    正常路径上服务会先 <code>unregistered</code> 再退出，所以开发者本地测试<b>永远看不到它</b>：
+    本地「停掉 tools 插件」走的是优雅停机。
+    <br>出问题的是「用户在任务管理器里杀掉 core」「机器断电」「插件被自动更新替换」这些路径。
+    而症状是<b>间歇性的</b>：「工具偶尔失灵，重启一次就好了」——
+    于是每个人都会去怀疑模型、去调温度、去换厂商，<b>没有人会想到去查注册表</b>。
+    <br>所以这条必须有测试：<b>kill -9 一个工具宿主服务，断言 loop 的工具目录在 X ms 内不再包含它。</b>
+  </div>
+
+  <h3>9.5 模型偏好回落链：五层，逐层向后</h3>
+  <div class="tree">provider / model / thinking 的取值顺序（<b>第一个有值的赢</b>）
+
+  ① <span class="add">loop.run 的显式参数</span>            <span class="dim">前端用户当场选的</span>
+  ② <span class="add">角色偏好</span>                        <span class="dim">agents/characters.json 的该角色字段</span>
+  ③ <span class="add">models 插件的 preferences.json 默认</span>  <span class="dim">用户设置窗里的「默认」</span>
+  ④ <span class="add">env（LLM_PROVIDER / *_MODEL）</span>      <span class="dim">部署者的显式意图</span>
+  ⑤ <span class="add">硬编码</span>                          <span class="dim">今天 loop/src/index.ts:30 的 env.LLM_PROVIDER || 'deepseek'</span>
+
+<span class="dim">skills / tools 同理，各有自己的回落：</span>
+  技能 = 角色绑定 ∩ 已启用（<b>两者都为空就是不带技能，不报错</b>）
+  工具 = 角色绑定 ∩ 已注册（<b>"*" 表示全部已注册</b>；未装的工具执行者不在并集里，天然消失）
+
+<span class="own">★ 为什么不把 ⑤ 删掉。</span>
+  它是唯一一层「零配置时也能跑」的兜底，而 ①~④ 全空意味着<b>用户什么都没配</b>。
+  但它必须排在最后 —— 今天它排在最前（只有 env 一条路），于是<b>只接了 OpenAI 兼容端点的用户，
+  第一次发问就得到 unsupported_provider，而下拉里明明有模型</b>。这是最伤用户的一类 bug。</div>
+</section>
+
+<!-- ══════════════ 10 ══════════════ -->
+<section>
+  <h2><span class="n">10</span>失败模式清单：会真的发生的那几种</h2>
+
+  <table>
+    <thead><tr><th style="width:22%">失败模式</th><th style="width:26%">怎么发生的</th><th style="width:22%">用户看到的症状</th><th>设计上的防线</th></tr></thead>
+    <tbody>
+      <tr style="background:var(--danger-soft)">
+        <td><b>角色把工具打包进自己</b><br><span class="tag risk">最严重</span></td>
+        <td>角色插件作者把「我带的工具」理解成「我的工具」，代码打进自己的 <code>dist/server/</code></td>
+        <td>装第二个角色时工具列表<b>互相污染</b>、无法共享、进程数不降反升</td>
+        <td><b>守住边界：角色存引用，工具归服务。</b>
+          这条要在插件作者文档里写成不变量，并用<b>一条 CI 守卫</b>：
+          角色的 <code>dist/server/</code> 里不许出现 <code>tool.execute</code> 的<b>执行</b>实现
+          —— 它只能出现在 <code>service.json</code> 的 <code>publishes</code> 里（发命令，不是执行）。</td></tr>
+      <tr>
+        <td><b>技能 scripts 变成后门</b></td>
+        <td>有人把「工具型技能」（<code>scripts/*.sh</code>）先做出来，审批位还没落地</td>
+        <td>装一个技能 = 装一个任意代码执行</td>
+        <td>脚本执行<b>必须</b>等审批位。<b>技能脚本产生的是 <code>risk:'proc'</code> 的工具，
+          而 <code>risk:'proc'</code> 在策略里默认 <code>ask</code> 且不可被插件自身改成 <code>auto</code></b>。</td></tr>
+      <tr>
+        <td><b>MCP 同名工具</b></td>
+        <td>两台 server 都有 <code>read_file</code></td>
+        <td>同样的问题两次结果不同；模型随机挑</td>
+        <td>确定的命名规则 <code>mcp__&lt;serverId&gt;__&lt;toolName&gt;</code>。
+          冲突<b>在注册时就拒绝</b>并给出人话原因，不留到运行时。</td></tr>
+      <tr>
+        <td><b>提示词超预算被静默截断</b></td>
+        <td>装了 6 个大技能 + 3 个能力插件，片段总量越过上限</td>
+        <td>「装上插件之后模型变笨」—— 看起来像模型问题</td>
+        <td>整块丢弃 + <code>logger.warn</code> + <b>界面上列出被丢了哪些</b>（§8）。</td></tr>
+      <tr>
+        <td><b>工具目录顺序抖动</b></td>
+        <td>实现时用了 <code>Map</code> 的插入序而非显式排序</td>
+        <td>同对话 token 费用翻十倍，<b>无任何报错</b></td>
+        <td>显式排序规则（§8），并加一条测试：两次收集同一批注册，<b>ToolSpec[] 逐字节相等</b>。</td></tr>
+      <tr>
+        <td><b>同名技能后者覆盖</b></td>
+        <td>两个插件都带 <code>git-diff</code></td>
+        <td>「我改了技能却不生效」，原因在<b>另一个插件</b>里</td>
+        <td>拒绝第二个（fail fast），并在 skills 视图里标出<b>冲突的两个来源</b>。</td></tr>
+      <tr>
+        <td><b>晚启动的收集方永远看不到目录</b></td>
+        <td>loop 启动晚于 tools 服务，注册事件早发完了</td>
+        <td>「工具有时有有时没有」—— <b>取决于进程启动顺序</b></td>
+        <td>§9.1 重播三段式。<code>tools.list</code> 是<b>空载荷命令</b>。</td></tr>
+      <tr>
+        <td><b>停插件留下半截历史</b></td>
+        <td>在途的一轮被直接 kill</td>
+        <td>会话历史里有一半截 assistant 消息，<b>永远留在那里</b>（append-only）</td>
+        <td>既有约定：停插件<b>先发 <code>loop.cancel</code> 收尾</b>，超时才强杀。</td></tr>
+      <tr>
+        <td><b>残留注册指向死进程</b></td>
+        <td>kill -9 一个工具宿主</td>
+        <td>「工具偶尔失灵，重启就好了」</td>
+        <td>§9.4 第三行：<code>service.failed</code> → 按 serviceId 清目录。</td></tr>
+      <tr>
+        <td><b>MCP 令牌进了总线</b></td>
+        <td>有人把 token 放进 <code>tool.registered</code> 的某个备注字段</td>
+        <td>令牌出现在 SSE 与日志里，<b>无法撤回</b></td>
+        <td>与「凭证明文永不过总线」同一条红线。
+          <b>加一条守卫：payload 里不允许出现 key/token/secret/password 命名的字段（大小写不敏感）。</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>清单里那一条标红的，值得单独强调它的性质。</b>
+    前九个失败模式都是<b>「有人写错了」</b>，可以靠 review 与文档防住；
+    第十条（角色打包工具）不同 —— 它<b>看起来完全合法</b>：代码能跑、测试能过、演示很自然。
+    <br>它唯一的不合法之处是<b>抽象层次错了</b>（把「引用」写成了「拥有」），
+    而抽象层次错误<b>不会被任何运行时检查发现</b>。
+    <br>所以对这类错误，唯一有效的防线是<b>让正确写法比错误写法更省事</b>：
+    角色插件只要订阅 <code>agent.state</code> + 发一条 <code>agent.resolve</code> 就能工作，
+    <b>它根本不需要知道任何工具代码</b>。等作者发现「不写那 50 行也能跑」，
+    错误的写法就没有生存空间了 —— <b>这比任何一条文档规定都管用</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 11 ══════════════ -->
+<section>
+  <h2><span class="n">11</span>不变式与红线（本设计不得破坏）</h2>
+
+  <ul>
+    <li><b>不新增进程间协议。</b> stdio JSON-RPC + <code>shared</code> 的 EventMap/CommandMap 仍是唯一入口。
+      本文新增的 15 个 topic 全部是<b>这两张表上的新行</b>，不是新机制。</li>
+    <li><b>Core 一行都不用改，而且 Core 不解析任何插件内容。</b>
+      它的校验逻辑是「查表」，表变宽自动覆盖。
+      <span class="tag have">已核对</span>
+      <code>manifest.ts:41-56</code> 就是查表；<code>plugin-registry-runtime.ts</code> 不 import 任何插件概念。</li>
+    <li><b>提示词 / 技能 / 工具 / 角色都不进 <code>plugin.json</code>。</b>
+      那张表是<b>归属</b>信息（哪些进程、哪些页面、哪些依赖），不是<b>内容</b>信息。
+      把内容写进去会让 <code>plugin.json</code> 变成大杂烩，
+      而且「提供了但是空的」与「不提供」将无法区分 ——
+      <b>而目录存在性检查读不出这个区别</b>（这两个的处置完全相反：前者是配置错误，后者正常）。</li>
+    <li><b>凭证明文永不过总线、永不进 SSE、永不进日志。</b>
+      新增的 MCP 令牌走同一条红线。凭证引用（<code>file:&lt;id&gt;</code> / <code>env:NAME</code>）
+      当不透明字符串透传，<b>只有执行者解引用</b>。</li>
+    <li><b>存在性由服务决定，不由目录决定。</b>
+      没装 provider 就等于没有那个模型；没有服务注册工具就等于模型不知道那个工具。
+      <b>不存在「声明了但用不了」的第二种状态。</b></li>
+    <li><b>每种「能力存在性」都必须自带重播通路。</b>
+      每个 <code>*.list</code> 命令 + 收集方上线时主动问一次。
+      <b>启动顺序不该是任何人的隐式依赖。</b></li>
+    <li><b>缺失是合法的。</b>
+      没装 skills / tools / mcp / agents 任何一个，对话照常工作，只是少一份能力。
+      订阅失败要<b>忽略</b>，不能让装饰性内容打死主链路。</li>
+    <li><b>顺序必须确定。</b> 提示词同优先级按发布者 id → 片段 id 字典序；
+      工具按 serviceId → name 字典序。<b>同一个系统两次启动得到不同的装配结果，
+      症状是「模型行为随机」或「token 费用翻倍」，两者都几乎无法排查。</b></li>
+    <li><b>有长度上限并告警。</b> 静默截断是最坏的一种。</li>
+    <li><b>只读工具可策略免审；写 / 网络 / 进程类必须逐次审，且默认是审。</b>
+      这条是技能 <code>scripts/</code> 的<b>前置条件</b>，不是可选项。</li>
+    <li><b>loop 是唯一的编排者。</b> 工具轮上限、requestId 映射、消息落库、状态机
+      <b>全在 loop</b>。<b>谁都不该能绕过它。</b></li>
+    <li><b>角色存引用，技能与工具归服务。</b> 角色插件的 <code>dist/server/</code> 里
+      不许出现工具的<b>执行</b>实现。</li>
+    <li><b>测试跟着被测物走。</b>
+      装配器（composePrompt / 工具过滤 / 预算闸门）的测试留在 <b>loop</b> 包；
+      每个插件自带数据与协议符合性的校验留在<b>那个插件</b>包里
+      （照 <code>service-distribution.test.ts</code> 与 <code>plugin-ui-e2e.test.ts</code> 的做法：
+      真构建 → 真 Core → 真请求）。
+      <b>而两个必须有的跨插件集成测试</b>：① 装配结果逐字节可重现；
+      ② kill -9 一个工具宿主后目录在 X ms 内清空。这两条<b>只能在真 Core 上跑</b>，
+      所以它们不属于任何一个包。</li>
+  </ul>
+</section>
+
+<!-- ══════════════ 12 ══════════════ -->
+<section>
+  <h2><span class="n">12</span>实施顺序：每一步独立验收、独立可 revert</h2>
+
+  <p>全部只动<b>服务与事件表</b>，不动插件标准。</p>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W0</span><span class="ttl">补模型配置缺口</span><span class="tag opt">零新协议</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd>把 <code>defaultProvider / defaultModel / defaultThinking</code> 加进
+        <code>userData/plugin/models/preferences.json</code>（归 models 所有，复用
+        <code>models.prefs.set</code> 的合并 patch，<b>不新增 topic</b>）。
+        <code>loop.run</code> 缺省时回落它，再缺省才回落 env。</dd>
+      <dt>为什么先做</dt><dd>消掉一个用户可见故障：<b>只接了 OpenAI 兼容端点的用户第一次发问就失败</b>，
+        而下拉里明明有模型。而后面每一步都会让<b>提示词与工具面同时变化</b> ——
+        如果没有一个稳定的模型回落，你分不清「模型变笨了」是提示词改动还是模型选错了。</dd>
+      <dt>验收</dt><dd class="mono">只接 OpenAI 兼容端点、不设任何 env → 第一次发问成功</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W1</span><span class="ttl">提示词片段装配器</span><span class="tag new">W2–W4 的地基</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd>3 个 topic（<code>prompt.fragment.registered / .unregistered / .list</code>）
+        + <code>composePrompt()</code>。形态几乎不用改：
+        <code>buildMessages(history, systemPrompt, max)</code> <b>已经是参数化的</b>，
+        把那个 9 行常量换成装配器的返回值即可。</dd>
+      <dt>同批做完</dt><dd>预算闸门（8 KB 上限 + 整块丢弃 + warn）+ 稳定排序 + <b>两条测试</b>：
+        ① 装配结果逐字节可重现；② 超预算时<b>被丢的</b>与<b>留下的</b>都可在结构化日志里看到。</dd>
+      <dt>风险</dt><dd><span class="tag risk">中</span> 它顺带验证「装配器放 loop」这个决定对不对。
+        如果测下来装配逻辑复杂到需要独立进程，那就该重新考虑 —— <b>这是 W1 真正的验收点，不是「能不能跑通」</b>。</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W2</span><span class="ttl">agent 服务（角色）</span><span class="tag new">第一个新插件</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd>新建 <code>plugins/agents/</code>：1 服务 + 1 视图 + <code>characters.json</code>。
+        它的角色提示词<b>走 W1 的普通片段</b>，所以 loop 侧只多订阅
+        <code>agent.resolve.result</code> 一条。</dd>
+      <dt>带一个真角色切片</dt><dd>「代码评审员」绑 <code>read_file</code> + <code>git-diff</code> 技能。
+        <b>切角色 → 下一轮 prompt 与 tools 同时变化</b>，这就是端到端的验收信号。</dd>
+      <dt>同时把角色选择器接进 composer</dt><dd>它订阅 <code>agent.state</code>；<b>没装 agents 插件时那个下拉要消失</b>，
+        不能留一个空的或写死的「默认」。</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W3</span><span class="ttl">skills 服务（技能）</span><span class="tag new">零新机制</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd>索引 = <b>一个提示词片段</b>（W1 已有）· 正文 = <b>一个工具</b>（W4 才有通路）——
+        所以顺序上它<b>要么在 W4 之后，要么先只发布索引、skill_read 暂不可用</b>。
+        <br>建议：<b>W3 与 W4 同批</b>，否则「技能管理界面里显示已装但一调就不生效」比没有更糟。</dd>
+      <dt>知识型技能先行</dt><dd>它只需要「索引片段 + <code>skill_read</code> 工具」，
+        <b>不需要脚本执行、不需要审批</b>。这是本文<b>唯一建议先开的</b>一类技能。</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W4</span><span class="ttl">工具跨进程化 + tools 插件</span><span class="tag risk">唯一真正的新协议</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd><code>tool.registered / .unregistered / tools.list / tool.execute / tool.execute.result</code>
+        + 新建 <code>plugins/tools/</code>（<code>tools</code> + <code>fs-tools</code> 两个服务）。
+        <b>切片 = 把 loop 里已经在跑的 <code>read_file</code>/<code>list_dir</code> 搬过去</b>：
+        不加任何新功能就验证了整条新通路。</dd>
+      <dt>同批做完（否则只是把问题挪了位置）</dt><dd>
+        ① <code>tool.execute</code> 硬超时 + <b>失败结果兜底</b>；
+        ② 孤儿结果<b>静默丢弃</b>；
+        ③ <code>service.failed</code> → 按 serviceId 清目录；
+        ④ 沙箱边界移到执行者自己的 <code>workspace/</code>，<b>loop 手里不再有路径</b>；
+        ⑤ <code>kill -9</code> 集成测试。</dd>
+      <dt>验收</dt><dd class="mono">对话界面零改动（loop 保留 loop.tool.executed + message.append{role:'tool'}）；
+        工具目录在「能力」视图里可见且带来源服务；两条跨插件集成测试通过</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W5</span><span class="ttl">审批位</span><span class="tag risk">W6 的前置</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd><code>tool.approval.requested / .resolved</code> + 审批弹窗 +
+        <code>approvals.json</code> 的三级策略。<b>默认 ask</b>，只读类可自动升到 auto（需用户显式改）。</dd>
+      <dt>纪律</dt><dd>「记住这次」<b>带作用域</b>（会话级 / 工具级），不记全局。
+        <code>rejected</code> 也<b>回填给模型</b>而不是失败整轮。
+        审批期间用户取消 → 结果成为孤儿 → 静默丢弃。</dd>
+      <dt>验收</dt><dd class="mono">装一个 risk:'proc' 的工具：第一次执行必弹审批；拒绝后模型收到「用户拒绝了」并自己换办法</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W6</span><span class="ttl">mcp 服务</span><span class="tag opt">loop 侧零改动</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd>新建 <code>plugins/mcp/</code>：<code>tools/list</code> → <code>tool.registered</code>；
+        <code>tools/call</code> → <code>tool.execute.result</code>。
+        <b>零新增 topic</b> —— 这是本文对「工具做成能力位」这个决定的最终验证：
+        loop 对 MCP <b>一行都不改</b>。</dd>
+      <dt>同批做完</dt><dd>确定的命名规则 + 冲突注册时拒绝；每 server 独立超时与独立注销；
+        令牌只在 <code>servers.json</code> 与子进程环境里（<b>事件里只出现 serverId</b>）。</dd>
+    </dl></div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="id">W7</span><span class="ttl">脚本型技能（可选）</span><span class="tag opt">依赖 W5</span></div>
+    <div class="bd"><dl>
+      <dt>做什么</dt><dd>技能包里的 <code>scripts/*</code> 注册为 <code>risk:'proc'</code> 的工具。
+        <b>这条可以永远不做</b> —— 知识型 + 工具型 + 工作流型三种形态已经够用。</dd>
+      <dt>若要做</dt><dd>必须有 W5 已落地，且 <code>risk:'proc'</code> <b>在策略上不可被插件自身改成 auto</b>。
+        这一条是「技能不是后门」的<b>技术保证</b>，不是文档约定。</dd>
+    </dl></div>
+  </div>
+
+  <div class="note">
+    <b>为什么 W3 建议与 W4 同批，而 W2 可以单独走。</b>
+    W2（角色）只需要 W1 的<b>提示词片段</b>这条通路，而「角色绑技能」那部分<b>可以先绑空列表</b> ——
+    角色照样能用，只是暂时不带技能。<b>缺一份绑定是「少一点能力」，不是「坏了」。</b>
+    <br>而技能不一样：<b>技能的全部内容都在 <code>skill_read</code> 这个工具里</b>。
+    工具通路没通之前，「已装技能」在界面上是绿的、点下去读不出正文 ——
+    <b>那是在对用户撒谎</b>。所以技能宁可晚一点整体上线，也不能半上线。
+  </div>
+</section>
+
+<!-- ══════════════ 13 ══════════════ -->
+<section>
+  <h2><span class="n">13</span>待决问题（需要拍板的六条）</h2>
+
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:26%">问题</th><th style="width:32%">选项</th><th>建议与理由</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>装配器放哪</b></td>
+        <td class="mono">① loop 进程内收集<br>② 新增一个「装配」服务<br>③ 提到 Core</td>
+        <td><b>①</b>。loop 已经是工具目录的装配者，一处组装逻辑让 prompt 与 tools <b>同步增减</b>；
+          ② 多一跳总线往返与一个失败点；③ 违反「Core 不解析插件内容」。
+          <br><b>但 W1 的验收点就是检验 ① 对不对</b>：若装配逻辑复杂到需要独立进程，就该改 ②。</td></tr>
+      <tr><td>2</td><td><b>角色里存<b>引用</b>还是存<b>快照</b></b></td>
+        <td class="mono">① 存 name 引用<br>② 把当时的 prompt/tools 快照存进角色</td>
+        <td><b>①</b>。② 会让「装/卸插件立即生效」这个最省事的性质消失 ——
+          快照必须跟着每次装卸做迁移，而历史是 append-only 的，迁移不了。
+          <br>代价要说清：<b>删掉一个工具后，旧角色里那个绑定会指向不存在的工具</b>。
+          处置是<b>装配时忽略并在「能力」视图里标一条悬空引用</b>，不报错。</td></tr>
+      <tr><td>3</td><td><b>技能要不要区分「全局启用」与「角色可见」</b></td>
+        <td class="mono">① 一个开关<br>② 两个（全局装/启用 + 角色绑定）</td>
+        <td><b>②</b>。一个开关会逼用户「要么给所有角色开，要么全关」——
+          而技能管理插件的诉求正是「<b>管理装了哪些技能</b>」。
+          <br>实现上很便宜：角色存 name 引用，全局开关在 skills 服务的 <code>skills.json</code>，
+          <b>取交集</b>。两条都要有，因为「装了就全局生效」是另一种失控。</td></tr>
+      <tr><td>4</td><td><b>提示词片段的字节上限取多少</b></td>
+        <td class="mono">① 不限<br>② 8 KB（建议）<br>③ 按 token 数算</td>
+        <td><b>②</b>，并且<b>必须告警</b>。① 的失败是「装了几个大技能之后模型变笨且没人知道原因」。
+          ③ 更准确（不同 token 器的分词不同），但要多引一个分词器依赖，且<b>字节数已经够做闸门了</b> ——
+          闸门的作用是<b>提醒人</b>，不是精确计费。</td></tr>
+      <tr><td>5</td><td><b>工具默认审批策略</b></td>
+        <td class="mono">① 全部 ask<br>② 只读 auto / 其余 ask<br>③ 全部 auto（信任已注册）</td>
+        <td><b>②，但新装的工具第一次仍要 ask。</b>
+          <br>③ 的理由最危险：它把「注册」当成了「已审计」。<b>注册只说明「这个服务说自己有这个工具」，
+          不说明它安全。</b>
+          <br>① 的代价是每次 <code>read_file</code> 都弹窗，几天之后用户会闭眼点允许 ——
+          <b>那等于既没有 ① 也没有 ③，是最坏的组合</b>（用户以为自己在控制，其实闭着眼）。</td></tr>
+      <tr><td>6</td><td><b><code>dataReadableBy[]</code> 留还是删</b></td>
+        <td class="mono">① 保留等 HTTP 数据面<br>② 现在删掉<br>③ 补上数据面</td>
+        <td><b>②</b>。它只进了 schema，而能施加限制的 HTTP 面<b>不存在</b>。
+          <br>本文所有跨插件读都走<b>总线事件</b>（<code>agent.state</code> / <code>models.prefs.state</code> /
+          <code>tools.state</code> / <code>skills.state</code>）或 <b>纯引用</b>（角色存 name）。
+          <br><b>留着一条不生效的授权声明比没有更糟</b> —— 它让读代码的人以为边界存在。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>这份设计与既有三份文档的关系，一句话对齐：</b>
+    <br><code>插件标准.html</code> 钉死了<b>「这五样东西都不在插件标准里」</b>（§2），
+    本文是那条结论的<b>落地施工图</b>；
+    <code>插件协作与AI能力装配.html</code> 给了<b>prompt / 技能 / 工具三条线的契约种子</b>与六条待决问题，
+    本文把它们<b>合进一个闭环</b>，补上<b>MCP 与角色</b>两族，并给 W0–W7 的落地顺序。
+    <br><b>三份文档没有互相矛盾的地方</b>，因为它们对「什么进 plugin.json」的判断是同一条：
+    <b>归属是数据，状态是事实，能力是运行期注册出来的</b>。
+  </div>
+</section>
+
+<footer>
+  Osteosome · 智能体 Loop 与插件协同设计 · 2026-10-06 ·
+  代码依据 <code>shared/src/events.ts</code>（EventMap / CommandMap 现状）·
+  <code>shared/src/plugin-manifest.ts</code> ·
+  <code>core/src/service-manager/{plugin-registry,plugin-registry-runtime,manifest,manager}.ts</code> ·
+  <code>plugins/chat-workbench/services/{loop,llm,session}/src/*</code> ·
+  <code>plugins/*/service.json</code> ·
+  配套 <code>docs/插件标准.html</code> · <code>docs/插件化架构优化.html</code> ·
+  <code>docs/插件协作与AI能力装配.html</code> · <code>docs/开发进度/阶段追踪.md</code>
+</footer>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ══════════════ §2 分层聚焦 ══════════════ */
+  var lanePill = document.getElementById('lanePill');
+  var LAYER_TXT = {
+    all: '9 个前端视图 · 10 个服务 · 4 类用户数据目录',
+    ui: '① 前端层 · 6 个插件 UI 产物 + workbench 第 7 视图。Core 代伺服，同源 iframe，彼此零通信。',
+    core: '② Core 只做四件事：扫盘 · spawn · 搬字节 · 路由命令。它不认识 prompt / 技能 / 工具 / 角色。',
+    svc: '③ 服务层 · 一个服务 = 一个进程 = 一份能力。图中每一格的 📁 是它自己的用户数据目录。',
+    asm: '④ 装配输入 · 各服务自愿 publish 的东西汇总处。★ 这一层不在 plugin.json 里。',
+    exe: '④ 执行层 · 有副作用的事在这里发生。沙箱边界随执行者走，不在 loop 手里。',
+    llm: '⑤ 模型层 · 主位透传不透明引用，只有 provider 解引用明文。retry 是「重发命令」不是「改状态」。'
+  };
+  function focusLayer(key) {
+    var groups = document.querySelectorAll('.laneG');
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      if (key === 'all') { g.style.opacity = '1'; g.style.filter = 'none'; }
+      else if (g.dataset.l === key) { g.style.opacity = '1'; g.style.filter = 'none'; }
+      else { g.style.opacity = '0.16'; g.style.filter = 'grayscale(0.6)'; }
+    }
+    var tags = document.querySelectorAll('.layerTag');
+    for (var j = 0; j < tags.length; j++) {
+      tags[j].style.opacity = (key === 'all' || tags[j].dataset.l === key) ? '1' : '0.3';
+    }
+    lanePill.textContent = LAYER_TXT[key] || LAYER_TXT.all;
+    var btns = document.querySelectorAll('.layerBtn');
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].classList.toggle('on', btns[k].dataset.layer === key);
+      if (btns[k].dataset.layer === key) { btns[k].classList.remove('ghost'); }
+      else { btns[k].classList.add('ghost'); }
+    }
+  }
+  var lb = document.querySelectorAll('.layerBtn');
+  for (var li = 0; li < lb.length; li++) {
+    (function (b) {
+      b.addEventListener('click', function () { focusLayer(b.dataset.layer); });
+    })(lb[li]);
+  }
+
+  /* ══════════════ §6 agent loop 步进 ══════════════ */
+  var STEPS = [
+    { n:'①', nodes:['s1'], edges:['h1'], who:'前端 → loop', face:'🌐 同源 HTTP',
+      txt:'用户选了角色、点了发送。界面把 <b>characterId 与 provider / model / thinking 同级</b> 发成一条命令 —— <b>选角色不是另一套入口</b>，它只是这轮请求多带的一个字段。A = 对外 requestId，前端只见它。',
+      code:'POST /api/command { topic:"loop.run",\n  payload:{ requestId:"A", sessionId, text, characterId:"reviewer" } } → 202' },
+    { n:'②', nodes:['s2'], edges:['h1'], who:'loop 受理', face:'🔌 总线',
+      txt:'两件事，顺序不能反：<b>先 <code>accept(A)</code> 占位防重入</b>（运行中再发直接回 busy），再把 user 消息落库。用户行要「服务端真的存下来了」才出现，而不是乐观地先画上去。',
+      code:'core.accept(A) → message.append{role:"user"}\nloop.state.changed{A, running}   ← 此刻还没有 prompt' },
+    { n:'③', nodes:['s3'], edges:['h2'], who:'拉历史', face:'🔌 总线 → 📁 本地文件',
+      txt:'会话历史是唯一的数据源，<b>loop 不直读文件</b> —— 服务之间只经总线。拿到历史才发第一次请求（起内部 id B）。历史拉取失败或会话已删，都有降级成一问一答的兜底，<b>不会卡在 running</b>。',
+      code:'publish session.get{hg-A} → session.get.result{ messages }\n→ buildMessages(历史, <待装配>, 20) → core.start(B)' },
+    { n:'④', nodes:['s4'], edges:['h3'], who:'★ 解析角色（agent 服务）', face:'🔌 总线',
+      txt:'角色服务只做一件事：<b>把「角色」这份用户数据解析成一组具体的绑定</b>。它不认识技能的实现，也不认识工具的执行体 —— 那分别是 skills 服务与各执行者的事。它回给 loop 的是一份<b>纯数据的配方</b>。<b>绑定 ≠ 实现。</b>',
+      code:'publish agent.resolve{ requestId:"rg-A", characterId:"reviewer" }\n← agent.resolve.result{ fragments[], skills[], tools[], provider?, model?, thinking?, params? }' },
+    { n:'⑤', nodes:['s5'], edges:['h4'], who:'★ 装配提示词（loop 进程内）', face:'🔌 总线 + 📖 只读特权',
+      txt:'四个来源合成一份：身份层(0，loop 内置，恒在) + 角色层(5) + 技能索引(10) + 能力层(30~90，各服务 publish)。<b>关键性质：历史里的 system 一律丢弃 → prompt 每轮重新装配，不进 messages。</b>所以「装/卸插件立即生效」<b>免费</b> —— 不需要迁移任何历史数据。',
+      code:'composePrompt([\n  {id:"identity",   priority:0,   text:"…你是…"},   ← 恒在\n  {id:"role:reviewer", priority:5, text:"…"},            ← 角色那条\n  {id:"skill-index", priority:10, text:"- git-diff: …"}, ← 一个索引行/技能\n  {id:"reliability", priority:30, text:"…"}, …按 priority → 发布者 id → 片段 id 稳定排序' },
+    { n:'⑥', nodes:['s6'], edges:['h5'], who:'★ 装配工具（loop 进程内）', face:'🔌 总线',
+      txt:'工具目录是 <code>tool.registered</code> 的<b>并集</b>，再按角色绑定<b>过滤</b>（<code>"*"</code> = 全部已注册）。过滤后为空不是错误 —— 角色没绑工具就是没绑。<b>但「模型返回了目录外的工具名」必须是失败结果</b>，而不是静默忽略。',
+      code:'tools = union(tool.registered ∥ skills ∥ fs-tools ∥ mcp) ∩ role.tools\n→ ToolSpec[] 走 API tools 参数，不进 system 文本\n→ 排序：serviceId 字典序 → name 字典序（顺序抖动会打掉 prompt 缓存）' },
+    { n:'⑦', nodes:['s7'], edges:['v1'], who:'★ 预算闸门', face:'🧮 loop 进程内',
+      txt:'片段变长会挤掉历史：上限 8 KB 片段 + 20 条历史。超了按 priority 从低到高<b>整块丢弃并 logger.warn</b>。历史截断要对齐到 <code>user</code> 边界（孤立 tool 消息会让上游 400）。<b>静默截断是最坏的一种</b> —— 症状是「模型变笨」，而没人知道原因。',
+      code:'if (promptBytes > 8192) drop lowest-priority fragments first, 每条一条 warn\nif (messages.length > 20) truncate, 对齐到 user 边界\n被丢的片段 → 结构化日志 + 「能力」视图可见' },
+    { n:'⑧', nodes:['s8'], edges:['h6'], who:'发 llm.request', face:'🔁 总线',
+      txt:'B 只活在 loop 内存。<b>A/B 的映射是为了让回程事件换发成 A</b>（见 ⑬）。这一条也解释了为什么工具轮之后必须生成新的 B：<b>一条 A 会对应多个 B</b>，而前端只认 A。',
+      code:'publish llm.request{ requestId:"B", messages, tools, provider?, model?, thinking? }' },
+    { n:'⑨', nodes:['s9'], edges:['h7'], who:'llm 主位查路由', face:'🔁 总线',
+      txt:'路由表由注册事件<b>喂起</b>，查询失败<b>立刻回明确错误</b>，不让请求悬着。主位自己不 import 任何 provider —— <b>「装了什么」决定「有什么模型」</b>。W0 之后这里不再有「只接了 OpenAI 兼容端点就必然失败」的那条坑。',
+      code:'route = resolve(provider ?? 角色 ?? preferences.json ?? env)\n无则 → llm.request.failed{ unsupported_provider }\n有则 → llm.request.started' },
+    { n:'⑩', nodes:['s10'], edges:['h8'], who:'主位 → provider', face:'🔁 总线',
+      txt:'主位把路由里的凭证引用与重试策略当<b>不透明字符串</b>注入并透传。引用形如 <code>env:NAME</code> 或 <code>file:cred_x</code> —— <b>主位不解引用，因此明文永远不过总线</b>。它对 MCP、角色、技能一无所知，也不需要知道。',
+      code:'publish llm.provider.request{ B, model, messages, tools,\n  credentialRef:"file:cred_x", retryPolicy:{…} }' },
+    { n:'⑪', nodes:['s11'], edges:['h9'], who:'provider 发流', face:'📖 读自带数据 · 📁 解引用凭证',
+      txt:'<b>全系统只有这一个进程把引用解成明文</b>并放进 Authorization 头，然后向上游发流、逐块回吐。引用格式坏了在这里就抛 —— 空 apiKey 打过去换来 401，那条报错会指向「厂商配错了」，而真实原因指向错的方向更难查。',
+      code:'resolveApiKey(credentialRef) → streamCompletions(baseURL)\n→ publish llm.provider.chunk{ requestId:"B", chunk }' },
+    { n:'⑫', nodes:['s12'], edges:['h10'], who:'主位翻块', face:'🔁 总线',
+      txt:'wire 形状不出 provider 边界。工具调用按块 id 拼装完整参数，<b>块闭合即发、不等 finish</b> —— 上层能在模型还在续答时就开始渲染工具。思维链与正文必须分流，否则思维链会混进回答正文。',
+      code:'delta → llm.token.streamed{ B, blockType:"text"|"reasoning" }\nblock-end(tool_call) → llm.request.tool_call{ B, toolCall }\nfinish → finished{stop|length|tool_calls} / failed' },
+    { n:'⑬', nodes:['s13'], edges:['v2'], who:'loop 换发 B → A', face:'🔌 总线 → 🌐 SSE',
+      txt:'累积正文与思维链，<b>换发成 A（B 永不泄前端）</b>。若 <code>finishReason === "tool_calls"</code>：落一条带 <code>toolCalls</code> 的 assistant 消息，<b>状态保持 running、不发 idle</b>，然后进 ⑭。所有 handler 第一件事都是 <code>if (requestId !== activeA) return</code>。',
+      code:'publish loop.token.streamed{ A, sessionId, blockType }\nif (toolCalls) → message.append{ assistant, toolCalls }\nstate 保持 running' },
+    { n:'⑭', nodes:['s14'], edges:['h11'], who:'★ 派发工具执行', face:'🔌 总线',
+      txt:'<b>loop 不执行工具</b>：它与执行者是不同进程，<b>不能直接调别人的代码</b>。它做的是「查这个 name 是谁注册的 → 发给那个服务」。<b>loop 保留发布权</b>（<code>loop.tool.executed</code> + <code>message.append{role:\'tool\'}</code>），所以<b>对话界面一行都不用改</b> —— 变的只是「谁真正执行」。',
+      code:'publish tool.execute{ requestId:"T" /* = toolCallId */, sessionId,\n  name:"read_file", arguments:"{…}" }\n执行者 = 注册了这个 name 的那个服务（fs-tools / skills / mcp / …）\n· 每个 tool.execute 有硬超时 → 超时产失败结果，不许静默' },
+    { n:'⑮', nodes:['s15','apx'], edges:['h12','ap'], who:'★ 审批闸门（tools 服务）', face:'🔌 总线 → 🌐 前端裁决',
+      txt:'只读工具可按<b>策略</b>免审；<b>写 / 网络 / 进程类逐次审</b>。策略在 tools 插件自己的 <code>approvals.json</code> —— <b>不放 Core，因为 Core 不该知道有哪些工具</b>。<b>默认是审</b>：新装工具第一次免审等于「装了就等于装了」，而用户装它时并没有读它的代码。',
+      code:'publish tool.approval.requested{ T, toolName, summary, risk, arguments }\n← tool.approval.resolved{ T, approved, reason? }\n· 「记住这次」必须带作用域（会话级/工具级），不记全局\n· 用户在审批期间取消这一轮 → 结果成孤儿 → 静默丢弃' },
+    { n:'⑯', nodes:['s16'], edges:['h13'], who:'结果回填', face:'🔁 总线 → 📁 落库',
+      txt:'<b>失败结果也回填给模型，让它自我纠正</b> —— 这是「让模型自我纠正」的一部分，<b>不是错误处理</b>。今天 <code>executeTool</code> 已经是这个行为（返回错误文本而不是抛），跨进程后<b>要保持它</b>。所以：<b>不要自动重试有副作用的工具</b>。',
+      code:'← tool.execute.result{ T, ok, content, summary }\n→ publish loop.tool.executed{ A, name, ok, summary }\n→ message.append{ role:"tool", toolCallId:"T", content }   ← 落库，append-only' },
+    { n:'⑰', nodes:['s17'], edges:['h14','lb'], who:'工具轮续跑', face:'🔁 总线',
+      txt:'轮上限 <code>MAX_TOOL_ROUNDS</code>（默认 5）<b>留在 loop 手里</b>：它是<b>编排</b>决策不是执行决策 —— <b>谁都不该能绕过它</b>。超限时不发起下一次请求，而是回填一条失败结果让模型收尾。下一轮 <code>nextRound(B→B′)</code> 回到 ⑧，<b>预算闸门与装配都重跑一遍</b>（因为目录可能在这几秒里变了）。',
+      code:'rounds++ ≤ MAX_TOOL_ROUNDS ? nextRound(B → B′) → 回 ⑧\n                        : 回填「已达工具轮上限」→ 收尾\n· 一个 B 一个 requestId；下一轮换 B，不复用' },
+    { n:'⑱', nodes:['s18'], edges:['h15'], who:'★ 收尾闭环：回到界面', face:'🌐 SSE',
+      txt:'落 assistant 消息（正文 + <code>reasoning</code> 思维链 + usage），状态回 idle。<b>同一批事件投递给同一插件的三个独立 iframe</b>，它们各自按 curId 过滤后<b>重建</b>自己的视图 —— 没有消息层、没有共享内存，<b>服务端事件流本来就是那个共享层</b>。三个出口的事件不同（成功 / <code>loop.run.failed</code> / <code>loop.run.cancelled</code>），界面才知道该怎么显示。',
+      code:'message.append{ assistant, reasoning, usage }\nloop.state.changed{ A, idle }\n三个 iframe 各自 rebuild ｜ 每个 handler：if (requestId !== activeA) return' }
+  ];
+
+  var rail = document.getElementById('lpRail');
+  for (var r = 0; r < STEPS.length; r++) rail.appendChild(document.createElement('i'));
+  var stage = document.getElementById('lpStage'), pill = document.getElementById('lpPill');
+  var idx = -1, lpTimer = null;
+  function renderLp() {
+    for (var i = 0; i < STEPS.length; i++) {
+      var s = STEPS[i], on = (i === idx);
+      var vis = (idx < 0) ? false : (on || i === idx - 1 || i === idx + 1);
+      s.nodes.forEach(function (id) {
+        var g = document.getElementById(id);
+        if (!g) return;
+        g.classList.toggle('on', on);
+        g.classList.toggle('dim', idx >= 0 && !vis);
+      });
+      s.edges.forEach(function (id) {
+        var e = document.getElementById(id);
+        if (!e) return;
+        e.classList.toggle('on', on);
+        e.classList.toggle('dim', idx >= 0 && !vis);
+      });
+      rail.children[i].className = on ? 'on' : (i < idx ? 'done' : '');
+    }
+    if (idx < 0) {
+      pill.textContent = '1 / ' + STEPS.length;
+      stage.innerHTML = '<div class="who">准备就绪</div><div class="txt">按 ▶ 播放，看一个数据包走完一轮<b>含工具调用与审批</b>的 18 步。' +
+        '注意 ⑤⑥⑦⑭⑮ 这五格标了 ★ —— 它们是本轮新增或改造的，其余 13 格<b>一行都不用改</b>。' +
+        '全程没有任何一条新协议，也没有任何一个目录规则参与。</div>';
+      return;
+    }
+    var st = STEPS[idx];
+    pill.textContent = (idx + 1) + ' / ' + STEPS.length + ' · ' + st.face;
+    stage.innerHTML = '<div class="who">' + st.n + ' ' + st.who + ' · ' + st.face + '</div>' +
+      '<div class="txt">' + st.txt + '</div><div class="code">' + st.code.replace(/</g, '&lt;') + '</div>';
+  }
+  function goLp(n) { idx = Math.max(-1, Math.min(STEPS.length - 1, n)); renderLp(); }
+  document.getElementById('lpPlay').addEventListener('click', function () {
+    if (lpTimer) { clearInterval(lpTimer); lpTimer = null; this.textContent = '▶ 播放'; return; }
+    if (idx >= STEPS.length - 1) idx = -1;
+    this.textContent = '⏸ 暂停';
+    lpTimer = setInterval(function () {
+      if (idx >= STEPS.length - 1) {
+        clearInterval(lpTimer); lpTimer = null;
+        document.getElementById('lpPlay').textContent = '▶ 播放';
+        return;
+      }
+      goLp(idx + 1);
+    }, reduced ? 4200 : 2600);
+  });
+  document.getElementById('lpNext').addEventListener('click', function () {
+    if (lpTimer) { clearInterval(lpTimer); lpTimer = null; document.getElementById('lpPlay').textContent = '▶ 播放'; }
+    goLp(idx + 1);
+  });
+  document.getElementById('lpPrev').addEventListener('click', function () {
+    if (lpTimer) { clearInterval(lpTimer); lpTimer = null; document.getElementById('lpPlay').textContent = '▶ 播放'; }
+    goLp(idx - 1);
+  });
+  document.getElementById('lpReset').addEventListener('click', function () {
+    if (lpTimer) { clearInterval(lpTimer); lpTimer = null; document.getElementById('lpPlay').textContent = '▶ 播放'; }
+    goLp(-1);
+  });
+  renderLp();
+
+  /* ══════════════ §7 时序图（JS 生成） ══════════════ */
+  var LANES = [
+    { t:'前端 UI', c:'ui' },
+    { t:'Core', c:'core' },
+    { t:'loop', c:'svc' },
+    { t:'agent', c:'new' },
+    { t:'skills', c:'new' },
+    { t:'tools', c:'new' },
+    { t:'fs-tools / mcp', c:'host' },
+    { t:'llm 主位', c:'svc' },
+    { t:'provider', c:'svc' }
+  ];
+  /* kind: h = HTTP/SSE, b = 总线, f = 文件/只读特权, s = 进程内 */
+  var MSGS = [
+    [0,1,'POST /api/command  loop.run{ A, characterId }','h'],
+    [1,2,'loop.run  → accept(A) · message.append{user}','b'],
+    [2,0,'loop.state.changed{ A, running }','b'],
+    [2,7,'session.get{ hg-A }','b'],
+    [7,2,'session.get.result{ messages[] }','b'],
+    [2,3,'agent.resolve{ characterId }','b'],
+    [3,2,'agent.resolve.result{ fragments / skills / tools / model }','b'],
+    [2,4,'skills.list','b'],
+    [4,2,'skills.state{ skills[] }  → skills 服务自己再 publish 一条索引片段','b'],
+    [2,5,'tools.list','b'],
+    [5,2,'tool.registered{ fs-tools: read_file, list_dir }','b'],
+    [3,2,'prompt.fragment.registered{ id:"role:reviewer", priority:5 }','b'],
+    [2,-1,'★ composePrompt(四层) + 工具过滤 + 预算闸门 + llm.request{ B }','s'],
+    [2,7,'llm.request{ requestId:"B", messages, tools }','b'],
+    [7,-1,'查路由表（注册事件喂起）；查不到 → unsupported_provider','s'],
+    [7,8,'llm.provider.request{ B, credentialRef, retryPolicy }','b'],
+    [8,7,'llm.provider.chunk{ B } × N','b'],
+    [7,2,'llm.token.streamed{ B } + llm.request.tool_call{ B, toolCall }','b'],
+    [2,0,'loop.token.streamed{ A } · assistant{ toolCalls } 落库','b'],
+    [2,5,'tool.execute{ T = toolCallId, name:"read_file", arguments }','b'],
+    [5,-1,'★ 策略判定：risk=read → auto 免审；write/net/proc → ask','s'],
+    [5,0,'tool.approval.requested{ T, toolName, summary, risk }','b'],
+    [0,5,'tool.approval.resolved{ T, approved:true }','b'],
+    [5,6,'转发执行（沙箱 = 执行者自己的 workspace/）','b'],
+    [6,5,'ok / 失败 / 超时 → 失败结果，不是静默','b'],
+    [5,2,'tool.execute.result{ T, ok, content, summary }','b'],
+    [2,7,'message.append{ role:"tool", toolCallId:"T" }','b'],
+    [2,-1,'rounds+1 ≤ MAX_TOOL_ROUNDS ? nextRound(B→B′) → 回第 14 步','s'],
+    [2,0,'第二轮 token → finished → message.append{assistant,usage} → state{idle}','b']
+  ];
+  var SW = 1160, LANE_W = 112, LANE_X0 = 60, TOP = 96, GAP = 31;
+  function cx(i) { return LANE_X0 + i * LANE_W + LANE_W / 2; }
+  var LH = TOP + (MSGS.length - 1) * GAP + 40;
+  var mkFill = { ui:'var(--surface)', core:'var(--primary-soft)', svc:'var(--bus-soft)',
+                 new:'var(--primary-soft)', host:'var(--warning-soft)' };
+  var mkStroke = { ui:'var(--success)', core:'var(--primary)', svc:'var(--bus)',
+                   new:'var(--primary)', host:'var(--warning)' };
+  var mkMark = { ui:'mSq', core:'mSq', svc:'mSq', new:'mSq', host:'mSq' };
+  var s = '';
+  s += '<defs>';
+  ['mSq'].forEach(function (id) {
+    s += '<marker id="' + id + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+         '<path d="M0,0 L10,5 L0,10 z" fill="var(--border-strong)"/></marker>';
+  });
+  s += '</defs>';
+  s += '<text x="14" y="26" font-size="11.5" font-weight="700" fill="var(--muted)">横 = 时间（向下）。一列 = 一个参与者；一条 = 一次跨进程往返或一次进程内计算。</text>';
+  /* 泳道头 */
+  LANES.forEach(function (L, i) {
+    var x = cx(i);
+    s += '<rect x="' + (x - 52) + '" y="36" width="104" height="34" rx="8" fill="' + mkFill[L.c] +
+         '" stroke="' + mkStroke[L.c] + '"/>';
+    s += '<text class="laneHead" x="' + x + '" y="57" text-anchor="middle">' + L.t + '</text>';
+    s += '<line x1="' + x + '" y1="70" x2="' + x + '" y2="' + LH + '" stroke="var(--border)" stroke-dasharray="2 5"/>';
+  });
+  /* 消息 */
+  MSGS.forEach(function (m, i) {
+    var y = TOP + i * GAP;
+    var self = (m[1] === -1);
+    var stroke = m[3] === 'h' ? 'var(--success)' : (m[3] === 'f' ? 'var(--warning)'
+                : (m[3] === 's' ? 'var(--primary)' : 'var(--bus)'));
+    s += '<g class="seqmsg" data-i="' + i + '">';
+    if (self) {
+      var lx = cx(m[0]) + 6;
+      s += '<path d="M' + lx + ' ' + y + ' c 40 -14 96 -14 96 0" stroke="' + stroke +
+           '" stroke-width="1.8" fill="none" stroke-dasharray="' + (m[3] === 's' ? '5 4' : '6 5') +
+           '" marker-end="url(#mSq)"/>';
+      s += '<text class="seqlabel" data-i="' + i + '" x="' + (lx + 4) + '" y="' + (y - 4) +
+           '" font-size="10.5" fill="var(--text)" font-family="var(--mono)">' + m[2] + '</text>';
+    } else {
+      var x1 = cx(m[0]), x2 = cx(m[1]);
+      s += '<line x1="' + x1 + '" y1="' + y + '" x2="' + (x2 + (x2 > x1 ? -5 : 5)) + '" y2="' + y +
+           '" stroke="' + stroke + '" stroke-width="1.8" marker-end="url(#mSq)"' +
+           (m[3] === 's' ? ' stroke-dasharray="5 4"' : ' stroke-dasharray="7 5"') + '/>';
+      var mid = (x1 + x2) / 2, anchor = 'middle';
+      if (Math.abs(x2 - x1) < 200) { mid = x1 + (x2 > x1 ? 12 : -12); anchor = x2 > x1 ? 'start' : 'end'; }
+      s += '<text class="seqlabel" data-i="' + i + '" x="' + mid + '" y="' + (y - 5) +
+           '" text-anchor="' + anchor + '" font-size="10.5" fill="var(--text)" font-family="var(--mono)">' + m[2] + '</text>';
+    }
+    s += '<text class="seqnum" data-i="' + i + '" x="14" y="' + (y + 4) + '">' + (i + 1) + '</text>';
+    s += '</g>';
+  });
+  var seqSvg = document.getElementById('seqSvg');
+  seqSvg.setAttribute('viewBox', '0 0 ' + SW + ' ' + LH);
+  seqSvg.innerHTML = s;
+
+  var sqPill = document.getElementById('sqPill'), sqStage = document.getElementById('sqStage');
+  var sIdx = -1, sqTimer = null;
+  var seqMsgs = seqSvg.querySelectorAll('.seqmsg');
+  var seqLabels = seqSvg.querySelectorAll('.seqlabel');
+  var seqNums = seqSvg.querySelectorAll('.seqnum');
+  var MSGTXT = [
+    '用户选了角色点了发送。HTTP 回执只表示「命令收到了」—— 后面所有进展都由事件驱动。',
+    'loop 受理：先占位防重入，再落 user 消息。<b>此刻还没有 prompt</b>，所以这一步不可能失败于「装配」。',
+    '界面拿到 running 状态，画出「正在生成」。三个 iframe 各自从 SSE 重建这个状态。',
+    '历史是唯一数据源，loop 不直读文件。<b>拿到历史才发第一次请求</b>（起内部 id B）。',
+    '拿不到就降级成一问一答，<b>不会卡在 running</b>。',
+    '★ 角色服务只做「把用户数据解析成绑定」。它<b>不认识</b>技能实现与工具执行体。',
+    '配方是纯数据：fragments / skills / tools / provider / model / thinking。<b>绑定 ≠ 实现。</b>',
+    '★ 重播三段式第 2 段：<b>收集方上线时主动问一次</b>。空载荷命令，不需要参数。',
+    '拿到全量就不需要 diff、不需要补偿逻辑。skills 服务随后自己 publish 一条<b>索引片段</b>（name+description）。',
+    '★ 同上。工具目录也是「重播整份」，所以 fs-tools 早于 loop 启动也能被看到。',
+    '注意：<b>连角色那条提示词也是同一族机制</b>（<code>prompt.fragment.registered</code>）。它对 loop 是普通片段。',
+    '★ 进程内计算，零总线往返。<b>提示词与工具由同一装配点、同一时刻收集</b> —— 它们必须同步增减。',
+    'B 只活在 loop 内存，前端只见 A。一条 A 会对应多个 B（每个工具轮换一个）。',
+    '主位对 prompt / tools / 角色 / MCP <b>一无所知，零改动</b>。它只查路由表。',
+    '路由表由注册事件喂起。<b>查不到立刻回明确错误</b>，不让请求悬着。',
+    '凭证引用当<b>不透明字符串</b>透传 —— 主位不解引用，明文永远不过总线。',
+    '唯一解引用明文的地方就是 provider 进程。',
+    '翻块：wire → 中立事件。<code>tool_call</code> <b>块闭合即发</b>，不等 finish。',
+    '换发成 A。落一条带 toolCalls 的 assistant 消息，<b>状态保持 running 不发 idle</b>。',
+    '★ loop <b>不执行工具</b>，它只是「查这个名字是谁注册的 → 发给那个服务」。',
+    '★ 三级策略：auto / ask / deny。<b>默认 ask</b>；只读类可被用户显式升到 auto。',
+    '需要审批的工具才走这一跳。<b>纯只读工具在这一格直接跳过</b>，不打扰用户。',
+    '「记住这次」<b>必须带作用域</b>（会话级 / 工具级）—— 记成全局会让第一次的「这次允许」变成永久通行证。',
+    '沙箱边界<b>随执行者走</b>：fs-tools 用自己的 <code>workspace/</code>，loop 手里不再有路径。',
+    '失败与超时<b>都产一次失败结果</b>，不许静默 —— 静默的等价物是「模型一直转圈」。',
+    '★ <b>失败结果也回填给模型，让它自我纠正</b>。这是「让模型自我纠正」的一部分，不是错误处理。',
+    '<code>role:\'tool\'</code> 消息落库，append-only、不可变。UI 由此渲染工具块。',
+    '★ 轮上限 <code>MAX_TOOL_ROUNDS</code> <b>留在 loop 手里</b> —— 它是编排决策，谁都不该能绕过。下一轮换 B′。',
+    '★ 闭环：这一轮的最后一字节。三个 iframe 各自按 curId 过滤后<b>重建</b>视图；服务端事件流本来就是那个共享层。'
+  ];
+  function renderSq() {
+    for (var i = 0; i < seqMsgs.length; i++) {
+      var on = (i === sIdx);
+      seqMsgs[i].classList.toggle('on', on);
+      seqLabels[i].classList.toggle('on', on);
+      seqNums[i].classList.toggle('on', on);
+    }
+    if (sIdx < 0) {
+      sqPill.textContent = '0 / ' + MSGS.length;
+      sqStage.innerHTML = '<div class="who">准备就绪</div><div class="txt">按 ▶ 播放，看一次<b>含工具调用与审批</b>的完整轮次在 9 个参与者之间怎么走。' +
+        '<b>横着看 = 时间</b>，所以这张图能回答另一张图回答不了的问题：<b>哪一步是本地的，哪一步是跨进程的，失败会怎么传播。</b></div>';
+      return;
+    }
+    sqPill.textContent = (sIdx + 1) + ' / ' + MSGS.length;
+    sqStage.innerHTML = '<div class="who">第 ' + (sIdx + 1) + ' 跳 · ' + MSGS[sIdx][2].replace(/<[^>]*>/g, '').slice(0, 90) +
+      '</div><div class="txt">' + MSGTXT[sIdx] + '</div>';
+  }
+  function goSq(n) { sIdx = Math.max(-1, Math.min(MSGS.length - 1, n)); renderSq(); }
+  document.getElementById('sqPlay').addEventListener('click', function () {
+    if (sqTimer) { clearInterval(sqTimer); sqTimer = null; this.textContent = '▶ 播放'; return; }
+    if (sIdx >= MSGS.length - 1) sIdx = -1;
+    this.textContent = '⏸ 暂停';
+    sqTimer = setInterval(function () {
+      if (sIdx >= MSGS.length - 1) {
+        clearInterval(sqTimer); sqTimer = null;
+        document.getElementById('sqPlay').textContent = '▶ 播放';
+        return;
+      }
+      goSq(sIdx + 1);
+    }, reduced ? 2600 : 1500);
+  });
+  document.getElementById('sqNext').addEventListener('click', function () {
+    if (sqTimer) { clearInterval(sqTimer); sqTimer = null; document.getElementById('sqPlay').textContent = '▶ 播放'; }
+    goSq(sIdx + 1);
+  });
+  document.getElementById('sqPrev').addEventListener('click', function () {
+    if (sqTimer) { clearInterval(sqTimer); sqTimer = null; document.getElementById('sqPlay').textContent = '▶ 播放'; }
+    goSq(sIdx - 1);
+  });
+  document.getElementById('sqReset').addEventListener('click', function () {
+    if (sqTimer) { clearInterval(sqTimer); sqTimer = null; document.getElementById('sqPlay').textContent = '▶ 播放'; }
+    goSq(-1);
+  });
+  renderSq();
+
+  /* ══════════════ §8 交互式装配预览 ══════════════ */
+  var IDENTITY = '你是一个本地桌面 AI 助手的对话后端，运行在 Osteosome 客户端里。用简体中文回答，语气自然、简洁。';
+  var ROLES = {
+    reviewer: { name:'代码评审员',
+      prompt:'你是资深代码评审员。只指出会导致故障、丢数据或难以回退的问题，不评论风格。',
+      skills:['git-diff'], tools:['read_file','list_dir'] },
+    researcher: { name:'调研员',
+      prompt:'你是一个调研员。先给结论再给依据；不确定的地方明确说不确定，绝不编造来源。',
+      skills:['web-research','pdf-extract'], tools:'*' },
+    ops: { name:'运维值班',
+      prompt:'你是运维值班。任何写操作都先说明影响面再等确认；不要主动重启服务。',
+      skills:[], tools:['run_tests','http_get','read_file'] },
+    bare: { name:'裸会话', prompt:'', skills:[], tools:[] }
+  };
+  var CAPS = [
+    { id:'skills', nm:'skills 插件（技能索引片段）', on:true,
+      frag:{ id:'skill-index', priority:10 } },
+    { id:'reliability', nm:'reliability 插件（能力片段）', on:true,
+      frag:{ id:'reliability', priority:30, text:'任何工具失败都必须把失败原因如实回述，不得美化。' } },
+    { id:'mcp', nm:'mcp 插件（能力片段）', on:true,
+      frag:{ id:'mcp-notice', priority:50, text:'你可以调用外部 MCP 服务器提供的工具；调用前先说明你打算用它做什么。' } },
+    { id:'agents', nm:'agents 插件（角色片段）', on:true, frag:null }
+  ];
+  var SKILLS = { 'git-diff':210, 'pdf-extract':340, 'web-research':260 };
+  var TOOLS = {
+    'read_file':  { src:'fs-tools', risk:'read' },
+    'list_dir':   { src:'fs-tools', risk:'read' },
+    'skill_read': { src:'skills',   risk:'read' },
+    'mcp__web__search': { src:'mcp', risk:'net' },
+    'run_tests':  { src:'tools',    risk:'proc' },
+    'http_get':   { src:'tools',    risk:'net' }
+  };
+  var BUDGET = 8192;
+  var curRole = 'reviewer';
+  var capOn = { skills:true, reliability:true, mcp:true, agents:true };
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function bytes(s) { return new Blob([s]).size; }
+
+  function buildRolePick() {
+    var box = document.getElementById('rolePick');
+    box.innerHTML = '';
+    Object.keys(ROLES).forEach(function (k, i) {
+      var r = document.createElement('div');
+      r.className = 'optrow' + (k === curRole ? ' sel' : '');
+      r.innerHTML = '<input type="radio" name="rolechk"' + (k === curRole ? ' checked' : '') +
+        '><span class="nm">' + r0(k) + '</span><span class="risk">' +
+        (ROLES[k].tools === '*' ? '全部工具' : ROLES[k].tools.length + ' 工具') + '</span>';
+      r.addEventListener('click', function () { curRole = k; buildRolePick(); renderAsm(); });
+      box.appendChild(r);
+    });
+    function r0(k) { return ROLES[k].name; }
+  }
+  function buildCapPick() {
+    var box = document.getElementById('capPick');
+    box.innerHTML = '';
+    CAPS.forEach(function (c) {
+      var d = document.createElement('div');
+      d.className = 'optrow' + (capOn[c.id] ? ' sel' : '');
+      d.innerHTML = '<input type="checkbox"' + (capOn[c.id] ? ' checked' : '') +
+        '><span class="nm">' + c.nm + '</span>';
+      d.addEventListener('click', function () { capOn[c.id] = !capOn[c.id]; buildCapPick(); renderAsm(); });
+      box.appendChild(d);
+    });
+  }
+  function renderAsm() {
+    var role = ROLES[curRole];
+    var layers = [];
+
+    layers.push({ p:0, nm:'身份层 · loop 内置', text:IDENTITY, kind:'own' });
+    if (capOn.agents && role.prompt) {
+      layers.push({ p:5, nm:'角色层 · agent 服务 · ' + role.name, text:role.prompt, kind:'add' });
+    }
+
+    var idxLines = [];
+    Object.keys(SKILLS).forEach(function (n) {
+      var bound = role.skills.indexOf(n) >= 0;
+      if (bound && capOn.skills) idxLines.push('- ' + n + ': （' + SKILLS[n] + ' B 摘要注入，正文经 skill_read 按需读）');
+    });
+    if (idxLines.length) {
+      layers.push({ p:10, nm:'技能索引层 · skills 服务 · ' + idxLines.length + ' 条',
+        text:idxLines.join('\n'), kind:'add' });
+    }
+
+    if (capOn.reliability) {
+      layers.push({ p:30, nm:'能力层 · reliability',
+        text:'任何工具失败都必须把失败原因如实回述，不得美化。', kind:'add' });
+    }
+    if (capOn.mcp) {
+      var wantMcp = (role.tools === '*' || role.tools.indexOf('mcp__web__search') >= 0);
+      if (wantMcp) {
+        layers.push({ p:50, nm:'能力层 · mcp',
+          text:'你可以调用外部 MCP 服务器提供的工具；调用前先说明你打算用它做什么。', kind:'add' });
+      }
+    }
+
+    var total = 0;
+    layers.forEach(function (l) { l.b = bytes(l.text); total += l.b; });
+
+    /* 超预算 → 从低 priority 起整块丢弃 */
+    var dropped = [];
+    while (total > BUDGET && layers.length > 1) {
+      var worst = -1, wp = -1;
+      for (var i = 0; i < layers.length; i++) {
+        if (layers[i].p > wp) { wp = layers[i].p; worst = i; }
+      }
+      dropped.push(layers[worst]);
+      total -= layers[worst].b;
+      layers.splice(worst, 1);
+    }
+
+    var lw = document.getElementById('pLayers');
+    lw.innerHTML = '';
+    layers.forEach(function (l, i) {
+      var d = document.createElement('div');
+      d.className = 'layer';
+      d.style.borderLeftColor = l.kind === 'own' ? 'var(--success)' : 'var(--primary)';
+      d.style.animationDelay = (i * 60) + 'ms';
+      d.innerHTML = '<span class="p">p' + l.p + '</span><span>' + esc(l.nm) +
+        '<br><span style="color:var(--muted);font-size:12px">' + esc(l.text.replace(/\n/g, ' · ')).slice(0, 150) +
+        (l.text.length > 120 ? ' …' : '') + '</span></span><span class="b">' + l.b + ' B</span>';
+      lw.appendChild(d);
+    });
+    dropped.forEach(function (l) {
+      var d = document.createElement('div');
+      d.className = 'layer dropped';
+      d.style.animationDelay = '0ms';
+      d.innerHTML = '<span class="p">p' + l.p + '</span><span>' + esc(l.nm) +
+        '</span><span class="b">丢弃 -' + l.b + ' B</span>';
+      lw.appendChild(d);
+    });
+
+    var bar = document.getElementById('pBar');
+    var pct = Math.min(100, Math.round(total / BUDGET * 100));
+    bar.firstElementChild.style.width = pct + '%';
+    bar.className = 'bar' + (total > BUDGET * 0.85 ? ' warn' : '') + (total > BUDGET ? ' over' : '');
+    document.getElementById('pMeta').textContent =
+      'composePrompt() = ' + layers.length + ' 条片段 · ' + total + ' B / 上限 ' + BUDGET + ' B (' + pct +
+      '%) · 排序键 = priority → 发布者 id → 片段 id' +
+      (dropped.length ? ' · 已丢弃 ' + dropped.length + ' 条' : '');
+
+    var pw = document.getElementById('pWarn');
+    if (dropped.length) {
+      pw.innerHTML = '<div class="badline">⚠ 超预算：已按 priority 从低到高<b>整块丢弃</b> ' + dropped.length +
+        ' 条片段，并各发一条 logger.warn。<b>静默截断是最坏的一种</b> —— 症状是「模型变笨」而没人知道原因。</div>';
+    } else if (total > BUDGET * 0.85) {
+      pw.innerHTML = '<div class="warnline">⚠ 接近预算上限（' + pct + '%）。再加一条能力片段就会被丢弃。</div>';
+    } else {
+      pw.innerHTML = '<div class="okline">✓ 预算充足。历史 20 条的对齐规则与片段无关（截断点对齐到 user 边界）。</div>';
+    }
+
+    /* 工具目录 */
+    var tc = document.getElementById('tChips');
+    tc.innerHTML = '';
+    var names = Object.keys(TOOLS).filter(function (n) {
+      if (!capOn.skills && n === 'skill_read') return false;
+      if (!capOn.mcp && n.indexOf('mcp__') === 0) return false;
+      if (role.tools === '*') return true;
+      return role.tools.indexOf(n) >= 0;
+    });
+    if (role.tools === '*') {
+      var dangling = Object.keys(TOOLS).filter(function (n) {
+        return (capOn.skills || n !== 'skill_read') && (capOn.mcp || n.indexOf('mcp__') !== 0);
+      });
+      names = dangling;
+    }
+    if (!names.length) {
+      tc.innerHTML = '<span class="chip none">目录为空 —— 角色没绑工具，这不是错误</span>';
+    } else {
+      names.sort();
+      names.forEach(function (n, i) {
+        var t = TOOLS[n];
+        var c = document.createElement('span');
+        c.className = 'chip ' + (t.risk === 'read' ? 'ro' : (t.risk === 'net' ? 'net' : 'proc'));
+        c.style.animationDelay = (i * 40) + 'ms';
+        c.textContent = n + '  ·  ' + t.src + '  ·  ' + t.risk;
+        tc.appendChild(c);
+      });
+    }
+    var tw = document.getElementById('tWarn');
+    if (role.tools !== '*' && role.tools.some(function (n) { return !TOOLS[n]; })) {
+      tw.innerHTML = '<div class="warnline">⚠ 角色里有一个绑定指向<b>未注册的工具</b> —— 取交集时会被忽略，' +
+        '并应在「能力」视图里标一条<b>悬空引用</b>，<b>不报错</b>（缺一份绑定只是少一点能力）。</div>';
+    } else {
+      tw.innerHTML = '<div class="okline">✓ ToolSpec[] 走 API <code>tools</code> 参数，<b>不进 system 文本</b>（前缀缓存友好）。' +
+        '排序：serviceId → name，<b>顺序抖动会打掉 prompt 缓存</b>，症状是「token 费用翻倍」且无报错。</div>';
+    }
+
+    /* 技能索引 */
+    var sc = document.getElementById('sChips');
+    sc.innerHTML = '';
+    if (!capOn.skills) {
+      sc.innerHTML = '<span class="chip none">skills 服务不在位 —— 没有这一层，这是一条合法的缺失</span>';
+    } else if (!idxLines.length) {
+      sc.innerHTML = '<span class="chip none">角色没绑任何技能（或都没启用）</span>';
+    } else {
+      role.skills.forEach(function (n, i) {
+        if (SKILLS[n] === undefined) return;
+        var c = document.createElement('span');
+        c.className = 'chip skill';
+        c.style.animationDelay = (i * 40) + 'ms';
+        c.textContent = n + '  ·  索引 ' + SKILLS[n] + ' B  ·  正文按需';
+        sc.appendChild(c);
+      });
+    }
+    document.getElementById('sWarn').innerHTML =
+      '<div class="okline">✓ 全文经 <code>skill_read</code> 工具按需回填。' +
+      '<b>20 个技能 × 平均 2 KB 全文 ≈ 10k token</b> —— 全塞进 system prompt 会在用户一个都用不上时吃掉大部分预算。</div>';
+  }
+  buildRolePick();
+  buildCapPick();
+  renderAsm();
+
+  /* ══════════════ §9.1 重播三段式 ══════════════ */
+  var RP = [
+    { t:'① 发布方重播整份', w:'registered 事件',
+      d:'进程一就绪就 publish <b>全部</b>，不是「从现在起的变化」。增量事件对晚到的订阅方等于没发生。' },
+    { t:'② 收集方问一次', w:'*.list 命令',
+      d:'收集方订阅成功后<b>主动发一条空载荷命令</b>要全量。这是对「晚启动」的唯一防御。' },
+    { t:'③ 前端等 connected 后再问', w:'UI 同样要问',
+      d:'页面打开可能在全部事件之后。<b>前端对 provider 清单是纯事件驱动的</b>，不问一次就会把已连接的服务显示成「未连接」。' },
+    { t:'④ 停用时退场', w:'unregistered / 兜底',
+      d:'进程正常退出时它自己发 unregistered；但<b>被强杀时不会</b> —— 必须靠 service.failed 按 id 清（§9.4）。' }
+  ];
+  var rpList = document.getElementById('rpList');
+  RP.forEach(function (r, i) {
+    var d = document.createElement('div');
+    d.className = 't';
+    d.innerHTML = '<span class="i">' + (i + 1) + '</span><span class="w">' + r.w + '</span><span class="d">' + r.d + '</span>';
+    rpList.appendChild(d);
+  });
+  var rpPill = document.getElementById('rpPill'), rpTimer = null, rpIdx = -1;
+  function renderRp() {
+    for (var i = 0; i < RP.length; i++) {
+      rpList.children[i].classList.toggle('live', i === rpIdx);
+      rpList.children[i].classList.toggle('done', rpIdx > i);
+    }
+    rpPill.textContent = rpIdx < 0
+      ? '发布方重播 / 收集方问一次 / 前端等 connected 后再问 / 停用时退场'
+      : (rpIdx + 1) + ' / ' + RP.length + ' · ' + RP[rpIdx].t;
+  }
+  document.getElementById('rpPlay').addEventListener('click', function () {
+    if (rpTimer) { clearInterval(rpTimer); rpTimer = null; rpIdx = -1; renderRp(); return; }
+    rpIdx = 0; renderRp();
+    rpTimer = setInterval(function () {
+      rpIdx++;
+      if (rpIdx >= RP.length) { clearInterval(rpTimer); rpTimer = null; rpIdx = -1; renderRp(); return; }
+      renderRp();
+    }, reduced ? 2400 : 1500);
+  });
+  renderRp();
+
+  /* ══════════════ §9.2 工具执行状态机 ══════════════ */
+  var FSM = [
+    { n:'pending', d:'模型返回 toolCall，loop 落 assistant{toolCalls}' },
+    { n:'executing', d:'已发 tool.execute{T}，开始硬计时' },
+    { n:'awaiting-approval', d:'risk ∈ {write,net,proc} → 发 requested，等前端裁决', opt:true },
+    { n:'ok', d:'失败结果也算成功回执 —— ok:false + 人话原因回填给模型', ok:true },
+    { n:'failed', d:'执行者返回错误 / 抛异常 —— 同样回填，让模型自我纠正', bad:true },
+    { n:'timeout', d:'硬超时 → 产失败结果，不许静默（否则用户看到「一直转圈」）', bad:true },
+    { n:'orphaned', d:'结果到达时 A 已释放 → 静默丢弃，不许补发' },
+    { n:'rejected', d:'用户拒绝 → 也回填「用户拒绝了，请用别的办法」，不失败整轮' }
+  ];
+  var fsmBox = document.getElementById('fsm');
+  FSM.forEach(function (f, i) {
+    if (i > 0) {
+      var a = document.createElement('span');
+      a.className = 'arw'; a.textContent = '→';
+      fsmBox.appendChild(a);
+    }
+    var d = document.createElement('span');
+    d.className = 'st' + (f.ok ? ' ok' : '') + (f.bad ? ' bad' : '');
+    d.dataset.i = String(i);
+    d.textContent = f.n;
+    d.title = f.d;
+    fsmBox.appendChild(d);
+  });
+  var fsmTimer = null, fsmIdx = -1, fsmBtn = document.createElement('button');
+  fsmBtn.className = 'btn';
+  fsmBtn.textContent = '▶ 走一遍状态机';
+  fsmBtn.addEventListener('click', function () {
+    if (fsmTimer) {
+      clearInterval(fsmTimer); fsmTimer = null; fsmBtn.textContent = '▶ 走一遍状态机';
+      for (var i = 0; i < fsmBox.querySelectorAll('.st').length; i++) {
+        fsmBox.querySelectorAll('.st')[i].classList.remove('on');
+      }
+      return;
+    }
+    fsmIdx = 0; fsmBtn.textContent = '⏸ 停';
+    fsmBox.querySelectorAll('.st')[0].classList.add('on');
+    fsmTimer = setInterval(function () {
+      var all = fsmBox.querySelectorAll('.st');
+      for (var i = 0; i < all.length; i++) all[i].classList.toggle('on', i === fsmIdx);
+      fsmIdx++;
+      if (fsmIdx >= all.length) {
+        clearInterval(fsmTimer); fsmTimer = null; fsmBtn.textContent = '▶ 走一遍状态机';
+        for (var j = 0; j < all.length; j++) all[j].classList.remove('on');
+      }
+    }, reduced ? 1500 : 850);
+  });
+  fsmBox.parentNode.insertBefore(fsmBtn, fsmBox);
+})();
+</script>
+</body>
+</html>

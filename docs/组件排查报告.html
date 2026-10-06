@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>组件排查报告 · 数据落点与状态一致性</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-2:#0b3f74; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec; --warning:#9a6700; --warning-soft:#fdf6e3;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 12px rgba(16,22,26,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-2:#093460; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f; --warning:#d29922; --warning-soft:#33280f;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--s5) var(--s6); }
+
+  header.bar { position: sticky; top:0; z-index:10; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding-top:10px; padding-bottom:10px; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  header.bar button:hover { filter:brightness(1.08); }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+
+  section { margin: var(--s6) 0 0; }
+  h2 { font-size:var(--lg); margin: 0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+       border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size: var(--md); margin: var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  h4 { font-size: var(--sm); margin: var(--s4) 0 var(--s2); }
+  p { margin: 0 0 var(--s3); }
+  ul, ol { margin: 0 0 var(--s3); padding-left: 1.3em; }
+  li { margin: 3px 0; }
+
+  table { width:100%; border-collapse: collapse; margin: var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th, td { text-align:left; padding: 8px 10px; border-bottom:1px solid var(--border); vertical-align: top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background: var(--surface); }
+  .mono, td.mono { font-family:var(--mono); font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.ok { border-left-color: var(--success); background: var(--success-soft); }
+  .note.info { border-left-color: var(--primary); background: var(--primary-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); vertical-align:middle; }
+  .tag.done { background:var(--success); }
+  .tag.next { background:var(--primary); }
+  .tag.plan { background:var(--warning); }
+  .tag.risk { background:var(--danger); }
+  .ref { font-family:var(--mono); font-size:12px; color:var(--primary); white-space:nowrap; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--s3); margin:0 0 var(--s4); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s3); box-shadow:var(--shadow-sm); }
+  .card .k { font-size:var(--xs); color:var(--muted); }
+  .card .v { font-size:26px; font-weight:700; line-height:1.2; font-family:var(--mono); }
+  .card.bad .v { color:var(--danger); }
+  .card.good .v { color:var(--success); }
+  .card.warn .v { color:var(--warning); }
+
+  .finding { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s4); margin:0 0 var(--s4); box-shadow:var(--shadow-sm); }
+  .finding h3 { margin-top:0; color:var(--text); font-size:var(--md); display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
+  .finding .id { font-family:var(--mono); color:var(--primary); }
+
+  pre { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3); font-size:12.5px; line-height:1.6; overflow-x:auto; margin:0 0 var(--s3); }
+  pre code { background:none; padding:0; }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.85; margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .bad { color:var(--danger); }
+  .tree .dim { color:var(--muted); }
+
+  .check { list-style:none; padding-left:0; }
+  .check li { display:flex; gap:var(--s3); align-items:flex-start; padding:var(--s3) 0; border-bottom:1px dashed var(--border); }
+  .check .box { flex:none; width:18px; height:18px; border:2px solid var(--border-strong); border-radius:var(--r-sm); margin-top:3px; }
+  .check .body { flex:1; }
+  .check .why { color:var(--muted); font-size:var(--sm); }
+
+  .ok-list li::marker { color: var(--success); }
+  .foot { color:var(--muted); font-size:var(--xs); margin-top:var(--s6); border-top:1px solid var(--border); padding-top:var(--s3); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>组件排查报告</h1>
+    <span class="sub">数据落点与状态一致性 · 2026-10-05</span>
+    <span class="sp"></span>
+    <button id="theme" type="button">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="lead">
+    <p style="margin:0"><b>一句话结论：</b>全仓 21 个组件里只有 <b>chat-workbench 的 session 服务</b>有必须立刻修的问题 ——
+    它把会话写进了<b>构建产物目录</b>，而且历史被劈成两份、其中 822 条当前完全不可见。
+    其余组件数据落点正确或不落盘；另有 2 个 P1（SDK 的空串陷阱、缺一条「落盘位置」回归测试）
+    和 5 个 P2 提示项。全仓 <b>837 条测试 / 93 个文件全绿</b>，但<code>tauri</code> 壳侧 0 测试。</p>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="k">排查组件</div><div class="v">21</div></div>
+    <div class="card bad"><div class="k">P0 必修</div><div class="v">2</div></div>
+    <div class="card warn"><div class="k">P1 该修</div><div class="v">3</div></div>
+    <div class="card"><div class="k">P2 提示</div><div class="v">5</div></div>
+    <div class="card bad"><div class="k">错位会话文件</div><div class="v">1186</div></div>
+    <div class="card good"><div class="k">测试（通过）</div><div class="v">837</div></div>
+  </div>
+
+  <!-- ══════════ 1 ══════════ -->
+  <section>
+    <h2><span class="n">1</span>排查范围与方法</h2>
+    <p><b>组件清单</b>（按 <code>plugin.json</code> 与 workspace 实际包）：</p>
+    <table>
+      <thead><tr><th style="width:26%">层</th><th>组件</th></tr></thead>
+      <tbody>
+        <tr><td>Core</td><td class="mono">config（含 boot-config）· sse-bridge · service-manager · plugin registry · credentials/preferences store</td></tr>
+        <tr><td>服务 ×6</td><td class="mono">session · loop · llm · credentials · llm-retry · llm-provider-openai</td></tr>
+        <tr><td>插件 UI ×3</td><td class="mono">workbench（6 视图）· chat-workbench（3 视图）· models（1 视图）</td></tr>
+        <tr><td>宿主与底座</td><td class="mono">client · sdk/service-sdk · sdk/core-client · sdk/ui · shared · src-tauri 壳 · scripts（build / pack / smoke）</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>五条排查轴</b>：</p>
+    <ol>
+      <li><b>数据落点</b>：文件写到哪个根？写进源码树 / 构建产物 / 数据目录？</li>
+      <li><b>生命周期时序</b>：依赖握手后才有的值（<code>service.dataDir</code>）是否在模块顶层就读了？</li>
+      <li><b>状态一致性</b>：同一件事在代码 / 注释 / 文档里是不是只有一种说法？数据是不是只有一份？</li>
+      <li><b>密钥与边界</b>：明文去哪、日志会不会漏、跨插件读文件有没有卡前缀。</li>
+      <li><b>测试盲点</b>：现有 93 个测试文件覆盖了哪条轴，哪条轴没人守。</li>
+    </ol>
+
+    <div class="note info">
+      <b>方法说明</b>：静态扫描（grep 全仓 <code>dataDir / process.cwd / .data / localStorage</code> 等）
+      + 运行期取证（起临时 Core 实跑、清点磁盘文件、对比 index 与文件名集合）。
+      每条结论都带 <span class="ref">文件:行号</span>，可直接跳进去核对。
+    </div>
+  </section>
+
+  <!-- ══════════ 2 ══════════ -->
+  <section>
+    <h2><span class="n">2</span>P0 — 必须先修</h2>
+
+    <div class="finding">
+      <h3><span class="id">F-01</span> <span class="tag risk">P0</span> session 把会话写进构建产物目录</h3>
+
+      <p><b>根因链</b>（三段，缺一不可）：</p>
+      <ol>
+        <li><span class="ref">plugins/chat-workbench/services/session/src/index.ts:12-13</span>
+          <pre><code>const service = new Service({ id: 'session', version: '1.0.0' })
+const store = new SessionStore(service.dataDir || process.env.DS_DATA_DIR || '.data')</code></pre>
+          这行在<b>模块顶层</b>执行 —— 此时 <code>service.start()</code> 还没跑。</li>
+        <li><span class="ref">sdk/ts/src/service.ts:91</span> <code>dataDir = ''</code> 直到
+          <span class="ref">:142</span> 握手返回才赋值 → 第一个操作数<b>恒为空串</b>。
+          <span class="ref">plugins/chat-workbench/services/session/src/index.ts:13</span> 的
+          <code>process.env.DS_DATA_DIR</code> 全仓只有这一处引用、Core 从不设置 → 第二个操作数<b>恒为空</b>。
+          于是恒等于 <code>'.data'</code>。</li>
+        <li><span class="ref">core/src/service-manager/manager.ts:351</span>
+          <code>spawnServiceProcess(manifest.entry, { cwd: svc.dir })</code>，P2 起
+          <code>svc.dir = plugins/&lt;id&gt;/dist/server/&lt;sid&gt;</code>
+          （<span class="ref">core/src/service-manager/plugin-registry-runtime.ts:143</span>）
+          → 相对路径 <code>.data</code> 解析成 <b>构建产物目录</b>。</li>
+      </ol>
+
+      <p><b>磁盘实证</b>（2026-10-05 取证）：</p>
+      <div class="tree">plugins/chat-workbench/
+├── dist/server/session/.data/sessions/      <span class="bad">← 正在被写：364 文件 / 291 KB，index 364 条</span>
+│                                             <span class="bad">  最后写入 2026-10-05 10:25（Core 还在跑）</span>
+└── services/session/.data/sessions/         <span class="bad">← 遗留：822 文件 / 603 KB，index 768 条</span>
+                                              <span class="bad">  目录 mtime 2026-09-30（P2 之前的 cwd）</span>
+
+userData/plugin/                             <span class="bad">← Test-Path = False，一条会话都没有</span>
+userData/core/preferences.json               <span class="own">← 偏好 / 密钥在这里，是对的</span></div>
+
+      <p><b>四个后果</b>：</p>
+      <ul>
+        <li><b>改数据目录对会话无效</b>：本周新增的 <code>ost.config.json</code> 换根之后，偏好跟着走，
+          会话仍留在插件的 <code>dist/</code> 里 —— 一个功能在最大的那块数据上是空的。</li>
+        <li><b>随时会消失</b>：<code>git clean -xdf</code>、重新 clone、换机器、换分支重装，
+          会话全没；<code>.gitignore</code> 的 <code>dist/</code>（<span class="ref">.gitignore:2</span>）
+          让它们既不入库、也<b>不在 git status 里出现</b>。</li>
+        <li><b>只读安装目录会直接写失败</b>（<code>Program Files</code> / <code>/Applications</code>）。</li>
+        <li><b>产品自相矛盾</b>：<span class="ref">shared/src/paths.ts:36-38</span> 明确约定
+          <code>&lt;dataDir&gt;/plugin/&lt;pluginId&gt;/</code>，Core 也确实算好了这张表
+          （<span class="ref">plugin-registry-runtime.ts:159-166</span>）—— 唯一的消费者没用它。</li>
+      </ul>
+
+      <div class="note ok">
+        <b>已经是好的</b>：打包没有泄露风险。<span class="ref">scripts/pack-plugin.mjs:61-72</span>
+        已把 <code>.data</code> 排除在交付物外，且
+        <span class="ref">core/tests/pack-plugin.test.ts:122</span> 有断言守住
+        （「是运行期数据，不该被发出」）。这条不用动。
+      </div>
+
+      <p><b>怎么修</b>（最小改动，见第 6 节清单第 1 步）：把 store 的构造推迟到
+      <code>service.start()</code> 之后 —— 例如 <code>main()</code> 里 <code>await service.start()</code>
+      拿到 <code>service.dataDir</code> 再建 store，或改成 lazy getter；
+      同时删掉 <code>DS_DATA_DIR</code> 这个死掉的兜底（要么删，要么让 Core 真的下发），
+      否则它会继续给人「这里有逃生门」的错觉。</p>
+    </div>
+
+    <div class="finding">
+      <h3><span class="id">F-02</span> <span class="tag risk">P0</span> 1186 条会话被劈成两份，822 条是孤儿</h3>
+
+      <p>两份错位数据<b>不是同一份的两个副本</b>，实测<b>文件名零重叠</b>：</p>
+      <table>
+        <thead><tr><th>位置</th><th>会话文件</th><th>index 条目</th><th>文件不在 index 里</th><th>被应用看得见</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">services/session/.data/sessions/</td><td class="mono">822</td><td class="mono">768</td><td class="mono">54</td><td><span class="tag risk">否</span></td></tr>
+          <tr><td class="mono">dist/server/session/.data/sessions/</td><td class="mono">364</td><td class="mono">364</td><td class="mono">0</td><td><span class="tag plan">是（当前）</span></td></tr>
+          <tr><td class="mono">交集</td><td class="mono" colspan="3">0 个文件名重叠</td><td><span class="tag risk">822 条不可达</span></td></tr>
+        </tbody>
+      </table>
+
+      <p><b>自动迁移不会来救</b>，两条路径的触发条件现在都不成立：</p>
+      <ul>
+        <li><span class="ref">core/src/config/paths.ts:213-218</span> <code>migrateFlatLayout</code> ——
+          只在 <code>core/preferences.json</code> <b>不存在</b>时才动；现在它存在 → 直接 return。</li>
+        <li><span class="ref">core/src/config/paths.ts:251-259</span> <code>migrateLegacyDataDir</code> ——
+          只在 dataDir <b>为空目录</b>时才动；现在 <code>userData/</code> 非空 → 直接 return。</li>
+        <li>讽刺的是映射表里已经写好了正确目标：
+          <span class="ref">core/src/config/paths.ts:196</span>
+          <code>sessions: 'plugin/chat-workbench/sessions'</code> —— 只是没机会触发。</li>
+      </ul>
+
+      <div class="note bad">
+        <b>顺序不能反</b>：必须<b>先修 F-01 的代码，再搬数据</b>。
+        先搬的话，服务下次启动又往 <code>dist/</code> 里新建一份，等于白搬。
+      </div>
+
+      <p><b>合并策略建议</b>：以「文件名并集」为准（两份零重叠，无冲突），
+      <code>index.json</code> 取两份条目合并去重，54 个不在 index 里的文件按
+      「保留但不进 index」处理（它们本来就是游离的，别凭空造出 index 条目）。
+      具体命令见第 7 节附录，<b>跑之前先停 Core</b>。</p>
+    </div>
+  </section>
+
+  <!-- ══════════ 3 ══════════ -->
+  <section>
+    <h2><span class="n">3</span>P1 — 这一轮该修</h2>
+
+    <div class="finding">
+      <h3><span class="id">F-03</span> <span class="tag warn">P1</span> SDK 的 <code>dataDir</code> 在 start 前是空串，且不 fail-fast</h3>
+      <p><span class="ref">sdk/ts/src/service.ts:91-92</span> 把 <code>dataDir = ''</code> 当成契约写在注释里。
+      问题在于 <code>''</code> 是 falsy —— 调用方写 <code>a || b || c</code> 时<b>不会报错，只会静默落到 c</b>。
+      F-01 就是这么来的，而写这段代码的人看注释是发现不了的（注释只说「start 前为空」，没说「读了会怎样」）。</p>
+      <p><b>建议</b>：改成未握手取值即抛 ——
+      <code>get dataDir() { if (!this.started) throw new Error('service.dataDir available only after start()') }</code>；
+      测试要提前拿到值的话，给一条显式逃生口（如 <code>ServiceOptions.prefillDataDir</code>），
+      而不是让生产代码靠 <code>||</code> 兜底。</p>
+      <div class="note">改完这一条，F-01 的写法<b>在编译期/启动期就活不下去</b> —— 这是治本的那一半。</div>
+    </div>
+
+    <div class="finding">
+      <h3><span class="id">F-04</span> <span class="tag warn">P1</span> 没有任何测试断言「服务把数据写进了给它的那个目录」</h3>
+      <ul>
+        <li><span class="ref">core/src/service-manager/plugin-registry-runtime.ts:159</span>
+          <code>serviceDataDirs()</code> 由静态分析标注 <b>no covering tests</b>。</li>
+        <li>现有端到端 <span class="ref">core/tests/e2e.test.ts</span> /
+          <span class="ref">plugin-ui-e2e.test.ts</span> /
+          <span class="ref">scripts/smoke.mjs:236-298</span> 全都在验
+          「命令有回执、进程被杀能重启」，<b>没有一条看落盘位置</b> ——
+          这就是 F-01 能活到今天的原因：轴 1（数据落点）在测试里是空白。</li>
+      </ul>
+      <p><b>建议</b>：加一条最小回归 —— 起真 Core（临时 dataDir）→ 发
+      <code>session.create</code> → 断言文件出现在
+      <code>&lt;tmp&gt;/plugin/chat-workbench/sessions/</code>，
+      <b>且</b> <code>plugins/**/dist/**</code> 下没有新增任何文件。两条断言合起来才堵得住 F-01。</p>
+    </div>
+
+    <div class="finding">
+      <h3><span class="id">F-05</span> <span class="tag warn">P1</span> loop 的工具根默认等于构建产物目录</h3>
+      <p><span class="ref">plugins/chat-workbench/services/loop/src/index.ts:31</span></p>
+      <pre><code>const TOOL_ROOT = process.env.LLM_TOOL_ROOT?.trim() || process.cwd()</code></pre>
+      <p>和 F-01 同一个机制：cwd = <code>plugins/chat-workbench/dist/server/loop</code>。
+      后果是 <code>toolSpecs(TOOL_ROOT)</code>（<span class="ref">:40</span>）在一个构建产物目录里扫工具定义，
+      <code>executeTool</code> 的路径守卫基准也变成那个目录 ——
+      <b>不显式设 <code>LLM_TOOL_ROOT</code>，工具能力实际上是死的</b>，而且报错不会指向「根选错了」。</p>
+      <p><b>建议</b>：默认值换成与 cwd 无关、且随部署形态确定的路径（开发期仓库根 / 安装期
+      <code>dataDir</code> 下的 workspace），并把最终值暴露到 <code>/api/info</code>，
+      让设置页能看见「模型能读哪个目录」。</p>
+    </div>
+  </section>
+
+  <!-- ══════════ 4 ══════════ -->
+  <section>
+    <h2><span class="n">4</span>P2 — 提示项（不阻塞）</h2>
+    <table>
+      <thead><tr><th style="width:7%">编号</th><th style="width:30%">问题</th><th style="width:33%">证据</th><th>影响 / 建议</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">F-06</td>
+          <td>服务 stderr 被按 <code>info</code> 级别记日志</td>
+          <td class="ref">core/src/service-manager/manager.ts:835-841</td>
+          <td>配了 warn/error 过滤时，服务的报错会被当普通日志吞掉；建议按内容分级或直接 <code>logger.error</code>。</td>
+        </tr>
+        <tr>
+          <td class="mono">F-07</td>
+          <td><code>plugins/workbench/ui</code> 6 个视图只有 3 条测试</td>
+          <td class="mono">workbench/ui/tests = 1 文件 / 3 测试（全仓最低）</td>
+          <td>设置页刚加的数据目录 UI 没有回归网；建议至少覆盖「加载 → 编辑 → 保存失败 → 恢复默认」四态。</td>
+        </tr>
+        <tr>
+          <td class="mono">F-08</td>
+          <td>注释里写死端口 <code>4317</code></td>
+          <td class="ref">plugins/{workbench,models,chat-workbench}/ui/src/main.ts:4-5</td>
+          <td>实际端口动态分配；按注释排查会走错方向。改成「Core 伺服的 <code>/plugins/&lt;id&gt;/ui/</code>」。</td>
+        </tr>
+        <tr>
+          <td class="mono">F-09</td>
+          <td>session 存储的头注仍是<b>服务级</b>旧约定</td>
+          <td class="ref">plugins/.../session/src/store.ts:2-8 <br/>对照 <span class="ref">shared/src/paths.ts:11-21</span></td>
+          <td>注释写 <code>serviceDataDir(dataDir, 'session')</code>，权威约定是插件级
+              <code>plugin/&lt;pluginId&gt;/</code> —— 同一件事两种说法，会误导下一个改这块的人。修 F-01 时顺手改。</td>
+        </tr>
+        <tr>
+          <td class="mono">F-10</td>
+          <td>两处遗留数据已无人读取</td>
+          <td class="mono">仓库根 <code>.data/</code>（8 文件）<br/> <code>userData/preferences.json</code> + <code>credentials.json</code>（扁平副本）</td>
+          <td>扁平副本是 <code>migrateFlatLayout</code> 「只复制不删」的设计（<span class="ref">paths.ts:209</span>），本身没错；
+              但留着会让人以为「改了没生效」。确认后可删。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ══════════ 5 ══════════ -->
+  <section>
+    <h2><span class="n">5</span>组件健康总表</h2>
+    <table>
+      <thead>
+        <tr><th style="width:24%">组件</th><th style="width:9%">落盘</th><th style="width:14%">测试</th><th>结论</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">core/config（含 boot-config）</td><td>是</td><td class="mono">含 core 27 文件</td><td><span class="tag done">通过</span> 四层优先级（CLI &gt; env &gt; 配置文件 &gt; 缺省）真机实测</td></tr>
+        <tr><td class="mono">core/sse-bridge</td><td>是</td><td class="mono">含 core 27 文件</td><td><span class="tag done">通过</span> 仅绑 127.0.0.1 + Origin 白名单（<span class="ref">server.ts:17,265-266</span>）</td></tr>
+        <tr><td class="mono">core/service-manager</td><td>日志</td><td class="mono">manager.test</td><td><span class="tag plan">P2</span> F-06</td></tr>
+        <tr><td class="mono">core/plugin registry</td><td>否</td><td class="mono">plugin-ui / pack-plugin</td><td><span class="tag warn">P1</span> F-04（<code>serviceDataDirs</code> 无人守）</td></tr>
+        <tr><td class="mono">core 凭证 / 偏好存储</td><td>是</td><td class="mono">credentials-sse 等</td><td><span class="tag done">通过</span> 明文落盘是<b>设计选择</b>：GET 掩码、原值只走点对点 RPC、不进日志与事件</td></tr>
+        <tr style="background:var(--danger-soft)"><td class="mono">chat-workbench / <b>session</b></td><td><b>是（错位）</b></td><td class="mono">2 文件 / 27 测试</td><td><span class="tag risk">P0</span> F-01 · F-02 · F-09</td></tr>
+        <tr><td class="mono">chat-workbench / loop</td><td>只读</td><td class="mono">2 文件 / 32 测试</td><td><span class="tag warn">P1</span> F-05（工具根 = cwd）</td></tr>
+        <tr><td class="mono">chat-workbench / llm</td><td>否</td><td class="mono">1 文件 / 7 测试</td><td><span class="tag done">通过</span> 纯路由透传</td></tr>
+        <tr><td class="mono">chat-workbench / ui（3 视图）</td><td>否</td><td class="mono">2 文件 / 46 测试</td><td><span class="tag done">通过</span> 当前会话 id 走 <code>sessionStorage</code>，同源 iframe 共享是设计（<span class="ref">session-sync.ts:65,106</span>）</td></tr>
+        <tr><td class="mono">credentials 服务</td><td>否</td><td class="mono">1 文件 / 9 测试</td><td><span class="tag done">通过</span> <code>env:</code> / <code>core:</code> 两路，失败恒回 error 不兜底默认 key</td></tr>
+        <tr><td class="mono">reliability / llm-retry</td><td>否</td><td class="mono">2 文件 / 20 测试</td><td><span class="tag done">通过</span> 纯内存记账</td></tr>
+        <tr><td class="mono">models / llm-provider-openai</td><td>只读</td><td class="mono">4 文件 / 56 测试</td><td><span class="tag done">通过</span> 只经受限 <code>plugins.readFile</code> 读自己的 <code>catalog.json</code>，前缀边界 fail closed</td></tr>
+        <tr><td class="mono">models / ui（1 视图）</td><td>否</td><td class="mono">1 文件 / 16 测试</td><td><span class="tag done">通过</span> <code>catalog.json</code> 构建期拷进 <code>dist/ui</code></td></tr>
+        <tr><td class="mono">workbench / ui（6 视图）</td><td>否</td><td class="mono">1 文件 / 3 测试</td><td><span class="tag plan">P2</span> F-07；新增数据目录设置走 <code>/api/info</code> + <code>/api/config</code></td></tr>
+        <tr><td class="mono">client（宿主）</td><td>否</td><td class="mono">20 文件 / 160 测试</td><td><span class="tag done">通过</span> 布局经 <code>/api/preferences</code> 持久化，<code>localStorage</code> 零使用</td></tr>
+        <tr><td class="mono">sdk / service-sdk</td><td>否</td><td class="mono">4 文件 / 54 测试</td><td><span class="tag warn">P1</span> F-03（空串陷阱）</td></tr>
+        <tr><td class="mono">sdk / core-client · sdk/ui · shared</td><td>否</td><td class="mono">26 文件 / 119 测试</td><td><span class="tag done">通过</span></td></tr>
+        <tr><td class="mono">src-tauri 壳</td><td>否</td><td class="mono">0</td><td><span class="tag plan">提示</span> 新增 dialog 能力已过 <code>cargo check</code>，但 iframe 内能否弹目录框<b>未实证</b></td></tr>
+        <tr><td class="mono">scripts（build / pack / smoke）</td><td>是</td><td class="mono">pack-plugin.test</td><td><span class="tag done">通过</span> 交付物排除 <code>.data</code> / <code>.map</code> / 源码，有断言</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note ok">
+      <b>横向确认过的四件事</b>
+      <ul class="ok-list" style="margin:6px 0 0">
+        <li>全仓源码<b>无硬编码端口</b>（<code>localhost:1420</code> 等只出现在 vite 代理、文档注释与测试里），插件 UI 一律用 <code>location.origin</code>。</li>
+        <li>除 session 外，<b>其余 5 个服务不落盘</b>，读文件全部经 Core 的受限 RPC。</li>
+        <li>UI 侧<b>零 <code>localStorage</code></b>，偏好统一走 <code>/api/preferences</code>。</li>
+        <li>打包链路<b>不会把用户数据发出去</b>（护栏 + 测试双保险）。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ══════════ 6 ══════════ -->
+  <section>
+    <h2><span class="n">6</span>建议修复顺序（可逐条勾）</h2>
+    <ul class="check">
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>1. <span class="tag risk">P0</span> 修 session 的数据根</b> ——
+          <span class="ref">plugins/chat-workbench/services/session/src/index.ts:12-13</span>
+          <div class="why">store 改为 <code>service.start()</code> 之后构造；删掉死掉的 <code>DS_DATA_DIR</code>；顺手修 F-09 的头注。
+          改完跑 <code>pnpm --filter @osteosome/plugin-chat-workbench/services/session test</code>。</div>
+        </span>
+      </li>
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>2. <span class="tag risk">P0</span> 停 Core → 合并两份会话 → 删残留</b> ——
+          命令见附录 A
+          <div class="why">必须在第 1 步之后。目标 <code>userData/plugin/chat-workbench/sessions/</code>（与 <span class="ref">paths.ts:196</span> 一致）。搬完确认 <code>userData/plugin/</code> 非空、两个 <code>.data</code> 消失。</div>
+        </span>
+      </li>
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>3. <span class="tag warn">P1</span> SDK <code>dataDir</code> 改成未握手即抛</b> ——
+          <span class="ref">sdk/ts/src/service.ts:91</span>
+          <div class="why">治本的一半：让第 1 步那种写法直接活不下去。跑 <code>pnpm --filter @osteosome/service-sdk test</code>。</div>
+        </span>
+      </li>
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>4. <span class="tag warn">P1</span> 补「落盘位置」回归测试</b> —— 新增到 <code>core/tests/</code>
+          <div class="why">两条断言：该出现的出现在 dataDir；<code>plugins/**/dist/**</code> 无新增。守住轴 1。</div>
+        </span>
+      </li>
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>5. <span class="tag warn">P1</span> loop 工具根默认值</b> ——
+          <span class="ref">plugins/chat-workbench/services/loop/src/index.ts:31</span>
+          <div class="why">换掉 <code>process.cwd()</code>，并把最终值暴露到 <code>/api/info</code>。</div>
+        </span>
+      </li>
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>6. <span class="tag plan">P2</span> 收尾五项</b> —— F-06 日志分级 · F-07 workbench 测试 ·
+          F-08 注释端口 · F-10 遗留数据清理
+          <div class="why">都不阻塞功能，攒一批一起做即可。</div>
+        </span>
+      </li>
+      <li>
+        <span class="box"></span>
+        <span class="body">
+          <b>7. 全量验证</b> —— <span class="mono">pnpm -r typecheck</span> · <span class="mono">pnpm run test</span> · 真机重启看落点
+          <div class="why">预期 837+ 测试全绿；<code>/api/info</code> 的 <code>dataDir</code> 与会话所在根一致。</div>
+        </span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ══════════ 7 ══════════ -->
+  <section>
+    <h2><span class="n">7</span>附录</h2>
+
+    <h3>A · 会话合并脚本（先修代码，再停 Core 执行）</h3>
+    <pre><code># 1) 修完 F-01、停止 Core 之后再跑
+$repo = 'C:\Users\dmql\Documents\GitHub\osteosome'
+$dst  = Join-Path $repo 'userData\plugin\chat-workbench\sessions'
+New-Item -ItemType Directory -Force -Path $dst | Out-Null
+
+$srcA = Join-Path $repo 'plugins\chat-workbench\dist\server\session\.data\sessions'   # 364，当前在用
+$srcB = Join-Path $repo 'plugins\chat-workbench\services\session\.data\sessions'      # 822，孤儿
+
+# 文件名并集（实测零重叠，不会互相覆盖）
+foreach ($src in @($srcA, $srcB)) {
+  Get-ChildItem $src -File -Filter *.json | Where-Object Name -ne 'index.json' |
+    ForEach-Object { Copy-Item $_.FullName (Join-Path $dst $_.Name) -Force }
+}
+
+# index 取并集去重
+# 注意用 .NET 读写：PS5.1 的 `Set-Content -Encoding UTF8` 会写 BOM，
+# 而服务端是 JSON.parse(readFileSync(...)) —— BOM 会让它直接抛 Unexpected token。
+$a = [System.IO.File]::ReadAllText((Join-Path $srcA 'index.json')) | ConvertFrom-Json
+$b = [System.IO.File]::ReadAllText((Join-Path $srcB 'index.json')) | ConvertFrom-Json
+$merged = @($a) + @($b) | Group-Object id | ForEach-Object { $_.Group[0] }
+[System.IO.File]::WriteAllText((Join-Path $dst 'index.json'), ($merged | ConvertTo-Json -Depth 8))
+
+# 2) 核对：文件数 = 并集 1186，且 index 条目 = 768+364 去重
+(Get-ChildItem $dst -File -Filter *.json | Where-Object Name -ne 'index.json').Count
+
+# 3) 确认应用读得到之后，再删残留（源目录保留到你确认为止）
+# Remove-Item -Recurse -Force "$repo\plugins\chat-workbench\dist\server\session\.data"
+# Remove-Item -Recurse -Force "$repo\plugins\chat-workbench\services\session\.data"</code></pre>
+
+    <h3>B · 取证命令（复现本报告的每个数字）</h3>
+    <pre><code># 两份错位数据的清点
+node -e "const fs=require('fs');const A='plugins/chat-workbench/services/session/.data/sessions',B='plugins/chat-workbench/dist/server/session/.data/sessions';
+const a=new Set(fs.readdirSync(A).filter(f=>f!=='index.json')),b=new Set(fs.readdirSync(B).filter(f=>f!=='index.json'));
+console.log('A',a.size,'B',b.size,'overlap',[...a].filter(x=>b.has(x)).length)"
+
+# 正确落点是否存在
+Test-Path userData\plugin          # 预期 False（修复前）
+
+# 谁在写 dist 下那份（看最后写入时间）
+Get-Item plugins\chat-workbench\dist\server\session\.data | Select LastWriteTime
+
+# 数据目录设置是否真的换了根（重启 Core 后）
+curl http://127.0.0.1:1420/api/info</code></pre>
+
+    <h3>C · 本次已验证通过的项</h3>
+    <ul class="ok-list">
+      <li><code>pnpm -r typecheck</code> —— 21 个包，exit 0。</li>
+      <li><code>pnpm run test</code> —— <b>837 测试 / 93 文件</b> 全绿（core 288 · client 160 · shared 57 · provider 56 · sdk 116 · 其余 160）。</li>
+      <li><code>cargo check</code>（src-tauri，含新增 dialog 插件与 <code>dialog:default</code> 权限）—— exit 0。</li>
+      <li>数据目录新功能真机实测：缺省 &rarr; <code>&lt;仓库&gt;/userData</code>(<code>default</code>)；
+        <code>PUT /api/config</code> &rarr; 写 <code>ost.config.json</code> 重启生效(<code>config</code>)；
+        <code>--data</code> &rarr; <code>cli</code>；<code>OST_DATA</code> &rarr; <code>env</code>；
+        且偏好确实落进新根、仓库 <code>userData</code> 未被触碰。</li>
+      <li>打包链路排除 <code>.data</code> / <code>.map</code> / 源码，<code>pack-plugin.test.ts:122</code> 有断言。</li>
+      <li>凭证纪律：明文只在 <code>userData/core/credentials.json</code> 与点对点 RPC，GET 掩码、不入日志与事件。</li>
+    </ul>
+
+    <p class="foot">
+      排查范围：21 个组件 · 五条轴（数据落点 / 生命周期 / 状态一致性 / 密钥边界 / 测试盲点）·
+      证据一律给 <span class="ref">文件:行号</span> 与可复现命令 ·
+      未做改动，本报告为只读取证结果。
+    </p>
+  </section>
+
+</div>
+
+<script>
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+</script>
+</body>
+</html>

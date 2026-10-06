@@ -165,6 +165,9 @@
 │   ├── ui/                         <span class="own">← 前端源码（P5 / P6）</span>
 │   └── dist/                       <span class="own">← 编译产物，Core 只认它（P2）</span>
 ├── core/ · shared/ · client/ · sdk/
+├── userData/                      <span class="dim">← 用户数据根（§2 目标模型）：core/ + plugin/&lt;id&gt;/；缺省就是它（由入口反推应用根，启动器不再传 --data），gitignore 忽略</span>
+├── ost.config.json                <span class="dim">← 引导配置：数据目录等启动期设置，设置页改的就是它；必须在数据目录之外（偏好住在里面 = 鸡生蛋），gitignore 忽略</span>
+├── node_modules/                  <span class="dim">← 依赖产物：pnpm workspace 每包一个，gitignore 忽略，既非源码也不进交付物（pack 装配时跳过）</span>
 └── scripts/pack-plugin.mjs         <span class="own">← 把上面那个目录装配成交付物（P8）</span></div>
 
   <h3>六个乱点（各自在哪一阶段消失，看后果那一列）</h3>
@@ -252,9 +255,15 @@ client/src/                <span class="dim">← 只剩壳：面板容器 / 布�
 core/                      <span class="dim">← 扫插件目录 · 起服务 · 伺服插件 UI · 路由命令到总线</span>
 shared/                    <span class="dim">← 只剩跨进程契约：协议类型 / 事件表 / wire 解析（不再持有厂商清单）</span>
 
+userData/                  <span class="dim">← 数据根（缺省 = 仓库根）：core/ + plugin/&lt;id&gt;/ 三层布局</span>
+ost.config.json            <span class="dim">← 引导配置：改数据目录的唯一入口（设置页 → 高级）。它必须待在数据目录之外 —— 偏好住在 &lt;dataDir&gt;/core/preferences.json 里，存一起就是鸡生蛋</span>
+
 sdk/
 ├── core-client/          <span class="own">← ★ Core HTTP/SSE 客户端（宿主与插件共用的那一份）</span>
 └── ui/                   <span class="own">← ★ 共享 UI 组件 + 设计令牌（各一份源码，不产运行时产物）</span>
+
+<span class="dim">不在目标模型内、但开发工作副本必然有：</span>
+node_modules/             <span class="dim">← 依赖产物，pnpm workspace 每包一个；gitignore 忽略、pack 装配时跳过，既不是源码也不是交付物的一部分</span>
 
 <span class="own">安装目录</span>（免安装 zip 解压到任意可写目录；<span class="own">路径基准 = 可执行文件所在目录</span>）：
 &lt;安装目录&gt;/osteosome/
@@ -413,9 +422,9 @@ sdk/
       <tr><td>插件 WebUI 怎么被访问</td><td><span class="tag done">A 为主</span> Core 代伺服</td><td>活动部件最少：服务零改动、复用现成静态防护、无端口、无 SSE 反代</td></tr>
       <tr><td>要不要给 B 留出口</td><td><span class="tag plan">P7 可选</span></td><td>插件声明 <code>http.port</code> 时 Core 才开 <code>/plugins/&lt;id&gt;/api/*</code> 反代；不声明就不启用这条路由，B 的成本不付</td></tr>
       <tr><td>仓库根 <code>services/</code> 是否留作兼容区</td><td><span class="tag done">不留</span></td><td>每个服务必须属于某个插件，「装了什么」与「有什么服务」永远一致，没有例外</td></tr>
-      <tr><td>插件的<b>用户数据</b>放哪</td><td><span class="tag done">userData/plugin/&lt;id&gt;/</span></td><td>目录约定只有「你有一个属于自己的目录」这一条；<b>里面有什么、什么格式由插件自己定</b>（models = 密钥 + 接入清单，chat-workbench = 对话，reliability 也许什么都不写）</td></tr>
+      <tr><td>插件的<b>用户数据</b>放哪</td><td><span class="tag done">userData/plugin/&lt;id&gt;/<br>已生效</span></td><td>目录约定只有「你有一个属于自己的目录」这一条；<b>里面有什么、什么格式由插件自己定</b>（models = 密钥 + 接入清单，chat-workbench = 对话，reliability 也许什么都不写）</td></tr>
       <tr><td>数据根放哪</td><td><span class="tag done">安装目录内</span></td><td><code>&lt;安装目录&gt;/osteosome/{core,plugins,userData}</code>。自包含、用户找得到、整目录拷走即换机器。<b>路径基准从 cwd 改为可执行文件所在目录</b>（见 P1 的判据）</td></tr>
-      <tr><td>Core 自己的数据放哪</td><td><span class="tag done">userData/core/</span></td><td>只剩布局 / 主题 / 语言 / 插件启停状态；<code>/api/preferences</code> 缩小成只管这些，<code>/api/credentials</code> 与 <code>credentials.resolve</code> 退休</td></tr>
+      <tr><td>Core 自己的数据放哪</td><td><span class="tag done">userData/core/<br>已生效</span></td><td>只剩布局 / 主题 / 语言 / 插件启停状态；<code>/api/preferences</code> 缩小成只管这些（<code>PUT</code> 遇到 <code>llm</code> 段会<b>丢掉并回一句原因</b>，不留第二处真相），<code>/api/credentials</code> 与 <code>credentials.resolve</code> <b>已退休</b> —— 密钥归 models 插件自己的服务，见下方 §5「凭证能力位退休」</td></tr>
       <tr><td>Core 怎么把数据根给服务</td><td><span class="tag done">Core 算、传查表</span></td><td><code>ServiceManagerOptions.dataDir: string</code> → <code>serviceDataDirs: Map&lt;serviceId, string&gt;</code>，由 <code>main.ts</code> 用插件清单算出（它已经在算 <code>allowedServiceIds</code>）。<b>ServiceManager 继续不知道插件存在</b>，SDK 一行不改</td></tr>
       <tr><td>插件能不能读别人的数据</td><td><span class="tag plan">写只限自己<br>已生效</span></td><td>写：服务只拿到自己的 <code>userData/plugin/&lt;id&gt;/</code>，跨插件写结构上不可能。读：<code>plugin.json</code> 的 <code>dataReadableBy[]</code> 已进 schema（P2），<b>但要等「按插件读数据」的 HTTP 面存在才谈得上 403</b> —— 见 §5 P3 的「没做」。约五行代码换来可审计的权限边界，而不是靠信任</td></tr>
       <tr><td><code>plugin.json.version</code> 要不要参与阻断</td><td><span class="tag done">加 coreCompatibility</span></td><td>见下方 §5 P2；不写 = 不限，现有插件零改动</td></tr>
@@ -511,12 +520,23 @@ sdk/
           前端早就为同一个坑做过这件事（<code>useLlmProviders.ts</code>），现在主位自己上线也问一次，
           <b>启动顺序不再是任何人的隐式依赖</b>。
         </dd>
-        <dt>没做</dt>
+        <dt>已做（晚于本文初版）</dt>
         <dd>
-          <code>llm.*</code> 偏好与凭证<b>仍在 Core 那一侧</b>（<code>userData/core/</code>）：搬它们要 UI 与 provider 服务同时搬
-          （客户端还住着 <code>client/</code>）。<code>preferences.get</code> 服务 RPC 因此还在服役 ——
-          <span class="ref">plugins/models/ui</span> 的设置面板正是调它（<span class="tag warn">原计划归 P5，P5 未做，事实未变</span>）。<br>
-          <b>运行期装插件不会启动它的服务</b>（<code>rescan()</code> 只更新清单与状态，ServiceManager 的服务目录表是构造时定的）——
+          <code>llm.*</code> 偏好与凭证<b>已搬出 Core</b>，落到 <code>userData/plugin/models/</code>：
+          <code>preferences.json</code>（接入清单 / 自填端点 / 模型开关，<b>去掉了 <code>llm</code> 这层壳</b>）
+          与 <code>credentials.json</code>（密钥）。<b>owner 是 models 插件的 provider 服务</b>，
+          前端经总线读写（<code>models.prefs.*</code> / <code>models.credentials.*</code>，owner 每次变更<b>重播整份</b>），
+          Core 只转发命令、不持有、不落盘。凭证引用 scheme 随之从 <code>core:&lt;id&gt;</code> 改成 <code>file:&lt;id&gt;</code>
+          —— 名字跟着位置走，否则 <code>core:</code> 会指向一个再也没人读的地方。<br>
+          连带退休：<code>/api/credentials</code>（前端通道）、<code>credentials.get/list/set/delete</code>（服务 RPC）、
+          <code>credentials.resolve</code> / <code>credentials.resolved</code>（凭证能力位）、
+          <code>credential.saved</code> / <code>credential.deleted</code> 事件，以及整个 <code>credentials</code> 插件
+          （5 个服务 → 4 个，6 个服务 → 5 个）。<br>
+          迁移：<code>core/config/paths.ts</code> 的 <code>migratePluginOwnedData()</code>，启动时在起服务<b>之前</b>跑。
+          密钥是「复制 → 校验能读回 → 才删源」（留副本意味着明文继续躺在 Core 侧，恰好是要拆掉的那件事）；
+          <code>llm</code> 段<b>写成功才</b>从 Core 偏好里摘掉，幂等，目标已存在一律不覆盖。<br>
+          <span class="tag warn">仍没做</span>：<b>运行期装插件不会启动它的服务</b>
+          （<code>rescan()</code> 只更新清单与状态，ServiceManager 的服务目录表是构造时定的）——
           要真做，得先有 <code>plugin.install</code> 命令，而那在 P8 里<b>明确后置</b>（见 P8「后置（明确不做）」）。
         </dd>
       </dl>
@@ -1182,12 +1202,12 @@ sdk/
           <b>仍未定的是热更新那半</b>：每个插件一个 vite dev server + Core 反代（改动最小）／
           一个 vite 多入口（统一端口，但要处理模块重复与 HMR 边界）。
           <b>建议前者</b> —— 见 §6「开发体验掉档」，这是那份代价里唯一还没兑现缓解的部分。</td></tr>
-      <tr><td><code>plugins/credentials</code> 插件的定位<br><span style="color:var(--warning)">← P1 没定，仍然开放</span></td><td>凭证归使用方插件之后，这个「凭证能力位」插件还剩什么。
+      <tr><td><code>plugins/credentials</code> 插件的定位<br><span style="color:var(--success)">← 已定：退休</span></td><td>凭证归使用方插件之后，这个「凭证能力位」插件还剩什么。
           <b>退休</b>（服务已有 <code>dataDir</code>，自己读文件）／ <b>转型</b>成「帮用户管理各插件凭证文件格式」的库。
-          前者更干净，后者保留一个跨插件统一的凭证视图（但那又回到 Core 集中管密钥，与 §4 冲突）。
-          <b>现状</b>：既没退休也没转型 —— 它还在，纯服务无 UI，<code>/api/credentials</code> 与
-          <code>credentials.resolve</code> 都在服役（§3、§7 仍依赖）。
-          <b>建议退休</b>，但那是独立的一刀，不该塞进任何已完成阶段的收尾里。</td></tr>
+          前者更干净，后者保留一个跨插件统一的凭证视图（但那又回到 Core 集中管密钥，与 §4 冲突）。<br>
+          <b>现状：已按「退休」落地</b> —— 密钥由 models 插件的 provider 服务自己读
+          <code>userData/plugin/models/credentials.json</code>，插件目录整个删除（5 插件 → 4、6 服务 → 5）。
+          「转型成库」这个选项作废：跨插件统一的凭证视图与 §4 的隔离直接冲突，而 §4 已经是既定方向。</td></tr>
       <tr><td>发行方式还没定</td><td>§4 已标「待确认」，指的是 <b>OST 这个应用</b>怎么发。
           <b>P8 只解决了其中一半</b>：插件这一层的交付物已经是确定的（一个目录，<code>pnpm run pack:plugins</code>）。
           剩下的仍是「应用怎么装」：免安装 zip（可写、升级不覆盖数据、用户能找到）／ 安装器（能写 Program Files，

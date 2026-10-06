@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>插件协作与 AI 能力装配 · 逐个确认稿</title>
+<style>
+  /* 令牌与 docs/插件化架构优化.html 同一套（取自 sdk/ui/src/tokens.css） */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-2:#0b3f74; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec; --warning:#9a6700; --warning-soft:#fdf6e3;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 12px rgba(16,22,26,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-2:#093460; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f; --warning:#d29922; --warning-soft:#33280f;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 12px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--s5) var(--s6); }
+
+  header.bar { position: sticky; top:0; z-index:10; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding-top:10px; padding-bottom:10px; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar button { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  header.bar button:hover { filter:brightness(1.08); }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+
+  section { margin: var(--s6) 0 0; }
+  h2 { font-size:var(--lg); margin: 0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+       border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size: var(--md); margin: var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin: 0 0 var(--s3); }
+  ul, ol { margin: 0 0 var(--s3); padding-left: 1.25em; }
+  li { margin: 4px 0; }
+
+  table { width:100%; border-collapse: collapse; margin: var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th, td { text-align:left; padding: 8px 10px; border-bottom:1px solid var(--border); vertical-align: top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background: var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color: var(--danger); background: var(--danger-soft); }
+  .note.ok { border-left-color: var(--success); background: var(--success-soft); }
+  .note.info { border-left-color: var(--primary); background: var(--primary-soft); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); vertical-align:middle; white-space:nowrap; }
+  .tag.done { background:var(--success); }
+  .tag.now { background:var(--primary); }
+  .tag.plan { background:var(--warning); }
+  .tag.risk { background:var(--danger); }
+  .tag.opt  { background:var(--muted); }
+  .ref { font-family:var(--mono); font-size:12px; color:var(--primary); white-space:nowrap; }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.85; margin:0 0 var(--s4);
+    white-space:pre; overflow-x:auto; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .bad { color:var(--danger); }
+  .tree .dim { color:var(--muted); }
+  .tree .add { color:var(--primary); font-weight:600; }
+
+  /* 流程图（纯 CSS，不用 svg） */
+  .flow { display:flex; align-items:stretch; gap:0; margin:0 0 var(--s4); flex-wrap:wrap; }
+  .fstep { border:1px solid var(--border-strong); border-radius:var(--r-md); background:var(--surface);
+    padding:var(--s3); min-width:150px; flex:1 1 150px; }
+  .fstep .who { font-size:10px; font-weight:700; letter-spacing:.4px; color:var(--muted); text-transform:uppercase; }
+  .fstep .what { font-size:var(--sm); font-weight:600; margin:2px 0 4px; }
+  .fstep .det { font-size:11.5px; color:var(--muted); font-family:var(--mono); line-height:1.6; }
+  .farrow { align-self:center; padding:0 6px; color:var(--muted); font-size:16px; }
+  .fstep.plug { border-color:var(--success); }
+  .fstep.core { border-color:var(--primary); background:var(--primary-soft); }
+  .fstep.host { border-color:var(--warning); }
+  .fstep.new { border-style:dashed; border-color:var(--primary); }
+
+  .kv { display:grid; grid-template-columns:190px 1fr; gap:5px var(--s3); font-size:var(--sm); margin:0 0 var(--s4); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  /* 确认清单 */
+  .check { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); margin:0 0 var(--s3); overflow:hidden; }
+  .check > .hd { display:flex; align-items:center; gap:var(--s2); padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .check > .hd .id { font-family:var(--mono); font-weight:700; color:var(--primary); }
+  .check > .hd .ttl { font-weight:600; }
+  .check > .bd { padding:var(--s3) var(--s4); }
+  .check > .bd table { margin:0; }
+  .box-empty { border:1px dashed var(--border-strong); border-radius:var(--r-md); padding:var(--s3) var(--s4);
+    color:var(--muted); font-size:var(--sm); background:var(--surface-2); }
+
+  footer { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  footer a { color:var(--primary); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>插件协作与 AI 能力装配</h1>
+    <span class="sp"></span>
+    <span class="sub">2026-10-05 · 逐个确认稿：core → 4 个插件 → prompt / 技能 / 工具</span>
+    <button id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>这份文档回答四个问题</b>，全部以<b>当前仓库的真实代码</b>为依据，不是设想：
+  ① 几个插件之间<b>怎么交互</b>（以及哪些说法其实不成立）；② <b>模型怎么配</b>（一条五步链路 + 三处数据落点 + 优先级）；
+  ③ <b>prompt 怎么带入</b>；④ <b>技能怎么加载</b>、<b>工具怎么调用</b>。
+  <br><b>现状定性</b>：①②已落地且有测试守住；③④<b>只有种子</b> ——
+  prompt 是一个常量字符串、工具是 loop 进程内的注册表、技能<b>还不存在</b>。
+  这份稿子要做的是把③④的<b>扩展点</b>钉死，而不是重写①②。
+  <br><span style="color:var(--muted)">配套：<code>docs/插件化架构优化.html</code>（目录与分发形态的定案）·
+    <code>docs/开发进度/阶段追踪.md</code>（P5 角色 / P6 技能 / P7 工具管线的里程碑）</span>
+</div>
+
+<div class="note bad">
+  <b>先说三条最容易误判的事实</b>（它们决定了后面所有设计的天花板）：
+  <br><b>① <code>plugin.json</code> 的 <code>capabilities[]</code> 不参与任何判定。</b>
+  schema 的注释写得很直白：「纯展示，<b>一旦有代码依赖它做判断，它就会变成第二个真源</b>」
+  （<span class="ref">shared/src/plugin-manifest.ts:107-110</span>）。
+  所以「A 插件声明了 <code>llm.request</code>，B 插件就能调它」这句话<b>今天不成立</b> ——
+  真正被校验的是 <code>service.json</code> 的 <code>publishes</code>/<code>subscribes</code>，
+  而那是对<b>共享事件表</b>的校验（<span class="ref">core/src/service-manager/manifest.ts:41-56</span>）。
+  <br><b>② <code>dependencies[]</code> 不产生运行时耦合，只影响启动顺序与状态聚合。</b>
+  缺必需依赖 → 插件 <code>degraded</code> 而不是不启动；依赖未满足<b>刻意不阻止 spawn</b>
+  （<span class="ref">plugin-registry-runtime.ts:408-414</span>：只装 session 不装 models 时，
+  用户仍要看得到会话列表）。
+  <br><b>③ 跨插件读数据今天<b>没有</b>通路。</b>
+  <code>dataReadableBy[]</code> 只进了 schema，而能施加限制的 HTTP 面
+  （<code>/api/plugins/&lt;id&gt;/data/*</code>）<b>不存在</b>。
+  现网唯一的跨插件读是 <code>ChatComposerView.vue</code> 订阅 <code>models.prefs.state</code> ——
+  走的是<b>总线事件</b>而不是文件，所以那条声明目前<b>没有生效点</b>。
+</div>
+
+<!-- ══════════════ 1 ══════════════ -->
+<section>
+  <h2><span class="n">1</span>现状盘点：4 个插件 / 5 个服务</h2>
+
+  <div class="tree">osteosome/
+├── core/                       <span class="dim">← 扫盘 · 起服务 · 伺服插件 UI · 路由命令到总线（不认识任何插件业务）</span>
+├── shared/                     <span class="dim">← EventMap / CommandMap 唯一真相源 + 插件 manifest schema</span>
+├── sdk/{ts,core-client,ui}/    <span class="dim">← 服务 SDK · 前端总线客户端 · 共享组件与令牌</span>
+├── client/                     <span class="dim">← 壳：面板容器 / 拖拽布局 / iframe 宿主（本地 widget 注册表已空）</span>
+└── plugins/
+    ├── models/                 <span class="own">🧠 模型接入</span>   1 服务 · 1 视图
+    │   ├── catalog.json            <span class="dim">12 家预设（插件自带数据，随插件走）</span>
+    │   ├── services/llm-provider-openai/
+    │   └── ui/  → dist/ui/         <span class="own">widget.llm-settings</span>
+    ├── chat-workbench/         <span class="own">💬 对话工作台</span> 3 服务 · 3 视图
+    │   ├── services/{session,loop,llm}/
+    │   └── ui/  → dist/ui/         <span class="own">session-list · chat-timeline · chat-composer</span>
+    ├── reliability/            <span class="own">🛟 可靠性</span>     1 服务 · 0 视图
+    │   └── services/llm-retry/
+    └── workbench/              <span class="own">🧭 工作台外壳</span> 0 服务 · 6 视图
+        └── ui/  → dist/ui/         <span class="own">system-info · command-palette · settings · event-stream · service-manager · service-status</span>
+
+<span class="dim">userData/                            ← 三层归属，全部跟着用户走</span>
+├── core/{layout,ui,plugins}.json <span class="dim">← Core 自己的：布局 / 主题 / 插件启停</span>
+└── plugin/
+    ├── models/{preferences,credentials}.json
+    ├── chat-workbench/sessions/  + tool-root/   <span class="dim">← tool-root 是模型能读的文件边界</span>
+    └── reliability/               <span class="dim">（今天不写盘）</span></div>
+
+  <h3>依赖图（<code>dependencies[]</code>，只影响顺序与状态）</h3>
+  <div class="tree">models  <span class="dim">（无依赖）</span>
+   ▲
+   │  dependencies:[{pluginId:"models"}]
+chat-workbench  <span class="dim">（session + loop + llm）</span>
+   ▲
+   │  dependencies:[{pluginId:"chat-workbench"}]
+reliability     <span class="dim">（llm-retry）</span>
+
+workbench       <span class="dim">（无依赖 —— 它只碰 Core：/health · /events · /api/command）</span></div>
+
+  <div class="note">
+    <b>为什么这条依赖链<b>没有</b>变成隐式启动契约</b> —— 一个值得记住的实证：
+    插件化落地时服务遍历顺序从「平铺目录字母序」变成「按插件」，
+    <code>llm-provider-openai</code> 于是<b>先于</b> <code>llm</code> 启动 →
+    主位订阅时注册事件已经发完 → 路由表空 → 所有请求 <code>unsupported_provider</code>。
+    修法不是把顺序排回去，而是让 <b><code>llm</code> 启动后自己发一次 <code>llm.provider.reannounce</code></b>
+    （<span class="ref">chat-workbench/services/llm/src/index.ts:229-233</span>）。
+    <br><b>结论</b>：<b>启动顺序不该是任何人的隐式依赖</b>；每个「能力存在性」都要有一条
+    「重播当前状态」的自查通路。这条已经在 <code>llm</code> 与 provider 两侧落地，
+    ③④ 要新增的每一种能力（prompt 片段 / 技能 / 工具目录）<b>都必须自带这一条</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<section>
+  <h2><span class="n">2</span>插件之间如何交互关联</h2>
+
+  <p>插件之间<b>没有直接调用</b>（不 import、不共享内存、不共享文件句柄）。
+  全部交互落在<b>四个面</b>上，每个面的边界都是机制性的：</p>
+
+  <table>
+    <thead><tr><th style="width:16%">面</th><th style="width:30%">机制</th><th style="width:24%">谁校验</th><th>能表达什么 / 不能表达什么</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① 归属与顺序</b></td>
+        <td class="mono">plugin.json<br>dependencies[] / autoStart</td>
+        <td class="mono">shared: findPluginCycles + topoSortPlugins<br>core: allowedServiceIds</td>
+        <td><b>能</b>：算安装顺序、算聚合状态（ready/degraded/failed/stopped）、决定不 spawn 哪些。<br>
+            <b>不能</b>：不能表达「A 需要 B 的某个 topic」。依赖缺失只是状态降级。</td>
+      </tr>
+      <tr>
+        <td><b>② 运行时契约</b><br><span style="color:var(--success)">唯一真正的交互面</span></td>
+        <td class="mono">service.json<br>publishes[] / subscribes[]<br>→ shared EventMap / CommandMap</td>
+        <td class="mono">manifest.ts:41-56<br><span class="dim">（topic 必须在共享表里，否则进程起不来）</span></td>
+        <td><b>能</b>：任何跨进程协作。<b>加新能力 = 往 shared 加 topic</b>（只增不改）。<br>
+            <b>不能</b>：不能带返回值 —— 命令的应答一律走 <code>&lt;cmd&gt;.result</code> 事件。</td>
+      </tr>
+      <tr>
+        <td><b>③ 数据</b></td>
+        <td class="mono">握手返回 dataDir<br>= userData/plugin/&lt;id&gt;/</td>
+        <td class="mono">manager.ts:188 dataDirOf<br><span class="dim">按 serviceDataDirs 查表，缺省才回退根</span></td>
+        <td><b>能</b>：各写各的目录，Core 不解析内容与格式。<br>
+            <b>不能</b>：跨插件读写。<code>dataReadableBy[]</code> 已声明但<b>无生效点</b>。</td>
+      </tr>
+      <tr>
+        <td><b>④ 前端</b></td>
+        <td class="mono">/api/plugins 快照<br>/plugins/&lt;id&gt;/ui/* 伺服<br>sessionStorage（仅同插件跨 iframe）</td>
+        <td class="mono">registry.ts: resolveWidget<br><span class="dim">ui.views 优先于本地注册表</span></td>
+        <td><b>能</b>：插件页面独立拖拽摆位；同插件多视图共享 <code>curId</code>（一个字节）。<br>
+            <b>不能</b>：跨插件 UI 通信（无 postMessage / BroadcastChannel，一个都没用）。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>还有第五个面，也是新增能力时最容易被忽略的：<code>plugins.readFile</code>。</b>
+    服务打成单文件后没有任何 <code>require</code> 能解析到 <code>plugins/&lt;id&gt;/xxx.json</code>，
+    于是 Core 授予「读<b>自己插件目录</b>的只读文件」这条点对点特权 RPC
+    （<span class="ref">manager.ts:559-599</span>）。它的边界是全部内容：
+    <b>只读</b>、<b>只限自己插件目录</b>（跨插件读在结构上不可能）、<b>没有根就拒绝</b>（fail closed）、
+    不读 <code>node_modules</code>、单文件 2 MiB 上限。
+    <br><b>它走 stdio JSON-RPC 而不是 HTTP</b>：服务本来就有这条私有管道，
+    再开 HTTP 端点等于给每个服务进程开一个能读文件的公网入口。
+    <br><span style="color:var(--muted)">③④ 要用的正是它 —— 技能包与 prompt 片段是插件<b>自带数据</b>，
+    不是用户数据，不该进 <code>userData/</code>。</span>
+  </div>
+
+  <h3>一次真实请求穿过哪些面（现状实测路径）</h3>
+  <div class="flow">
+    <div class="fstep host"><div class="who">插件 UI</div><div class="what">③ 输入框</div>
+      <div class="det">POST /api/command<br>loop.run{provider,model,thinking}<br><span class="dim">③ 面</span></div></div>
+    <div class="farrow">→</div>
+    <div class="fstep plug"><div class="who">chat-workbench</div><div class="what">loop</div>
+      <div class="det">1 落 user 消息<br>2 accept(A) 占位<br>3 发 session.get 拉历史<br><span class="dim">② 面</span></div></div>
+    <div class="farrow">→</div>
+    <div class="fstep plug"><div class="who">chat-workbench</div><div class="what">session</div>
+      <div class="det">回 session.get.result<br>写 userData/plugin/chat-workbench/<br>sessions/<span class="dim">③ 面</span></div></div>
+    <div class="farrow">→</div>
+    <div class="fstep plug"><div class="who">chat-workbench</div><div class="what">loop 组装</div>
+      <div class="det">buildMessages(历史, DEFAULT_SYSTEM_PROMPT)<br>core.start(B) 发 llm.request<br><b>tools: TOOL_SPECS</b><span class="dim">② 面</span></div></div>
+    <div class="farrow">→</div>
+    <div class="fstep plug"><div class="who">chat-workbench</div><div class="what">llm 主位</div>
+      <div class="det">查路由表<br>注入 credentialRef + retryPolicy<br>发 llm.provider.request<span class="dim">② 面</span></div></div>
+    <div class="farrow">→</div>
+    <div class="fstep plug"><div class="who">models</div><div class="what">provider</div>
+      <div class="det">resolveApiKey('file:cred_x')<br>streamCompletions(baseURL)<br>逐块 llm.provider.chunk<span class="dim">③ 面</span></div></div>
+    <div class="farrow">↺</div>
+    <div class="fstep plug"><div class="who">reliability</div><div class="what">llm-retry（旁路）</div>
+      <div class="det">failed → 退避 → <b>重发 llm.request</b><br>finished → llm.metrics.usage<span class="dim">② 面</span></div></div>
+  </div>
+
+  <div class="note ok">
+    <b>这张图里有三处值得单独指出的设计</b>：
+    <br><b>① 凭证永远不过总线。</b> 主位把 <code>credentialRef</code>（<code>env:NAME</code> 或 <code>file:cred_x</code>）当<b>不透明字符串</b>转发，
+    只有 provider 进程自己解引用出明文。明文不进事件 / SSE / 日志 —— 这条红线在密钥从 Core 迁到插件后<b>仍然成立</b>，只是路径短了两跳。
+    <br><b>② A/B 两层 requestId。</b> A = <code>loop.run</code>（前端只见 A），B = <code>llm.request</code> 内部 id，映射只活在 loop 内存。
+    所以 <code>llm.token.streamed</code> 到前端时被<b>换发</b>成 A（<code>loop.token.streamed</code>），B 不泄前端。
+    <br><b>③ retry 是「重发命令」而不是「改状态」。</b> llm-retry 收到 <code>llm.request.failed</code> 后
+    按退避<b>重新 publish 原来的 <code>llm.request</code> payload</b>，于是整条链走一遍全新流程。
+    这是「总线是唯一真源」的自然结果，也是为什么 retry 不需要任何新协议。
+  </div>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<section>
+  <h2><span class="n">3</span>之后如何配置模型</h2>
+
+  <p>模型配置的完整链路是<b>一条五步</b>，落点是<b>三处文件</b>。核心结论：
+  <b>models 插件的用户数据全部由它自己的 provider 服务持有</b>，Core 与前端都只是通路。</p>
+
+  <h3>三处数据落点，先分清归属</h3>
+  <table>
+    <thead><tr><th style="width:26%">文件</th><th style="width:16%">归属</th><th style="width:22%">谁写</th><th>内容与作用</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">plugins/models/catalog.json</td><td><b>插件自带</b><br><span style="color:var(--muted)">随插件走</span></td>
+        <td class="mono">人手 / 插件作者</td>
+        <td>12 家预设（<code>id/label/baseUrl/api/credentialEnv/defaultModel/models</code>）。<br>
+          <b>服务端与 UI 读同一份</b>：服务经 <code>plugins.readFile</code> 读原件，UI 读构建复制进 <code>dist/ui/</code> 的副本 ——
+          一份被编写的文件，所以「界面上有的厂商，服务一定认」。</td></tr>
+      <tr><td class="mono">userData/plugin/models/<br>preferences.json</td><td><b>插件用户数据</b><br><span style="color:var(--muted)">跟着用户走</span></td>
+        <td class="mono">provider 服务（唯一写者）</td>
+        <td><code>ModelsPrefs</code> = <code>connectedVendors[]</code>（点过「连接」的厂商，<b>空 = 一家都没接</b>）·
+          <code>vendorOverrides[]</code>（自填端点 / 对预设的改写）· <code>enabledModels[]</code>（已禁用模型，<code>providerId::model</code>；<b>空数组 = 全启用</b>）。</td></tr>
+      <tr><td class="mono">userData/plugin/models/<br>credentials.json</td><td><b>插件用户数据</b></td>
+        <td class="mono">provider 服务</td>
+        <td>密钥明文。<b>只在本进程内存与这个文件里</b>；回前端的永远是掩码（<code>sk-abc…xyz</code>）。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>形状为什么住在 <code>shared</code> 而不是插件里</b>（<span class="ref">shared/src/llm/settings.ts</span> 文件头）：
+    三个进程都要读它 —— provider 服务（所有者）、models 的 UI、<b>chat-workbench 的输入框</b>（读 <code>enabledModels</code> 过滤模型下拉）。
+    形状写在插件里的话，输入框就得从 <code>plugins/models/…</code> 深路径 import ——
+    那条路会把插件目录结构变成<b>编译期依赖</b>，而插件是<b>可换的</b>（同 wire 的另一个实现也该能用这份形状）。
+    所以：<b>形状在 shared，数据在插件自己的目录。</b>
+  </div>
+
+  <h3>五步链路</h3>
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:22%">做什么</th><th style="width:26%">通路（面）</th><th>细节</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>选厂商 / 连端点</b></td><td class="mono">UI → <code>models.prefs.set{patch}</code><br>→ owner <code>models.prefs.state</code>（②）</td>
+        <td>合并式 patch（没给的键不变）。owner <b>每次变更重播整份</b> → 订阅方不需要 diff、不需要补偿逻辑。</td></tr>
+      <tr><td>2</td><td><b>填密钥</b></td><td class="mono"><code>models.credentials.put</code><br>→ <code>models.credentials.state</code>（掩码）（②）</td>
+        <td>明文只走「前端 → Core <code>/api/command</code> → 总线 → owner」这一条路，<b>不进 SSE / 事件 / 日志</b>。
+          这条通道<b>按设计就没有读原值的入口</b>（没有 <code>get(id)</code>，不是没做）。</td></tr>
+      <tr><td>3</td><td><b>算实例表</b></td><td class="mono">owner 进程内 <code>reconcile()</code>（③）</td>
+        <td><code>buildVendorInstances</code>：只看本进程实现的 wire（<code>openai</code>）· 有可用凭证才注册 ·
+          叠加自填端点（同 id 覆盖预设）· wire 不是本进程实现的<b>拒绝并告警</b>（不静默丢弃）。</td></tr>
+      <tr><td>4</td><td><b>注册 / 注销</b></td><td class="mono"><code>llm.provider.registered</code><br><code>llm.provider.unregistered</code>（②）</td>
+        <td><b>差异</b>要反映到总线：新增的注册、消失的注销。只增不减的话，删掉密钥后下拉里还挂着一家永远 401 的厂商。
+          payload 带 <code>defaultModel / credentialRef / retryPolicy</code>。</td></tr>
+      <tr><td>5</td><td><b>发起请求</b></td><td class="mono"><code>loop.run{provider,model,thinking}</code> → 主位查路由 → <code>llm.provider.request</code>（②）</td>
+        <td>主位<b>透传</b>路由里的 <code>credentialRef</code> 与 <code>retryPolicy</code>，自己不解析。
+          「重播清单」用 <code>llm.provider.reannounce</code>（晚启动者问一次）。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>优先级：三个来源冲突时听谁的</h3>
+  <div class="tree">凭证来源（<b>env 优先</b>）
+  ├─ <span class="own">1. env:&lt;ID_UPPER&gt;_API_KEY</span>   ← 部署者的显式意图（脚本 / CI / 自建端点）
+  ├─ 2. file:&lt;credId&gt;        ← 用户在设置窗存的（userData/plugin/models/credentials.json）
+  └─ 3. 都没有              → <span class="bad">不注册</span>（前端下拉里不出现，等价于「没装」）
+
+端点 / 默认模型的 env 覆盖
+├─ &lt;ID_UPPER&gt;_BASE_URL   <span class="dim">改端点</span>      <span class="dim">（如 DEEPSEEK_BASE_URL=http://127.0.0.1:1234/v1）</span>
+├─ &lt;ID_UPPER&gt;_MODEL      <span class="dim">改默认模型</span>
+└─ LLM_VENDORS_EXTRA        <span class="dim">自填端点（JSON 数组）；优先级低于 settings 窗写的</span></div>
+  <div class="note ok">
+    <b>为什么 env 优先</b>：env 是<b>部署者</b>的显式意图，用户填的密钥是<b>用户</b>的偏好。冲突时听部署者的。
+    这条也解释了为什么集成冒烟可以指假上游跑全链路而不用改任何代码。
+  </div>
+
+  <div class="note bad">
+    <b>三处现在就要确认的缺口</b>（都会让「配置了模型」这件事半残）：
+    <br><b>① 默认 provider 是硬编码的。</b> <code>loop/src/index.ts:30</code>：
+    <code>DEFAULT_PROVIDER = env.LLM_PROVIDER || 'deepseek'</code>。
+    副作用很具体：<b>只接了 OpenAI 兼容端点的用户，第一次发问会得到 <code>unsupported_provider</code></b> ——
+    而下拉里明明有模型。
+    <br><b>② 用户选的 provider/model 不持久化。</b> <code>ChatComposerView.vue</code> 里
+    <code>provider</code> 是本地 ref，首个 provider 注册后自动选 <code>list[0]</code>。
+    刷新页面 / 换窗口就回到第一项。
+    <br><b>③ 逐轮参数与「默认配置」没有分层。</b> <code>loop.run</code> 每次带参，
+    但「这个会话/这个用户默认用哪家」没有任何落点。
+    <br><b>建议</b>：三者一起解 —— 在 <code>preferences.json</code> 里加一段
+    <code>{ defaultProvider, defaultModel, defaultThinking }</code>（归 models 插件所有，
+    与 <code>enabledModels</code> 并列），<code>loop.run</code> 缺省时回落它，再缺省才回落 env。
+    <b>不新增 topic</b>（复用 <code>models.prefs.set</code> 的合并 patch），<b>不改 Core</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<section>
+  <h2><span class="n">4</span>prompt 怎么带入</h2>
+
+  <div class="tree">现状（plugins/chat-workbench/services/loop/src/prompt.ts，9 行）
+export const DEFAULT_SYSTEM_PROMPT = [
+  '你是一个本地桌面 AI 助手的对话后端，运行在 Osteosome 客户端里。',
+  '用简体中文回答，语气自然、简洁，不啰嗦。',
+  '如果用户的问题超出你的能力或需要外部信息，直接说明，不要编造。',
+].join('\n')
+
+<span class="dim">→ buildMessages() 把它置首，历史里的 system 一律丢弃</span>
+<span class="dim">  （history.ts:37「system 统一由 prompt 参数提供，避免重复注入」）</span></div>
+
+  <p>这个常量<b>不是 bug，它是「没有扩展点」的样子</b>。要变成可装配的 prompt，
+  需要回答三个问题 —— 而且每个问题的答案都已经被现有机制框死了：</p>
+
+  <table>
+    <thead><tr><th style="width:20%">问题</th><th style="width:34%">候选</th><th>结论与理由</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① prompt 分几层？</b></td>
+        <td class="mono">① 身份层（loop 内置）<br>② 能力层（插件片段）<br>③ 会话层（每个会话）</td>
+        <td><b>三层，全都要。</b> 身份层不可卸（否则模型不知道自己是什么）；
+          能力层<b>随插件装卸增减</b>；会话层是角色 / 项目约定（P5 角色插件的落点）。
+          <br><b>关键性质</b>：历史里的 <code>system</code> 被丢弃 → <b>prompt 每轮重新装配，不进 messages</b>。
+          这条性质让「装/卸插件立即生效」<b>免费</b> —— 不需要迁移任何历史数据。</td>
+      </tr>
+      <tr>
+        <td><b>② 片段从哪来？</b></td>
+        <td class="mono">A. plugin.json 声明（静态字符串）<br>B. 插件自带 <code>prompts/*.md</code>（<code>plugins.readFile</code>）<br>C. 服务经总线动态发布</td>
+        <td><b>B 为主，A 与 C 为辅。</b><br>
+          A 适合一行短提示，但 <code>plugin.json</code> 会变成大杂烩 —— 它现在是「归属」文件，不是内容文件。<br>
+          B 让长 prompt 有语法高亮与可 diff，且<b>随插件走</b>（不占用户数据目录）。<br>
+          C 是必须的补充：有的片段<b>依赖运行期事实</b>（当前 provider 列表、当前工具清单、技能索引）。
+          <br><b>所以三种都要，但形状要统一</b> —— 都归一成 <code>{ id, priority, text }</code>。</td>
+      </tr>
+      <tr>
+        <td><b>③ 谁装配？</b></td>
+        <td class="mono">① loop 自己收集<br>② 新增 prompt 服务<br>③ 提到 Core 侧</td>
+        <td><b>① loop 自己收集。</b><br>
+          loop 已经<b>同时</b>是 tool 目录的装配者（<code>TOOL_SPECS</code>）。
+          让 prompt 走同一个收集器，<b>装一个插件 → prompt 与 tool 同时增减</b>，一处组装逻辑。<br>
+          ② 会多一跳总线往返与一个失败点，而 prompt 没有独立的生命周期需求。<br>
+          ③ 违反不变式「Core 不解析插件内容」—— prompt 是内容。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>契约提案（往 shared 加，只增不改）</h3>
+  <div class="tree">// ── shared/src/events.ts 新增 ──────────────────────────────
+<span class="add">'prompt.fragment.registered'</span>:   { pluginId, id, priority, text }   <span class="dim">// 事件</span>
+<span class="add">'prompt.fragment.unregistered'</span>: { pluginId, id }                  <span class="dim">// 事件</span>
+<span class="add">'prompt.fragments.list'</span>:        Record&lt;string, never&gt;           <span class="dim">// 命令（reannounce 同款）</span>
+
+<span class="dim">// 装配结果由 loop 持有，不进总线 —— 没有别的进程需要知道最终 prompt 是什么</span></div>
+
+  <div class="note ok">
+    <b>三条设计纪律，直接沿用现有机制</b>：
+    <br><b>① 「重播整份」而不是发增量。</b> 同 <code>llm.provider.reannounce</code> / <code>models.prefs.state</code>：
+    订阅方可能晚于发布方启动，增量事件早发完了。<b>拿到全量就不需要补偿逻辑</b>，这条性质比省字节重要得多。
+    <br><b>② 缺失是合法的。</b> 一个不带 prompt 片段的插件完全正常（就像不带 <code>catalog.json</code> 一样）。
+    所以 loop 侧订阅失败要<b>忽略</b>而不是抛 —— 否则一个装饰性片段能打死对话。
+    <br><b>③ 顺序要显式。</b> <code>priority</code> 数字越小越靠前，身份层恒为 0（不可被覆盖）。
+    <b>拼接顺序必须稳定</b>：<code>pluginId</code> 相同优先级时按 id 字典序 —— 否则同一个系统两次启动得到不同 prompt，
+    而症状是「模型行为随机」，几乎无法排查。
+  </div>
+
+  <div class="note bad">
+    <b>必须一起解决的一件事：prompt 与历史截断的相互作用。</b>
+    <code>buildMessages</code> 保留最近 <code>DEFAULT_MAX_MESSAGES = 20</code> 条，并把截断点对齐到 <code>user</code> 边界
+    （<span class="ref">history.ts:58-63</span>，因为孤立 tool 消息会让上游 400）。
+    <b>能力层片段变长时，20 条历史里真正的对话占比会变少</b>，而症状是「插件装上之后模型变笨」——
+    它看起来像模型问题，不像预算问题。
+    <br><b>建议</b>：prompt 片段<b>有总字节上限</b>（比如 8 KB），超了按 <code>priority</code> 从低到高丢弃并<b>发一条 <code>loop.run.failed</code> 或至少一条 logger.warn</b>。
+    <b>静默截断是最坏的一种</b>：模型表现退化，没人知道是因为 prompt 被砍了。
+  </div>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<section>
+  <h2><span class="n">5</span>技能怎么加载</h2>
+
+  <div class="box-empty">
+    <b>今天没有技能。</b> <code>docs/开发进度/阶段追踪.md</code> 的 P6「技能」是 ⬜ 未开始，
+    交付物两条：「技能包（SKILL.md），按需懒加载」+「技能注入 loop」。
+    下面是把这两条落到<b>现有机制</b>上的形状 —— <b>不新增一种插件交互方式</b>。
+  </div>
+
+  <h3>核心判断：技能 = prompt 片段 + tool，不是第三种东西</h3>
+  <p>「懒加载」这个词容易让人以为要造一套新的加载器。实际拆开看，一个技能包只需要两件事：</p>
+  <table>
+    <thead><tr><th style="width:14%">形态</th><th style="width:30%">包形态</th><th style="width:26%">怎么进上下文</th><th>什么时候用</th></tr></thead>
+    <tbody>
+      <tr><td><b>知识型</b></td><td class="mono">SKILL.md<br><span class="dim">frontmatter:<br>name / description / when</span></td>
+        <td>启动时只注入 <code>name + description</code>（一行索引）</td>
+        <td>模型判断相关时，通过 <code>skill_read(name)</code> 读全文，正文作为 tool 结果回填。</td></tr>
+      <tr><td><b>工具型</b></td><td class="mono">SKILL.md + <code>scripts/*</code></td>
+        <td><code>scripts/</code> 里的脚本<b>注册为 tool</b>；SKILL.md 只做说明注入</td>
+        <td>模型调那个 tool。<b>说明与实现在同一个包里</b>，所以模型看到的描述和实际能做的事不会漂。</td></tr>
+      <tr><td><b>工作流型</b></td><td class="mono">SKILL.md + 若干 tool 组合</td>
+        <td>同知识型（索引注入）+ 该流程需要的 tools 一起进目录</td>
+        <td>先 <code>skill_read</code> 拿到步骤，再逐步调 tool。<b>它不是一个新类别，只是前两者的组合</b>。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>「渐进披露」是这套设计里唯一真正的新东西</b>，也是它必须被认真对待的原因：
+    启动时只注入索引（每个技能一行），全文<b>只在模型要的时候</b>读。
+    <br>这不是优化，是<b>可行性问题</b>：20 个技能 × 平均 2 KB 全文 = 40 KB ≈ 10k token，
+    在 system prompt 里就把大部分预算吃掉了，而用户可能一个都用不上。
+    <br><b>代价</b>：模型必须先决定「要不要读这个技能」—— 所以 <code>description</code> 字段是<b>契约</b>不是注释，
+    写得含糊 = 技能装了也不会被读。这条要写进插件作者文档。
+  </div>
+
+  <h3>契约提案：复用已有的两条通路，只加两个 tool</h3>
+  <div class="tree"><span class="dim">// ① 索引 = prompt 片段（复用 §4 的契约，零新增 topic）</span>
+<span class="add">'prompt.fragment.registered'</span> { pluginId:"skills", id:"skill-index", priority:10,
+                         text: "- pdf-extract: 把 PDF 抽成 markdown。用户提到 PDF/扫描件时先读它。\n- ..." }
+
+<span class="dim">// ② 全文 = 一个 tool（工具目录走 llm.request.tools，今天已通）</span>
+name: "skill_read"
+description: "读取一个已安装技能的完整说明。索引里列出的技能才可读。"
+parameters: { type:"object", properties:{ name:{type:"string"} }, required:["name"] }
+
+<span class="dim">// ③ 工具型技能的 scripts/ → 同一批 tool（复用现有工具目录通路）</span>
+name: "pdf_extract"   <span class="dim">← scripts/pdf_extract.(py|js|sh)</span></div>
+
+  <div class="note ok">
+    <b>为什么这样就够</b>：<code>ToolSpec</code> 已经是中立契约（<span class="ref">shared/src/llm/types.ts:47</span>），
+    主位透传、provider 各翻自家 wire、<code>llm.request.tool_call</code> 块闭合即发 ——
+    <b>整条工具通路今天就能跑</b>，只差「谁来填 <code>TOOL_SPECS</code>」这一个口子。
+    <br><b>所以技能没有引入任何新的进程间协议</b>，只是给已有的两条通路接了新的生产者。
+    这与「插件化零新增协议」是同一条纪律的延续。
+  </div>
+
+  <div class="note bad">
+    <b>四个必须现在定下来的边界，否则技能会变成安全洞</b>：
+    <br><b>① 技能从哪读？</b> 插件自带的走 <code>plugins.readFile</code>（只读、只限自己插件目录）；
+    <b>用户自己的</b>呢？建议 <code>userData/plugin/&lt;某个 skills 插件&gt;/skills/&lt;name&gt;/SKILL.md</code> ——
+    <b>注意这需要一个「skills 插件」来当这个目录的主人</b>，否则 <code>userData/</code> 下会长出一个
+    谁都不认领的目录（这正是凭证插件退休的原因：没有主人的数据目录迟早出问题）。
+    <br><b>② <code>scripts/</code> 的执行边界。</b> 今天的内置工具是<b>纯只读</b>、路径锁在
+    <code>userData/plugin/chat-workbench/tool-root/</code> 内、单文件 ≤64 KB、目录 ≤200 项 ——
+    而且注释里明确写了「<b>没有写 / 删 / 网络 / 进程类工具，那些必须先有审批 listener 才允许存在</b>」。
+    <b>脚本执行直接违反这条</b>：它就是进程执行。所以脚本型技能<b>必须先有审批位</b>（§6）才能开，
+    否则技能插件就是一个「装了就等于装了任意代码执行」。
+    <br><b>③ 技能之间的顺序与覆盖。</b> 同一 <code>name</code> 两个技能都有 → <b>拒绝第二个</b>（fail fast），
+    不要「后者覆盖前者」：症状是「我改了技能却不生效」，而原因在另一个插件里。
+    <br><b>④ 卸载时已读过的技能怎么办。</b> 历史里那条 tool 结果还在（append-only，不改）。
+    <b>建议照附件能力备忘的处置 A</b>：数据保留、只是不再可用；重装即恢复。不要级联删。
+  </div>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<section>
+  <h2><span class="n">6</span>工具怎么调用</h2>
+
+  <div class="tree">现状（plugins/chat-workbench/services/loop/src/tools.ts，152 行）
+  ├── toolSpecs(root)      <span class="dim">← 只声明 name/description/parameters，下发给模型</span>
+  ├── executeTool(root, …) <span class="dim">← 副作用边界；未知工具返回失败结果而不抛（让模型自我纠正）</span>
+  ├── readTool  → read_file   <span class="dim">路径锁在 root 内 · ≤64 KB</span>
+  └── listTool  → list_dir    <span class="dim">≤200 项</span>
+
+<span class="dim">root = userData/plugin/chat-workbench/tool-root/（默认空，用户想让它读什么就放什么）</span>
+
+<span class="dim">组装点：loop/src/index.ts:381-382，握手之后才算（dataDir 那时才到货）</span>
+<span class="dim">工具轮上限：MAX_TOOL_ROUNDS = env.LLM_MAX_TOOL_ROUNDS ?? 5</span></div>
+
+  <p>这份注册表<b>文件头自己写着</b>：「这是 P7『最小工具循环』的种子，<b>不是终态</b>。
+  终态是『工具 = 可插拔能力位 + 审批 listener + MCP』」。所以下面只说<b>从种子到终态要动哪一处</b>。</p>
+
+  <h3>四段：声明 → 聚合 → 执行 → 审批</h3>
+  <table>
+    <thead><tr><th style="width:12%">段</th><th style="width:26%">今天</th><th style="width:30%">终态</th><th>要动的地方</th></tr></thead>
+    <tbody>
+      <tr><td><b>① 声明</b></td>
+        <td class="mono">loop/src/tools.ts 里两个<br>写死的 ToolDefinition</td>
+        <td class="mono">插件自带 <code>tools.json</code><br>（<code>ToolSpec[]</code>，与 catalog.json 同一套路）</td>
+        <td>零新增协议。owner 服务用 <code>plugins.readFile</code> 读自己的 <code>tools.json</code>，
+          像 <code>llm-provider-openai</code> 读 <code>catalog.json</code> 一样。</td></tr>
+      <tr><td><b>② 聚合</b></td>
+        <td class="mono">TOOL_SPECS = toolSpecs(TOOL_ROOT)<br>模块级，一次</td>
+        <td class="mono">订阅 <code>tool.registered</code> /<br><code>tool.unregistered</code> / 发 <code>tools.list</code></td>
+        <td><b>与 §4 的 prompt 片段同一个收集器。</b> 装一个插件 → 工具与 prompt 同时增减。<br>
+          <b>必须有重播命令</b>（<code>tools.list</code>），否则晚启动的 loop 会永远看不到工具目录 ——
+          这就是 <code>llm.provider.reannounce</code> 那个坑，第三次踩不得。</td></tr>
+      <tr><td><b>③ 执行</b></td>
+        <td class="mono">loop 进程内直接调<br><code>executeTool()</code></td>
+        <td class="mono">loop 发 <code>tool.execute</code><br>→ 宿主服务执行 → 回 <code>tool.execute.result</code></td>
+        <td>这是<b>唯一真正需要新协议</b>的一段。<b>关键理由</b>：loop 与工具宿主是<b>不同进程</b>，
+          loop <b>不能</b>直接调别人的代码；而今天 <code>executeTool</code> 依赖 loop 进程内的
+          <code>node:fs</code> 与 <code>TOOL_ROOT</code>。<br>
+          <b>loop 仍然保留 loop.tool.executed 的发布权</b>（assistant / tool 消息只能它 append），
+          所以 UI 一行不用改 —— <b>变的只是「谁真正执行」</b>。</td></tr>
+      <tr><td><b>④ 审批</b></td>
+        <td class="mono"><b>不存在</b></td>
+        <td class="mono"><code>tool.approval.requested</code>（事件）<br><code>tool.approval.resolved</code>（命令）</td>
+        <td>只读工具可<b>策略免审</b>（沿用今天的只读白名单）；写 / 网络 / 进程类必须逐次审。
+          策略放<b>宿主插件自己的</b> <code>userData/plugin/&lt;id&gt;/approvals.json</code> ——
+          不放 Core，因为 Core 不该知道有哪些工具。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>契约提案（③ ④ 新增，② 与 §4 同构）</h3>
+  <div class="tree"><span class="add">'tool.registered'</span>:    { pluginId, tools: ToolSpec[] }   <span class="dim">// 事件（重播整份，不发增量）</span>
+<span class="add">'tool.unregistered'</span>:  { pluginId }                     <span class="dim">// 事件</span>
+<span class="add">'tools.list'</span>:          Record&lt;string, never&gt;          <span class="dim">// 命令（reannounce 同款）</span>
+
+<span class="add">'tool.execute'</span>:        { requestId /* = toolCallId */, sessionId, name, arguments }   <span class="dim">// 命令 loop→宿主</span>
+<span class="add">'tool.execute.result'</span>: { requestId, ok, content, summary }                            <span class="dim">// 事件 宿主→loop</span>
+
+<span class="add">'tool.approval.requested'</span>: { requestId, toolName, summary, risk }                     <span class="dim">// 事件 loop→前端</span>
+<span class="add">'tool.approval.resolved'</span>:   { requestId, approved, reason? }                          <span class="dim">// 命令 前端→loop</span></div>
+
+  <div class="note bad">
+    <b>③ 会引入三个新问题，必须在这一步一起解决，否则只是把问题挪了位置</b>：
+    <br><b>① 超时与孤儿。</b> 宿主服务崩溃 → <code>tool.execute</code> 永远没有 result → loop 卡在 running。
+    必须给 <code>tool.execute.result</code> 一个<b>超时兜底</b>（失败结果，不是静默），
+    否则用户看到的就是「模型一直转圈」—— 与 <code>10-04 崩溃自愈</code> 里修的那个 provider 崩溃是<b>同一种病</b>。
+    <br><b>② 审批期间用户停掉这一轮。</b> 用户点了「允许」但这一轮已被 <code>loop.cancel</code> 取消 →
+    审批结果成孤儿。<b>规则</b>：结果到达时若 A 已释放，静默丢弃（与 <code>nextRound</code> 对未知 B 返回 null 同一处置）。
+    <br><b>③ 谁决定 <code>TOOL_ROOT</code>。</b> 今天 loop 用<b>自己插件的</b> dataDir 算沙箱根。
+    工具分散到多个插件后，<b>每个宿主服务各自算自己的</b>（它有 dataDir + <code>plugins.readFile</code>）——
+    loop 手里<b>不该</b>再有路径。这是「拆开之后反而更简单」的一处：沙箱边界随工具的主人走。
+  </div>
+
+  <div class="note ok">
+    <b>④ 之后接 MCP 的位置也就清楚了</b>：MCP server 是一个「宿主服务」，
+    它的 <code>tools.json</code> 是<b>运行时从 MCP 协议生成</b>的而不是文件里的 ——
+    所以它走的是同一条 <code>tool.registered</code> 通路，<b>loop 侧零改动</b>。
+    <b>这就是把工具做成能力位而不是做进 loop 的全部回报</b>。
+  </div>
+</section>
+
+<!-- ══════════════ 7 ══════════════ -->
+<section>
+  <h2><span class="n">7</span>逐个确认清单</h2>
+
+  <div class="check">
+    <div class="hd"><span class="id">core</span><span class="ttl">Core</span><span class="tag done">现状已稳</span></div>
+    <div class="bd">
+      <table>
+        <thead><tr><th style="width:30%">要确认什么</th><th style="width:34%">现状（代码依据）</th><th>结论 / 需要的动作</th></tr></thead>
+        <tbody>
+          <tr><td>Core 需不需要知道 prompt / 技能 / 工具的存在</td>
+            <td class="mono">Core 只扫 manifest、spawn、伺服字节、路由命令<br>（plugin-registry-runtime.ts）</td>
+            <td><b>不需要。</b> 三样东西都是<b>总线上的内容</b>，Core 不解析插件内容是既定不变式。<b>零改动。</b></td></tr>
+          <tr><td>新增 topic 要不要动 Core</td>
+            <td class="mono">manifest.ts 拿共享表校验 publishes/subscribes；<br>新增 topic 必须先进共享表</td>
+            <td><b>要动 shared，不要动 Core。</b> 校验逻辑是「查表」，表变宽它自动覆盖。</td></tr>
+          <tr><td>插件自带文件通路够不够</td>
+            <td class="mono">plugins.readFile：只读 · 只限自己插件目录 · 2 MiB · 禁 node_modules</td>
+            <td><b>够。</b> catalog.json / tools.json / prompts/*.md / SKILL.md 全走它，<b>零新增面</b>。</td></tr>
+          <tr><td>停用插件时新能力怎么退场</td>
+            <td class="mono">plugin.stop → 展开成服务 stop（先 loop.cancel）<br>已有先收尾的约定</td>
+            <td><b>进程退了，它发布的片段 / 工具目录自然随之消失。</b> 但要有<b>兜底</b>：
+              宿主进程被强杀时 loop 的内存里会留残骸 → 需要在 <code>service.failed</code> 上做一次清理。<b>这是本稿新增的一条要求。</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="check">
+    <div class="hd"><span class="id">models</span><span class="ttl">模型接入 · 1 服务 1 视图</span><span class="tag now">本稿要补 3 处</span></div>
+    <div class="bd">
+      <table>
+        <thead><tr><th style="width:30%">要确认什么</th><th style="width:34%">现状</th><th>结论 / 需要的动作</th></tr></thead>
+        <tbody>
+          <tr><td>配置模型的链路是否够用</td><td class="mono">五步全部通，且有 5 组测试 + 2 个集成冒烟</td>
+            <td><b>够用，不动结构。</b></td></tr>
+          <tr><td>默认 provider / model / thinking 落在哪</td>
+            <td class="mono">loop 硬编码 <code>env||'deepseek'</code>；<br>composer 的选择是本地 ref</td>
+            <td><b>加进 <code>preferences.json</code></b>（归 models 所有，复用合并 patch，<b>不新增 topic</b>）。
+              回落链：<code>loop.run</code> 参数 → 偏好 → env。</td></tr>
+          <tr><td>跨插件读 <code>enabledModels</code> 的通路</td>
+            <td class="mono">chat-workbench 订阅 <code>models.prefs.state</code>；<br><code>dataReadableBy</code> 已声明但无生效点</td>
+            <td><b>先用总线事件这条</b>（它已经在跑，且 owner 重播整份）。
+              <code>dataReadableBy[]</code> 要么在补上 HTTP 数据面时再启用，要么<b>从 manifest 删掉</b> ——
+              <b>留着一条不生效的授权声明比没有更糟</b>（读代码的人会以为它有约束力）。</td></tr>
+          <tr><td>「重播清单」三处是否一致</td>
+            <td class="mono">llm 主位发 reannounce · provider 响应 · 前端等 connected 再问</td>
+            <td><b>一致，已守住。</b> 新增的 prompt / tools 片段<b>照抄这个三段式</b>（发布方重播 / 收集方问一次 / 前端等 connected）。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="check">
+    <div class="hd"><span class="id">chat-workbench</span><span class="ttl">对话工作台 · 3 服务 3 视图</span><span class="tag now">本稿的主要改动落点</span></div>
+    <div class="bd">
+      <table>
+        <thead><tr><th style="width:30%">要确认什么</th><th style="width:34%">现状</th><th>结论 / 需要的动作</th></tr></thead>
+        <tbody>
+          <tr><td>prompt 从常量变装配器</td>
+            <td class="mono">prompt.ts 9 行常量 · buildMessages 的形参已经是入口</td>
+            <td><b>形态几乎不用改</b>：<code>buildMessages(history, systemPrompt, max)</code> 已经是参数化的。
+              把 <code>DEFAULT_SYSTEM_PROMPT</code> 换成 <code>composePrompt(fragments)</code> 的返回值即可。</td></tr>
+          <tr><td>片段收集器放哪</td>
+            <td class="mono">loop 是 tool 目录的装配者，且在握手后才建（dataDir 那时才到货）</td>
+            <td><b>放 loop</b>，与 TOOL_SPECS 同一个装配点、同一个时机。<b>prompt 与 tool 必须同时增减</b>，
+              否则会出现「工具在位但 prompt 没说明它存在」—— 模型不会去调一个它不知道存在的工具。</td></tr>
+          <tr><td>工具执行要不要留在 loop</td>
+            <td class="mono">loop 进程内 node:fs + TOOL_ROOT</td>
+            <td><b>迁出去</b>（§6 ③）。loop 保留发布权（<code>loop.tool.executed</code> + 消息落库），
+              <b>UI 零改动</b>。内置的 <code>read_file</code>/<code>list_dir</code> 作为「宿主就是 loop 自己」的单进程特例保留，
+              走<b>同一套接口</b>——这样只有一条执行代码路径。</td></tr>
+          <tr><td>工具轮上限还在 loop 手里吗</td><td class="mono">MAX_TOOL_ROUNDS（默认 5）</td>
+            <td><b>留在 loop。</b> 它是<b>编排</b>决策不是执行决策 —— 谁都不该能绕过它。</td></tr>
+          <tr><td>三个 iframe 会不会各装一份 prompt</td>
+            <td class="mono">prompt 在服务端组装，UI 从不参与</td>
+            <td><b>不会。</b> 与 P6 的结论一致：服务端事件流本来就是那个共享层，UI 只派生视图。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="check">
+    <div class="hd"><span class="id">reliability</span><span class="ttl">可靠性 · 1 服务 0 视图</span><span class="tag opt">本稿不改</span></div>
+    <div class="bd">
+      <table>
+        <thead><tr><th style="width:30%">要确认什么</th><th style="width:34%">现状</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>工具失败要不要重试</td>
+            <td class="mono">只重试 <code>llm.request</code>；工具是 loop 内部步骤</td>
+            <td><b>不要自动重试有副作用的工具。</b> 工具执行失败应该把失败结果<b>回填给模型让它自己纠正</b>
+              （今天 <code>executeTool</code> 已经是这个行为：返回错误文本而不是抛）。
+              工具迁到跨进程后<b>要保持这条</b> —— 它是「让模型自我纠正」的一部分，不是错误处理。</td></tr>
+          <tr><td>usage 记账要不要跟着工具走</td>
+            <td class="mono">llm.metrics.usage 按 requestId + provider</td>
+            <td><b>不动。</b> 工具轮是同一 requestId 的多轮 <code>llm.request</code>，记账天然覆盖。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="check">
+    <div class="hd"><span class="id">workbench</span><span class="ttl">工作台外壳 · 0 服务 6 视图</span><span class="tag now">接一处新职责</span></div>
+    <div class="bd">
+      <table>
+        <thead><tr><th style="width:30%">要确认什么</th><th style="width:34%">现状</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>工具/技能要不要有可视化</td>
+            <td class="mono">6 个视图：系统信息 / 命令面板 / 设置 / 事件流 / 服务管理 / 服务状态</td>
+            <td><b>建议新增一个视图</b>「能力」：列出当前所有已注册工具 + prompt 片段 + 技能索引，
+              带来源插件。<b>理由</b>：这四样东西都是<b>运行期才成形的</b>（晚启动的 loop 可能少收），
+              没有这个视图，用户只能靠翻日志排障 —— 而 <code>service.status</code> 那个视图当初就是为了做这件事才存在的。</td></tr>
+          <tr><td>命令面板要不要能执行工具</td><td class="mono">命令面板走 /api/command</td>
+            <td><b>可以，但不是第一优先。</b> <code>tool.execute</code> 一旦进共享表，它自动出现在命令面板的可选命令里 ——
+              <b>零额外代码</b>。要不要给 UI 加「手工执行工具」入口，另议。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 8 ══════════════ -->
+<section>
+  <h2><span class="n">8</span>不变式与红线（本稿不得破坏）</h2>
+  <ul>
+    <li><b>不新增进程间协议</b>：stdio JSON-RPC + <code>shared</code> 的 EventMap/CommandMap 仍是唯一入口。
+      本稿新增的 9 个 topic 全部是<b>这张表上的新行</b>，不是新机制。</li>
+    <li><b>Core 不解析插件内容</b>：prompt 片段 / 技能正文 / 工具 schema 全是<b>内容</b>，
+      一律经总线与 <code>plugins.readFile</code>，Core 一行都不碰。</li>
+    <li><b>凭证值永不过总线、永不进 SSE、永不进日志</b>：新增的任何路径都不得让明文出现在事件里。</li>
+    <li><b>「能力存在性」必须有一条重播通路</b>：prompt 片段 / 工具目录 / 技能索引
+      <b>每一个</b>都要有 <code>*.list</code> 类的重播命令 + 收集方上线时主动问一次。
+      这是本稿从「provider 启动顺序事故」里学到的最重要一条。</li>
+    <li><b>缺失是合法的</b>：不带 prompt 片段 / 不带工具 / 不带技能的插件完全正常。
+      订阅失败要忽略，不能让装饰性内容打死主链路。</li>
+    <li><b>顺序必须确定</b>：同优先级按 id 字典序。同一个系统两次启动得到不同 prompt，
+      症状是「模型行为随机」，几乎无法排查。</li>
+    <li><b>只读工具不需要审批，写 / 网络 / 进程类必须审批</b> —— 这条今天写在
+      <code>tools.ts</code> 的注释里，<b>它是技能里 <code>scripts/</code> 的前置条件</b>，不是可选项。</li>
+    <li><b>测试跟着被测物走</b>：loop 的工具 / prompt 测试留在 loop 包；
+      每个插件自带文件的校验留在该插件包里（照 <code>service-distribution.test.ts</code> 与
+      <code>plugin-ui-e2e.test.ts</code> 的做法：真构建 → 真 Core → 真请求）。</li>
+  </ul>
+</section>
+
+<!-- ══════════════ 9 ══════════════ -->
+<section>
+  <h2><span class="n">9</span>待决问题（本稿需要你拍板的六条）</h2>
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:28%">问题</th><th style="width:34%">选项</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>prompt / 工具 的装配器放哪</b></td>
+        <td class="mono">① loop 进程内收集（推荐）<br>② 新增 prompt 服务<br>③ 提到 Core</td>
+        <td>①。<b>理由</b>：loop 已经是 tool 目录的装配者，一处组装逻辑让两者同步增减；
+          ②多一跳总线往返与一个失败点；③ 违反「Core 不解析插件内容」。</td></tr>
+      <tr><td>2</td><td><b>默认 provider/model/thinking 归谁</b></td>
+        <td class="mono">① models 插件的 preferences.json<br>② Core 偏好<br>③ 仍靠 env</td>
+        <td>①。理由：模型配置是 models 插件的事，Core 不该知道 provider 这个概念；
+          ③ 是现状，而它让「只接了 OpenAI 兼容端点」的用户第一次发问就失败。</td></tr>
+      <tr><td>3</td><td><b><code>dataReadableBy[]</code> 留还是删</b></td>
+        <td class="mono">① 保留等 HTTP 数据面<br>② 现在删掉<br>③ 补上 <code>/api/plugins/&lt;id&gt;/data/*</code></td>
+        <td><b>②</b>。现网唯一的跨插件读已经走总线事件，不需要文件面；
+          而一条<b>不生效的授权声明</b>比没有更糟 —— 它让人以为边界存在。③ 是另一个题（需要 Core 解析命名空间，与不变式相张）。</td></tr>
+      <tr><td>4</td><td><b>prompt 片段的长度上限</b></td>
+        <td class="mono">① 不限<br>② 按字节上限截断 + 告警<br>③ 按优先级整块丢弃</td>
+        <td>②，并<b>必须告警</b>。静默截断的代价是「模型变笨」而没人知道原因；
+          整块丢弃会让一个必需片段消失、行为突变。</td></tr>
+      <tr><td>5</td><td><b>技能脚本什么时候能开</b></td>
+        <td class="mono">① 审批位落地后一起开<br>② 先只做知识型技能</td>
+        <td><b>①</b>。② 会让「技能 = 装了就等于装了任意代码执行」这个洞先存在一段时间；
+          而 §6 ③ 的 <code>tool.execute</code> 与 ④ 的审批本来就是同一步要做的。</td></tr>
+      <tr><td>6</td><td><b>用户自己的技能放哪</b></td>
+        <td class="mono">① 新建一个 skills 插件当目录主人<br>② 挂到某个已有插件<br>③ Core 代管</td>
+        <td><b>①</b>。② 会让「谁的技能」这个问题依赖挂载位置；③ 与凭证退休是同一个教训 ——
+        <b>没有主人的数据目录迟早出问题</b>。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>建议的落地顺序</b>（每步都能独立验收、独立 revert）：
+    <ol style="margin:6px 0 0">
+      <li><b>先补 §3 的三个缺口</b>（默认 provider / model / thinking）—— 零新协议、改一个文件，
+        直接消掉「配置了却发不出去」这个最伤用户的问题。</li>
+      <li><b>再落 prompt 片段</b>（§4）—— 契约最小，且它顺带验证了「装配器放 loop」这个决定对不对。</li>
+      <li><b>然后是工具跨进程化</b>（§6 ①②③）—— 需要超时兜底与孤儿审批两条新纪律，
+        建议带一个真插件（把内置的 <code>read_file</code> 抽成独立工具插件）当切片。</li>
+      <li><b>审批位（§6 ④）之后才开技能脚本</b>（§5）。知识型技能其实可以在第 2 步之后就用 ——
+        它只需要 prompt 片段 + 一个 <code>skill_read</code> 工具。</li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  Osteosome · 插件协作与 AI 能力装配 · 2026-10-05 ·
+  现状依据：<code>shared/src/{events,plugin-manifest,paths}.ts</code> ·
+  <code>plugins/models/services/llm-provider-openai/src/{index,instances,store}.ts</code> ·
+  <code>plugins/chat-workbench/services/{llm,loop}/src/*</code> ·
+  <code>core/src/service-manager/{plugin-registry,plugin-registry-runtime,manifest,manager}.ts</code> ·
+  配套：<code>docs/插件化架构优化.html</code> · <code>docs/开发进度/阶段追踪.md</code> ·
+  <code>docs/ost-capability-design.md</code>（能力层备忘，本文与它同一判断：prompt 必须是能力的投影）
+</footer>
+</div>
+
+<script>
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+</script>
+</body>
+</html>

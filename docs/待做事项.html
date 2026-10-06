@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>待做事项 · 插件依赖声明（TASK-1 / TASK-2）</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3;
+    --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px; --xl:19px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family:var(--mono); }
+  .wrap { max-width:1160px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:20; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md);
+    padding:6px 12px; font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+
+  section { margin:var(--s6) 0 0; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background:var(--surface); }
+  td.mono { font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm);
+    padding:1px 6px; color:#fff; background:var(--muted); white-space:nowrap; }
+  .tag.a { background:var(--primary); }
+  .tag.b { background:var(--success); }
+  .tag.c { background:var(--warning); }
+  .tag.out { background:var(--muted); }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.8;
+    margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .add { color:var(--success); font-weight:600; }
+  .tree .dim { color:var(--muted); }
+  .tree .warn { color:var(--danger); }
+
+  /* 任务卡 */
+  .task { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    margin:0 0 var(--s5); overflow:hidden; box-shadow:var(--shadow-sm); }
+  .task > .hd { display:flex; align-items:center; gap:var(--s3); padding:var(--s3) var(--s4);
+    border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .task > .hd .id { font-family:var(--mono); font-weight:700; color:var(--primary); font-size:var(--lg); }
+  .task > .hd .ttl { font-weight:700; font-size:var(--md); }
+  .task > .hd .sp { flex:1; }
+  .task > .bd { padding:var(--s4); }
+  .task > .bd > h3:first-child { margin-top:0; }
+
+  /* 判据清单 */
+  .crit { list-style:none; padding:0; margin:0; }
+  .crit li { display:flex; gap:var(--s3); align-items:flex-start; padding:6px 0;
+    border-bottom:1px dashed var(--border); font-size:var(--sm); }
+  .crit li:last-child { border-bottom:0; }
+  .crit .box { flex:0 0 auto; width:16px; height:16px; border:2px solid var(--border-strong);
+    border-radius:var(--r-sm); margin-top:4px; background:var(--surface); }
+  .crit .cmd { font-family:var(--mono); font-size:12px; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:var(--r-sm); padding:1px 6px; margin-left:6px;
+    white-space:nowrap; }
+
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:5px var(--s3); font-size:var(--sm); margin:0 0 var(--s4); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  /* 阶段条 */
+  .stages { display:grid; grid-template-columns:1fr auto 1fr; gap:var(--s3); align-items:stretch; margin:0 0 var(--s4); }
+  .stage-box { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); padding:var(--s3); font-size:var(--sm); }
+  .stage-box.a { border-color:var(--success); }
+  .stage-box.b { border-color:var(--primary); background:var(--primary-soft); }
+  .stage-box .t { font-weight:700; font-size:13px; margin-bottom:4px; }
+  .stage-box .r { font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-top:6px; }
+  .stage-arrow { align-self:center; color:var(--muted); font-size:18px; }
+
+  /* 依赖图 */
+  .dep { font-family:var(--mono); font-size:12.5px; line-height:2; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s3) var(--s4);
+    white-space:pre; overflow-x:auto; margin:0 0 var(--s4); }
+
+  .outbox { border:2px dashed var(--border-strong); border-radius:var(--r-md); padding:var(--s3) var(--s4);
+    background:var(--surface-2); }
+  .outbox h4 { margin:0 0 var(--s2); font-size:var(--sm); color:var(--muted); text-transform:uppercase;
+    letter-spacing:.5px; }
+  .outbox ul { margin:0; font-size:var(--sm); }
+
+  footer { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+
+  @media (max-width:820px){ .stages { grid-template-columns:1fr; } .stage-arrow { text-align:center; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>待做事项 · 插件依赖声明</h1>
+    <span class="sp"></span>
+    <span class="sub">2026-10-05 · 2 项 · 设计已定，见 docs/插件标准.html §7</span>
+    <button class="btn" id="theme">切换深色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>两项任务，都只动「声明与检查」，不动任何运行机制。</b>
+  设计已在 <code>docs/插件标准.html</code> §7 定案，本文件是<b>施工单</b>：触点、交付物、可执行的判据、以及明确不做什么。
+  <br><b>为什么现在做</b>：一旦 OST 开源、分发物只有 <code>dist/</code>，
+  <code>plugin.json</code> 就是<b>唯一的信息载体</b> —— 而今天
+  <code>pack-plugin.mjs</code> 的 <code>preflight</code> <b>只查文件存在性</b>，
+  一个带 accidental <code>external</code> 的第三方插件会产出一个「合法」的交付物，一路顺到用户手上才炸。
+  <br><span style="color:var(--muted)">口径：一个 PR + 全绿 + 可单独 revert。落地后同步勾选
+    <code>docs/插件标准.html</code> §11 的 <b>W0.5</b>。</span>
+</div>
+
+<!-- ══════════════ 顺序 ══════════════ -->
+<section>
+  <h2><span class="n">1</span>两件事的关系与施工顺序</h2>
+
+  <div class="dep">TASK-2 阶段 A（产物里有任何外部 require 就报错）
+    └─ <b>不依赖 TASK-1</b>，可以立刻做，立刻有价值
+
+TASK-1（plugin.json 加 requires 字段 + Zod + 单测）
+    └─ 独立
+
+TASK-2 阶段 B（产物里有外部 require <b>且</b> requires 里没声明 → 报错）
+    └─ <b>依赖 TASK-1</b>：它把「一律禁止」放宽成「声明了就放过」
+       为将来的 external / 原生模块场景留出口</div>
+
+  <div class="stages">
+    <div class="stage-box a">
+      <div class="t">阶段 A · 立刻做</div>
+      把「产物里不允许出现非 <code>node:</code> 前缀的 <code>require</code>」这条规则
+      从 <b>OST 仓库的 CI 测试</b>搬进 <b>打包流程</b>。
+      <div class="r">改动面：pack-plugin.mjs 一个文件 + 一份可单跑的检查函数</div>
+    </div>
+    <div class="stage-arrow">→</div>
+    <div class="stage-box b">
+      <div class="t">阶段 B · TASK-1 之后</div>
+      同一条规则升级为「有外部 require 但没在 <code>requires</code> 里声明 → 报错」，
+      于是将来合法的 external 有出口。
+      <div class="r">改动面：对账函数加一个 manifest 参数</div>
+    </div>
+  </div>
+
+  <div class="note ok">
+    <b>阶段 A 是这两项里优先级最高的</b> —— 不是因为它更完整，而是因为它<b>保护生态</b>：
+    坏插件在作者发布时就被拦住，而不是流到别人手上。
+    <br>而且它<b>不需要作者自觉</b>：第三方作者不会跑 OST 的测试文件，但会跑自己的 <code>pnpm pack</code>。
+  </div>
+
+  <div class="note bad">
+    <b>与现有守卫的关系（别重复造，也别以为已经安全）。</b>
+    <code>core/tests/service-distribution.test.ts</code> 第 3 条<b>已经在做</b>「静态扫产物里的外部 require」——
+    但它在 <b>OST 仓库的 CI</b> 里、<b>只对 5 个内置插件生效</b>。
+    <span class="tag warn">第三方插件完全不被它覆盖</span>
+    所以本任务不是「新写一条规则」，而是<b>把同一条规则挪到所有人都跑得到的地方</b>。
+    <br><span class="tag out">纪律</span> 挪过去时<b>复用同一个函数</b>，不要在 <code>pack-plugin.mjs</code> 里重写一遍正则 ——
+    理由同 <code>pack-plugin.mjs</code> 现有的那条纪律：「这里再写一遍就是第二份规则，迟早漂移」。
+  </div>
+</section>
+
+<!-- ══════════════ TASK-1 ══════════════ -->
+<section>
+  <h2><span class="n">2</span>TASK-1 · 在 <code>plugin.json</code> 加 <code>requires</code></h2>
+
+  <div class="task">
+    <div class="hd">
+      <span class="id">T1</span>
+      <span class="ttl">manifest 加 <code>requires</code> 字段与 Zod schema</span>
+      <span class="sp"></span>
+      <span class="tag a">约 30 行</span><span class="tag out">零新协议</span>
+    </div>
+    <div class="bd">
+
+      <h3>目标</h3>
+      <p>让一个插件能声明「<b>我需要用户的机器上有什么</b>」，且<b>不写 = 不限</b>。
+      本任务<b>只加声明，不加任何探测逻辑</b> —— 探测是 §7 里说的后续工作。</p>
+
+      <h3>为什么不能从 <code>package.json</code> 自动推导</h3>
+      <ul>
+        <li><code>package.json</code> <b>不进交付物</b>（<code>pack-plugin.mjs</code> 明确排掉）→ 用户根本读不到。</li>
+        <li>pnpm workspace 依赖指向<b>仓库内的工作区包</b> → 推导出来是噪声，不是运行时依赖。</li>
+        <li><code>devDependencies</code> 与分发完全无关。</li>
+      </ul>
+      <div class="note">
+        <b>所以它是 manifest 的一等字段</b>，只有真需要的才写。
+        真正用来「自动发现漏声明」的不是 <code>package.json</code>，而是<b>产物</b> —— 见 TASK-2。
+      </div>
+
+      <h3>触点</h3>
+      <table>
+        <thead><tr><th style="width:34%">文件</th><th style="width:12%">改什么</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">shared/src/plugin-manifest.ts</td><td>加 schema<br>加字段</td>
+            <td>紧挨 <code>PluginDependencySchema</code>（第 30 行附近）与 <code>PluginManifestSchema</code>（第 86 行起）。
+              <b>风格照抄 <code>PluginDependencySchema</code></b>：带文件头的「为什么」注释。</td></tr>
+          <tr><td class="mono">shared/src/index.ts</td><td>导出</td><td>与 <code>PluginDependencySchema</code> 一并导出，供测试与 Core 复用。</td></tr>
+          <tr><td class="mono">shared/tests/（或既有 schema 测试处）</td><td>加用例</td>
+            <td>见下方判据。</td></tr>
+          <tr><td class="mono">plugins/*/plugin.json</td><td><b>不动</b></td>
+            <td>缺省即不限，<b>现有四个插件零改动</b>。这是验收项之一。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>交付物</h3>
+      <div class="tree"><span class="add">+ // shared/src/plugin-manifest.ts</span>
+
+<span class="add">+ /**</span>
+<span class="add">+  * 「我需要用户的机器上有什么」—— 只有 Core 判不了的那部分属于这里。</span>
+<span class="add">+  *</span>
+<span class="add">+  * ## 为什么不从 package.json 推导</span>
+<span class="add">+  * package.json 不进交付物（pack-plugin.mjs 排掉），用户读不到；pnpm workspace 的</span>
+<span class="add">+  * 依赖指向仓库内的工作区包，推导出来是噪声。真正的对账对象是**产物**里的 require，</span>
+<span class="add">+  * 见 pack-plugin.mjs。</span>
+<span class="add">+  *</span>
+<span class="add">+  * ## 为什么只有这两种 kind</span>
+<span class="add">+  * 「需要某个原生模块」不是依赖、是**运行环境的能力** —— 能 bundle 的必须 bundle</span>
+<span class="add">+  * （service-distribution 那条守卫在强制），不能 bundle 的应该走 dependencies[] 或总线。</span>
+<span class="add">+  * 否则这条声明只是「我需要 X」而没法说明「谁提供 X」，是一条无法兑现的承诺。</span>
+<span class="add">+  *</span>
+<span class="add">+  * ## 缺省纪律</span>
+<span class="add">+  * 不写 = 不限。理由与 coreCompatibility / dataReadableBy 相同：</span>
+<span class="add">+  * 「没声明」永远是安全的缺省，现有插件零改动就能过。</span>
+<span class="add">+  *</span>
+<span class="add">+  * ## 它只能是数据</span>
+<span class="add">+  * 一旦允许写检查逻辑（如 "check": "git --version &amp;&amp; ..."），就是给插件在</span>
+<span class="add">+  * Core 进程里执行任意命令的能力 —— 既打破「Core 不解析插件内容」，也是个洞。</span>
+<span class="add">+  */</span>
+<span class="add">+ export const RequiresSchema = z.discriminatedUnion('kind', [</span>
+<span class="add">+   z.object({</span>
+<span class="add">+     kind: z.literal('node'),</span>
+<span class="add">+     /** 版本区间。留空 = 只要「有 Node」 */</span>
+<span class="add">+     version: z.string().optional(),</span>
+<span class="add">+     why: z.string().optional(),</span>
+<span class="add">+   }),</span>
+<span class="add">+   z.object({</span>
+<span class="add">+     kind: z.literal('executable'),</span>
+<span class="add">+     name: z.string().min(1),</span>
+<span class="add">+     /** 先只做存在性。版本区间要引入「输出怎么解析」，那是个 DSL —— 等真需要再加 */</span>
+<span class="add">+     version: z.string().optional(),</span>
+<span class="add">+     /** 人话原因，直接显示给用户：「缺少可执行程序 git（用于：读写仓库快照）」 */</span>
+<span class="add">+     why: z.string().optional(),</span>
+<span class="add">+     optional: z.boolean().default(false),</span>
+<span class="add">+   }),</span>
+<span class="add">+ ])</span>
+
+<span class="add">+ // PluginManifestSchema 里加（紧挨 coreCompatibility）</span>
+<span class="add">+ requires: RequiresSchema.array().default([]),</span></div>
+
+      <h3>判据</h3>
+      <ul class="crit">
+        <li><span class="box"></span><span>缺省即不限：<code>{ id, name, version }</code> 三个字段的最小清单能过 schema，且 <code>parsed.requires === []</code></span></li>
+        <li><span class="box"></span><span>两种 kind 都能解析，且 <code>optional</code> 缺省为 <code>false</code></span></li>
+        <li><span class="box"></span><span><code>requires: []</code> 与「字段完全缺失」结果一致（两条都过）</span></li>
+        <li><span class="box"></span><span>缺 <code>name</code> 的 executable 被拒；未知 <code>kind</code> 被拒</span></li>
+        <li><span class="box"></span><span><span class="tag warn">关键</span> <b>未声明字段会被 Zod 剥掉</b>：手写一个 <code>requires</code> 但 schema 没加时，解析结果里<b>查不到这个键</b> —— 补一条断言守住这条</span></li>
+        <li><span class="box"></span><span>现有四个 <code>plugin.json</code>（models / chat-workbench / reliability / workbench）全部仍能解析，且解析结果与改动前逐字段相等（<b>零改动</b>）</span></li>
+        <li><span class="box"></span><span><code>pnpm -r run typecheck</code> 零错 · <code>pnpm -r run test</code> 全绿 · <code>node scripts/smoke.mjs</code> PASS</span></li>
+      </ul>
+
+      <div class="outbox">
+        <h4>明确不做</h4>
+        <ul>
+          <li><b>任何探测逻辑</b>（不 spawn、不查 PATH、不读 <code>process.versions</code>）—— 那是后续任务</li>
+          <li><b>不映射成新的插件状态</b>：不满足时将来映射到 <code>degraded</code>，本任务只加字段</li>
+          <li><b>不加 <code>kind: "module"</code></b>（理由见上方注释与 §7）</li>
+          <li><b>不解析 <code>version</code> 区间做判定</b>：字段先留着，语义留到真需要时再定</li>
+          <li><b>不给现有插件补写 <code>requires</code></b>：先证明零插件也能过</li>
+        </ul>
+      </div>
+
+      <h3>风险</h3>
+      <div class="note">
+        <b>主要风险是「加了一个没人用的字段」。</b> 缓解：判据里那条「四个插件逐字段相等」保证它<b>不改变任何现有行为</b>，
+        而 TASK-2 会立刻给它一个消费者。<br>
+        次要风险：Zod 剥字段那条容易漏 —— 它与 <code>ui</code> / <code>coreCompatibility</code> 当初踩的坑是同一个，
+        所以补了断言。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ TASK-2 ══════════════ -->
+<section>
+  <h2><span class="n">3</span>TASK-2 · 产物对账守卫</h2>
+
+  <div class="task">
+    <div class="hd">
+      <span class="id">T2</span>
+      <span class="ttl">打包时检查产物里的外部 <code>require</code></span>
+      <span class="sp"></span>
+      <span class="tag b">阶段 A 可立刻做</span><span class="tag c">保护生态</span>
+    </div>
+    <div class="bd">
+
+      <h3>目标</h3>
+      <p>让 <b><code>pnpm pack</code> 在产物不合法时当场失败并说清哪里不对</b>，
+      而不是产出一个「看起来合法」的目录。</p>
+
+      <h3>为什么这条最该先做</h3>
+      <div class="note bad">
+        <b>「拷走就能跑」这条性质极易被无声破坏。</b>
+        哪天有人在 build 脚本里加一个 <code>external</code>，或者某个依赖改成了动态 <code>require</code>，
+        产物会安静地退化成「<b>在仓库里能跑、拷出去不能跑</b>」——
+        因为 Node 会<b>向上逐级找 <code>node_modules</code></b>，
+        在仓库里一路找到 pnpm 的那份；拷到用户机器上没有 <code>node_modules</code>，于是
+        <code>Cannot find module</code>。
+        <br><b>而报错发生在用户点发送的那一刻，不是构建的那一刻。</b>
+        <br>现有守卫（<code>service-distribution.test.ts</code> 第 3 条）能抓住，但它在 OST 的 CI 里 ——
+        <b>第三方插件作者不跑你的测试文件</b>。所以要把规则挪到<b>所有人都跑得到的地方</b>：打包流程。
+      </div>
+
+      <h3>触点</h3>
+      <table>
+        <thead><tr><th style="width:30%">文件</th><th style="width:14%">改什么</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">core/tests/service-distribution.test.ts</td><td><b>抽出函数</b></td>
+            <td>把第 3 条（<code>line 69-76</code>）里那段正则抽成<b>可复用函数</b>，
+              测试与打包流程<b>共用同一个</b>，不要各写一遍。</td></tr>
+          <tr><td class="mono">scripts/pack-plugin.mjs</td><td>加一条 preflight</td>
+            <td><code>preflight()</code>（<code>line 158</code> 起）里加一项「扫每个
+              <code>dist/server/&lt;sid&gt;/index.js</code>」。
+              <br>顺手：它现在<b>只查文件存在性</b>，注释已经写明「不管清单的语义校验」——
+              这条<b>不属于语义校验，属于「拷走能不能跑」的机械前提</b>，所以不违反那条纪律
+              （该纪律针对的是 schema / protocolVersion / topic 白名单那类）。</td></tr>
+          <tr><td class="mono">core/tests/pack-plugin.test.ts</td><td>加用例</td>
+            <td>见下方判据。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>两阶段的判定规则</h3>
+      <div class="tree"><span class="dim">// 阶段 A —— 不依赖 TASK-1，立刻可做</span>
+产物里有<b>任何</b>非 <code>node:</code> 前缀的 require  →  报错
+
+<span class="dim">// 阶段 B —— TASK-1 之后，把「一律禁止」放宽成「没声明才禁止」</span>
+产物里有非 <code>node:</code> 前缀的 require
+  且 <b>它不在 manifest.requires 里</b>  →  报错
+<span class="dim">  （为将来的 external / 原生模块场景留出口）</span>
+
+<span class="dim">// 实测基线（四个插件 / 五个服务的产物，应当全部通过）</span>
+llm                        220 KB  require 3 条  非 node: 前缀 0 条
+loop                       236 KB  require 8 条  非 node: 前缀 0 条
+session                    225 KB  require 6 条  非 node: 前缀 0 条
+llm-provider-openai        240 KB  require 6 条  非 node: 前缀 0 条
+llm-retry                  222 KB  require 3 条  非 node: 前缀 0 条</div>
+
+      <div class="note">
+        <b>白名单的有效范围只有 <code>node:</code> 前缀这一条</b>。
+        现有测试里那个 <code>&amp;&amp; r !== 'node:util'</code> 分支是<b>死代码</b>
+        （<code>'node:util'.startsWith('node:')</code> 本来就为真）。抽函数时可以顺手清掉，
+        但<b>注意副作用</b>：若将来某个依赖吐一个<b>裸</b> <code>require('path')</code>，
+        它会被判成外部依赖 → <b>假红</b>。方向是安全的（烦人而不危险），但要在注释里写明。
+      </div>
+
+      <h3>判据</h3>
+      <ul class="crit">
+        <li><span class="box"></span><span>阶段 A：四个内置插件的 <code>pnpm run pack:plugins</code> 全绿（实测基线：五个产物 220–240 KB，外部 require 均为 0 条）</span></li>
+        <li><span class="box"></span><span><b>反向用例</b>：造一个含 <code>require('lodash')</code> 的假产物 → preflight 必须红，且错误信息指出<b>哪个插件的哪个服务</b>缺了什么</span></li>
+        <li><span class="box"></span><span><b>反向用例 2</b>：改成动态 <code>require(v)</code> → 阶段 A 抓不到（静态扫不出来），<b>用例要如实体现这一点</b>，不许假装能抓</span></li>
+        <li><span class="box"></span><span>打包失败时<b>逐条列出全部问题</b>（沿用现有 <code>preflight</code> 的行为：打包失败通常不止一处，逐条改比逐次重跑快）</span></li>
+        <li><span class="box"></span><span><code>verifyOutput()</code> 复用同一函数（它现在也调 <code>preflight</code>，所以自动覆盖<b>输出目录</b>）</span></li>
+        <li><span class="box"></span><span>阶段 B：<code>requires</code> 里声明了那个包 → 放行；没声明 → 红</span></li>
+        <li><span class="box"></span><span><code>pnpm -r run typecheck</code> 零错 · <code>pnpm -r run test</code> 全绿 · <code>node scripts/smoke.mjs</code> PASS</span></li>
+      </ul>
+
+      <div class="outbox">
+        <h4>明确不做</h4>
+        <ul>
+          <li><b>不引入新的依赖</b>：检查用手写正则（与现有守卫一致），不为了这件事加 eslint 插件或 depcheck</li>
+          <li><b>不做真正的 <code>load()</code> 验证</b>：那属于 <code>ost doctor</code> 的范围（见 §4）</li>
+          <li><b>不检查 <code>index.js.map</code></b>：打包已经排掉 <code>*.map</code>，产物里不会有</li>
+          <li><b>不把规则复制进 Core</b>：Core 装不上时靠 <code>scanPlugins</code> 报，这一条只管<b>发布前</b></li>
+        </ul>
+      </div>
+
+      <h3>风险</h3>
+      <table>
+        <thead><tr><th style="width:30%">风险</th><th>缓解</th></tr></thead>
+        <tbody>
+          <tr><td>抽函数时动了现有测试，导致 <code>service-distribution</code> 那四条的行为悄悄变了</td>
+            <td>抽完先单独跑那一个测试文件，确认四条全绿再动 <code>pack-plugin.mjs</code></td></tr>
+          <tr><td><b>误报打断别人的正常发布</b></td>
+            <td>阶段 A 只在<b>真有</b>外部 require 时才红；实测基线是 0 条。
+              若将来某个依赖升级导致误报，<b>阶段 B 就是那个出口</b>（声明即放行）。</td></tr>
+          <tr><td>「打包时过了但拷走还是不能跑」</td>
+            <td>本规则<b>不是</b>那个问题的充分条件 —— 静态扫抓不到动态 <code>require</code>。
+              真正端到端的证明是 <code>service-distribution</code> 第 4 条（拷到空目录真跑一次），
+              而它只对内置插件生效。<b>这就是 §4 里 <code>ost doctor</code> 存在的理由。</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 相关但不在本文件 ══════════════ -->
+<section>
+  <h2><span class="n">4</span>相关但不在本文件（避免重复开工 / 重复设计）</h2>
+
+  <table>
+    <thead><tr><th style="width:24%">项</th><th style="width:12%">为什么不做</th><th>要点（已设计，位置见 §7）</th></tr></thead>
+    <tbody>
+      <tr><td><b>Core 级 Node 版本检查</b></td><td>范围不同</td>
+        <td><code>插件化架构优化.html</code> §5 P8 明写「要求用户机器上有 Node ≥ 24」，
+          而实测 <code>engines</code>、<code>.node-version</code>、<code>.nvmrc</code> <b>全都不存在</b>，
+          且零检查。<b>那是应用级前置条件，应该由 Core 判一次</b>，而不是让每个插件各写一遍。
+          改一个文件，消掉「用户装完根本起不来但不知道为什么」的最坏故障。<b>优先级高于这两项。</b></td></tr>
+      <tr><td><b><code>ost doctor &lt;plugin-dir&gt;</code></b></td><td>依赖探测</td>
+        <td>七步自检器（清单 → 产物 → Core 版本 → 插件依赖 → requires → <b>真的 spawn 一次</b> → 人话报告）。
+          要<b>复用 <code>scanPlugins</code> 与同一个 preflight</b>，不另写一套 ——
+          否则会出现「doctor 说能装、Core 装不上」，那比没有 doctor 更糟。</td></tr>
+      <tr><td><b>requires 的实际探测</b></td><td>后续</td>
+        <td>扫盘期只做<b>零成本</b>检查：<code>node</code> 版本字符串比较 +
+          <b>PATH 目录扫描</b>（<code>existsSync</code>）代替 spawn ——
+          <code>scanPlugins</code> 是同步的、在 Core 构造期调用，
+          在里面 spawn 4 个插件 × 2 个 CLI × 1.5s ≈ <b>Core 启动卡 12 秒</b>，
+          而某些 Windows 环境的 CLI 会弹 GUI 框卡死 30 秒。</td></tr>
+      <tr><td><b>能力位冲突检测</b></td><td>生态成熟后</td>
+        <td><code>llm.provider.registered</code> 的 <code>provider</code> 字段是<b>全局命名空间</b>，
+          而 <code>routes.set</code> 是<b>幂等覆盖</b> —— 两个插件都注册 <code>deepseek</code> 会互相覆盖，
+          用户看到的现象是「我装了个插件，结果模型行为变了」。
+          今天只有一个插件会注册 provider，<b>先不做</b>，但要记下来。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>一句话串起来</b>：这两项只解决「<b>怎么声明</b>」和「<b>怎么发现漏声明</b>」，
+    不解决「<b>怎么在别人的机器上验证真的能用</b>」—— 后者是 <code>doctor</code> 的活。
+    <br>而准确的目标表述始终是：<b>把「不可发现的问题」变成「可发现的问题」，而不是消灭问题。</b>
+  </div>
+</section>
+
+<footer>
+  Osteosome · 待做事项 · 2026-10-05 ·
+  设计依据 <code>docs/插件标准.html</code> §7 与 §11 的 W0.5 ·
+  代码依据 <code>shared/src/plugin-manifest.ts</code> ·
+  <code>core/tests/service-distribution.test.ts</code> ·
+  <code>core/tests/pack-plugin.test.ts</code> ·
+  <code>scripts/pack-plugin.mjs</code> ·
+  <code>scripts/build-service.mjs</code> ·
+  验证命令 <code>pnpm -r run typecheck</code> · <code>pnpm -r run test</code> ·
+  <code>pnpm run pack:plugins</code> · <code>node scripts/smoke.mjs</code> ·
+  环境 <code>node@24.x · pnpm@11.1.2</code>
+</footer>
+</div>
+
+<script>
+  var btn = document.getElementById('theme');
+  btn.addEventListener('click', function () {
+    var el = document.documentElement;
+    var dark = el.getAttribute('data-theme') === 'dark';
+    el.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? '切换深色' : '切换浅色';
+  });
+</script>
+</body>
+</html>
