@@ -73,17 +73,21 @@
   .step-pill { font-family:var(--mono); font-size:12px; color:var(--muted); padding:5px 12px;
     border:1px solid var(--border); border-radius:var(--r-full); background:var(--surface); }
 
-  .rail { display:flex; gap:5px; margin:var(--s2) 0 var(--s3); flex-wrap:wrap; }
-  .rail i { width:26px; height:6px; border-radius:var(--r-full); background:var(--surface-3);
-    display:block; cursor:pointer; transition:background .2s, transform .2s; }
-  .rail i:hover { transform:scaleY(1.7); }
-  .rail i.done { background:var(--success); }
-  .rail i.on   { background:var(--primary); transform:scaleY(1.7); }
+  
 
   /* ══ 三栏：内部 · 过 Core · 用户 ══ */
-  .trio { display:grid; grid-template-columns:410px 176px 1fr; gap:var(--s3); align-items:start; }
-  @media (max-width:1180px){ .trio { grid-template-columns:392px 1fr; } .corecol { grid-column:1 / -1; } }
-  @media (max-width:820px){ .trio { grid-template-columns:1fr; } }
+  .trio { display:grid; grid-template-columns:512px 176px 1fr; gap:var(--s3); align-items:start; }
+  .leftcol { position:sticky; top:56px; }
+  /* 宽：图 + Core 通路 + 三个面板并排 */
+  @media (min-width:1561px){ .trio { grid-template-columns:512px 176px 1fr; } }
+  /* 中：Core 通路挪到图下面，三个面板放到右边那一列 */
+  @media (max-width:1560px){ .trio { grid-template-columns:470px 1fr; }
+    .corecol { grid-column:1 / -1; grid-row:2; }
+    .leftcol { grid-row:1; }
+    .rightcol { grid-row:1; } }
+  @media (max-width:900px){ .trio { grid-template-columns:1fr; }
+    .leftcol, .corecol, .rightcol { grid-column:1; grid-row:auto; }
+    .leftcol { position:static; } }
   .colhd { display:flex; align-items:center; gap:var(--s2); font-size:12px; font-weight:700;
     color:var(--muted); letter-spacing:.3px; margin-bottom:var(--s2); }
   .colhd .k { width:20px; height:20px; border-radius:var(--r-full); background:var(--primary);
@@ -91,41 +95,75 @@
   .colhd.r .k { background:var(--success); }
   .colhd.c .k { background:var(--bus); }
 
-  .flowbox { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
-    box-shadow:var(--shadow-sm); overflow:hidden; }
-  .flowbox .vp { height:600px; display:flex; justify-content:center;
-    background: repeating-linear-gradient(180deg, var(--surface) 0 39px, var(--surface-2) 39px 40px); }
-  .flowbox svg { height:100%; width:auto; display:block; }
-  .flowroot { transition: transform .55s cubic-bezier(.4,0,.2,1); }
+  /* ══ 左栏：全景图 ══ */
+  .graphbox { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-sm); padding:8px; }
+  .graphbox svg { display:block; width:100%; height:auto; }
 
-  .st { transition: opacity .35s; }
-  .st .bx { fill:var(--surface); stroke:var(--border-strong); stroke-width:1.4; }
-  .st.k-http .bx { fill:var(--success-soft); stroke:var(--success); }
-  .st.k-bus  .bx { fill:var(--bus-soft); stroke:var(--bus); }
-  .st.k-local .bx { fill:var(--warning-soft); stroke:var(--warning); }
-  .st.k-file .bx { fill:var(--primary-soft); stroke:var(--primary); }
-  .st.past { opacity:.46; }
-  .st.future { opacity:.24; }
-  .st.now { opacity:1; }
-  .st.now .bx { stroke-width:2.8; animation:glow 1.15s ease-in-out infinite; }
-  .ed { fill:none; stroke:var(--border-strong); stroke-width:2;
-        transition:opacity .35s, stroke-width .35s; }
-  .ed.k-http { stroke:var(--success); }
-  .ed.k-bus  { stroke:var(--bus); }
-  .ed.k-local { stroke:var(--warning); }
-  .ed.k-file { stroke:var(--primary); }
-  .ed.lit { stroke-width:3.6; stroke-dasharray:7 6; animation:dashflow 1s linear infinite;
-    filter:drop-shadow(0 0 5px currentColor); }
-  .ed.off { opacity:.18; }
-  .elbl { font-size:9.5px; font-family:var(--mono); fill:var(--muted); transition:opacity .3s; }
-  .elbl.lit { fill:var(--text); font-weight:700; }
-  .elbl.off { opacity:.22; }
+  /* 边：按面着色。默认极淡，点亮时高亮 */
+  .ge { fill:none; stroke:var(--border-strong); stroke-width:1.2; transition:stroke-width .3s, opacity .3s; }
+  .ge.k-bus   { stroke:var(--bus); }
+  .ge.k-http  { stroke:var(--success); }
+  .ge.k-file  { stroke:var(--primary); }
+  .ge.k-ext   { stroke:var(--ext); stroke-dasharray:5 4; }
+  .ge.k-local { stroke:var(--warning); stroke-dasharray:2 3; }
+  .ge.dim { opacity:.13; }
+  .ge.lit { opacity:1; stroke-width:2.4; }
+  .ge.lit.anim { stroke-dasharray:7 5; animation:dashflow 1.1s linear infinite; }
+  .ge.mid { opacity:.5; }
+  .gelb { font-size:8.5px; font-family:var(--mono); fill:var(--muted); transition:opacity .3s, fill .3s;
+    paint-order:stroke; stroke:var(--surface); stroke-width:4px; stroke-linejoin:round; }
+  .gelb.off { opacity:.14; }
+  .gelb.lit { fill:var(--text); font-weight:700; opacity:1; }
+
+  /* 节点：插件框 / 组件 / 服务 */
+  .gn { transition:opacity .3s; }
+  .gn .nb { stroke-width:1.3; transition:stroke-width .3s, stroke .3s; }
+  .gn .nt { font-size:10.5px; font-weight:700; fill:var(--text); transition:fill .3s; }
+  .gn .nid { font-size:8.5px; font-family:var(--mono); fill:var(--muted); }
+  .gn.core .nb { fill:var(--surface-2); stroke:var(--bus); }
+  .gn.core .nt { fill:var(--bus); }
+  .gn.plugin .nb { fill:var(--primary-soft); stroke:var(--primary); }
+  .gn.plugin .nt { fill:var(--primary); }
+  .gn.comp .nb { fill:var(--surface); stroke:var(--success); }
+  .gn.svc .nb { fill:var(--surface); stroke:var(--border-strong); }
+  .gn.ext .nb { fill:var(--ext-soft); stroke:var(--ext); stroke-dasharray:4 3; }
+  .gn.ext .nt { fill:var(--ext); }
+  .gn.off { opacity:.34; }
+  .gn.on { opacity:1; }
+  .gn.on .nb { stroke-width:2.4; }
+  .gn.on .nt { fill:var(--text); }
+  .gn.on.comp .nt { fill:var(--success); }
+  .gn.on.core .nt { fill:var(--bus); }
+
+  /* 跨插件「不过 Core」的边：出框的虚线 */
+  .gnote { font-size:8.5px; font-family:var(--mono); fill:var(--muted); }
+
   @keyframes dashflow { to { stroke-dashoffset:-52; } }
   @keyframes glow { 0%,100%{ filter:drop-shadow(0 0 0 transparent) } 50%{ filter:drop-shadow(0 0 9px var(--primary)) } }
   @keyframes rise { from { opacity:0; transform:translateY(7px) } to { opacity:1; transform:none } }
   @keyframes fadein { from { opacity:0 } to { opacity:1 } }
   @keyframes caret { 0%,100%{ opacity:1 } 50%{ opacity:0 } }
   @keyframes spin { to { transform:rotate(360deg) } }
+
+  /* 逐格列表 */
+  .legend { font-size:10.5px; color:var(--muted); line-height:1.7; margin-top:6px; }
+  .stepswrap { margin-top:var(--s2); }
+  .steps { list-style:none; margin:0; padding:0; max-height:238px; overflow-y:auto;
+    border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+    box-shadow:var(--shadow-sm); scroll-behavior:smooth; }
+  .steps li { display:grid; grid-template-columns:22px 1fr auto; gap:5px; align-items:center;
+    padding:4px 8px; border-bottom:1px solid var(--border); cursor:pointer; font-size:12px;
+    transition:background .2s; }
+  .steps li:last-child { border-bottom:0; }
+  .steps li:hover { background:var(--surface-2); }
+  .steps li .no { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .steps li .kd { font-family:var(--mono); font-size:9px; color:var(--muted); }
+  .steps li.now { background:var(--primary-soft); box-shadow:inset 3px 0 0 var(--primary); }
+  .steps li.now .no { color:var(--primary); font-weight:700; }
+  .steps li.past { opacity:.5; }
+  .steps li .badge { font-size:9px; padding:0 5px; border-radius:var(--r-full); font-weight:700;
+    border:1px solid currentColor; }
 
   /* ══ 中间：Core 通路 ══ */
   .corecol .box { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
@@ -155,10 +193,13 @@
   .coreact .none { color:var(--warning); }
 
   /* ══ 右：对话 ══ */
-  .chat3 { display:grid; grid-template-columns:150px 1fr 178px; gap:9px; height:600px; }
-  @media (max-width:1400px){ .chat3 { grid-template-columns:132px 1fr 160px; } }
-  @media (max-width:1080px){ .chat3 { grid-template-columns:1fr; height:auto; }
-    .comp { min-height:230px; } }
+  .chat3 { display:grid; grid-template-columns:172px 1fr 186px; gap:9px; height:600px; }
+  @media (max-width:1560px){ .chat3 { grid-template-columns:152px 1fr 168px; } }
+  /* 三栏塞不进右边那列时：会话列表 / 输入框 并排，对话单独占满一行 */
+  @media (max-width:1240px){ .chat3 { grid-template-columns:1fr 1fr; height:auto; }
+    .comp { min-height:190px; }
+    .comp.tl { grid-column:1 / -1; }
+    .comp.tl > .cbd { max-height:430px; } }
   .comp { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
     box-shadow:var(--shadow-sm); display:flex; flex-direction:column; overflow:hidden; min-width:0; }
   .comp > .chd { display:flex; align-items:center; gap:5px; padding:6px 9px;
@@ -173,11 +214,14 @@
   .comp > .chd .lamp.warn{ background:var(--warning); }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
   .comp > .cbd { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:7px; }
+  /* 面板内容一律不压缩：宁可滚动，也不要把一个会话行压成半行 */
+  .comp > .cbd > * { flex:none; }
+  .comp > .cbd > .lstnote { margin-top:auto; }
   .comp.tl > .cbd { padding:9px; }
 
   /* 会话列表 */
   .lstbar { display:flex; gap:4px; flex-wrap:wrap; }
-  .lstbar span { font-size:10px; padding:2px 6px; border-radius:var(--r-sm);
+  .lstbar span { font-size:10px; padding:2px 6px; border-radius:var(--r-sm); white-space:nowrap;
     border:1px solid var(--border-strong); color:var(--muted); background:var(--surface); }
   .lstbar span.pri { border-color:var(--success); color:var(--success); background:var(--success-soft); }
   .sessrow { border:1px solid var(--border); border-left:3px solid var(--border);
@@ -229,7 +273,7 @@
   .empty .e2 { margin-top:4px; font-size:10.5px; }
   .perstep { align-self:stretch; font-size:10.5px; line-height:1.55; color:var(--text);
     background:var(--primary-soft); border:1px solid var(--primary); border-left-width:3px;
-    border-radius:var(--r-sm); padding:5px 8px; animation:rise .3s both; }
+    border-radius:var(--r-sm); padding:5px 8px; animation:rise .3s both; overflow-wrap:anywhere; }
   .perstep .pk { font-family:var(--mono); font-size:9px; font-weight:700; color:var(--primary);
     margin-right:5px; padding:0 4px; border-radius:3px; background:var(--surface); }
   .perstep code { font-size:10px; }
@@ -335,6 +379,17 @@
   .hops .hv.local { color:var(--warning); }
   .hops .ht { color:var(--text); }
   .hops .ht em { font-style:normal; color:var(--muted); }
+  .gpsum { font-size:var(--sm); margin:0 0 var(--s2); padding:6px 10px; border-radius:var(--r-sm);
+    background:var(--surface-2); border:1px solid var(--border); }
+  .gpsum .dim { color:var(--muted); }
+  .gpsum .nc { color:var(--danger); }
+  .gpsum .gk { font-family:var(--mono); font-size:10.5px; font-weight:700;
+    padding:0 5px; border-radius:var(--r-full); border:1px solid currentColor; margin:0 1px; }
+  .gpsum .gk.k-bus { color:var(--bus); }
+  .gpsum .gk.k-http { color:var(--success); }
+  .gpsum .gk.k-file { color:var(--primary); }
+  .gpsum .gk.k-rpc, .gpsum .gk.k-ext { color:var(--ext); }
+  .gpsum .gk.k-local { color:var(--warning); }
   .expl .code { font-family:var(--mono); font-size:11.5px; margin-top:8px; background:var(--surface-2);
     border:1px solid var(--border); border-radius:var(--r-sm); padding:8px 10px; white-space:pre-wrap; }
   .kc-http, .kc-sse { color:var(--success); font-weight:700; }
@@ -383,22 +438,22 @@
   <b>这份文档只有一个交互，三个视图，永远同步。</b>每一步都给出四件事：
   <br><b>① 哪个插件的哪个服务在干活</b> → <b>② 涉及哪个组件（会话列表 / 对话 / 输入框）</b> →
   <b>③ 走哪个接口、发到哪</b> → <b>④ 过不过 Core</b>。
-  <br><b>左栏</b>：流程图，每格四行（插件/服务→对端 · 接口 · 🪟 组件），
-  框色 = 落在哪个面。
+  <br><b>左栏</b>：一张<b>全景图</b> —— 每个插件一个框，组件和服务都装在它自己插件的框里，
+  <b>每个插件都和 Core 相连</b>。走一步就在图上点亮一次：<b>亮线 = 真的有字节经过</b>。
   <br><b>中栏</b>：<b>这一步过不过 Core、走哪条通路</b> —— 最容易搞混的一层，所以单独占一栏。
   <br><b>右栏</b>：同一时刻用户屏幕上是什么样子。
   <br><b>走完整轮之后，那三条结论应该自己就成立了：</b>
   ① 提示词、技能、工具、角色<b>都不在任何插件清单里</b>，它们是各服务注册出来的；
-  ② <b>Core 在所有「进程之间」的通路上，但不在任何一条「进程与外部世界」的通路上</b>；
+  ② <b>Core 在所有「进程之间」的通路上，但不在任何一条「进程与外部世界」的通路上</b>
+  —— 左图上，紫色线一律收进 Core，青色虚线一律从服务直接出框；
   ③ <b>Core 从不解析内容</b> —— 它查白名单、转字节、记生命周期，仅此而已。
-  <br><span style="color:var(--muted)">快捷键：<code>←</code> <code>→</code> 单步，空格播放。需要全景与契约时看
-  <code>docs/智能体Loop与插件协同设计.html</code>。</span>
+  <br><span style="color:var(--muted)">快捷键：<code>←</code> <code>→</code> 单步，空格播放。左图下方那份<b>逐格清单也可以直接点</b>。
+  需要全景与契约时看 <code>docs/智能体Loop与插件协同设计.html</code>。</span>
 </div>
 <div class="ctl">
   <span style="color:var(--muted);font-size:12px;align-self:center;margin:0 4px">情况</span>
-  <button class="btn sceneBtn on"  data-scene="A">A · 旧会话继续（先选会话）</button>
-  <button class="btn ghost sceneBtn" data-scene="B1">B1 · 会话列表点「新建」</button>
-  <button class="btn ghost sceneBtn" data-scene="B2">B2 · 输入框首问（无会话）</button>
+  <button class="btn sceneBtn on"  data-scene="A">A · 旧会话继续（有历史）</button>
+  <button class="btn ghost sceneBtn" data-scene="B">B · 全新会话（没有历史）</button>
   <button class="btn" id="play">▶ 自动播放</button>
   <button class="btn ghost" id="prev">◀ 上一步</button>
   <button class="btn ghost" id="next">下一步 ▶</button>
@@ -412,32 +467,26 @@
   <span class="step-pill" id="who">按 ▶ 开始</span>
 </div>
 
-<div class="rail" id="rail"></div>
+
 
 <div class="trio">
-  <div>
-    <div class="colhd"><span class="k">1</span>流程图 · 谁 · 什么接口 · 哪个视图</div>
-    <div class="flowbox">
-      <div class="vp">
-        <svg id="flow" viewBox="0 0 390 600" role="img" aria-label="一轮 agent loop 的十六步流程图">
-          <defs>
-            <marker id="aB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-              <path d="M0,0 L10,5 L0,10 z" fill="var(--border-strong)"/></marker>
-          </defs>
-          <g class="flowroot" id="flowRoot"></g>
-        </svg>
-      </div>
+  <div class="leftcol">
+    <div class="colhd"><span class="k">1</span>全景图 · 插件 / Core · 谁和谁说话</div>
+    <div class="graphbox">
+      <svg id="graph" viewBox="0 0 612 574" role="img"
+           aria-label="插件与 Core 的全景图：组件和服务各在一个插件框里，每个插件都和 Core 相连"></svg>
     </div>
-    <div style="font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.7">
-      每格四行：<b style="color:var(--primary)">插件 / 服务 → 对端</b> ·
-      <span class="kc-http">接口</span>（颜色 = 类型：HTTP 绿 · 总线紫 · 外部青 · 进程内橙）·
-      <span class="kc-ui">🪟 组件</span>。
-      框色 = 这一步落在哪个面：
-      <span style="color:var(--success)">HTTP</span> ·
-      <span style="color:var(--bus)">总线</span> ·
-      <span style="color:var(--warning)">进程内</span> ·
-      <span style="color:var(--primary)">文件</span>。
-      <b>★</b> = 本轮新增或改造。
+    <div class="legend">
+      <b style="color:var(--bus)">紫</b> 总线 C2 ·
+      <b style="color:var(--success)">绿</b> HTTP C1/C3 ·
+      <b style="color:var(--primary)">蓝</b> 静态产物 C4 ·
+      <b style="color:var(--ext)">青虚线</b> 点对点 C0 / 直连外部 <b>E</b> ·
+      <b style="color:var(--warning)">橙虚线</b> 进程内（不过 Core）
+      <br><b>点亮 = 这一步真的有字节经过</b>；半亮 = 这一步被读到，但字节没走。
+    </div>
+    <div class="stepswrap">
+      <div class="colhd" style="margin-top:var(--s3)"><span class="k">2</span>逐格走一遍 · 点一格看它经过谁</div>
+      <ol class="steps" id="stepList"></ol>
     </div>
   </div>
 
@@ -447,8 +496,7 @@
     <div class="coreact" id="coreAct"></div>
   </div>
 
-  <div>
-  <div>
+  <div class="rightcol">
     <div class="colhd r"><span class="k">3</span>三个组件 · 同一时刻各看到什么</div>
     <div class="chat3">
 
@@ -484,62 +532,66 @@
     </div>
   </div>
 </div>
-
-</div>
 <div class="expl" id="expl"></div>
 
-<h2><span class="n">1</span>两种情况：旧会话继续 vs 开启新会话</h2>
+<h2><span class="n">1</span>两种情况：接着旧会话聊，还是开一个全新会话</h2>
 
 <div class="note core">
-  <b>一轮对话只有两种入口，区别只在「<code>sessionId</code> 是哪来的」。</b>
+  <b>一轮对话只有两种情况，区别只在一件事：这个会话<b>里面有没有历史</b>。</b>
   <b>从「发消息」那格之后的所有步骤完全一样</b> —— 装配、请求、模型往返、工具轮、收尾，一格都不差。
   <br>所以这不是「两条流程」，而是<b>同一流程前面挂一段长度不同的前置</b>：
-  <b>A 有 2 格前置（从「选择会话」开始），B1 / B2 各 1 格前置。</b>
+  <b>A 有 2 格前置（先选中，再各自把历史载入进来）；B 只有 1 格前置（建一个空会话）。</b>
+  <br><b>B 内部不分情况。</b>列表点「新建」和直接发第一句话，<b>建出来的是同一个东西：一个没有历史的新会话</b>，
+  跑的是<b>同一条命令、同一段代码</b> —— 区别只在<b>界面上那一下是谁点的</b>。
 </div>
 
 <table>
   <thead><tr>
-    <th style="width:14%">情况</th><th style="width:17%">触发</th><th style="width:17%">谁发起</th>
-    <th style="width:20%">多了什么</th><th>少了什么 / 后果</th>
+    <th style="width:12%">情况</th><th style="width:19%">触发</th><th style="width:16%">谁发起</th>
+    <th style="width:21%">多了什么</th><th>少了什么 / 后果</th>
   </tr></thead>
   <tbody>
     <tr style="background:var(--success-soft)">
-      <td><b>A 旧会话继续</b><br><span class="dim">18 格</span></td>
-      <td><b>先在会话列表里点选</b>那一会话</td>
+      <td><b>A 旧会话继续</b><br><span class="dim">18 格</span><br><span class="dim">有历史</span></td>
+      <td><b>先在会话列表里点选</b>那一会话<br><span class="dim">然后照常发消息</span></td>
       <td class="mono">会话列表 → 共享层 curId<br>然后各组件自己载入</td>
       <td><b>前置 2 格</b>：<br>① 点选 → 写 curId → storage 事件（<b>不过 Core</b>）<br>② 三个组件<b>各自</b> session.list / session.get</td>
-      <td>比 B2 <b>少一次命令往返</b>（curId 是本地换的，不用等 <code>session.create</code>）。<br>但<b>多了「载入」这一步</b> —— 因为切到的是一个已有内容的会话。</td>
+      <td>比 B <b>少一次命令往返</b>（curId 是本地换的，不用等 <code>session.create</code>）。<br>但<b>多了「载入」这一步</b> —— 因为切到的是一个已有内容的会话，<b>历史必须先渲染出来</b>。</td>
     </tr>
     <tr style="background:var(--warning-soft)">
-      <td><b>B1 会话列表点「新建」</b><br><span class="dim">17 格</span></td>
-      <td>用户主动点了新建按钮</td>
-      <td class="mono">会话列表发<br><code>session.create{requestId,title?}</code></td>
-      <td><b>前置 1 格</b>：等 <code>session.create.result</code> → 写 curId → <code>session.created</code> 广播给三个组件</td>
-      <td><b>对话面板自动清空</b> —— 不是靠通知，是靠<b>按 curId 过滤</b>：新 curId 下没有旧消息可匹配。<br>会话是<b>空壳</b>，只有 meta，没有消息。</td>
-    </tr>
-    <tr style="background:var(--warning-soft)">
-      <td><b>B2 输入框首问</b><br><span class="dim">17 格</span></td>
-      <td>curId 为空，或指向的会话已被删除</td>
-      <td class="mono">输入框的 <code>ensureSession()</code> 先发<br><code>session.create</code></td>
-      <td><b>前置 1 格</b>，而且<b>必须等 result 回来才发 <code>loop.run</code></b> —— 比 A 多<b>整整一轮命令往返</b></td>
-      <td>界面需要一个明确的<b>「创建中」态</b>，否则用户看到的是「点了没反应」。<br>这条等待是<b>整个流程里唯一等外部 I/O 的地方</b>。</td>
+      <td><b>B 全新会话</b><br><span class="dim">17 格</span><br><span class="dim">没有历史</span></td>
+      <td>① 会话列表点「新建」<br>② 或直接打开输入框发第一句<br><span class="dim">① 之后紧接着就是 ②</span></td>
+      <td class="mono">会话列表点「新建」，<br>或输入框 <code>ensureSession()</code> 自己建<br><span class="dim">同一条命令</span></td>
+      <td><b>前置 1 格</b>：<code>session.create</code> → <code>.result</code> 回发起方 → 写 curId → <code>session.created</code> 广播给三个组件</td>
+      <td><b>对话面板自动清空</b> —— 不是靠通知，是靠<b>按 curId 过滤</b>：新 curId 下没有旧消息可匹配。<br>会话是<b>空壳</b>，只有 meta，没有消息 —— <b>「没有历史」不是一种特殊状态，只是还没往里写</b>。</td>
     </tr>
   </tbody>
 </table>
 
-<h3>四条命令，五种去向 —— 但都只是同一条命令</h3>
+<div class="note ok">
+  <b>B 内部为什么不再分情况。</b>
+  <br>列表点「新建」的下一件事<b>通常就是首问</b> —— 所以这两步本来就是同一条链上的相邻两格，
+  没有必要当成两条路：建完之后要发的话，走的还是下面那一模一样的 16 格。
+  <br>它们<b>跑的是同一段代码、同一对命令</b>：<code>session.create</code> 一条、回执一条、
+  <code>session.created</code> 一条。所以做成一格前置就够了，界面上只是<b>谁点了那一下</b>不同。
+  <br>要留的只是<b>两个把手</b>：① 用户点「新建」；② 他干脆不点，直接敲第一句话 ——
+  <b>② 才是常态</b>，很多人从来不碰那个按钮，那时<b>会话列表根本没参与</b>。
+  <br><b>这也是为什么 Core 那一侧完全不用改</b>：它只是又转发了一条已在白名单里的命令。
+</div>
+
+<h3>会话相关的几条命令 —— 全部差别都在这几行里</h3>
 <table>
-  <thead><tr><th style="width:26%">命令 / 动作</th><th style="width:14%">A</th><th style="width:30%">B1</th><th style="width:30%">B2</th></tr></thead>
+  <thead><tr><th style="width:26%">命令 / 动作</th><th style="width:16%">A 旧会话继续</th><th style="width:29%">B 全新会话 · 列表点「新建」</th><th>B 全新会话 · 输入框首问</th></tr></thead>
   <tbody>
     <tr><td class="mono kc-local">sessions.select(id)<br><span class="dim">写共享层 curId（不过 Core）</span></td>
       <td class="mono"><b>★ 会话列表发</b></td>
       <td class="mono">不用 select —— <code>.result</code> 回来后直接写</td>
       <td class="mono">输入框自己拿到，不用写共享层</td></tr>
     <tr><td class="mono kc-topic">session.create{requestId, title?}</td><td class="mono">不发</td>
-      <td class="mono">会话列表 → <code>session</code><br>→ 回 <code>.result</code> 给会话列表</td>
-      <td class="mono">输入框 → <code>session</code><br>→ 回 <code>.result</code> 给输入框</td></tr>
+      <td class="mono" colspan="2"><b>发起方二选一</b>（① 点「新建」；② <code>ensureSession()</code>，curId 为空时）→ <code>session</code> → 回 <code>.result</code> 给<b>发起方</b></td></tr>
     <tr><td class="mono kc-topic">session.list / session.get</td>
-      <td class="mono" colspan="3"><b>A 独有</b>：三个组件<b>各自</b>发（幂等，几十字节）—— 换来「关掉一个面板再打开也能用」</td></tr>
+      <td class="mono" colspan="3"><b>A 独有</b>：三个组件<b>各自</b>发（幂等，几十字节）—— 因为<b>要把旧历史渲染出来</b>；
+        B 是空会话，没有历史要载，所以<b>不发这两条</b></td></tr>
     <tr><td class="mono kc-topic">session.created{…}</td>
       <td class="mono">不发</td>
       <td class="mono" colspan="2">session 广播给<b>三个面板</b>（列表加一行；对话 / 输入框只是被告知「当前会话变了」）</td></tr>
@@ -547,8 +599,9 @@
       <td class="mono"><b>直接发</b></td>
       <td class="mono"><b>直接发</b>（curId 已由上一步写好）</td>
       <td class="mono"><b>等 <code>.result</code> 之后才发</b></td></tr>
-    <tr><td class="mono kc-topic">session.get{sessionId}</td>
-      <td class="mono" colspan="3"><b>三种情况都由 loop 统一发起</b>（界面自己那次是为了渲染）—— <b>loop 不关心这个会话是新是旧</b></td></tr>
+    <tr><td class="mono kc-topic">session.get{sessionId}<br><span class="dim">主线那一条</span></td>
+      <td class="mono" colspan="3"><b>A / B 都由 loop 统一发起</b>（界面自己那次是为了渲染，A 才有）—— <b>loop 不关心这个会话是新是旧</b>；
+        新会话照样走这一跳，只是拉回来的是<b>刚刚落库的那一条 user</b></td></tr>
   </tbody>
 </table>
 
@@ -557,7 +610,7 @@
   <br><b>① <code>session.create.result</code> 必须【常驻订阅】。</b>
   它就是那条已经咬过两次的坑：<b>不要为一次命令临时订阅 topic</b>（换 SSE 连接会开一个「两条流都不在」的窗口，
   回执和领域事件双双丢失）。
-  <br>症状对照：A 场景完全正常（因为没有这一跳），<b>只有 B1 / B2 会坏</b> ——
+  <br>症状对照：A 场景完全正常（因为没有这一跳），<b>只有 B 会坏</b> ——
   所以它<b>躲过所有在 A 场景上做的测试</b>。
   <br>修法：<code>session.create.result</code> 进常驻订阅集合，在本地按 <code>requestId</code> 配对。
   <br><b>② curId 失效要有兜底。</b>
@@ -567,17 +620,8 @@
   <br><b>③ 「空会话」不是一个状态，是「还没有消息」。</b>
   <code>session.create</code> 只建 <b>meta</b>（id / title / 时间戳），内容由 <code>message.append</code> 填。
   所以<b>不要给「空会话」写一套单独的渲染逻辑</b> —— 对话组件现有的空态（<code>EmptyState</code>）就够了。
-</div>
-
-<div class="note ok">
-  <b>为什么 B1 和 B2 要分成两条，而不是统一成「点新建」？</b>
-  <br>因为<b>用户不一定点新建</b>。最常见的第一次使用是：直接打开输入框、敲一句话、按发送 ——
-  这时<b>根本没有会话列表参与</b>，只有输入框自己能建。
-  <br>反过来，如果只保留 B1（必须先点新建才能说话），那么用户面对空界面要做的第一件事就变成
-  「找一个按钮」，而他真正想做的事只是<b>说话</b>。
-  <br><b>代价是两处都要维护</b> —— 但它们共用同一条 <code>session.create</code> 命令与同一个
-  <code>ensureSession</code> 实现，所以「两处」其实是「同一个动作的两个触发点」，
-  而不是两份逻辑。这也是为什么 <b>Core 那一侧完全不用改</b>：它只是又转发了一条已在白名单里的命令。
+  <br><span class="dim">A 与 B 之所以能共用一套渲染，正是因为第三条：它们在服务端<b>没有两种形状</b>，
+  只有「消息条数不同」。</span>
 </div>
 
 <h2><span class="n">2</span>对话侧只有三个组件：会话列表 · 对话 · 输入框</h2>
@@ -732,10 +776,14 @@
   那会把刚修好的「事件只到一次」打回原形。
 </div>
 
-<h3>🔁 总线 topic —— 十四个，同一套机制</h3>
+<h3>🔁 总线 topic —— 同一套机制</h3>
 <table>
   <thead><tr><th style="width:30%">topic</th><th style="width:24%">发布方</th><th style="width:22%">订阅方 / 去处</th><th>步</th></tr></thead>
   <tbody>
+    <tr style="background:var(--warning-soft)"><td class="mono kc-topic">session.create / .result<br>session.created / .updated / .deleted<br>session.list / .get / .result</td>
+      <td class="mono kc-ui">widget.session-list<br>widget.chat-composer<br>widget.chat-timeline</td>
+      <td class="mono">chat-workbench/session<br><span class="dim">（.result 回发起方，.created/.updated 广播三个面板）</span></td>
+      <td class="mono"><b>仅前置</b><br><span class="dim">A 的 ①②</span><br><span class="dim">B 的 ①</span></td></tr>
     <tr><td class="mono kc-topic">loop.run</td><td class="mono kc-ui">widget.chat-composer</td><td class="mono">chat-workbench/loop</td><td class="mono">①</td></tr>
     <tr><td class="mono kc-topic">loop.state.changed{A,idle|running}</td><td class="mono">chat-workbench/loop</td><td class="mono">loop 自己 + 三条 SSE 连接</td><td class="mono">② ⑫ ⑯</td></tr>
     <tr><td class="mono kc-topic">message.append</td><td class="mono">chat-workbench/loop</td><td class="mono">chat-workbench/session</td><td class="mono">② ⑨ ⑪ ⑮ ⑯</td></tr>
@@ -1229,7 +1277,7 @@
       code:'message.append{ assistant, reasoning, usage }\nloop.state.changed{ A, "idle" }\n// 每个 handler 的第一件事： if (requestId !== activeA) return' }
   ];
 
-  /* ══ 每一步涉及的前端组件（中文短名，画在流程图第四行） ══ */
+  /* ══ 每一步涉及的前端组件（中文短名） ══ */
   var UI_ZH = [
     '输入框',
     '输入框 + 对话',
@@ -1268,7 +1316,7 @@
     'widget.session-list + widget.chat-timeline + widget.chat-composer'
   ];
 
-  /* ══ 每一步的主接口（画在流程图第三行） ══ */
+  /* ══ 每一步的主接口 ══ */
   var IFACE = [
     { k:'http', t:'POST /api/command · loop.run' },
     { k:'topic', t:'message.append · loop.state.changed' },
@@ -1454,95 +1502,127 @@
       tl: '自己 bootstrap：session.get{新 id} → 14 条历史渲染出来',
       cp: '不拉数据；它只等 curId。发送按钮此刻才可用' }
   ];
-  var PER_B1 = [
-    { list: '★ 用户点「新建会话」→ session.create；拿到 .result 后<b>写 curId</b>；session.created 让它自己加一行',
-      tl: '收到 <code>storage</code> → curId 变了 → <b>按 curId 过滤，历史自然清空</b>（不需要任何通知）',
-      cp: '收到 <code>storage</code> → 准备发 loop.run 时用新 sessionId' }
-  ];
-  var PER_B2 = [
-    { list: '无 —— 它<b>没参与</b>（这一格是输入框自己发起的）',
-      tl: '还在等 curId → <b>仍是空态</b>',
-      cp: '★ curId 为空 → <b>ensureSession()</b> 先发 session.create；拿到 .result 后才轮到下一格发 loop.run' }
+  /* B 的两个触发点：同一个「空会话」，只是谁发的 session.create 不同 */
+  var PER_B = [
+    { list: '可能是它自己发的（用户点了「新建会话」），也可能只是<b>收到 session.created 而加一行</b>；<br>拿到 result 后由<b>发起方</b>写 curId',
+      tl: 'curId 变了 → <b>按 curId 过滤，历史自然清空</b>（不需要任何通知）',
+      cp: '★ 它发起的（curId 为空时）→ <b>ensureSession()</b> 先发 session.create，<b>拿到 .result 才轮到下一格发 loop.run</b><br>别人发起的 → 收 <code>storage</code> 事件，直接用新 sessionId' }
   ];
 
-  /* ══ 两种情况：旧会话继续（先选择会话） / 开启新会话 ══ */
+/* ══ 两种情况：A 旧会话继续（有历史） / B 全新会话（没有历史） ══
+     B 只有一格前置：建一个空会话。「谁点的」有两种 —— 会话列表点「新建」，
+     或输入框首问时 ensureSession() 自己建 —— 但那是同一条命令、同一段代码。 */
+
+  function sc(hd, rows, ft) {
+    return '<div class="sesscard"><div class="sesscard__hd">' + hd + '</div>' +
+      rows.map(function (r) {
+        return '<div class="sesscard__row"><span class="sc-k">' + r[0] + '</span>' +
+               '<span class="sc-v">' + r[1] + '</span></div>';
+      }).join('') +
+      '<div class="sesscard__ft">' + ft + '</div></div>';
+  }
+
+  var CARD_B = sc('新会话 · <b>还没有任何消息</b>',
+      [ ['谁发', '会话列表点「新建」<br><span style="opacity:.7">或 输入框 ensureSession()（curId 为空时）—— 同一条命令</span>'],
+        ['发', 'POST /api/command · session.create{ requestId, title? }'],
+        ['回', 'session.create.result → sessionId（按 requestId 配对给发起方）'],
+        ['广播', 'session.created → 三个组件'],
+        ['curId', '发起方写共享层 → storage 事件 → 另外两个 iframe 知道换人了'] ],
+      '建出来的只有 meta（id / title / 时间戳）—— <b>一条消息都没有</b>。' +
+      '三条命令都过 C1 白名单；<b>Core 不知道有「会话」这个概念</b>');
+
+  function preA() {
+   return [ {
+             n:'', k:'http', t:'会话列表点选另一条', face:'本地',
+             pl:'chat-workbench', sv:'会话列表 → 对话 / 输入框', to:'共享层',
+             iface:{ k:'local', t:'sessionStorage + storage 事件' },
+             ui:'会话列表（发起）· 对话 · 输入框', uiwid:'三个组件同时受影响',
+             core:[], per: PER_A[0],
+             card: sc('curId · 会话列表是<b>唯一</b>的发起方',
+               [ ['动作', 'sessions.select(sess_7f3a91)'],
+                 ['落到', 'sessionStorage + storage 事件 → 另外两个 iframe'],
+                 ['过 Core', '<b>不过</b> —— 既不是命令也不是事件'],
+                 ['选中', 'sess_7f3a91「handler 评审」· <b>已有 14 条历史</b>'] ],
+               'curId 指向一个<b>已有内容</b>的会话 —— 所以下一格<b>必须去载历史</b>，这就是 A 与 B 的分水岭'),
+             note: 'curId 一变，对话面板按 curId 过滤就再也匹配不到旧消息 → <b>立刻清屏</b>（不是 bug）',
+             ca:'<span class="none">这一步<b>完全不经过 Core</b></span> —— 只有一条 storage 事件。<br><b>curId 是三个组件唯一共享的东西，而它就写在这一步。</b>',
+             txt:'<b>「接着聊」不是默认状态，是被选出来的状态。</b>会话列表是「当前会话」的<b>唯一发起方</b>：' +
+                 '点选 → 写共享层 <code>curId</code> → 同插件的另外两个 iframe 经 <code>storage</code> 事件知道换人了。' +
+                 '<br>所以这一步<b>没有命令、没有 topic、没有 Core 参与</b> —— 却决定了后面 16 格全部作用在哪个会话上。' +
+                 '<br><b>对话组件「立刻清屏」不是 bug</b>：curId 一变，它按 curId 过滤就再也匹配不到旧消息了。' +
+                 '<br><b>这一格是 A 与 B 的分水岭</b>：curId 指向一个<b>已有内容</b>的会话，所以下一格必须去载历史。',
+             code:'会话列表 onSelect(i) → sessions.select(meta.id)\n  → 写 sessionStorage["ost.curId"] + storage 事件\n     ├→ 对话  ：curId 变 → 清屏 → 准备 session.get\n     └→ 输入框：curId 变 → 下一格 loop.run 带新 sessionId\n\n// ★ 这一格完全不过 Core：它既不是命令也不是事件，只是同源同插件的共享层',
+             hops: [ { f:'chat-workbench · widget.session-list', v:'sessions.select(id)', k:'local', t:'共享层 curId（不过 Core）' },
+                     { f:'共享层（sessionStorage）', v:'storage 事件', k:'local', t:'widget.chat-timeline + widget.chat-composer' } ]
+           }, {
+             n:'', k:'http', t:'三个组件各自载入历史', face:'HTTP',
+             pl:'chat-workbench', sv:'会话列表 + 对话 → session', to:'session',
+             iface:{ k:'http', t:'POST /api/command · session.list / .get' },
+             ui:'会话列表 · 对话', uiwid:'widget.session-list · widget.chat-timeline',
+             core:['c1','c2','c3'], per: PER_A[1],
+             card: sc('历史载入 · <b>两个面板各自 bootstrap</b>',
+               [ ['列表', 'POST /api/command · session.list'],
+                 ['对话', 'POST /api/command · session.get{ sess_7f3a91 }'],
+                 ['回来', 'session.get.result{ messages: <b>14 条</b> }'],
+                 ['广播', 'session.updated{ updatedAt } → 三个面板'] ],
+               '同一条命令发了两次，幂等、几十字节 —— 换来<b>「对话」面板单独关掉再打开也能用</b>'),
+             note: 'A 独有的一格：B 里没有历史要载，<b>不发这两条命令</b>',
+             ca:'三条命令都过 C1 白名单 → <b>bus.publish</b>；结果按 requestId 回到各自面板，再由 <b>session.created / updated</b> 广播。<b>三个组件互不知情</b>。',
+             txt:'<b>「有历史」这件事，就落在这两行命令上</b> —— 每个 iframe 各自 bootstrap，而不是共享一份数据。' +
+                 '代价是同一窗口里 <code>session.list</code> 会发三次 —— 幂等、几十字节，' +
+                 '换来的是<b>「对话」面板单独关掉再打开也能用</b>（用户真的能做这件事）。' +
+                 '<br><b>B 没有这一格</b>：新会话里没有历史要载，所以对话面板直接停在空态 —— ' +
+                 '<b>不是「少载了一次」，是本来就没有东西可载</b>。' +
+                 '<br><b>这一步也是「不跨 iframe 传数据」这条纪律的落点</b>：跨 iframe 传「数据」正是要避免的，正确做法是各自载入。',
+             code:'会话列表 --POST /api/command{ session.list }--> session   （自己的列表）\n对话     --POST /api/command{ session.get{新 id} }--> session\nsession  --session.get.result{ session:{ messages:[…14 条] } }--> 对话\nsession  --session.updated{ updatedAt }--> 三个面板（列表刷新时间）',
+             hops: [ { f:'chat-workbench · widget.session-list', v:'POST /api/command · session.list', k:'http', t:'chat-workbench/session' },
+                     { f:'chat-workbench · widget.chat-timeline', v:'POST /api/command · session.get', k:'http', t:'chat-workbench/session' },
+                     { f:'chat-workbench/session', v:'session.get.result{ messages[14] }', k:'topic', t:'对话面板（按 requestId 配对）' },
+                     { f:'chat-workbench/session', v:'session.updated{ updatedAt }', k:'topic', t:'GET /events → 三个面板' } ]
+           } ];
+  }
+
+  function preB() {
+    return [ {
+             n:'', k:'http', t:'建一个新会话（空的）', face:'HTTP',
+             pl:'chat-workbench', sv:'会话列表 或 输入框 → session', to:'session',
+             iface:{ k:'http', t:'POST /api/command · session.create' },
+             ui:'会话列表 · 对话 · 输入框', uiwid:'widget.session-list / widget.chat-composer',
+             core:['c1','c2','c3'], per: PER_B[0], card: CARD_B,
+             note: 'curId 指向一个<b>没有任何消息</b>的会话 → 对话面板停在空态（B <b>不发</b> session.list / .get）',
+             ca:'查白名单 → <b>bus.publish("session.create")</b> → 202。然后把 <b>session.create.result</b> 按 requestId 投回发起方、把 <b>session.created</b> 投给三条 SSE 连接。<b>Core 不知道有「会话」这个概念。</b>',
+             txt:'<b>「新建完会话，下一件事通常就是首问」—— 所以这一格不是可选步骤。</b>' +
+                 '发一条 <code>session.create{requestId, title?}</code>，<b>title 可选</b>，界面显示 <code>meta.title || "新会话"</code>。' +
+                 '<br><b>发起方有两种，同一条命令同一段代码</b>：① 用户在会话列表点「新建」；' +
+                 '② 用户直接敲第一句话 —— curId 为空（或指向已删除的会话），输入框的 <code>ensureSession()</code> 先建。' +
+                 '<b>第 ② 种是常态</b>：很多人从来不点「新建」，那是会话列表根本没参与的一条路。' +
+                 '<br><b>两条路唯一的差别在界面</b>：列表发起时 curId 已经写好，首问可以<b>直接发</b>；' +
+                 '输入框发起时它得先拿到 sessionId 才知道往 <code>loop.run</code> 里填什么，' +
+                 '所以按钮要显示<b>「创建会话中…」并锁住</b> —— 否则用户看到的是「点了没反应」。' +
+                 '这条等待是<b>整个流程里唯一等外部 I/O 的地方</b>。' +
+                 '<br><b>与 A 的差别只有一处</b>：A 的 curId 本地就换了，B 要<b>先建再换</b> —— 多等一次命令往返。',
+             code:'① 会话列表 onNewClick() ─┐\n                             ├─ POST /api/command{ topic:"session.create", payload:{ requestId } }\n② 输入框 ensureSession()   ─┘        ↓ 202\nsession --session.create.result{ requestId, sessionId }--> 发起方（按 requestId 配对）\nsession --session.created{ sessionId, title, updatedAt }--> 三条 SSE 连接（三个面板都收到）\n发起方 --拿到 sessionId 后写共享层 curId--> 对话 / 输入框（storage 事件）\n输入框 --「创建会话中…」锁住；拿到 sessionId 才发 loop.run--> 下一格',
+             hops: [ { f:'chat-workbench · widget.session-list', v:'POST /api/command · session.create', k:'http', t:'chat-workbench/session' },
+                     { f:'chat-workbench · widget.chat-composer', v:'ensureSession() → POST /api/command', k:'http', t:'chat-workbench/session（curId 为空时）' },
+                     { f:'chat-workbench/session', v:'session.create.result{ requestId, sessionId }', k:'topic', t:'发起方（按 requestId 配对）' },
+                     { f:'chat-workbench/session', v:'session.created{ sessionId, title, updatedAt }', k:'topic', t:'GET /events → 三个面板' },
+                     { f:'发起方', v:'写共享层 curId', k:'local', t:'storage 事件 → 对话 / 输入框' } ]
+           } ];
+  }
+
   var SCENES = {
-    A: { name:'A · 旧会话继续', sess:'sess_7f3a91', tag:'sess_7f3a91…（已选中，14 条历史）',
-         pre: [ {
-            n:'', k:'http', t:'会话列表点选另一条', face:'本地',
-            pl:'chat-workbench', sv:'会话列表 → 对话 / 输入框', to:'共享层',
-            iface:{ k:'local', t:'sessionStorage + storage 事件' },
-            ui:'会话列表（发起）· 对话 · 输入框', uiwid:'三个组件同时受影响',
-            core:[], per: PER_A[0],
-            ca:'<span class="none">这一步<b>完全不经过 Core</b></span> —— 只有一条 storage 事件。<br><b>curId 是三个组件唯一共享的东西，而它就写在这一步。</b>',
-            txt:'<b>旧会话不是「本来就在那儿」，而是被选出来的。</b>会话列表是「当前会话」的<b>唯一发起方</b>：' +
-                '点选 → 写共享层 <code>curId</code> → 同插件的另外两个 iframe 经 <code>storage</code> 事件知道换人了。' +
-                '<br>所以这一步<b>没有命令、没有 topic、没有 Core 参与</b> —— 却决定了后面 16 格全部作用在哪个会话上。' +
-                '<br><b>对话组件「立刻清屏」不是 bug</b>：curId 一变，它按 curId 过滤就再也匹配不到旧消息了。',
-            code:'会话列表 onSelect(i) → sessions.select(meta.id)\n  → 写 sessionStorage["ost.curId"] + storage 事件\n     ├→ 对话  ：curId 变 → 清屏 → 准备 session.get\n     └→ 输入框：curId 变 → 下一格 loop.run 带新 sessionId\n\n// ★ 这一格完全不过 Core：它既不是命令也不是事件，只是同源同插件的共享层',
-            hops: [ { f:'chat-workbench · widget.session-list', v:'sessions.select(id)', k:'local', t:'共享层 curId（不过 Core）' },
-                    { f:'共享层（sessionStorage）', v:'storage 事件', k:'local', t:'widget.chat-timeline + widget.chat-composer' } ]
-          }, {
-            n:'', k:'http', t:'三个组件各自载入', face:'HTTP',
-            pl:'chat-workbench', sv:'会话列表 + 对话 → session', to:'session',
-            iface:{ k:'http', t:'POST /api/command · session.list / .get' },
-            ui:'会话列表 · 对话', uiwid:'widget.session-list · widget.chat-timeline',
-            core:['c1','c2','c3'], per: PER_A[1],
-            ca:'三条命令都过 C1 白名单 → <b>bus.publish</b>；结果按 requestId 回到各自面板，再由 <b>session.created / updated</b> 广播。<b>三个组件互不知情</b>。',
-            txt:'<b>每个 iframe 各自 bootstrap，而不是共享一份数据。</b>' +
-                '代价是同一窗口里 <code>session.list</code> 会发三次 —— 幂等、几十字节，' +
-                '换来的是<b>「对话」面板单独关掉再打开也能用</b>（用户真的能做这件事）。' +
-                '<br><b>这一步也是「不跨 iframe 传数据」这条纪律的落点</b>：跨 iframe 传「数据」正是要避免的，正确做法是各自载入。',
-            code:'会话列表 --POST /api/command{ session.list }--> session   （自己的列表）\n对话     --POST /api/command{ session.get{新 id} }--> session\nsession  --session.get.result{ session:{ messages:[…14 条] } }--> 对话\nsession  --session.updated{ updatedAt }--> 三个面板（列表刷新时间）',
-            hops: [ { f:'chat-workbench · widget.session-list', v:'POST /api/command · session.list', k:'http', t:'chat-workbench/session' },
-                    { f:'chat-workbench · widget.chat-timeline', v:'POST /api/command · session.get', k:'http', t:'chat-workbench/session' },
-                    { f:'chat-workbench/session', v:'session.get.result{ messages[14] }', k:'topic', t:'对话面板（按 requestId 配对）' },
-                    { f:'chat-workbench/session', v:'session.updated{ updatedAt }', k:'topic', t:'GET /events → 三个面板' } ]
-          } ] },
-
-    B1: { name:'B1 · 在会话列表点「新建会话」', sess:'sess_c04b2e', tag:'sess_c04b2e…（刚建，空）',
-         pre: [ {
-            n:'', k:'http', t:'会话列表点「新建」', face:'HTTP',
-            pl:'chat-workbench', sv:'会话列表 → session', to:'session',
-            iface:{ k:'http', t:'POST /api/command · session.create' },
-            ui:'会话列表（发起）· 对话 · 输入框', uiwid:'widget.session-list',
-            core:['c1','c2','c3'], per: PER_B1[0],
-            ca:'查白名单 → <b>bus.publish("session.create")</b> → 202。然后把 <b>session.create.result</b> 投回、<b>session.created</b> 投给三条 SSE 连接。<b>Core 不知道有「会话」这个概念。</b>',
-            txt:'<b>会话列表是「当前会话」的唯一发起方</b>：新建 / 切换 / 重命名 / 删除，只有它的用户操作会改变 curId。' +
-                '发一条 <code>session.create{requestId, title?}</code> —— <b>title 可选</b>，界面显示 <code>meta.title || "新会话"</code>。' +
-                '<br>与场景 A 的差别只有一处：<b>A 不用发命令（curId 本地就换了），B1 要先建再换</b>。',
-            code:'会话列表 --POST /api/command{ topic:"session.create", payload:{ requestId:"cr-1" } }--> Core\nsession  --session.create.result{ cr-1, sess_c04b2e, title:"新会话" }--> 会话列表\nsession  --session.created{ sessionId, title, updatedAt }--> 三条 SSE 连接（三个面板都收到）\n会话列表 --拿到 result 后写共享层 curId--> 对话 / 输入框（storage 事件）',
-            hops: [ { f:'chat-workbench · widget.session-list', v:'POST /api/command · session.create', k:'http', t:'chat-workbench/session' },
-                    { f:'chat-workbench/session', v:'session.create.result{ cr-1, sessionId }', k:'topic', t:'会话列表（按 requestId 配对）' },
-                    { f:'chat-workbench/session', v:'session.created{ sessionId, title, updatedAt }', k:'topic', t:'GET /events → 三个面板' },
-                    { f:'会话列表', v:'写共享层 curId', k:'local', t:'storage 事件 → 对话 / 输入框' } ]
-          } ] },
-
-    B2: { name:'B2 · 输入框首问（没有会话）', sess:'sess_d81f70', tag:'sess_d81f70…（ensureSession 现建）',
-         pre: [ {
-            n:'', k:'http', t:'ensureSession() 先建会话', face:'HTTP',
-            pl:'chat-workbench', sv:'输入框 → session', to:'session',
-            iface:{ k:'http', t:'POST /api/command · session.create' },
-            ui:'输入框', uiwid:'widget.chat-composer',
-            core:['c1','c2'], per: PER_B2[0],
-            ca:'同样一条 <code>session.create</code>。区别只在<b>发起方是输入框</b>，而且它<b>必须等 result 回来才发 loop.run</b> —— 所以比 A 多<b>整整一轮往返</b>。',
-            txt:'curId 为空或指向的会话已不存在时，输入框的 <code>ensureSession()</code> 钩子会先建一个。' +
-                '<b>会话列表全程没参与</b> —— 用户甚至没打开过它。' +
-                '<br><b>所以输入框不能在等 result 的这段时间里发 loop.run</b>，界面需要一个明确的「创建中」态，' +
-                '否则用户看到的是「点了没反应」。这条等待是<b>整个流程里唯一等外部 I/O 的地方</b>。',
-            code:'输入框 --POST /api/command{ topic:"session.create", payload:{ requestId:"cr-2" } }--> Core\n  // ★ 必须【常驻订阅】session.create.result —— 不要为这次命令临时订阅（换 SSE 连接会丢事件）\nsession  --session.create.result{ cr-2, sess_d81f70 }--> 输入框\n输入框 --按钮显示「创建会话中…」并锁住 → 下一格才发 loop.run',
-            hops: [ { f:'chat-workbench · widget.chat-composer', v:'ensureSession() → POST /api/command', k:'http', t:'chat-workbench/session' },
-                    { f:'chat-workbench/session', v:'session.create.result{ cr-2, sessionId }', k:'topic', t:'输入框（按 requestId 配对）' },
-                    { f:'chat-workbench · widget.chat-composer', v:'拿到 sessionId 后才发 loop.run', k:'http', t:'chat-workbench/loop（下一格）' } ]
-          } ] }
+    A: { name:'A · 旧会话继续（有历史）',   pre: preA },
+    B: { name:'B · 全新会话（没有历史）', pre: preB }
   };
   var scene = 'A';
-  function PRE() { return SCENES[scene].pre; }
-  function PERPRE(i) {
-    if (scene === 'A') return PER_A[i];
-    if (scene === 'B1') return PER_B1[i];
-    return PER_B2[i];
+  function PRE() { return SCENES[scene].pre(); }
+  /* B 的两个触发点只是同一格前置的两种发起方 */
+  function sceneName() {
+    if (scene === 'A') return SCENES.A.name;
+    return SCENES.B.name;
   }
+  function sessId() { return scene === 'A' ? 'sess_7f3a91' : 'sess_c04b2e'; }
+
   /* 把并列数组（IFACE / UI_ZH / UI_WID / HOPS / PER）合并进步骤对象，
      这样「前置步骤」与「主线步骤」对下游是完全同构的 —— 前置步骤自带这几个字段。 */
   function ALL() {
@@ -1572,69 +1652,199 @@
   });
   var coreAct = document.getElementById('coreAct');
 
-  /* ══ 流程图 ══ */
-  /* ══ 流程图（按场景重建：ALL = 前置步骤 + 16 步主线） ══ */
-  var VH = 600, X = 22, BW = 346, BH = 66, PITCH = 98, Y0 = 30;
-  var KSTROKE = { http:'var(--success)', bus:'var(--bus)', local:'var(--warning)', file:'var(--primary)' };
-  var KIFACE = { http:'var(--success)', sse:'var(--success)', topic:'var(--bus)',
-                 rpc:'var(--ext)', ext:'var(--ext)', local:'var(--warning)' };
   var CIRCLED = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩',
                  '⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
-  function bot() { return Y0 + (ALL().length - 1) * PITCH + BH + 26; }
-  var root = document.getElementById('flowRoot');
+  var KBADGE = { http:'var(--success)', sse:'var(--success)', topic:'var(--bus)',
+                 rpc:'var(--ext)', ext:'var(--ext)', local:'var(--warning)', file:'var(--primary)' };
 
-  function buildFlow() {
-    var list = ALL(), pre = PRE().length, svg = '';
-    for (var i = 0; i < list.length - 1; i++) {
-      var y1 = Y0 + i * PITCH + BH, y2 = Y0 + (i + 1) * PITCH;
-      svg += '<path id="ed' + i + '" class="ed k-' + list[i].k + '" d="M195 ' + y1 + ' V' + (y2 - 5) +
-             '" marker-end="url(#aB)"/>';
-      svg += '<text id="eb' + i + '" class="elbl" x="203" y="' + (y1 + 12) + '">' + CIRCLED[i + 1] + '</text>';
-    }
-    /* 第 2 轮回边：从「第 2 轮」格回到「装配」格（索引随场景变） */
-    var from = pre + 11, to = pre + 3;
-    var ly = Y0 + from * PITCH + BH / 2, ty = Y0 + to * PITCH + BH / 2, my = (ly + ty) / 2;
-    svg += '<path id="edlb" class="ed k-bus" d="M' + X + ' ' + ly + ' H14 V' + ty + ' H' + (X - 4) +
-           '" marker-end="url(#aB)"/>';
-    svg += '<text id="eblb" class="elbl" x="18" y="' + (my + 3) + '" text-anchor="middle" ' +
-           'transform="rotate(-90 18 ' + (my + 3) + ')">第 2 轮 nextRound</text>';
-    list.forEach(function (s, i) {
-      var y = Y0 + i * PITCH;
-      var ifc = s.iface, uiv = s.ui;
-      svg += '<g id="st' + i + '" class="st k-' + s.k + ' future">';
-      svg += '<rect class="bx" x="' + X + '" y="' + y + '" width="' + BW + '" height="' + BH + '" rx="9"/>';
-      svg += '<text x="' + (X + 10) + '" y="' + (y + 18) + '" font-size="12.5" font-weight="700">' + CIRCLED[i] + '</text>';
-      svg += '<text x="' + (X + 28) + '" y="' + (y + 18) + '" font-size="12" font-weight="600" fill="var(--text)">' + s.t + '</text>';
-      svg += '<text x="' + (X + BW - 8) + '" y="' + (y + 14) + '" font-size="8.5" text-anchor="end" fill="' +
-             KSTROKE[s.k] + '" font-weight="700">' + s.face + '</text>';
-      svg += '<text x="' + (X + 10) + '" y="' + (y + 33) + '" font-size="9" font-family="var(--mono)" fill="var(--primary)">' +
-             s.pl + '</text>';
-      svg += '<text x="' + (X + 10) + '" y="' + (y + 46) + '" font-size="9" font-family="var(--mono)" fill="var(--muted)">' +
-             s.sv + (s.to !== '—' ? ' → ' + s.to : '') + '</text>';
-      svg += '<text x="' + (X + 10) + '" y="' + (y + 58) + '" font-size="9" font-family="var(--mono)" fill="' +
-             KIFACE[ifc.k] + '" font-weight="700">' + escSvg(ifc.t) + '</text>';
-      svg += '<text x="' + (X + BW - 8) + '" y="' + (y + 58) + '" font-size="8.5" text-anchor="end" ' +
-             'font-family="var(--mono)" fill="var(--success)">🪟 ' + escSvg(uiv) + '</text>';
-      if (i < pre) {
-        svg += '<text x="' + (X + BW - 8) + '" y="' + (y + 33) + '" font-size="8.5" text-anchor="end" ' +
-               'font-family="var(--mono)" font-weight="700" fill="var(--warning)">前置</text>';
-      }
-      svg += '</g>';
-    });
-    root.innerHTML = svg;
+  /* ══════════ 每一步点亮全景图上的哪些节点 / 哪些边 ══════════
+     on  = 这一步真正在传字节的（实心高亮 + 流动虚线）
+     mid = 这一步被读到的，但字节没走（半亮：注册表、上下文）
+     位置越靠前，通路本来就存在，所以不点亮 */
+  var GPATH = [
+    /* ① 用户发消息 */ { on:['uiCp','core'],            e:['e_c1_cp'],                   m:['cwBox'] },
+    /* ② 受理 + 落库 */ { on:['svLoop','svSess','coreBus'], e:['e_bus_loop','e_bus_sess'], m:[] },
+    /* ③ 拉历史 */    { on:['svLoop','svSess','coreBus'], e:['e_bus_loop','e_bus_sess'], m:[] },
+    /* ④ 装配（进程内，不过 Core）：角色 / 技能 / 工具目录都是被「读到」的注册表，
+         没有一条线亮 —— 这就是「不过 Core」在图上的样子 */
+    {                     on:['svLoop'],                 e:[],                           m:['svcAgent','svcSkills','svcRetry','svcTools','svcFs','svcProv'] },
+    /* ⑤ 发 llm.request */ { on:['svLoop','svLlm','coreBus'], e:['e_bus_loop','e_bus_llm'], m:[] },
+    /* ⑥ llm 查路由 */  { on:['svLlm','svLoop','coreBus'], e:['e_bus_llm','e_bus_loop'],  m:[] },
+    /* ⑦ provider 发流（C0 读凭据在先 → E 出网在中 → C2 chunk 回总线在后） */
+    {                     on:['svcProv','extLlm','coreBus'], e:['e_c0_prov','e_ext_llm','e_bus_prov'], m:[] },
+    /* ⑧ 主位翻块 */     { on:['svLlm','svcProv','coreBus'], e:['e_bus_llm','e_bus_prov'], m:[] },
+    /* ⑨ 换发 A → 界面 */{ on:['svLoop','coreBus','coreSse','uiTl','uiCp'], e:['e_bus_loop','e_c3_all'], m:['uiList'] },
+    /* ⑩ 派发工具执行 */{ on:['svLoop','svcFs','coreBus'], e:['e_bus_loop','e_bus_fs'], m:[] },
+    /* ⑪ 结果回填 */    { on:['svcFs','svLoop','svSess','coreBus'], e:['e_bus_fs','e_bus_loop','e_bus_sess'], m:[] },
+    /* ⑫ 第 2 轮重新装配 */ { on:['svLoop','svLlm','coreBus'], e:['e_bus_loop','e_bus_llm'], m:['svcAgent','svcSkills'] },
+    /* ⑬ 派发 + 命中风险 */ { on:['svLoop','svcTools','coreBus','coreSse'], e:['e_bus_loop','e_bus_tools','e_c3_all'], m:['uiTl'] },
+    /* ⑭ 审批裁决：弹窗经 C3 送来 → 用户点按经 C1 回去 → tools 收到裁决 */
+    {                     on:['uiTl','svcTools','coreBus','coreSse'], e:['e_c3_all','e_c1_tl','e_bus_tools'], m:['core'] },
+    /* ⑮ 结果回填 + 最终回答 */ { on:['svcTools','svLoop','svSess','coreBus'], e:['e_bus_tools','e_bus_loop','e_bus_sess'], m:[] },
+    /* ⑯ 收尾闭环 */    { on:['svLoop','svSess','coreBus','coreSse','uiList'], e:['e_bus_loop','e_bus_sess','e_c3_all'], m:['uiTl','uiCp'] }
+  ];
+  /* 前置两格各自的点亮（跟场景无关，两种情况只是发起方不同） */
+  var GPRE_A = [
+    /* ① 点选会话：只有橙虚线 curId，一条 Core 线都不亮 */
+    { on:['uiList','uiTl','uiCp'], e:['e_curid'], m:[] },
+    /* ② 载入历史：各组件自己 C1 发命令 → C2 给 session → 结果经 C3 回来 */
+    { on:['uiList','uiTl','svSess','core','coreBus','coreSse'],
+      e:['e_c1_list','e_bus_sess','e_c3_all'], m:[] }
+  ];
+  var GPRE_B = [
+    { on:['uiList','uiCp','svSess','core','coreBus','coreSse'],
+      e:['e_c1_list','e_bus_sess','e_c3_all'], m:[] }
+  ];
+  function gpath(i) {
+    var pre = PRE().length;
+    if (i < pre) return (scene === 'A' ? GPRE_A : GPRE_B)[i];
+    return GPATH[i - pre];
   }
 
-  /* ══ 步进轨 ══ */
-  var rail = document.getElementById('rail');
-  function buildRail() {
-    rail.innerHTML = '';
-    while (rail.firstChild) rail.removeChild(rail.firstChild);
-    ALL().forEach(function (s, i) {
-      var d = document.createElement('i');
-      d.title = CIRCLED[i] + ' ' + s.t + '  ·  ' + s.pl + ' · ' + s.sv;
-      d.addEventListener('click', function () { stop(); go(i); });
-      rail.appendChild(d);
+  /* ══════════ 全景图：一次画好，之后只切换高亮 ══════════
+     布局（viewBox 612 × 656）：
+       中间一条 Core 竖条；左边 chat-workbench（三个组件 + 三个服务）；
+       右边四个插件；最下面一行是「外部世界」（E 不过 Core）。
+     边有四种：总线紫 / HTTP 绿 / 文件蓝 / 直连青虚线 / 进程内橙虚线。 */
+  var G = {
+    nodes: {
+      /* — Core（中间一条） — */
+      core:    { x:238, y:26,  w:132, h:56,  k:'core',   t:'Core',            s:'查白名单 · 搬字节 · 记生命周期' },
+      coreBus: { x:238, y:90,  w:132, h:50,  k:'core',   t:'C2 总线',         s:'每服务一条 stdio' },
+      coreSse: { x:238, y:148, w:132, h:44,  k:'core',   t:'C3 事件出',       s:'GET /events' },
+      /* Core 的「只做三件事」注解（不参与连线，只是提醒它不是语义层） */
+      coreNote: { x:238, y:200, w:132, h:62, k:'core',  t:'不解释 payload', s:'查表 · 搬字节 · 记生命周期' },
+      /* — 左上：chat-workbench（三个视图 + 三个服务） — */
+      cwBox:   { x:14,  y:26,  w:206, h:252, k:'plugin', t:'chat-workbench', s:'3 个视图 · 3 个服务' },
+      uiList:  { x:24,  y:58,  w:90,  h:46,  k:'comp',   t:'会话列表',        s:'session-list' },
+      uiTl:    { x:120, y:58,  w:92,  h:46,  k:'comp',   t:'对话',            s:'chat-timeline' },
+      uiCp:    { x:24,  y:112, w:188, h:46,  k:'comp',   t:'输入框',          s:'chat-composer' },
+      /* 汇聚线：从三个视图右上角出发，在框内走到右侧出框点（不画虚线底纹） */
+      svLoop:  { x:24,  y:170, w:188, h:44,  k:'svc',    t:'loop',            s:'装配 · 编排 · 落库' },
+      svLlm:   { x:24,  y:220, w:92,  h:44,  k:'svc',    t:'llm',             s:'路由 · 翻块' },
+      svSess:  { x:120, y:220, w:92,  h:44,  k:'svc',    t:'session',         s:'会话文件' },
+      /* — 右上：tools（两个服务 + 一个视图） — */
+      pTools:  { x:396, y:26,  w:202, h:120, k:'plugin', t:'tools',           s:'2 个服务 · 1 个视图' },
+      svcFs:   { x:406, y:58,  w:90,  h:44,  k:'svc',    t:'fs-tools',        s:'读文件 · 算沙箱' },
+      svcTools: { x:502, y:58, w:88,  h:44,  k:'svc',    t:'tools',           s:'风险 · 审批' },
+      uiTools: { x:406, y:110, w:184, h:26,  k:'comp',   t:'widget.tools',    s:'' },
+      /* — 右侧一列：其余插件，每个一格 — */
+      pAgents: { x:396, y:158, w:202, h:84,  k:'plugin', t:'agents',          s:'1 个服务 · 1 个视图' },
+      svcAgent: { x:406, y:188, w:92,  h:42, k:'svc',    t:'agent',           s:'角色 · 绑定' },
+      uiAgents: { x:504, y:188, w:86,  h:42, k:'comp',   t:'widget.agents',  s:'' },
+      pSkills: { x:396, y:254, w:202, h:70,  k:'plugin', t:'skills',          s:'1 个服务' },
+      svcSkills: { x:406, y:284, w:184, h:30, k:'svc',    t:'skills',          s:'技能索引 · skill_read' },
+      pModels: { x:396, y:336, w:202, h:76,  k:'plugin', t:'models',          s:'唯一出网点' },
+      svcProv: { x:406, y:366, w:184, h:38,  k:'svc',    t:'llm-provider-openai', s:'★ 唯一解引用明文处' },
+      pRel:    { x:396, y:424, w:202, h:70,  k:'plugin', t:'reliability',     s:'旁路 · 不参与编排' },
+      svcRetry: { x:406, y:454, w:184, h:30, k:'svc',    t:'llm-retry',       s:'失败重发' },
+      pMcp:    { x:396, y:506, w:202, h:70,  k:'plugin', t:'mcp',             s:'管子进程' },
+      svcMcp:  { x:406, y:536, w:184, h:30,  k:'svc',    t:'mcp',             s:'stdio JSON-RPC' },
+      /* — 左下：外部世界（★ 不过 Core）——
+         每条 E 线各自贴着自己的目标，标注写在自己的那条线上，互不压字 */
+      extLlm:  { x:14,  y:286, w:206, h:50,  k:'ext',    t:'上游厂商 API',    s:'Authorization 明文只活在这里' },
+      extProc: { x:14,  y:354, w:206, h:50,  k:'ext',    t:'用户机器上的子进程', s:'stdio JSON-RPC · risk:proc' },
+      extUpd:  { x:14,  y:422, w:206, h:48,  k:'ext',    t:'上游工具（远程）', s:'tools/call · 逐次审批' },
+      extNote: { x:14,  y:488, w:206, h:62,  k:'ext',    t:'E = 唯一的绕过',  s:'进程可以自由出网；Core 不代理、不审查。' }
+    },
+    edges: [
+      /* ── chat-workbench 三个视图 ↔ Core：C4 伺服字节 → C1 命令进 → C3 事件出 ──
+         左边三个视图只画一条「汇聚线」到 Core，避免三组线糊成一团；
+         C1 与 C4 各只画一条，标签写清是「三个视图各自」。 */
+      { id:'e_c4_ui',   k:'file', d:'M220,34 L238,34', l:'', lx:0, ly:0, a:'cwBox', b:'core', rev:1 },
+      { id:'e_c1_cp',   k:'http', d:'M212,130 C226,130 226,62 238,62',
+        l:'C1 命令进', lx:226, ly:106, a:'uiCp', b:'core' },
+      { id:'e_c1_list', k:'http', d:'M114,60 C170,60 190,38 226,38', l:'', lx:0, ly:0, a:'uiList', b:'core' },
+      { id:'e_c1_tl',   k:'http', d:'M114,88 C170,88 190,50 226,50', l:'', lx:0, ly:0, a:'uiTl', b:'core' },
+      { id:'e_c3_all',  k:'http', d:'M238,170 C186,170 176,92 214,92',
+        l:'C3 GET /events', lx:186, ly:152, a:'cwBox', b:'coreSse', rev:1 },
+      /* ── chat-workbench 三个服务 ↔ Core 总线 ── */
+      { id:'e_bus_loop', k:'bus', d:'M212,192 C230,192 230,110 238,110',
+        l:'', lx:0, ly:0, a:'svLoop', b:'coreBus' },
+      { id:'e_bus_llm',  k:'bus', d:'M116,242 C186,242 206,122 238,122', l:'', lx:0, ly:0, a:'svLlm', b:'coreBus' },
+      { id:'e_bus_sess', k:'bus', d:'M212,242 C230,242 230,128 238,128', l:'', lx:0, ly:0, a:'svSess', b:'coreBus' },
+      /* ── 右列插件 ↔ Core 总线（同一条机制，只是接在不同的服务上） ── */
+      { id:'e_bus_fs',    k:'bus', d:'M396,80 C380,80 380,104 370,104', l:'', lx:0, ly:0, a:'svcFs', b:'coreBus', rev:1 },
+      { id:'e_bus_tools', k:'bus', d:'M396,96 C384,96 384,116 370,116', l:'',  lx:0, ly:0, a:'svcTools', b:'coreBus', rev:1 },
+      { id:'e_bus_agent', k:'bus', d:'M396,209 C384,209 384,132 370,132', l:'',  lx:0, ly:0, a:'svcAgent', b:'coreBus', rev:1 },
+      { id:'e_bus_skills',k:'bus', d:'M396,299 C386,299 386,142 370,142', l:'',  lx:0, ly:0, a:'svcSkills', b:'coreBus', rev:1 },
+      { id:'e_bus_prov',  k:'bus', d:'M396,385 C388,385 388,150 370,150', l:'',  lx:0, ly:0, a:'svcProv', b:'coreBus', rev:1 },
+      { id:'e_bus_retry', k:'bus', d:'M396,469 C390,469 390,158 370,158', l:'',  lx:0, ly:0, a:'svcRetry', b:'coreBus', rev:1 },
+      { id:'e_bus_mcp',   k:'bus', d:'M396,551 C392,551 392,164 370,164', l:'',  lx:0, ly:0, a:'svcMcp', b:'coreBus', rev:1 },
+      /* 两个管理视图也各自走 C1 / C3 */
+      { id:'e_c1_tools', k:'http', d:'M396,123 C382,123 382,78 370,78', l:'', lx:0, ly:0, a:'uiTools', b:'core', rev:1 },
+      { id:'e_c1_agents',k:'http', d:'M504,209 C470,209 420,180 370,180', l:'', lx:0, ly:0, a:'uiAgents', b:'core', rev:1 },
+      /* ── E：进程直连外部（★ 不过 Core）—— 从服务框左侧绕出去，不碰 Core ── */
+      { id:'e_ext_llm',  k:'ext', d:'M406,375 C350,375 330,315 220,315',
+        l:'E ★不过 Core', lx:306, ly:306, a:'svcProv', b:'extLlm', noArrow:1 },
+      { id:'e_ext_proc', k:'ext', d:'M406,545 C356,545 336,382 220,382',
+        l:'E ★不过 Core', lx:308, ly:374, a:'svcMcp', b:'extProc', noArrow:1 },
+      { id:'e_ext_upd',  k:'ext', d:'M406,556 C362,556 342,450 220,450',
+        l:'远程 tools/call · 逐次审批', lx:316, ly:442, a:'svcMcp', b:'extUpd', noArrow:1 },
+      /* ── C0：stdio 点对点（不过总线，只做握手与读自己目录） ── */
+      { id:'e_c0_prov',  k:'rpc', d:'M370,138 C346,138 348,349 406,349',
+        l:'C0 plugins.readFile', lx:322, ly:258, a:'svcProv', b:'coreBus', rev:1 },
+      /* ── 进程内：三个视图之间只共享 curId（不过 Core） ── */
+      { id:'e_curid',    k:'local', d:'M24,104 L24,135 L114,135',
+        l:'curId（不过 Core）', lx:66, ly:148, a:'uiList', b:'uiCp', noArrow:1 }
+    ]
+  };
+  var gsvg = document.getElementById('graph');
+  var DEFMARK = '<marker id="gm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+                '<path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>';
+  (function buildGraph() {
+    var svg = '<defs>' + DEFMARK + '</defs>';
+    /* 边先画，压在框下面 */
+    G.edges.forEach(function (e) {
+      svg += '<path id="' + e.id + '" class="ge k-' + e.k + ' dim" d="' + e.d +
+             '"' + (e.noArrow ? '' : ' marker-end="url(#gm)"') + ' style="color:' +
+             ({ http:'var(--success)', sse:'var(--success)', bus:'var(--bus)',
+                file:'var(--primary)', rpc:'var(--ext)', ext:'var(--ext)',
+                local:'var(--warning)' })[e.k] + '"/>';
+      if (e.l) {
+        svg += '<text id="' + e.id + '_lb" class="gelb gel off" x="' + e.lx + '" y="' + e.ly +
+               '" text-anchor="middle">' + e.l + '</text>';
+      }
     });
+    Object.keys(G.nodes).forEach(function (id) {
+      var n = G.nodes[id];
+      /* 插件框：标题在上，成员框各占一行 */
+      if (n.k === 'plugin') {
+        svg += '<g id="gn_' + id + '" class="gn ' + n.k + ' off">' +
+               '<rect class="nb" x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" rx="8"/>' +
+               '<text class="nt" x="' + (n.x + n.w / 2) + '" y="' + (n.y + 15) + '" text-anchor="middle">' +
+               n.t + '</text>' +
+               '<text class="nid" x="' + (n.x + n.w / 2) + '" y="' + (n.y + 26) + '" text-anchor="middle">' +
+               n.s + '</text></g>';
+        return;
+      }
+      var two = n.h >= 40;
+      svg += '<g id="gn_' + id + '" class="gn ' + n.k + ' off">' +
+             '<rect class="nb" x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" rx="6"/>' +
+             '<text class="nt" x="' + (n.x + n.w / 2) + '" y="' + (n.y + (two ? 19 : n.h / 2 + 4)) +
+             '" text-anchor="middle">' + n.t + '</text>' +
+             (n.s ? '<text class="nid" x="' + (n.x + n.w / 2) + '" y="' + (n.y + (two ? 32 : n.h / 2 + 15)) +
+                    '" text-anchor="middle">' + n.s + '</text>' : '') + '</g>';
+    });
+    gsvg.innerHTML = svg;
+  })();
+
+  /* ══ 逐格列表 ══ */
+  var stepList = document.getElementById('stepList');
+  function buildSteps() {
+    var list = ALL(), pre = PRE().length, h = '';
+    list.forEach(function (s, i) {
+      var kd = KBADGE[s.iface.k] || 'var(--muted)';
+      h += '<li id="sl' + i + '"><span class="no">' + CIRCLED[i] + '</span>' +
+           '<span>' + esc(s.t) + (i < pre ? ' <span style="color:var(--warning);font-size:10px">前置</span>' : '') + '</span>' +
+           '<span class="badge" style="color:' + kd + '">' + esc(s.face) + '</span></li>';
+    });
+    stepList.innerHTML = h;
+    for (var j = 0; j < list.length; j++) {
+      (function (n) {
+        stepList.children[n].addEventListener('click', function () { stop(); go(n); });
+      })(j);
+    }
   }
 
   /* ══ 对话演示 ══ */
@@ -1654,6 +1864,8 @@
     return '<div class="fold"><span class="via">' + via + '</span> ' + esc(t) + '</div>';
   }
   function sys(t, c) { return '<div class="sysline' + (c ? ' ' + c : '') + '">' + esc(t) + '</div>'; }
+  /* 系统行里有 <b> 时走这个（内容是本文件里写死的 HTML，不是用户输入） */
+  function sysHtml(t, c) { return '<div class="sysline' + (c ? ' ' + c : '') + '">' + t + '</div>'; }
   function words(t, d) {
     return t.split(/(\s+)/).map(function (w, i) {
       if (/^\s+$/.test(w)) return w;
@@ -1767,7 +1979,7 @@
     { id:'sess_5b21de', title:'MCP 选型对比',  n:6,  at:'今天 09:12' },
     { id:'sess_7f3a91', title:'handler 评审',  n:14, at:'今天 10:38' }
   ];
-  var CUR_TITLE = { A:'handler 评审', B1:'新会话', B2:'新会话' };
+  var CUR_TITLE = { A:'handler 评审', B:'新会话' };
 
   /* 每个面板顶部那条「本步」——颗粒度到组件 */
   function curPer(k) {
@@ -1781,8 +1993,10 @@
     return '<div class="perstep"><span class="pk">本步</span>' + txt + '</div>';
   }
 
-  function sessionRows(b) {
-    var rows = SEED.slice(), curId = SCENES[scene].sess, fresh = false;
+  /* 会话列表从头到尾都在（那些会话是之前就有的）。
+     A：curId 指向已有 14 条历史的那条。B：curId 指向一个刚建出来、还没有消息的新会话。 */
+  function sessionRows(k, b) {
+    var rows = SEED.slice(), curId = sessId(), fresh = false, picked = k >= 0;
     if (scene === 'A') {
       var c = rows[2];
       if (b >= 0)  c.n = 15;
@@ -1790,35 +2004,37 @@
       if (b >= 15) c.n = 19;
       if (b >= 0)  c.at = '刚刚';
     } else {
-      fresh = true;
-      rows = [{ id:curId, title:CUR_TITLE[scene], n:0, at:'刚刚' }].concat(rows);
-      if (b >= 0)  rows[0].n = 1;   /* 刚落的 user */
-      if (b >= 10) rows[0].n = 3;   /* + assistant(toolCalls) + tool */
-      if (b >= 15) rows[0].n = 6;   /* + 第二轮 assistant + tool + assistant */
+      if (picked) {                       /* session.created 到达 → 它自己加的那一行 */
+        fresh = true;
+        var row = { id:curId, title:CUR_TITLE.B, n:0, at:'刚刚' };
+        if (b >= 0)  row.n = 1;           /* 刚落的 user */
+        if (b >= 10) row.n = 3;           /* + assistant(toolCalls) + tool */
+        if (b >= 15) row.n = 6;           /* + 第二轮 assistant + tool + assistant */
+        rows = [row].concat(rows);
+      }
     }
     return rows.map(function (s) {
-      return { id:s.id, title:s.title, n:s.n, at:s.at, active:s.id === curId, fresh:fresh };
+      return { id:s.id, title:s.title, n:s.n, at:s.at,
+               active: picked && s.id === curId, fresh:fresh };
     });
   }
 
   function buildList(k) {
-    h += perStep(curPer(k).list);
     var b = k - PRE().length;
     var h = '<div class="wid" style="font-family:var(--mono);font-size:9px;color:var(--muted)">widget.session-list</div>' +
-      '<div class="lstbar"><span class="pri">新建会话</span><span>重命名</span><span>删除</span></div>';
-    if (b < 0) {
-      h += '<div class="lstempty">按 ▶ 开始<br>它只在 <code>session.*</code> 事件到达时才变</div>';
-    } else {
-      sessionRows(b).forEach(function (s, i) {
-        h += '<div class="sessrow' + (s.active ? ' active' : '') + (s.fresh && s.active ? ' fresh' : '') +
-          '" style="animation-delay:' + (i * 55) + 'ms">' +
-          '<div class="tt">' + esc(s.title) + '</div>' +
-          '<div class="mt"><span>' + s.id + '</span><span class="nn">' + s.n + ' 条</span>' +
-          '<span style="margin-left:auto">' + s.at + '</span></div></div>';
-      });
-    }
+      '<div class="lstbar"><span class="pri">新建会话</span><span>重命名</span><span>删除</span></div>' +
+      perStep(curPer(k).list);
+    sessionRows(k, b).forEach(function (s, i) {
+      h += '<div class="sessrow' + (s.active ? ' active' : '') + (s.fresh && s.active ? ' fresh' : '') +
+        '" style="animation-delay:' + (i * 55) + 'ms">' +
+        '<div class="tt">' + esc(s.title) + '</div>' +
+        '<div class="mt"><span>' + s.id + '</span><span class="nn">' + s.n + ' 条</span>' +
+        '<span style="margin-left:auto">' + s.at + '</span></div></div>';
+    });
     h += '<div class="lstnote">订 session.created / updated / deleted<br>message.appended（只看 updatedAt）<br>' +
-      (b < 1 ? '<b>本轮它什么都没变</b> —— 它不订 loop.* 与 message.* 的正文' : '') + '</div>';
+      (b < 0
+        ? (scene === 'B' ? 'B 里这一格之后会多出一行 <b>0 条</b> 的新会话' : '等选中一条 → 高亮换过去')
+        : '本轮只有这一行的 <b>条数</b> 在动 —— 它不订 loop.* 与消息正文') + '</div>';
     return h;
   }
 
@@ -1826,7 +2042,7 @@
     var per = curPer(k).cp;
     var pre = PRE().length, b = k - pre;
     var running = b >= 1 && b < 15;
-    var creating = scene === 'B2' && b < 0;
+    var creating = scene === 'B' && b < 0;
     var sent = b >= 0;
     var h = '<div class="wid" style="font-family:var(--mono);font-size:9px;color:var(--muted)">widget.chat-composer</div>';
     h += '<div class="cfield"><label>角色 <span class="src2">agent.state</span></label>' +
@@ -1857,33 +2073,19 @@
     return h;
   }
 
-  /* 前置步骤的产物（会话相关） */
+  /* 前置步骤的产物（会话相关）：每格自带一张卡 + 一条系统行 */
   function preChat(k) {
     var pre = PRE(), h = '';
     for (var j = 0; j < pre.length; j++) {
       if (k < j) break;
-      h += '<div class="sesscard"><div class="sesscard__hd">会话 · ' +
-        (scene === 'B1' ? '会话列表 widget.session-list' : '输入框 widget.chat-composer') + '</div>' +
-        '<div class="sesscard__row"><span class="sc-k">发</span><span class="sc-v">POST /api/command · session.create</span></div>' +
-        '<div class="sesscard__row"><span class="sc-k">回</span><span class="sc-v">session.create.result → sessionId</span></div>' +
-        '<div class="sesscard__row"><span class="sc-k">广播</span><span class="sc-v">session.created → 三个组件</span></div>' +
-        '<div class="sesscard__row"><span class="sc-k">curId</span><span class="sc-v">' +
-        (scene === 'B1' ? '会话列表写共享层 → storage 事件 → 输入框与对话知道换人了'
-                         : '输入框自己拿到 sessionId → 下一格才发 loop.run') + '</span></div>' +
-        '<div class="sesscard__ft">三条命令都过 C1 白名单；<b>Core 不知道有「会话」这个概念</b></div>' +
-        '</div>';
-      if (scene === 'B1') {
-        h += sys('curId 换成新会话 → 对话组件按 curId 过滤，历史自然清空（不用任何跨 iframe 通知）');
-      } else {
-        h += sys('输入框进入「创建中」态 —— 这段时间不能发 loop.run，否则界面像点了没反应');
-      }
+      h += pre[j].card;
+      if (pre[j].note) h += sysHtml(pre[j].note, pre[j].noteCls);
     }
     return h;
   }
 
   function buildTimeline(k) {
-    h += perStep(curPer(k).tl);
-    var h = preChat(k);
+    var h = perStep(curPer(k).tl) + preChat(k);
     var pre = PRE().length, b = k - pre;
     var isNew = scene !== 'A';
     if (b < 0) {
@@ -1938,18 +2140,36 @@
 
   function render() {
     var list = ALL(), pre = PRE().length, cur = idx < 0 ? null : list[idx];
-    list.forEach(function (s, i) {
-      var g = document.getElementById('st' + i);
-      if (g) g.setAttribute('class', 'st k-' + s.k + ' ' +
-        (idx < 0 ? 'future' : (i === idx ? 'now' : (i < idx ? 'past' : 'future'))));
-      var e = document.getElementById('ed' + i), b = document.getElementById('eb' + i);
-      if (e) e.setAttribute('class', 'ed k-' + s.k + ' ' +
-        (idx < 0 ? 'off' : (i === idx - 1 ? 'lit' : 'off')));
-      if (b) b.setAttribute('class', 'elbl ' + (idx === i + 1 ? 'lit' : 'off'));
+
+    /* 左栏：全景图上点亮这一步真正经过的节点与边 */
+    var gp = idx < 0 ? null : gpath(idx);
+    var onN = {}, midN = {}, onE = {};
+    if (gp) {
+      (gp.on || []).forEach(function (n) { onN[n] = 1; });
+      (gp.m || []).forEach(function (n) { midN[n] = 1; });
+      (gp.e || []).forEach(function (e) { onE[e] = 1; });
+    }
+    Object.keys(G.nodes).forEach(function (id) {
+      var g = document.getElementById('gn_' + id);
+      if (g) g.setAttribute('class', 'gn ' + G.nodes[id].k + ' ' +
+        (onN[id] ? 'on' : (midN[id] ? 'mid' : 'off')));
     });
-    var elb = document.getElementById('edlb'), lblb = document.getElementById('eblb');
-    if (elb) elb.setAttribute('class', 'ed k-bus ' + (idx === pre + 11 ? 'lit' : 'off'));
-    if (lblb) lblb.setAttribute('class', 'elbl ' + (idx === pre + 11 ? 'lit' : 'off'));
+    G.edges.forEach(function (e) {
+      var p = document.getElementById(e.id);
+      if (p) p.setAttribute('class', 'ge k-' + e.k + ' ' + (onE[e.id] ? 'lit anim' : 'dim'));
+      var l = document.getElementById(e.id + '_lb');
+      if (l) l.setAttribute('class', 'gelb gel ' + (onE[e.id] ? 'lit' : 'off'));
+    });
+    /* 逐格列表 */
+    for (var q = 0; q < list.length; q++) {
+      var li = document.getElementById('sl' + q);
+      if (!li) continue;
+      li.className = q === idx ? 'now' : (q < idx ? 'past' : '');
+      /* 当前格滚进视野，否则长列表里看不到自己走到哪 */
+      if (q === idx && li.scrollIntoView) {
+        li.scrollIntoView({ block:'nearest' });
+      }
+    }
 
     /* 中栏：Core 通路 */
     CORRIDORS.forEach(function (c) {
@@ -1962,17 +2182,8 @@
     coreAct.innerHTML = cur
       ? '<b>' + CIRCLED[idx] + ' · Core 做的事</b><br>' + cur.ca
       : '<b>Core 在这一步做什么？</b><br><span class="none">按 ▶ 开始。' +
-        '中间这一栏会跟着左边的流程图一起走 —— 它回答的是「这一步的数据到底过不过 Core」。</span>';
-
-    if (idx < 0) {
-      root.style.transform = 'translateY(0px)';
-    } else {
-      var cy = Y0 + idx * PITCH + BH / 2;
-      root.style.transform = 'translateY(' + (-Math.max(0, Math.min(bot() - VH, cy - VH / 2))) + 'px)';
-    }
-    for (var r = 0; r < list.length; r++) {
-      rail.children[r].className = (idx >= 0 && r === idx) ? 'on' : (r < idx ? 'done' : '');
-    }
+        '中间这一栏回答的是「这一步的数据到底过不过 Core」—— 左边全景图上，' +
+        '<b>紫色实线亮起 = 过了 Core</b>，<b>一条线都不亮 = 没过</b>。</span>';
 
     /* 右栏：三个组件各自渲染自己订到的那部分 */
     var b = idx - pre;
@@ -1980,7 +2191,7 @@
     chatEl.innerHTML = buildTimeline(idx);
     inputEl.innerHTML = buildComposer(idx);
     var running = b >= 1 && b < 15;
-    var creating = scene === 'B2' && b < 0;
+    var creating = scene === 'B' && b < 0;
     setLamp(lampList, b < 1 ? '' : 'ok');
     setLamp(lampTl, running ? 'run' : (b >= 15 ? 'ok' : ''));
     setLamp(lampCp, creating ? 'warn' : (running ? 'run' : ''));
@@ -1998,9 +2209,11 @@
         '· <b>会话列表</b>：<b>第 ① 步它什么都没变</b> —— 它不订 loop.* 与消息正文<br>' +
         '· <b>对话</b>：正文 / 思维链 / 工具块 / 审批卡片全在这里<br>' +
         '· <b>输入框</b>：角色下拉 + 模型下拉 + 发送锁定，它<b>只发一条 loop.run</b><br>' +
-        '当前场景：<b>' + SCENES[scene].name + '</b> —— ' +
-        (pre ? '<b>前置 ' + pre + ' 格</b>（' + (scene === 'A' ? '先选择会话，再各自载入' : '多一次 <code>session.create</code> 往返') + '），' : '<b>无前置</b>，') +
-        '后面 16 格完全一样。三个面板顶部的<b>「本步」</b>条就是组件级颗粒度。</div>';
+        '当前情况：<b>' + sceneName() + '</b> —— ' +
+        (pre ? '<b>前置 ' + pre + ' 格</b>（' +
+          (scene === 'A' ? '先选中会话，再各自把<b>历史</b>载入进来'
+                         : '建一个<b>空</b>会话 —— 会话列表点「新建」或输入框首问，同一格') + '），' : '<b>无前置</b>，') +
+        '后面 16 格完全一样 —— <b>区别只在这个会话里有没有历史</b>。三个面板顶部的<b>「本步」</b>条就是组件级颗粒度。</div>';
     } else {
       var s = cur;
       pillEl.textContent = (idx + 1) + ' / ' + list.length;
@@ -2028,6 +2241,23 @@
             '<span class="hv ' + h.k + '">' + esc(h.v) + '</span>' +
             '<span class="ht">' + esc(h.t) + '</span></div>';
         }).join('') + '</div>' +
+        (gp ? '<div class="gpsum"><b>左图点亮：</b>' +
+          (gp.on.length
+            ? gp.on.map(function (n) { return G.nodes[n] ? G.nodes[n].t : n; }).join(' · ')
+            : '只有 loop 本身') +
+          (gp.m.length ? '<span class="dim">（半亮：' +
+            gp.m.map(function (n) { return G.nodes[n] ? G.nodes[n].t : n; }).join(' · ') +
+            ' 被读到，字节没走）</span>' : '') +
+          (gp.e.length
+            ? '　走的是 ' + gp.e.map(function (e) {
+                var f = G.edges.filter(function (x) { return x.id === e; })[0];
+                if (!f) return e;
+                return '<span class="gk k-' + f.k + '">' +
+                  ({ bus:'C2 总线', http:'C1/C3 HTTP', file:'C4 静态产物',
+                     rpc:'C0 点对点', ext:'E 不过 Core', local:'进程内' })[f.k] + '</span>';
+              }).join(' → ')
+            : '<b class="nc">　一条线都不亮 = 不过 Core</b>') +
+          '</div>' : '') +
         '<div class="body">' + s.txt + '</div>' +
         '<div class="code">' + esc(s.code) + '</div>';
     }
@@ -2042,25 +2272,26 @@
     if (timer) { clearInterval(timer); timer = null; document.getElementById('play').textContent = '▶ 自动播放'; }
   }
 
-  /* ══ 场景切换：A 旧会话继续 / B1 列表新建 / B2 输入框首问 ══ */
+  /* ══ 情况切换：A 旧会话继续 / B 全新会话 ══ */
   var sceneBtns = document.querySelectorAll('.sceneBtn');
+  function paintButtons() {
+    for (var k = 0; k < sceneBtns.length; k++) {
+      sceneBtns[k].classList.toggle('on', sceneBtns[k].dataset.scene === scene);
+      sceneBtns[k].classList.toggle('ghost', sceneBtns[k].dataset.scene !== scene);
+    }
+  }
+  function switchTo(fn) {
+    stop(); fn(); approved = null;
+    paintButtons(); buildSteps(); idx = -1; render();
+  }
   for (var bi = 0; bi < sceneBtns.length; bi++) {
     (function (b) {
       b.addEventListener('click', function () {
-        stop();
-        scene = b.dataset.scene;
-        approved = null;
-        for (var k = 0; k < sceneBtns.length; k++) {
-          sceneBtns[k].classList.toggle('on', sceneBtns[k] === b);
-          sceneBtns[k].classList.toggle('ghost', sceneBtns[k] !== b);
-        }
-        buildFlow();
-        buildRail();
-        idx = -1;
-        render();
+        switchTo(function () { scene = b.dataset.scene; });
       });
     })(sceneBtns[bi]);
   }
+  paintButtons();
 
   document.getElementById('next').addEventListener('click', function () { stop(); go(idx + 1); });
   document.getElementById('prev').addEventListener('click', function () { stop(); go(idx - 1); });
@@ -2082,8 +2313,7 @@
     else if (e.key === ' ') { e.preventDefault(); document.getElementById('play').click(); }
   });
 
-  buildFlow();
-  buildRail();
+  buildSteps();
   render();
 })();
 </script>
