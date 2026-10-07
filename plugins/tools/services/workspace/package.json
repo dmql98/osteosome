@@ -1,0 +1,21 @@
+{
+  "name": "@osteosome/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "workspace 能力位（P7 M0）：list/resolve/open · 只列目录不读文件",
+  "buildOutput": "../../dist/server/workspace/index.js",
+  "scripts": {
+    "build": "node ../../../../scripts/build-service.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}

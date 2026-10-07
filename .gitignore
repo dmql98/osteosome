@@ -6,6 +6,11 @@ src-tauri/target/
 coverage/
 *.tsbuildinfo
 
+# 目标模型的用户数据根（userData/core + userData/plugin/<id>/）：密钥与对话不入库
+userData/
+# Core 引导配置（ost.config.json，决定数据目录等启动期设置）：每台机器不同
+ost.config.json
+# P0 之前的旧数据根，只为一次性迁移存在
 .data/
 *.log
 *.db

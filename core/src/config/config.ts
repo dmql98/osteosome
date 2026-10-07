@@ -1,25 +1,41 @@
 /**
- * Core 配置加载（P1a WS-4）—— CLI / env 解析，fail fast。
+ * Core 配置加载（P1a WS-4）—— CLI / env / 引导配置解析，fail fast。
  *
- * 优先级：CLI > env > 默认值。
+ * 优先级：CLI > env > **引导配置文件** > 默认值。
  * - `--services` / `OST_SERVICES` → **显式的扁平服务目录**（给了就只用它，插件目录一概不看；
  *   缺省 = 从插件目录发现服务，见 `main.ts`）
- * - `--data` / `OST_DATA`         → 数据根目录
+ * - `--data` / `OST_DATA`         → 数据根目录（见下面「数据目录怎么被改」）
  * - `--dist` / `OST_DIST`         → 前端静态资源目录（缺省 `./dist/client`）
  * - `--port` / `OST_PORT`         → HTTP 端口（缺省 1420）
  * - `--plugins` / `OST_PLUGINS`   → 插件目录（缺省 `./plugins`；给 `none` 或空串 = **关掉插件层**）
+ *
+ * ## 数据目录怎么被改（引导配置）
+ *
+ * 除了 `--data` / `OST_DATA`（部署者逃生门），数据根还可以写在
+ * **`<应用根>/ost.config.json` 的 `dataDir`** 里 —— 设置页「数据目录」那格写的就是它。
+ *
+ * 为什么单独一个文件而不放进 `preferences.json`：偏好住在数据目录里，
+ * 而这个文件决定的正是数据目录在哪，存一起就成了鸡生蛋（见 `boot-config.ts`）。
+ * 前两级一旦给出就不会读引导配置，否则命令行明确指定的路径会被配置文件盖掉。
+ *
+ * **改完要重启 Core 才生效** —— dataDir 在启动时定死，运行中改不动。
  *
  * ## 路径缺省：发行版 vs 开发
  *
  * 有发行标记（exe 同级 `.osteosome-dist`）时，**安装根 = exe 旁边**，于是
  * `dataDir = <安装根>/userData`、`pluginsDir = <安装根>/plugins` —— 整份发行物自包含，
- * 拷走即换机器。没有标记（开发跑）时 `dataDir` 退到用户目录（`userDataDir()`）、
+ * 拷走即换机器。没有标记（开发跑）时 `dataDir = <应用根>/userData`
+ * （应用根由入口 `core/dist/main.js` 反推，不随 cwd 漂，见 `paths.ts` 的 `appRoot()`）、
  * `pluginsDir` 退到 `./plugins`。判据见 `paths.ts` 的 `installRoot()`。
  *
  * 支持 `--key value` 与 `--key=value` 两种写法。
  */
 import { isAbsolute, join, resolve } from 'node:path'
-import { installRoot, userDataDir } from './paths'
+import { readBootConfig } from './boot-config'
+import { appRoot, bootConfigFile, installRoot } from './paths'
+
+/** `dataDir` 最终是从哪一级来的 —— 设置页拿它显示「当前值是不是缺省」 */
+export type DataDirSource = 'cli' | 'env' | 'config' | 'default'
 
 /** CLI/env 解析后的 Core 配置（路径均已 resolve 为绝对路径） */
 export interface CoreConfig {
@@ -62,6 +78,22 @@ export interface CoreConfig {
    */
   installRoot?: string
   /**
+   * 引导配置文件绝对路径 `<应用根>/ost.config.json`。
+   *
+   * `loadConfig` 总会给出；手写的测试配置（`core/tests` 里那些 `CoreConfig` 字面量）
+   * 可以省略 —— 此时 `/api/config` 回 404，而不是让 Core 猜一个路径去写。
+   */
+  configFilePath?: string
+  /** `dataDir` 从哪一级来的；`loadConfig` 总会给出 */
+  dataDirSource?: DataDirSource
+  /**
+   * **缺省**数据根（`--data` / `OST_DATA` / 引导配置都没给时会用的那个）。
+   *
+   * 只为设置页的「恢复默认」用 —— 那个按钮要**显示**重启后会落到哪，
+   * 而不是等重启完才让人看见。
+   */
+  defaultDataDir?: string
+  /**
    * `dataDir` 是不是**缺省值**（没给 `--data` / `OST_DATA`）。
    *
    * 只给一件事用：决定要不要做旧 `<cwd>/.data` 的一次性迁移（见 `migrateLegacyDataDir`）。
@@ -75,7 +107,8 @@ export const DEFAULT_PORT = 1420
 
 const DEFAULTS = {
   /**
-   * 数据根**没有仓库内缺省** —— 走 installRoot() / userDataDir()；`--data` / `OST_DATA` 可覆盖。
+   * 数据根的缺省是**派生出来的**（发行版 `<安装根>/userData`，开发 `<应用根>/userData`）；
+   * `--data` / `OST_DATA` / 引导配置 `ost.config.json` 都能覆盖。
    *
    * 服务目录**也没有缺省**了：P1 之后从插件目录发现（`plugins/<id>/services/<sid>/`），
    * `servicesDir` 只在显式给出时存在。
@@ -116,6 +149,7 @@ function resolvePath(value: string, cwd: string): string {
  * 从 argv（默认 `process.argv.slice(2)`）与 env 加载配置。
  * `cwd` 仅用于相对路径解析（测试注入；缺省 `process.cwd()`）。
  * `execPath` 仅用于判发行版（测试注入；缺省 `process.execPath`）。
+ * `entry` 仅用于反推应用根（测试注入；缺省 `process.argv[1]`）。
  * 端口非法（非整数 / 越界）→ throw（fail fast）。
  */
 export function loadConfig(
@@ -123,6 +157,7 @@ export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
   execPath: string = process.execPath,
+  entry: string | undefined = process.argv[1],
 ): CoreConfig {
   const args = parseArgv(argv)
 
@@ -135,7 +170,6 @@ export function loadConfig(
   }
 
   const servicesRaw = pick('services', 'OST_SERVICES')
-  const dataRaw = pick('data', 'OST_DATA')
   const distRaw = pick('dist', 'OST_DIST') ?? DEFAULTS.dist
   const portRaw = pick('port', 'OST_PORT') ?? String(DEFAULT_PORT)
 
@@ -146,16 +180,38 @@ export function loadConfig(
 
   // 发行版 → 安装根在 exe 旁边，于是 dataDir / pluginsDir 都在它底下（整份发行物自包含）
   const root = installRoot(execPath)
+  // 应用根（开发跑）：由入口反推，**不随 cwd 漂**；入口不在预期布局时才退回 cwd。
+  // 引导配置住在它里面 —— 数据目录这个设置必须待在数据目录之外。
+  const base = appRoot(entry) ?? cwd
+  const configFilePath = bootConfigFile(base)
   // S7：--plugins '' / OST_PLUGINS='' 显式关掉插件层（测试用）；未给则用缺省（发行版下是 <安装根>/plugins）
   const pluginsRaw = args.get('plugins') ?? env.OST_PLUGINS ?? (root ? join(root, 'plugins') : DEFAULTS.plugins)
+
+  // ── dataDir 来源优先级：CLI > env > 引导配置 > 缺省 ────────
+  // 单独一层一层判而不是复用 pick()，是为了**说出来是谁定的**（dataDirSource）
+  const cliValue = args.get('data')
+  const cliData = cliValue !== undefined && cliValue !== '' ? cliValue : undefined
+  const envData = env.OST_DATA !== undefined && env.OST_DATA !== '' ? env.OST_DATA : undefined
+  const fileData = readBootConfig(configFilePath).dataDir
+  const dataDirSource: DataDirSource =
+    cliData !== undefined ? 'cli' : envData !== undefined ? 'env' : fileData !== undefined ? 'config' : 'default'
+  // 缺省：发行版跟着安装根走，开发跟着应用根走（`<应用根>/userData`）
+  const defaultDataDir = root !== undefined ? resolve(root, 'userData') : resolve(base, 'userData')
+
+  let dataDir: string
+  if (cliData !== undefined) dataDir = resolvePath(cliData, cwd)
+  else if (envData !== undefined) dataDir = resolvePath(envData, cwd)
+  else if (fileData !== undefined) dataDir = resolvePath(fileData, base)
+  else dataDir = defaultDataDir
 
   return {
     // 没给 → 从插件目录发现服务（main.ts 按插件清单算）；给了就只用它（测试 / 逃生门）
     ...(servicesRaw !== undefined ? { servicesDir: resolvePath(servicesRaw, cwd) } : {}),
-    // 没给 --data / OST_DATA → 发行目录或用户目录（数据跟着人，不跟着工作副本）
-    dataDir:
-      dataRaw !== undefined ? resolvePath(dataRaw, cwd) : root ? join(root, 'userData') : userDataDir(env),
-    dataDirIsDefault: dataRaw === undefined,
+    dataDir,
+    dataDirIsDefault: dataDirSource === 'default',
+    dataDirSource,
+    configFilePath,
+    defaultDataDir,
     distDir: resolvePath(distRaw, cwd),
     port,
     ...(root !== undefined ? { installRoot: root } : {}),

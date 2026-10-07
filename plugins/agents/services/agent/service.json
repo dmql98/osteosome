@@ -1,0 +1,17 @@
+{
+  "id": "agent",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "agent.state",
+    "agent.resolve.result",
+    "prompt.fragment.registered",
+    "prompt.fragment.unregistered"
+  ],
+  "subscribes": [
+    "agent.state.set",
+    "agent.resolve",
+    "prompt.fragments.list"
+  ]
+}

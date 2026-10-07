@@ -43,7 +43,10 @@ if not errorlevel 1 (
 )
 
 echo [P1b] Starting Core on port 1420...
-start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --plugins "%~dp0\plugins" --data "%~dp0\.data" --dist "%~dp0\core\dist\client"
+rem data dir is NOT passed on the command line any more: the default is repo-root
+rem userData, and an explicit ost.config.json overrides it. Passing --data here
+rem would outrank that file, so settings would silently stop working.
+start "Osteosome Core" /D "%~dp0" cmd.exe /k node core\dist\main.js --plugins "%~dp0\plugins" --dist "%~dp0\core\dist\client"
 
 rem Wait for Core instead of opening the browser too early.
 for /l %%I in (1,1,20) do (

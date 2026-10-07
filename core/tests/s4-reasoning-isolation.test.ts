@@ -157,10 +157,9 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string }> {
 describe('S4 集成冒烟 · 思考流不泄漏进正文', () => {
   let core: Core | undefined
   let dataDir = ''
-  let toolRoot = ''
   let up: { server: Server; baseUrl: string } | undefined
 
-  const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'LLM_PROVIDER', 'LLM_TOOL_ROOT']
+  const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'LLM_PROVIDER']
   const base = (): string => `http://127.0.0.1:${core!.port}`
 
   beforeAll(async () => {
@@ -168,8 +167,6 @@ describe('S4 集成冒烟 · 思考流不泄漏进正文', () => {
     process.env.OPENAI_BASE_URL = up.baseUrl
     process.env.OPENAI_API_KEY = 'test-openai-key'
     process.env.LLM_PROVIDER = 'openai'
-    toolRoot = mkdtempSync(path.join(tmpdir(), 'ost-s4-tools-'))
-    process.env.LLM_TOOL_ROOT = toolRoot
 
     dataDir = mkdtempSync(path.join(tmpdir(), 'ost-s4-smoke-'))
     core = await startCore({
@@ -191,7 +188,6 @@ describe('S4 集成冒烟 · 思考流不泄漏进正文', () => {
     for (const k of envKeys) delete process.env[k]
     up?.server.close()
     if (dataDir) rmSync(dataDir, { recursive: true, force: true })
-    if (toolRoot) rmSync(toolRoot, { recursive: true, force: true })
   }, 30_000)
 
   it(

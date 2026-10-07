@@ -1,0 +1,2035 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>技能管理 · 前端组件 Demo（widget.skills） · OST P6</title>
+<style>
+  /* ══ 文档壳：沿用 docs/插件demo/tool_manager 同一套皮肤 ══ */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+    /* ══ Demo 内联令牌：与 sdk/ui/src/tokens.css 同名同值 ══ */
+    --color-bg:#f5f6f8; --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-success-soft:#e7f6ec;
+    --color-warning:#9a6700; --color-warning-soft:#fdf6e3;
+    --color-bus:#7c4dff; --color-bus-soft:#efe9ff;
+    --color-ext:#0f8a8a; --color-ext-soft:#e2f4f4;
+    --color-proc:#c2410c; --color-proc-soft:#fdeee2;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px; --text-xl:20px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+    --color-bg:#14171c; --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-success-soft:#16301f; --color-warning:#d29922;
+    --color-warning-soft:#33280f; --color-proc:#fb923c; --color-proc-soft:#3a2314;
+    --color-bus:#a683ff; --color-bus-soft:#251d3d;
+    --color-ext:#2fc4c4; --color-ext-soft:#123536;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family: var(--mono); }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:30; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:29; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s2); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px;
+    border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  td.mono, .mono { font-size:12px; }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+
+  /* ══ 设备框：模拟 iframe 里插件 UI 的实际尺寸 ══ */
+  .stage { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    box-shadow:var(--shadow-sm); overflow:hidden; margin:0 0 var(--s4); }
+  .stage > .stage-bar { display:flex; align-items:center; gap:var(--s2); padding:6px 10px;
+    background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--xs); color:var(--muted); flex-wrap:wrap; }
+  .stage > .stage-bar b { color:var(--text); font-size:var(--sm); }
+  .stage > .stage-bar .sp { flex:1; }
+  .stage > .stage-bar .dots::before { content:'\25CF \25CF \25CF'; color:var(--border-strong); letter-spacing:2px; font-size:9px; }
+  /* position:relative 是必需的：抽屉/遮罩用 position:absolute，
+     没有它就会以视口为基准定位，再被 .stage 的 overflow:hidden 裁成一条。 */
+  .stage > .frame { background:var(--color-bg); position:relative; }
+  .caption { font-size:var(--xs); color:var(--muted); margin:0 0 var(--s4); }
+
+  /* ══════════════════════════════════════════════════════════
+     ↓↓↓ Demo 本体：widget.skills
+     取值全部走 sdk/ui/src/tokens.css 的真名
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── 通用控件（对应 sdk/ui 组件） ── */
+  .u-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid transparent;
+    border-radius:var(--radius-md); padding:5px 11px; font:inherit; font-size:var(--text-sm);
+    cursor:pointer; background:var(--color-primary); color:#fff; white-space:nowrap; }
+  .u-btn:hover:not(:disabled) { filter:brightness(1.06); }
+  .u-btn.sm { padding:3px 9px; font-size:var(--text-xs); }
+  .u-btn.ghost { background:var(--color-surface); color:var(--color-text); border-color:var(--color-border); }
+  .u-btn.ghost:hover:not(:disabled) { background:var(--color-surface-2); filter:none; }
+  .u-btn.danger { background:var(--color-danger); }
+  .u-btn.approve { background:var(--color-success); }
+  .u-btn.warn { background:var(--color-warning); }
+  .u-btn:disabled { opacity:.45; cursor:not-allowed; }
+
+  .u-input, .u-select, .u-textarea { background:var(--color-surface); color:var(--color-text);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:6px 9px;
+    font:inherit; font-size:var(--text-sm); width:100%; }
+  .u-textarea { font-family:var(--font-mono); font-size:12px; min-height:70px; resize:vertical; }
+  .u-input:focus, .u-textarea:focus, .u-select:focus { outline:2px solid var(--color-primary-soft);
+    border-color:var(--color-primary); }
+  .u-input::placeholder { color:var(--color-text-muted); }
+
+  .u-switch { display:inline-flex; align-items:center; gap:var(--space-2); cursor:pointer; }
+  .u-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .u-switch .track { width:32px; height:18px; border-radius:var(--radius-full);
+    background:var(--color-surface-3); position:relative; transition:background .18s; flex:none; }
+  .u-switch .thumb { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.3); transition:transform .18s; }
+  .u-switch input:checked + .track { background:var(--color-primary); }
+  .u-switch input:checked + .track .thumb { transform:translateX(14px); }
+  .u-switch input:disabled + .track { opacity:.4; }
+  .u-switch.disabled { cursor:not-allowed; }
+
+  .u-tabs { display:flex; gap:var(--space-1); border-bottom:1px solid var(--color-border); }
+  .u-tabs button { padding:var(--space-2) var(--space-3); border:0; border-bottom:2px solid transparent;
+    background:transparent; color:var(--color-text-muted); cursor:pointer; font:inherit; font-size:var(--text-sm); }
+  .u-tabs button[aria-selected="true"] { border-bottom-color:var(--color-primary); color:var(--color-primary); font-weight:600; }
+  .u-tabs .badge { font-size:10px; margin-left:4px; padding:0 4px; border-radius:var(--radius-full);
+    background:var(--color-surface-3); color:var(--color-text-muted); }
+  .u-tabs button[aria-selected="true"] .badge { background:var(--color-primary-soft); color:var(--color-primary); }
+
+  .seg { display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius-md); overflow:hidden; }
+  .seg button { border:0; background:var(--color-surface); color:var(--color-text-muted); cursor:pointer;
+    font:inherit; font-size:var(--text-xs); padding:4px 10px; border-right:1px solid var(--color-border); }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--color-primary); color:#fff; font-weight:600; }
+
+  .p-empty { padding:var(--space-5); text-align:center; color:var(--color-text-muted); font-size:var(--text-sm); }
+  .p-empty b { display:block; color:var(--color-text); margin-bottom:4px; }
+
+  /* 徽章 */
+  .p-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600;
+    border-radius:var(--radius-full); padding:1px 7px; white-space:nowrap; vertical-align:middle; }
+  .b-ok     { background:var(--color-success-soft); color:var(--color-success); }
+  .b-warn   { background:var(--color-warning-soft); color:var(--color-warning); }
+  .b-danger { background:var(--color-danger-soft); color:var(--color-danger); }
+  .b-src    { background:var(--color-surface-2); color:var(--color-text-muted); font-family:var(--font-mono); }
+  .b-plugin { background:var(--color-bus-soft); color:var(--color-bus); }
+  .b-custom { background:var(--color-primary-soft); color:var(--color-primary); }
+  .b-read   { background:var(--color-success-soft); color:var(--color-success); }
+  .b-proc   { background:var(--color-proc-soft); color:var(--color-proc); }
+  .b-dangling { background:var(--color-danger-soft); color:var(--color-danger); border:1px dashed currentColor; }
+  .b-managed  { background:var(--color-surface-2); color:var(--color-text-muted); border:1px dashed var(--color-border-strong); }
+
+  /* ── widget.skills 外壳 ── */
+  .sk-view { display:flex; flex-direction:column; height:100%; background:var(--color-surface);
+    color:var(--color-text); font: var(--text-sm)/1.6 var(--font-sans); }
+  .sk-head { display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4);
+    border-bottom:1px solid var(--color-border); flex-wrap:wrap; }
+  .sk-title { font-size:var(--text-lg); font-weight:600; }
+  .sk-count { font-size:var(--text-xs); color:var(--color-text-muted); }
+  .sk-tabs { padding:0 var(--space-4); }
+  .sk-body { flex:1; overflow:auto; padding:var(--space-4); }
+  .sk-filters { display:grid; grid-template-columns:1fr 150px 130px; gap:var(--space-2); margin-bottom:var(--space-3); }
+
+  /* ── 技能库表（沿用工具目录表的骨架） ── */
+  .tool-table { width:100%; border-collapse:collapse; font-size:var(--text-sm); }
+  .tool-table th { padding:var(--space-2) var(--space-3); text-align:left; color:var(--color-text-muted);
+    font-weight:500; font-size:var(--text-xs); background:var(--color-surface-2);
+    border-bottom:1px solid var(--color-border); }
+  .tool-table td { padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--color-border); vertical-align:middle; }
+  .tool-table tr:last-child td { border-bottom:0; }
+  .tool-table tbody tr:hover { background:var(--color-surface-2); }
+  .tool-table tr.row-off td { opacity:.45; }
+  .tool-table .t-name { font-family:var(--font-mono); font-size:12.5px; font-weight:600; }
+  .tool-table .t-title { font-weight:600; margin-left:6px; font-size:var(--text-sm); }
+  .tool-table .t-desc { color:var(--color-text-muted); font-size:11.5px; margin-top:2px;
+    max-width:460px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tool-table .t-note { font-size:11px; color:var(--color-text-muted); margin-top:3px;
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .tool-table .t-actions { display:flex; gap:4px; justify-content:flex-end; }
+  .group-row td { background:var(--color-surface-2); font-weight:600; font-size:var(--text-xs);
+    color:var(--color-text-muted); padding:var(--space-1) var(--space-3); }
+  .group-row td .g-count { font-weight:400; margin-left:6px; }
+
+  /* ── 详情抽屉 ── */
+  .dd-scrim { position:absolute; inset:0; background:rgba(0,0,0,.3); }
+  .dd-panel { position:absolute; top:0; right:0; bottom:0; width:460px; background:var(--color-surface);
+    border-left:1px solid var(--color-border); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; z-index:2; }
+  .dd-head { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-3) var(--space-4);
+    border-bottom:1px solid var(--color-border); flex:none; flex-wrap:wrap; }
+  .dd-name { font-family:var(--font-mono); font-size:var(--text-md); font-weight:600; }
+  /* min-height:0：flex 子项要能真正收缩，内部才滚得动而不是把面板撑高 */
+  .dd-body { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:var(--space-4); }
+  .dd-foot { padding:var(--space-3) var(--space-4); border-top:1px solid var(--color-border);
+    background:var(--color-surface-2); display:flex; gap:var(--space-2); align-items:center; flex-wrap:wrap; flex:none; }
+  .dd-sec-title { font-size:var(--text-xs); color:var(--color-text-muted); margin:var(--space-4) 0 var(--space-2);
+    font-weight:600; display:flex; align-items:center; gap:6px; }
+
+  .kv-list { display:flex; flex-direction:column; gap:6px; }
+  .kv { display:grid; grid-template-columns:76px 1fr; gap:var(--space-2); font-size:var(--text-xs);
+    align-items:baseline; line-height:1.7; }
+  .kv .k { color:var(--color-text-muted); }
+  /* 正文类值用无衬线 + 正常断行；只有路径 / 标识符才等宽 + 任意处断行 */
+  .kv .v { word-break:break-word; overflow-wrap:anywhere; }
+  .kv .v.mono { font-family:var(--font-mono); font-size:11.5px; word-break:break-all; }
+
+  .md-box { border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-surface-2);
+    padding:var(--space-3); font-size:12px; line-height:1.7; white-space:pre-wrap; max-height:220px; overflow:auto;
+    font-family:var(--font-mono); }
+  .pathbox { font-family:var(--font-mono); font-size:11.5px; color:var(--color-text-muted);
+    background:var(--color-surface-2); border-radius:var(--radius-sm); padding:6px 8px; word-break:break-all; }
+
+  .child-row { display:flex; align-items:center; gap:var(--space-2); padding:6px 8px; border-radius:var(--radius-sm);
+    border:1px solid var(--color-border); font-size:var(--text-xs); margin-bottom:4px; background:var(--color-surface); }
+  .child-row .cid { font-family:var(--font-mono); font-weight:600; font-size:11.5px; }
+  .child-row .cd { color:var(--color-text-muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ── 体检 ── */
+  .hx { display:flex; gap:var(--space-3); padding:var(--space-3); border:1px solid var(--color-border);
+    border-left-width:3px; border-radius:var(--radius-md); margin-bottom:var(--space-2); background:var(--color-surface); }
+  .hx.bad { border-left-color:var(--color-danger); }
+  .hx.warn { border-left-color:var(--color-warning); }
+  .hx.ok { border-left-color:var(--color-success); }
+  .hx-ico { width:20px; height:20px; border-radius:var(--radius-full); display:grid; place-items:center;
+    font-size:12px; font-weight:700; flex:none; margin-top:1px; }
+  .hx.bad .hx-ico { background:var(--color-danger-soft); color:var(--color-danger); }
+  .hx.warn .hx-ico { background:var(--color-warning-soft); color:var(--color-warning); }
+  .hx.ok .hx-ico { background:var(--color-success-soft); color:var(--color-success); }
+  .hx-main { flex:1; min-width:0; }
+  .hx-t { font-size:var(--text-sm); font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .hx-d { font-size:var(--text-xs); color:var(--color-text-muted); margin-top:3px; line-height:1.6; }
+  .hx-fix { font-size:var(--text-xs); margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+
+  /* ── 预算条 ── */
+  .budget { border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--space-3); background:var(--color-surface); }
+  .budget-track { height:8px; border-radius:var(--radius-full); background:var(--color-surface-3); overflow:hidden;
+    display:flex; margin:var(--space-2) 0 6px; }
+  .budget-track i { display:block; height:100%; background:var(--color-primary); }
+  .budget-track i.over { background:var(--color-danger); }
+  .budget-track i.warn { background:var(--color-warning); }
+  .budget-legend { display:flex; gap:var(--space-3); font-size:11px; color:var(--color-text-muted); flex-wrap:wrap; }
+
+  /* ── 边界情形切换条 ── */
+  /* ── 编辑器 ── */
+  .ed { display:grid; grid-template-columns:1fr 260px; gap:var(--space-4); }
+  .ed-lab { font-size:var(--text-xs); color:var(--color-text-muted); display:flex; align-items:center;
+    gap:6px; margin-bottom:3px; }
+  .ed-lab .req { color:var(--color-danger); }
+  .ed-body { min-height:190px; line-height:1.65; }
+  .ed-side { border-left:1px solid var(--color-border); padding-left:var(--space-4); }
+  .fm { border:1px dashed var(--color-border-strong); border-radius:var(--radius-md); padding:var(--space-3);
+    background:var(--color-surface-2); margin-bottom:var(--space-3); }
+  .fm-title { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); margin-bottom:var(--space-2); }
+  .file-row { display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:11.5px;
+    padding:4px 6px; border-radius:var(--radius-sm); }
+  .file-row:hover { background:var(--color-surface-2); }
+  .file-row .fk { color:var(--color-text-muted); width:16px; text-align:center; }
+  .file-row.blocked .fn { color:var(--color-text-muted); text-decoration:line-through; }
+
+  /* ── 工具披露面（skill_manager 在 widget.tools 里的那一行 + action 表） ── */
+  .act-table { width:100%; border-collapse:collapse; font-size:var(--text-xs); }
+  .act-table td { padding:5px 8px; border-bottom:1px dashed var(--color-border); vertical-align:top; }
+  .act-table td.a { font-family:var(--font-mono); font-weight:600; white-space:nowrap; }
+  .schema-tbl { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:11.5px; }
+  .schema-tbl td { padding:3px 6px; border-bottom:1px dashed var(--color-border); vertical-align:top; }
+  .schema-tbl td.k { color:var(--color-primary); white-space:nowrap; }
+  .schema-tbl td.t { color:var(--color-text-muted); }
+  .schema-tbl td.d { color:var(--color-text-muted); font-family:var(--font-sans); }
+
+  .scn-bar { display:flex; gap:var(--space-2); align-items:center; padding:var(--space-2) var(--space-3);
+    border-bottom:1px solid var(--color-border); background:var(--color-surface-2); flex-wrap:wrap; }
+  .scn-bar .lbl { font-size:var(--text-xs); color:var(--color-text-muted); }
+
+  .warnbox { border:1px solid var(--color-warning); background:var(--color-warning-soft); color:var(--color-warning);
+    border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); font-size:var(--text-xs); margin:var(--space-2) 0 0; }
+  .badbox  { border:1px solid var(--color-danger); background:var(--color-danger-soft); color:var(--color-danger);
+    border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); font-size:var(--text-xs); margin:var(--space-2) 0 0; }
+  .okbox   { border:1px solid var(--color-success); background:var(--color-success-soft); color:var(--color-success);
+    border-radius:var(--radius-md); padding:var(--space-2) var(--space-3); font-size:var(--text-xs); margin:var(--space-2) 0 0; }
+
+  .switcher { position:fixed; right:18px; bottom:18px; z-index:40; display:flex; gap:6px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-full);
+    padding:5px; box-shadow:var(--shadow-md); }
+  .switcher button { border:0; background:transparent; cursor:pointer; width:34px; height:34px;
+    border-radius:50%; font-size:15px; color:var(--muted); display:grid; place-items:center; }
+  .switcher button[aria-pressed="true"] { background:var(--primary); color:#fff; }
+  @media print { .switcher { display:none; } nav.toc { display:none; } header.bar { position:static; } }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>技能管理 · 前端组件 Demo</h1>
+    <span class="sp"></span>
+    <span class="sub">widget.skills —— 技能库 · 体检 · 会话激活 · 事件　｜　参考天枢 dev 的 SkillView / SkillPackageDetailPage，形态按 OST 技能契约重画</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s0">0 两个消费者的分工</a>
+    <a href="#s1">1 面板 · 总览</a>
+    <a href="#s2">2 技能库表</a>
+    <a href="#s3">3 详情抽屉</a>
+    <a href="#s4">4 统计 · 谁真的被读了</a>
+    <a href="#s5">5 砍掉的三个 Tab</a>
+    <a href="#s6">6 skill_manager 的披露面</a>
+    <a href="#s7">7 SKILL.md 编辑器</a>
+    <a href="#s8">8 七种边界情形</a>
+    <a href="#s9">9 组件映射 · 与天枢的差异</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>这份稿画的是 OST <code class="inl">widget.skills</code> 一个视图的<b>最终形态</b>与<b>交互</b>；服务与协议见
+  <code class="inl">../../智能体Loop与插件协同设计.html</code> §3.1，工具侧见
+  <code class="inl">../tool_manager/工具管理插件设计.html</code> §5.4。</b>
+  <br>
+  <b>形态参考天枢 dev 的 <code class="inl">SkillView</code> / <code class="inl">SkillPackageDetailPage</code></b>
+  （分类分组的卡片墙 + 左侧栏 + 右侧 Tab 的详情页），<b>但四条语义完全换掉</b>：
+  <br>① 列表单位不是「技能包 + 子技能两层」，而是<b>一个技能一行</b> —— 因为 OST 的子技能不是独立条目，是同一个
+  <code class="inl">SKILL.md</code> 里的分节，靠 <code class="inl">skill_manager</code> 懒激活；
+  <br>② 「描述」从卡片上的装饰变成<b>契约字段</b> —— 检查只在改它的地方响，不单开一屏；
+  <br>③ 面板从 4 个 Tab 收到 <b>2 个</b>：技能库 + 统计。砍掉的那三个去哪了，见 <a href="#s5">§5</a>；
+  <br>④ 没有「导出 / 同步到云端」—— OST 的技能不跨机搬运；
+  <br>⑤ 启停开关是<b>真的</b>（<code class="inl">skill.enabled.set</code>），与工具目录里那行
+  <code class="inl">managedBy:'auto'</code> 的 <code class="inl">skill_manager</code> 是两件事，别混。
+</div>
+
+<!-- ══════════ 0 ══════════ -->
+<section id="s0">
+  <h2><span class="n">0</span>两个消费者：界面管「装了什么」，工具管「读了什么」</h2>
+  <table>
+    <thead><tr><th style="width:20%">组件</th><th style="width:22%">住在哪</th><th style="width:20%">数据源</th><th style="width:20%">回答</th><th>写什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>SkillCatalogView</b> + 统计 Tab</td>
+        <td>skills 插件（<code class="inl">widget.skills</code>）</td>
+        <td class="mono">skills.state（owner 每次变更重播整份）</td>
+        <td>「这台机器上有哪些技能、它们现在是启用还是停用、我这份描述模型读不读得懂」</td>
+        <td class="mono">skills.list · skill.enabled.set · skill.package.write</td></tr>
+      <tr><td><b>skill_manager</b> 工具</td>
+        <td>skills 插件的 <code class="inl">skills</code> 服务（不是 UI）</td>
+        <td class="mono">同上 + 会话激活表</td>
+        <td>「现在该读哪一份技能正文」</td>
+        <td class="mono">会话激活表（进程内，不上总线）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>为什么这两件事不能合并成一个组件。</b>它们的时间尺度不一样：
+    界面管的是<b>跨会话</b>的「装没装 / 开不开」，工具管的是<b>本轮</b>的「读不读」。
+    <br>
+    合并的代价很具体：界面上会出现一个「本轮已激活」的列表，而它是<b>每轮都会变</b>的 ——
+    用户盯着它会以为「模型没读就是没装好」，于是去改描述，改了三轮，最后发现问题在别处。
+    <b>所以拆成两个 Tab：一个跨会话（技能库），一个本轮（会话）。</b>
+  </div>
+
+  <div class="note bad">
+    <b>与天枢最大的一处形态差异：列表不再是「分类 → 卡片墙」。</b>
+    天枢 <code class="inl">SkillView</code> 按 <code class="inl">category</code> 分组、卡片上显示
+    「名称 / id / v版本 / N 个子技能 / 绑定角色」。这套信息密度对天枢成立，因为它的技能包是<b>独立目录</b>（有 <code class="inl">skill-package.json</code>）。
+    <br>
+    OST 的技能是 <code class="inl">SKILL.md</code> 一个文件 + frontmatter，<b>没有 category 字段</b>；
+    而「谁提供的」（<code class="inl">ownerPluginId</code>）是<b>唯一真实存在的分组维度</b> ——
+    它的运维含义是「卸掉哪个插件会带走哪些技能」，而 category 没有这个含义。
+  </div>
+</section>
+
+<!-- ══════════ 1 ══════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>面板 · 总览</h2>
+  <p>面板本体。<b>两个</b> Tab，共用一份 <code class="inl">skills.state</code>，切 Tab 不重新取数、不重新订阅。
+  被砍掉的另外三个 Tab 去哪了，写在 <a href="#s5">§5</a>。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>widget.skills</b>
+      <span class="mono">index.html#library</span><span class="sp"></span>
+      <span>订阅 <code class="inl">skills.state</code> · 发 <code class="inl">skill.enabled.set</code> / <code class="inl">skill.package.write</code></span></div>
+    <div class="frame" style="height:520px;"><div class="sk-view" id="skView"></div></div>
+  </div>
+  <p class="caption">520px 模拟 dockview 里一个中等面板的真实高度。窄于 900px 时表退化成卡片列表（见 <a href="#s9">§9</a>）。</p>
+
+  <table>
+    <thead><tr><th style="width:14%">Tab</th><th style="width:32%">回答</th><th style="width:38%">为什么是它</th><th>章节</th></tr></thead>
+    <tbody>
+      <tr><td><b>技能库</b></td><td>有哪些技能？谁提供的？开了吗？正文谁能读？</td>
+        <td>唯一需要一份<b>全量列表</b>的地方 —— 也是唯一能停用 / 改描述的地方</td><td><a href="#s2">§2</a></td></tr>
+      <tr><td><b>统计</b></td><td>我装的这些技能，有几个模型<b>真的会用</b>？</td>
+        <td>唯一能把一份列表变成一个<b>决定</b>的地方。渐进披露让「装了没用过」是<b>静默</b>的，
+        界面上不给它一个数，用户就只能靠猜</td><td><a href="#s4">§4</a></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>头部那四个数字各自对应一个失败模式</b>，不是装饰：
+    <br><b>技能数</b> —— 零的时候 <code class="inl">skill_manager</code> 根本不注册（<a href="#s6">§6</a>）。
+    <br><b>本机可用数</b> —— 关掉「可用」的技能<b>不进索引片段</b>，所以它不占模型上下文，但仍在目录里可见、角色绑定也保留。
+    <br><b>从没被读过</b> —— 这一栏是<b>红灯</b>，且只在「本机可用 + 装了够久 + 调用 0 次」时才亮；
+    新装的技能不算（见 <a href="#s4">§4</a>）。
+    <br><b>索引字节</b> —— 索引片段是 <code class="inl">priority 10</code> 的一整块，预算 8 KB / 20 条；
+    超了<b>整块丢弃 + 每条一条 warn</b>，不是截断。所以这个数字要一直看得见。
+  </div>
+
+  <div class="note">
+    <b>两个 Tab 是这份设计里最费口舌的部分。</b>
+    工具管理面板有 5 个 Tab，因为工具要管 4 类东西（内置 / MCP / 审批 / 试调）；
+    技能只有一件东西 —— 一堆 <code class="inl">SKILL.md</code>。
+    <b>Tab 的数量应该等于「不同的用户问题」的数量，而不是等于「能做的操作」的数量。</b>
+    能做的操作（改描述、停用、设 preload）都在技能库这一屏里就地完成，不需要各自的 Tab。
+  </div>
+</section>
+
+<!-- ══════════ 2 ══════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>技能库 · 表（按 owner 分组）</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>SkillCatalogView</b>
+      <span class="sp"></span><span>点开关就地改 enabled；点「详情」开抽屉；<b>同名冲突 / 悬空绑定 / 来源插件未运行</b>都灰显但不隐藏</span></div>
+    <div class="frame" style="height:430px;"><div class="sk-view" id="skCatalog"></div></div>
+  </div>
+
+  <h3>两个开关：一个「本机可用」，一个「角色绑定」，合成是 AND</h3>
+  <p>这是整个面板最容易设计错的一处，所以先说清楚：<b>本视图的开关不叫「启用」。</b></p>
+
+  <table>
+    <thead><tr><th style="width:15%"></th><th style="width:26%">本机可用<span style="font-weight:400">（本视图的开关）</span></th>
+      <th>角色绑定<span style="font-weight:400">（在 widget.agents 选）</span></th></tr></thead>
+    <tbody>
+      <tr><td><b>回答什么</b></td><td>这台机器<b>有没有</b>这个能力</td>
+        <td>这个角色<b>要不要</b>这个能力</td></tr>
+      <tr><td><b>粒度</b></td><td>机器级 · 一份（<code class="inl">skills.json</code>）</td>
+        <td>角色级 · 每个角色一份（<code class="inl">characters.json · skills[]</code>）</td></tr>
+      <tr><td><b>存在的原因</b></td>
+        <td><b>预算闸门</b>。索引片段是 p10 的一整块，8 KB / 20 条，超了整块丢弃；
+        而角色绑定是分散的，<b>所有角色的并集照样能撑爆它</b>。只有机器级开关能保证这个不变量。
+        外加「这台机器上不要有这个能力」这种诉求，与谁用无关</td>
+        <td>不同角色用不同技能 —— 这是最常见的情况，不该由一个全局开关去表达</td></tr>
+      <tr><td><b>合成</b></td>
+        <td colspan="2"><b>本轮索引 = 本机可用 ∩ 角色绑定</b>。与工具目录同一条式子
+        （<code class="inl">tools = union(registered) ∩ role.tools</code>）。</td></tr>
+      <tr><td><b>关掉它会怎样</b></td>
+        <td>角色绑定<b>保留</b>（与「卸载不回溯历史」同一条纪律），重开即恢复；
+        但那 N 个角色<b>本轮拿不到</b>它</td>
+        <td>只是从这个角色的候选里去掉</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>为什么角色侧不给开关，只给「选择」。</b>
+    角色插件自己的判断是对的：<b>不选这个角色就是不用它</b>。再加一个 <code class="inl">enabled</code>
+    只会制造「下拉里选了它，但它被停用了怎么办」这种自相矛盾。
+    <br>
+    所以两边各留一半，<b>合起来正好两个开关，缺一个都不成立</b>：
+    只有角色侧 → 撑爆索引预算时无计可施；只有机器侧 → 所有角色被迫用同一批技能。
+  </div>
+
+  <div class="note bad">
+    <b>AND 必须在服务端成立，不能靠界面约定。</b>
+    如果 <code class="inl">skills.state</code> 里那份技能清单<b>不分角色</b>，
+    而 <code class="inl">skill_manager.read</code> 又按角色绑定拒绝，那么每一轮都会出现：
+    <b>模型在索引里看见了一个技能，去读，被拒</b> —— 而拒绝的原因用户完全看不到。
+    <br>
+    所以索引片段<b>不能是静态 publish 的一份</b>：它是<b>随角色解析一起算出来</b>的。
+    做法是给已有的 <code class="inl">skills.list</code> 加一个可选字段
+    （<code class="inl">skills.list{characterId}</code>，只加字段不改语义），
+    loop 先 <code class="inl">agent.resolve</code> 拿到角色，再按角色要清单。
+    <b>skills 服务仍然是唯一持有技能目录的人，零新 topic。</b>
+  </div>
+
+  <div class="note">
+    <b>界面上唯一需要做对的一件事：把「有效」显示出来。</b>
+    「绑了 2 个 · <b>有效 0 个</b>」这一格是 AND 的唯一出口。
+    没有它，用户只能自己在脑子里做交集 —— 而人做交集会出错，
+    出错后的症状是「我明明绑了它，模型就是不用」。
+  </div>
+
+  <h3>十一个决定，都写在表里了</h3>
+  <table>
+    <thead><tr><th style="width:30%">决定</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>按 owner 分组</b>（用户自建 / 插件自带 + 具体插件）</td>
+        <td>用户的问题是「卸掉 chat-workbench 会带走什么」，不是「web 开头的有哪些」。
+        <b>group 就是卸载影响面</b>，所以它必须是最外层结构。</td></tr>
+      <tr><td>组内按 name 排序</td>
+        <td><b>这一条是给模型的</b>：<code class="inl">skills.state</code> 与索引片段的顺序必须
+        <code class="inl">ownerPluginId → name</code> 稳定，否则 prompt 缓存全失效。
+        <b>界面顺序与它一致</b>，用户看到的就是模型看到的。</td></tr>
+      <tr><td>名称等宽字体 + 描述单行省略</td>
+        <td>name 是模型调用的<b>标识符</b>，用户要能一字不差核对；
+        description 长不影响扫表（抽屉与编辑器里有全文）。</td></tr>
+      <tr><td>描述后面只跟<b>一个</b>徽章，且<b>只在有问题时出现</b></td>
+        <td>渐进披露让 description 成为契约，所以要有一个信号；但信号只在<b>可改的那一条</b>上出现
+        （没有触发条件 / 过短），其余问题各归各屏（脚本 → 抽屉、冲突 → 抽屉、预算 → 底部预算条）。
+        <br><b>没有「体检通过」绿标</b> —— 大部分行是绿的，绿标就只是噪声。</td></tr>
+      <tr><td>「索引 B」列显示<b>字节数</b>而不是条数</td>
+        <td>预算卡在字节上（8 KB），也卡在条数上（20）。两个都超了才有事，
+        <b>先看到字节</b>，因为它先到。</td></tr>
+      <tr><td>停用的行<b>不隐藏</b>，只降透明度</td>
+        <td>隐藏 = 用户以为「我装过这个技能」。停用是<b>可逆</b>，所以留在原地。</td></tr>
+      <tr><td>同名冲突标 ⚠ 且<b>说明是哪两个 owner 撞了</b></td>
+        <td>fail fast 的另一半在界面上：被拒的那个<b>不覆盖</b>生效的那个。
+        只标「冲突」不写来源，用户会去错的那个插件里改。</td></tr>
+      <tr><td>来源插件未运行的行标<b>残留快照</b></td>
+        <td>技能目录是<b>运行期成形的</b>：插件停了，它 publish 过的那一份就该
+        <code class="inl">skill.unregistered</code> 消失。行还在，说明这条链路有问题，
+        所以要显眼而不是灰掉。</td></tr>
+      <tr><td>列头叫「<b>本机可用</b>」不叫「启用」</td>
+        <td>中文里「启用」和角色侧的「绑定」听起来是同一件事，而它们是 AND 不是覆盖。
+        叫「可用」才说得清：它管的是<b>这台机器上有没有</b>，不是「让不生效」。
+        （对比：工具目录里 <code class="inl">skill_manager</code> 那行的开关是<b>禁用的</b> ——
+        它由技能列表决定，我们这行的开关是真的。）</td></tr>
+      <tr><td>加一列「<b>角色</b>」，显示 <code class="inl">绑了 N · 有效 M</code></td>
+        <td>AND 的唯一出口。没有它，用户只能自己做交集；
+        而「我明明绑了它，模型就是不用」这个症状没有任何线索可查。</td></tr>
+      <tr><td><b>没有「删除技能」按钮</b></td>
+        <td>删除是<b>不可逆</b>的，而技能正文可能正被历史消息引用着（append-only，不改）。
+        本视图只提供<b>停用</b>；真要删，去删那个目录。</td></tr>
+      <tr><td>头部只有 <b>「导入目录…」</b>，没有「新建技能」</td>
+        <td>技能的事实来源是磁盘上的目录：一个没有 frontmatter 的空目录<b>没有 name</b>，
+        也就没法被索引、被角色引用。所以「新建」只能表现为「指一个目录过来」，
+        给一个从零开始的新建表单等于让人先填一堆再生成目录。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 3 ══════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>技能库 · 详情抽屉</h2>
+  <p>点任意一行的「详情」。抽屉里最重要的不是看正文，而是<b>看清这个技能从哪来、正文谁能读、卸载会发生什么</b>。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>SkillDetailDrawer</b>
+      <span class="sp"></span><span>四段：概览 · 结构 · 绑定角色 · 停用影响　｜　子技能与目录结构合成一段</span></div>
+    <div class="frame" style="height:520px;"><div class="sk-view" id="skDrawer"></div></div>
+  </div>
+
+  <div class="note">
+    <b>为什么是四段而不是五段。</b>
+    「子技能」与「目录结构」讲的是<b>同一件事</b> —— 这个技能由哪些文件组成、哪几块能被单独激活。
+    拆成两段的后果是用户要在一个抽屉里上下滚动才能把它们对上，而它们本来就是一张表的行。
+    合成一段之后，<b>preload 开关就落在它描述的那一行上</b>，不需要先解释「preload 是什么」再让人去找开关。
+  </div>
+
+  <div class="note bad">
+    <b>插件自带技能的正文，本插件读不到 —— 这不是缺陷，是 <code class="inl">readFile</code> 边界直接推出来的。</b>
+    <code class="inl">plugins.readFile</code> 只限自己插件目录，所以 <code class="inl">skills</code> 服务<b>从不</b>读别的插件的
+    <code class="inl">SKILL.md</code>；那份正文是<b>那个插件自己的服务</b>读完再
+    <code class="inl">publish skill.registered</code> 交上来的。
+    <br>
+    于是抽屉里对插件技能显示的是<b>「来源：chat-workbench · 正文由它提供」</b>加一条灰字，
+    <b>正文区替换成 frontmatter 摘要</b>。给一个读不出内容的区域配一个「展开全文」按钮，
+    等于教用户这个界面不可信。
+  </div>
+
+  <div class="note ok">
+    <b>「卸载影响」这一段是刻意放进去的</b>，因为 OST 的第 4 条硬边界是
+    <b>「卸载不回溯历史」</b>：历史里那条 <code class="inl">role:'tool'</code> 的技能正文<b>还在</b>（append-only）。
+    <br>
+    用户点「停用」之前必须知道三件事：① 索引片段里这一行会消失；② <b>历史消息里的正文不会被删</b>；
+    ③ 角色绑定<b>保留</b>，下次装回来即恢复。所以这一段<b>在按钮上方</b>，不是折叠区。
+  </div>
+</section>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<section id="s4">
+  <h2><span class="n">4</span>统计 · 哪些技能真的被读了</h2>
+  <p>面板只保留两个 Tab。第二个既不是「体检」也不是「事件」，而是<b>这一个</b> ——
+  它是唯一能回答「我装了它，模型到底用上了吗」的界面。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>SkillUsageTab</b>
+      <span class="sp"></span><span>数据来自 <code class="inl">skills.state.usage</code> —— skills 服务数自己执行的那次 tool 调用 · <b>只读</b></span></div>
+    <div class="frame" style="height:430px;"><div class="sk-view" id="skStats"></div></div>
+  </div>
+
+  <h3>为什么是「统计」而不是「事件」</h3>
+  <table>
+    <thead><tr><th style="width:18%"></th><th style="width:38%">事件流</th><th>统计</th></tr></thead>
+    <tbody>
+      <tr><td><b>回答的问题</b></td><td>「这个插件在总线上说了什么」</td>
+        <td>「我装的这些技能，有几个模型真的会用」</td></tr>
+      <tr><td><b>谁需要它</b></td><td>写插件的人（排障）</td>
+        <td>用插件的人（决定停用谁、谁的描述要改）</td></tr>
+      <tr><td><b>已有归属吗</b></td>
+        <td><b>有</b> —— 工作台的「事件流」视图，按 <code class="inl">serviceId=skills</code> 过滤即可。
+        在这里再抄一份是<b>重复</b>，而重复的日志会让人以为它是权威来源</td>
+        <td><b>没有</b> —— 别处都不提供这个数</td></tr>
+      <tr><td><b>数据从哪来</b></td><td>总线（人人可订阅）</td>
+        <td>skills 服务数<b>自己</b>的 <code class="inl">tool.execute.result</code>，落
+        <code class="inl">usage.json</code>，聚合后<b>搭 <code class="inl">skills.state</code> 的车</b>（不新增 topic）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>统计不需要新协议。</b>计数的数据源是 skills 服务<b>自己</b>执行的
+    <code class="inl">skill_manager.activate</code> —— 它收到结果时就知道了：不需要 Core 参与、
+    不需要别的服务配合，也不需要新的 topic。
+    <br>
+    聚合值挂在 <code class="inl">skills.state</code> 的 <code class="inl">usage</code> 字段上，
+    和技能列表一起<b>重播整份</b>。于是这一屏与技能库表<b>永远一致</b>，
+    不会出现「列表说有 6 个技能、统计说 5 个」这种需要人去对账的状态。
+  </div>
+
+  <div class="note">
+    <b>「0 次调用」不能直接等于「描述写坏了」。</b>
+    昨天刚装的技能调用 0 次完全正常。所以这张表里<b>必须有「已装 N 天」</b>，
+    而且只有<b>本机可用 + 装了够久 + 调用 0 次</b>这一组才被判成问题，其余如实显示、不下结论。
+    <br>
+    <b>这条比任何图表都重要</b>：图表会让人把噪声当信号，而「装了 40 天 · 调用 0 次」
+    是可以直接下结论的证据。
+  </div>
+
+  <div class="note bad">
+    <b>刻意不做的事。</b>
+    <br>① <b>不按模型 / 按会话下钻。</b>那是日志的活，而且从来没人靠它改过描述。
+    <br>② <b>不做趋势折线。</b>技能调用是稀疏事件（一个技能一周被读 0～3 次），
+    折线画出来是锯齿噪声，读的人只会记住「好像在涨」。
+    <br>③ <b>不做「推荐停用」。</b>停用是用户的决定；界面只把候选<b>挑出来</b>并给停用按钮。
+  </div>
+</section>
+
+<!-- ───────────────────────── 5 ───────────────────────── -->
+<section id="s5">
+  <h2><span class="n">5</span>砍掉的三个 Tab：体检 / 会话 / 事件</h2>
+  <p>它们不是被删掉的功能，是被<b>移到了它们唯一该在的地方</b>。写清楚，否则实现时会顺手加回来。</p>
+
+  <table>
+    <thead><tr><th style="width:13%">原 Tab</th><th style="width:34%">去哪了</th><th>为什么留在原地是错的</th></tr></thead>
+    <tbody>
+      <tr><td><b>体检</b></td>
+        <td>拆开：<b>可改的那条检查</b>并进技能库表的徽章与编辑器的实时提示；
+        <b>不可改的几条</b>并进它们各自发生的那一屏 —— 脚本 → 抽屉的文件列表；
+        冲突 → 抽屉与库表；悬空绑定 → 抽屉的「绑定角色」段；预算 → 库表底部的预算条</td>
+        <td>它把<b>四种不同性质的事</b>混进一个列表：两种改描述就行，两种根本不是用户能改的（预算、卸载）。
+        用户扫过 12 行红字，不会知道<b>先做哪一件</b> ——
+        而这一屏真正有用的其实只有一件事：<b>description 有没有触发条件</b>。
+        它应该在改它的地方响，而不是单开一屏等用户想起来去看。</td></tr>
+      <tr><td><b>会话</b></td>
+        <td>激活记录 → <b>对话时间线里的工具块</b>（loop 本来就把每次
+        <code class="inl">skill_manager</code> 调用渲染成块了）+ 抽屉里一行
+        「本轮 N 个 · B 字节」摘要；preload 开关 → 抽屉的子技能列表（本来就在那儿）</td>
+        <td>它是<b>同一份数据的第二个位置</b>。用户想知道「刚才那轮模型读了什么」，看时间线就行；
+        在管理面板里再列一遍只造成两种误读：① 以为那是模型这轮的<b>全部</b>能力；
+        ② 以为它比时间线更权威。<br>
+        更大的代价是它<b>暗示了「激活」是人的动作</b> —— 激活是模型每轮自己的决定，
+        面板一提供这个按钮，用户就会开始替模型选技能，而下一轮模型又会按自己的判断重来。</td></tr>
+      <tr><td><b>事件</b></td>
+        <td>工作台的<b>事件流</b>视图（按 <code class="inl">serviceId=skills</code> 过滤）</td>
+        <td>见 <a href="#s4">§4</a> 的表：它<b>有归属</b>。插件视图里再抄一份事件日志，
+        是把开发者视图混进用户视图；而且抄的那份<b>没有 Core 的重播语义</b> ——
+        刷新即空，用户会以为「没事件 = 没发生过」。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「砍掉一个 Tab」的代价必须说出来：</b>排障时少了一个就地看事件的地方，
+    「刚才那个技能到底被读了没有」要多跳一步。这是真的损失。
+    <br>
+    所以它成立的前提是<b>替代品真的存在</b>：工作台事件流必须已经支持按 serviceId 过滤。
+    如果没有，这一屏就得留着 —— <b>砍它的依据是「有更好的地方」，不是「看起来更干净」。</b>
+  </div>
+
+  <div class="note info">
+    <b>剩下的两个 Tab 为什么站得住。</b>
+    <b>技能库</b>回答「这台机器上有什么技能、开了吗、正文谁能读」——
+    只有它需要一份全量列表。
+    <b>统计</b>回答「哪些白装了」—— 只有它能把一份列表变成一个决定。
+    这两件事之间，没有第三个问题值得一张 Tab。
+  </div>
+</section>
+
+
+<!-- ══════════ 6 ══════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>skill_manager 的披露面：工具那一侧</h2>
+  <p>技能<b>是被这个工具披露给模型的</b>：模型看到的全部技能信息 = 索引片段里的一行 + 它自己调
+  <code class="inl">skill_manager</code> 拿到的正文。所以界面必须与工具<b>同源</b>。</p>
+
+  <h3>① 七个 action 分别落在界面的哪一处</h3>
+  <table>
+    <thead><tr><th style="width:20%">action</th><th style="width:30%">参数</th><th style="width:24%">返回什么给模型</th><th>界面上对应的地方</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">list_packages</td><td class="mono">—</td>
+        <td>name / description / 子技能清单（<b>无正文</b>）</td>
+        <td>技能库表的<b>数据源</b>；抽屉「概览」段展示同一份</td></tr>
+      <tr><td class="mono">describe_package</td><td class="mono">package_id</td>
+        <td>frontmatter 全字段 + 子技能数组</td><td>抽屉「概览」段（字段逐字对应）</td></tr>
+      <tr><td class="mono">list_children</td><td class="mono">package_id</td>
+        <td>子技能 id / name / description / preload</td><td>抽屉「结构」段的开关就是 preload</td></tr>
+      <tr><td class="mono">activate</td><td class="mono">package_id · skill_id</td>
+        <td>子技能正文 + 磁盘目录 + <code class="inl">&lt;dataDir&gt;</code> 绝对路径</td>
+        <td><b>对话时间线里的工具块</b>（loop 本来就在渲染）+
+        抽屉「概览」末尾一行「本轮 N 个 · B 字节」摘要</td></tr>
+      <tr><td class="mono">deactivate</td><td class="mono">package_id · skill_id</td>
+        <td>是否真的移除了</td>
+        <td>同上 —— <b>管理面板里没有这个按钮</b>（<a href="#s5">§5</a>：撤销模型刚做的事不该在设置面板里）</td></tr>
+      <tr><td class="mono">list_active</td><td class="mono">—</td>
+        <td>本会话已激活清单</td><td>抽屉「概览」末尾那一行摘要（<b>只显示计数与字节</b>）</td></tr>
+      <tr><td class="mono">read</td><td class="mono">skill_name 或 package_id[/skill_id]</td>
+        <td>正文（不计入激活上限）</td>
+        <td>不显示 —— <b>正文不进界面</b>，它是给模型的</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>这一栏是「界面与工具同源」的验收方式。</b>
+    把每个 action 的返回字段逐一对到界面的某一处，就会发现<b>只有 activate / deactivate / list_active
+    三项在界面里没有一一对应</b> —— 它们落在时间线与一行摘要上。
+    <br>
+    这个「对不齐」本身是结论：<b>模型的工作过程不搬家到管理界面里</b>。
+    界面显示的是<b>配置与后果</b>，模型的动作留在它发生的地方。
+  </div>
+
+  <div class="note bad">
+    <b>刻意没有的三个 action：<code class="inl">create_package / update / delete</code>。</b>
+    写盘只能从界面走（<a href="#s7">§7</a>）。理由和天枢一样，但理由要写全：
+    <br>① 模型直接改盘 = <b>技能内容变成模型的输出</b>，而 description 是契约（<a href="#s4">§4</a>）——
+    模型会为了「让技能被读到」去改自己的触发条件，那是自我授权。
+    <br>② 写盘没有<b>第二道闸</b>：工具管理里审批是唯一的无约束兜底，而技能包写入会改到<b>别的会话</b>正在读的文件。
+    <br>③ 用户无法回答「这个技能是我写的还是它自己改的」。
+    <br>
+    所以 OST 的分工是：<b>模型只读，界面可写</b>。界面上那个编辑器是唯一的写入口。
+  </div>
+
+  <h3>② 工具在 <code class="inl">widget.tools</code> 里的那一行（只读，没有开关）</h3>
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>工具目录 · skills-tools 那一组</b>
+      <span class="sp"></span><span>摘出来只为对照：<code class="inl">skill_manager</code> 行的<b>开关是禁用的</b></span></div>
+    <div class="frame" style="height:190px;">
+      <table class="tool-table"><thead><tr>
+        <th style="width:42%">工具</th><th style="width:10%">风险</th><th style="width:14%">策略</th>
+        <th style="width:14%">来源</th><th style="width:10%">启用</th><th style="width:10%"></th></tr></thead>
+      <tbody>
+        <tr><td><div class="t-name">skill_manager</div>
+          <div class="t-desc">发现技能包并懒激活子技能；写操作已下沉到本视图。</div>
+          <div class="t-note"><span class="p-badge b-managed">自动门控</span> 由已安装技能包决定</div></td>
+          <td><span class="p-badge b-read">read</span></td>
+          <td><span class="p-badge b-src">auto</span> <span class="p-badge b-src">默认</span></td>
+          <td><span class="p-badge b-src">skills-tools</span></td>
+          <td><label class="u-switch disabled" title="由已安装技能包决定，不能手动开关">
+            <input type="checkbox" checked disabled aria-label="启用 skill_manager">
+            <span class="track"><span class="thumb"></span></span></label></td>
+          <td><div class="t-actions"><button class="u-btn sm ghost">详情</button></div></td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:26%">技能列表状态</th><th style="width:26%"><code class="inl">skill_manager</code></th><th>工具目录里的呈现</th></tr></thead>
+    <tbody>
+      <tr><td>技能列表为空</td><td><b>不注册</b>，目录里没有它</td><td>目录里<b>不出现这一行</b></td></tr>
+      <tr><td>有技能包</td><td>注册，<code class="inl">risk:'read'</code></td>
+        <td>出现，但开关<b>禁用</b> + 灰字「由已安装技能包决定」</td></tr>
+      <tr><td>本机全部不可用</td><td>仍注册（<b>停用 ≠ 卸载</b>）</td>
+        <td>开关禁用不变；<code class="inl">skills.state</code> 里 <code class="inl">enabled:false</code></td></tr>
+      <tr><td>技能目录被清空</td><td>进程内注销 → 发 <code class="inl">tool.unregistered</code></td><td>该行消失</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「索引片段按角色过滤」与「工具目录按角色取交集」必须是同一件事，
+    否则模型会看见一个自己读不了的技能。</b>
+    <br>
+    工具那条好办：工具进的是 API 的 <code class="inl">tools</code> 参数，loop 在装配时取交集就行。
+    <b>技能索引是一个文本片段</b>，所以过滤必须发生在<b>片段被组装之前</b> ——
+    一份不分角色的索引片段，配上一个按角色拒绝的 <code class="inl">skill_manager.read</code>，
+    每轮都会产生「模型看见 → 去读 → 被拒」，而拒绝理由用户看不到。
+    <br>
+    所以：<code class="inl">skills.list</code> 加一个可选的 <code class="inl">characterId</code>
+    （<b>只加字段</b>，不改语义、不加 topic），
+    loop 先 <code class="inl">agent.resolve</code> 拿角色，再按角色要清单。
+    技能目录仍然只有 skills 服务持有，<code class="inl">skill_manager</code> 的可读范围
+    <b>就是那份过滤后的清单</b> —— 看得见的就一定读得到。
+  </div>
+
+  <div class="note">
+    <b>第三行是本设计新增的一条，也是最容易实现错的一条。</b>
+    「停用全部技能」与「卸载全部技能」在实现上是两个完全不同的状态：
+    前者<b>目录还在</b>，<code class="inl">skill_manager</code> 仍注册（它还有 <code class="inl">list_packages</code> 可调，只是返回空列表），
+    后者才触发注销。所以<b>启用开关不能直接连带工具注册态</b> ——
+    否则「停用一个技能」就会让模型的工具目录少一项，而用户只是关了一个东西。
+  </div>
+</section>
+
+<!-- ══════════ 7 ══════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>编辑器 · SKILL.md 是唯一要写的东西</h2>
+  <p>整个技能只有一个文件：<code class="inl">SKILL.md</code>（frontmatter + 正文）。编辑器就是它的一个表单化外壳。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>SkillEditor</b>
+      <span class="sp"></span><span>改 description → <b>左下角实时体检</b>；保存 = 一次 <code class="inl">skill.package.write</code> + 重新注册 · <b>下一轮生效</b></span></div>
+    <div class="frame" style="height:540px;"><div class="sk-view" id="skEditor"></div></div>
+  </div>
+
+  <div class="note ok">
+    <b>保存的语义必须写在按钮旁边：「下一轮生效」。</b>
+    prompt 每轮重算，历史里的 <code class="inl">system</code> 一律丢弃 ——
+    所以改完立刻生效，<b>不会</b>追溯已有会话里的任何一轮。这既是特性也是意外来源，
+    不写清楚用户会以为「我改了怎么刚才那轮还是老样子」。
+    <br>
+    （同一个性质在角色提示词上也成立，见 <code class="inl">../chat-workbench/智能体角色-组件Demo.html</code>。）
+  </div>
+
+  <div class="note">
+    <b>正文编辑区刻意不做富文本 / 不做 Markdown 预览。</b>
+    技能正文是<b>给模型读的</b>，不是给人排版的。做预览会诱导用户去「美化」，
+    而美化对模型毫无收益、对字节数只有损失。
+    <br>
+    <b>scripts/ 区域只读且带删除线</b>：P6 阶段审批位没落地，执行位必须显示为不可用 ——
+    否则「文件在目录里」会被读成「它能跑」。
+  </div>
+
+  <div class="note bad">
+    <b>编辑插件自带技能要显式拒绝。</b>
+    它们住在<b>别的插件目录</b>里，本插件既读不到也写不到（<code class="inl">plugins.readFile</code> 的边界，
+    见 <a href="#s3">§3</a>）。所以对这类技能只提供「查看 frontmatter 摘要」+ 一句人话原因，
+    <b>不提供「去那个插件改」的超链接</b> —— 我们连它在哪都不知道。
+  </div>
+</section>
+
+<!-- ══════════ 8 ══════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>七种边界情形</h2>
+  <p>每一种都在面板里有<b>具体形态</b>，而不是一句错误提示。切下面的按钮。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>边界情形</b>
+      <span class="sp"></span><span>同一份数据，不同状态的渲染</span></div>
+    <div class="frame" style="height:340px;"><div class="sk-view" id="skEdge"></div></div>
+  </div>
+</section>
+
+<!-- ══════════ 9 ══════════ -->
+<section id="s9">
+  <h2><span class="n">9</span>组件映射 · 与天枢的差异 · 响应式退化</h2>
+
+  <h3>组件 → sdk/ui 与插件文件</h3>
+  <table>
+    <thead><tr><th style="width:26%">组件</th><th style="width:22%">复用 sdk/ui</th><th style="width:22%">插件内路径</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">SkillCatalogView</td><td class="mono">Table · Switch · Badge · Input</td>
+        <td class="mono">ui/views/library/</td><td>没有 Table 组件就用语义化 table，不用 div 拼</td></tr>
+      <tr><td class="mono">SkillDetailDrawer</td><td class="mono">Drawer · Badge · Field</td>
+        <td class="mono">ui/views/library/Drawer.tsx</td><td>宽 460px；插件技能只读</td></tr>
+      <tr><td class="mono">SkillUsageTab</td><td class="mono">Table · Bar · Button</td>
+        <td class="mono">ui/views/stats/</td><td>纯只读；条形用最朴素的 div，不用图表库</td></tr>
+      <tr><td class="mono">SkillEditor</td><td class="mono">Field · Textarea · Banner</td>
+        <td class="mono">ui/views/library/Editor.tsx</td><td>与抽屉共用，抽屉里「编辑」切进来</td></tr>
+      <tr><td class="mono">SkillUsageBar</td><td class="mono">—（插件内联）</td>
+        <td class="mono">ui/views/library/UsageBadge.tsx</td><td>只渲染「N 天 / M 次」这一个 chip，供列表与统计共用</td></tr>
+      <tr><td class="mono">（无）事件视图</td><td class="mono">—</td><td class="mono">—</td>
+        <td>事件流<b>不在本插件实现</b>：复用工作台的 <code class="mono">widget.event-stream</code> +
+        <code class="mono">serviceId=skills</code> 过滤（<a href="#s4">§4</a>）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>与天枢的六处差异（每一条都有理由，不是审美）</h3>
+  <table>
+    <thead><tr><th style="width:22%">点</th><th style="width:32%">天枢 dev</th><th>OST 本设计</th></tr></thead>
+    <tbody>
+      <tr><td><b>分组维度</b></td><td><code class="inl">category</code>（finance / mysticism …），
+        且 <code class="inl">categoryLabels</code> 硬编码后已过期，9 个分类里 5 个显示英文 slug</td>
+        <td><b>owner</b>（用户自建 / 插件自带 + 具体插件）。分类不存在，就不硬造一个</td></tr>
+      <tr><td><b>列表单位</b></td><td>技能包（卡片）+ 子技能（展开的次级行）</td>
+        <td>一个技能一行；子技能在抽屉的「结构」段里，因为它是<b>preload 的开关单位</b></td></tr>
+      <tr><td><b>description</b></td><td>卡片上<b>根本不显示</b>，只有详情页有</td>
+        <td>列表单行 + 一个只在有问题时出现的徽章。渐进披露让它是契约，不能藏在详情页</td></tr>
+      <tr><td><b>第二屏</b></td><td>无（只有角色详情页里的绑定列表）</td>
+        <td><b>统计</b>：调用次数 / 已装天数。天枢不显示「模型实际用了几个」，
+        于是「技能装了没用过」这件事<b>永远不可见</b></td></tr>
+      <tr><td><b>写操作</b></td><td>REST <code class="inl">POST /api/skills/packages</code>，
+        但<b>没有 PUT/DELETE</b>；<code class="inl">materialize / hide / restore-builtin</code> 三个接口<b>无人调用</b></td>
+        <td>编辑器是唯一写入口，一次 <code class="inl">skill.package.write</code> 覆盖全部；
+        停用与卸载分两件事</td></tr>
+      <tr><td><b>绑定</b></td><td>在角色详情页的「技能」页签里绑/解绑，两个并排列表 + <code class="inl">±</code> 按钮</td>
+        <td>本视图<b>只读展示</b>绑定，绑定操作在 <code class="inl">widget.agents</code>。
+        角色存引用、技能归服务 —— <b>一处能改就够了，两处能改就会不一致</b></td></tr>
+      <tr><td><b>云同步</b></td><td>「拉取云端技能 / 同步到云端」两个按钮（Electron IPC，
+        失败用 <code class="inl">alert()</code>）</td>
+        <td><b>不做</b>。技能目录是<b>本机能力声明</b>，跨机搬运过去会在另一台机器上静默失效
+        （脚本路径、绝对路径、已绑定角色都不跟着走）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>响应式退化</h3>
+  <table>
+    <thead><tr><th style="width:22%">宽度</th><th>形态</th></tr></thead>
+    <tbody>
+      <tr><td><b>≥ 900px</b></td><td>表 + 右侧 460px 抽屉</td></tr>
+      <tr><td><b>620 ~ 900px</b></td><td>表保留，但描述列整列去掉（信息移到抽屉）；
+        抽屉改成<b>整宽覆盖</b></td></tr>
+      <tr><td><b>&lt; 620px</b></td><td>退化为卡片列表：技能名 + 状态徽章 + 开关；
+        抽屉从<b>底部升起</b>，最大高度 80%</td></tr>
+      <tr><td><b>&lt; 420px</b></td><td>编辑器单列：frontmatter 字段 → description → 正文 → 目录树</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>这份稿刻意保留的三个天枢做法</b>：
+    ① 顶部一行汇总数字（天枢的「N 个技能包」方向对，只是内容太薄）；
+    ② 详情用<b>左侧概览 + 右侧分段</b>而不是一路点进去（天枢的 260px 左栏信息密度合适）；
+    ③ 所有动作<b>就地生效</b>，不用「保存」按钮 —— 启停是开关不是表单。
+  </div>
+
+  <div class="note">
+    <b>不要在实现时加回来的三样东西</b>（每一样加回来的理由都会是「顺便」）：
+    <br>① <b>体检 Tab</b> —— 「顺手把所有检查集中列一遍」。检查分散在各自发生的地方，正是它们可执行的原因。
+    <br>② <b>会话 Tab</b> —— 「顺便能在这里停掉模型刚激活的技能」。撤销上下文是<b>对话动作</b>，不是设置。
+    <br>③ <b>事件 Tab</b> —— 「顺便把总线事件打出来方便排障」。它有归属，且抄来的那份没有重播语义。
+  </div>
+
+  <div class="foot">
+    组件 Demo · OST P6 技能插件 · 数据为静态示例（脚本内 <code class="inl">SKILLS</code> / <code class="inl">USAGE</code> / <code class="inl">ACTIVATIONS</code>），
+    与 <code class="inl">../tool_manager/工具管理-组件Demo.html</code> 同一套 token 与皮肤，可并排比对。
+  </div>
+</section>
+
+</div>
+
+<div class="switcher">
+  <button id="sw1" aria-pressed="true" title="面板总览">◧</button>
+  <button id="sw2" aria-pressed="false" title="skill_manager 披露面">⇄</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ═══════════ 主题 ═══════════ */
+  var root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ═══════════ 锚点高亮 ═══════════ */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var sections = tocLinks.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncToc() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < sections.length; i++) { if (sections[i] && sections[i].offsetTop <= y) idx = i; }
+    tocLinks.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', syncToc, { passive: true });
+  syncToc();
+
+  /* ═══════════ 工具函数 ═══════════ */
+  function byId(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     数据：静态示例。
+     字段刻意贴着 OST 的真实载荷：
+       SkillIndexEntry { name, ownerPluginId, description, source, enabled, bytes, preload }
+     —— 见 智能体Loop与插件协同设计.html §5「skill.registered / skills.state」
+     ══════════════════════════════════════════════════════════ */
+  var INDEX_BUDGET = 8192;      // priority 10 索引片段预算（字节）
+  var INDEX_MAX_ROWS = 20;      // 同预算下的条数上限
+  var BODY_BUDGET = 8192;       // 每会话子技能正文合计字节（preload 的代价就记在这里）
+
+  var SKILLS = [
+    {
+      name: 'git-diff', title: 'Git Diff 评审', source: 'custom', owner: null,
+      version: '1.4.0', updated: '2026-09-28',
+      desc: '读 git diff 并只指出会导致故障、丢数据或难以回退的问题。当用户贴出 diff、或问「这段改动有没有问题」时使用。',
+      when: '当用户贴出 diff 时', bytes: 214,
+      files: ['SKILL.md', 'references/review-checklist.md'],
+      enabled: true, dirty: false,
+      children: [
+        { id: 'staged-only', name: '只看暂存区', desc: '只评审 git diff --cached，忽略工作区改动。', preload: false },
+        { id: 'range-ref', name: '按区间评审', desc: '评审 A..B 区间，并把 BASE 注释一并带上。', preload: false }
+      ],
+      boundTo: ['代码评审员']
+    },
+    {
+      name: 'skill-authoring', title: '技能写作规范', source: 'custom', owner: null,
+      version: '2.0.1', updated: '2026-10-05',
+      desc: '写出能被模型真正读到的技能：description 是契约不是注释，正文按需分层。当你要新建或修一个技能包时使用。',
+      when: '当你要新建或修一个技能包时', bytes: 341,
+      files: ['SKILL.md', 'scripts/check_desc.mjs', 'references/contract.md'],
+      scripts: ['scripts/check_desc.mjs'],
+      enabled: true, dirty: false,
+      children: [
+        { id: 'frontmatter', name: 'frontmatter 规范', desc: 'name / description / version 三个必填字段的写法。', preload: true },
+        { id: 'desc-contract', name: 'description 契约', desc: '含 when 触发条件的写法与反例。', preload: false }
+      ],
+      boundTo: ['文档作者']
+    },
+    {
+      name: 'pdf-extract', title: 'PDF 表格提取', source: 'custom', owner: null,
+      version: '0.3.0', updated: '2026-10-02',
+      desc: '处理 PDF 文件。',
+      when: '', bytes: 96,
+      files: ['SKILL.md'],
+      /* 本机停用 —— 角色插件那份数据里它也是 available:false（见 e2b）。
+         绑定保留在「调研员」身上，这就是两侧都要讲的那个 AND。 */
+      enabled: false, dirty: false,
+      children: [], boundTo: ['调研员']
+    },
+    {
+      name: 'loop-trace', title: 'Loop 排障', source: 'plugin', owner: 'chat-workbench',
+      version: '1.1.0', updated: '2026-09-19',
+      desc: '按一次 loop.run 的三段日志定位卡在哪一格。当用户问「模型一直转圈」「这轮为什么没进工具」时使用。',
+      when: '当用户问「模型一直转圈」时', bytes: 187,
+      files: ['SKILL.md'],
+      enabled: true, dirty: false,
+      children: [], boundTo: ['运维值班']
+    },
+    {
+      name: 'composer-tips', title: 'Composer 提示词调优', source: 'plugin', owner: 'chat-workbench',
+      version: '0.9.0', updated: '2026-08-30',
+      desc: '帮你写提示词。',
+      when: '', bytes: 88,
+      files: ['SKILL.md'],
+      enabled: true, dirty: false,
+      children: [], boundTo: ['文档作者']
+    },
+    {
+      name: 'web-research', title: '联网调研', source: 'plugin', owner: 'research',
+      version: '0.2.0', updated: '2026-10-01',
+      desc: '先出检索式再抓正文，最后给带链接的要点清单。当用户问「最近…怎么样」时使用。',
+      when: '当用户问「最近…怎么样」时', bytes: 232,
+      files: ['SKILL.md'],
+      /* 唯一一种「停用之外」的消失：来源插件没运行，它本该发 skill.unregistered 而没发。
+         「本机可用」仍是 true（上次看到的状态），所以这不是停用。 */
+      enabled: true, dirty: false, ownerDown: true,
+      children: [], boundTo: ['调研员']
+    }
+  ];
+
+  /* 同名冲突：第二个 publish 的被拒（fail fast，不覆盖） */
+  var CONFLICTS = [{ name: 'git-diff', kept: 'custom', rejected: 'web-dev', at: '2026-10-06 09:12' }];
+  /* 悬空角色绑定：characters.json 里指向未注册的 name */
+  var DANGLING = [{ name: 'mcp-doctor', roles: ['运维值班'], note: '技能目录已无此项（来源目录被删）' }];
+
+  var ACTIVATIONS = [
+    { ref: 'skill-authoring/frontmatter', title: 'frontmatter 规范', hash: 'c17b5e9a22d04f81', at: '本轮开始时（preload）',
+      bytes: 2260, via: 'preload', body: true },
+    { ref: 'git-diff/staged-only', title: '只看暂存区', hash: '9f2c41d8e0a7b3c5', at: '2 轮前',
+      bytes: 1042, via: 'skill_manager.activate', body: true }
+  ];
+  function bodyBytes() {
+    return ACTIVATIONS.reduce(function (a, x) { return a + x.bytes; }, 0);
+  }
+
+  /* 统计：skills 服务数自己那几次 tool.execute.result，落 usage.json，
+     聚合后搭 skills.state 的车。days = 已装天数，calls/window 见 WINDOWS。 */
+  var WINDOWS = [
+    { k: '7', label: '近 7 天' }, { k: '30', label: '近 30 天' }, { k: 'all', label: '全部' }
+  ];
+  var USAGE = {
+    'git-diff':         { days: 42, calls7: 3,  calls30: 11, callsAll: 87, last: '今天 09:12', bytes: 214 },
+    /* 刚装 4 天 · 0 次 → 不下结论（这一组是「统计不报警」的样子） */
+    'skill-authoring':  { days: 4,  calls7: 0,  calls30: 0,  callsAll: 1,  last: '4 天前', bytes: 2260 },
+    /* 本机停用 → 既不算白装也不算生效（绑定在调研员身上，见 e2b） */
+    'pdf-extract':      { days: 5,  calls7: 0,  calls30: 0,  callsAll: 0,  last: '从未', bytes: 96 },
+    'loop-trace':       { days: 18, calls7: 1,  calls30: 4,  callsAll: 21, last: '昨天 22:40', bytes: 187 },
+    /* 38 天 · 启用中 · 30 天 0 次 → 这才是真问题（统计要抓的那一类） */
+    'composer-tips':    { days: 38, calls7: 0,  calls30: 0,  callsAll: 2,  last: '31 天前', bytes: 88 },
+    'web-research':     { days: 6,  calls7: 0,  calls30: 0,  callsAll: 0,  last: '从未', bytes: 232 }
+  };
+  /* 「装了够久」的门槛：一周。再短就不下结论 —— 新装的技能 0 次调用是正常的。 */
+  var COLD_DAYS = 7;
+
+  /* ═══════════ 派生量 ═══════════ */
+  function byName(n) { return SKILLS.filter(function (s) { return s.name === n; })[0]; }
+  function customRoot(s) { return 'userData/plugin/skills/custom/' + s.name + '/'; }
+  function pluginRoot(s) { return 'plugins/' + s.owner + '/skills/' + s.name + '/'; }
+  function skillRoot(s) { return s.source === 'custom' ? customRoot(s) : pluginRoot(s); }
+  function sourceLabel(s) {
+    return s.source === 'custom' ? '用户自建' : (s.owner || '未知插件');
+  }
+
+  /* 列表徽章只判这一条 —— 它是唯一「改一下就好」的问题。
+     脚本 / 冲突 / 悬空 / 预算各归各屏，不在这里凑热闹（见 §5）。 */
+  function descIssue(s) {
+    var out = [];
+    if (!s.when) out.push({ lv: 'bad', k: 'desc-when', t: '没有触发条件',
+      d: '模型只能靠字面猜要不要读它，猜不中时不会报错。' });
+    if (s.desc.length < 30) out.push({ lv: 'warn', k: 'desc-short', t: '描述过短',
+      d: s.desc.length + ' 字，省下的字节远少于一次误读的成本。' });
+    return out;
+  }
+
+  /* 「装了够久、启用中、这个窗口内一次没被读过」—— 才算真问题 */
+  function isCold(s, win) {
+    if (!s.enabled || s.ownerDown) return false;
+    var u = USAGE[s.name];
+    if (!u || u.days < COLD_DAYS) return false;
+    return callsIn(u, win) === 0;
+  }
+  function callsIn(u, win) { return win === '7' ? u.calls7 : win === '30' ? u.calls30 : u.callsAll; }
+
+  function counts() {
+    var total = SKILLS.length, on = 0, cold = 0;
+    SKILLS.forEach(function (s) {
+      if (s.enabled) on++;
+      if (isCold(s, win)) cold++;
+    });
+    return { total: total, on: on, cold: cold };
+  }
+  var win = '30';
+
+  function indexBytes() {
+    return SKILLS.filter(function (s) { return s.enabled && !s.ownerDown; })
+      .reduce(function (a, s) { return a + s.bytes; }, 0);
+  }
+  function indexRows() {
+    return SKILLS.filter(function (s) { return s.enabled && !s.ownerDown; }).length;
+  }
+  function indexOver() {
+    return indexBytes() > INDEX_BUDGET || indexRows() > INDEX_MAX_ROWS;
+  }
+
+  var filters = { q: '', src: '', st: '' };
+
+  /* ══════════════════════════════════════════════════════════
+     ① 技能库
+     ══════════════════════════════════════════════════════════ */
+  var TABS = [
+    { k: 'library', label: '技能库' }, { k: 'stats', label: '统计' }
+  ];
+  var notice = '';
+
+  function panelHead() {
+    var c = counts(), b = indexBytes();
+    return '<div class="sk-head"><span class="sk-title">技能</span>' +
+      '<span class="sk-count">' + c.total + ' 个技能 · ' + c.on + ' 个本机可用 · ' +
+      (c.cold ? '<b style="color:var(--color-danger)">' + c.cold + ' 个装了从没被读过</b>'
+              : '<span style="color:var(--color-success)">启用的都被读过</span>') +
+      ' · 索引 ' + b + ' B / ' + INDEX_BUDGET + ' B</span>' +
+      '<span style="flex:1"></span>' +
+      '<button class="u-btn sm ghost" data-import="1" title="技能的事实来源是磁盘目录：一个没有 frontmatter 的空目录没有 name，也就没法被索引">导入目录…</button>' +
+      '<span class="p-badge b-src">订阅 skills.state</span></div>' +
+      (notice ? '<div style="padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--color-border);' +
+        'background:var(--color-warning-soft);color:var(--color-warning);font-size:var(--text-xs)">' +
+        notice + ' <button class="u-btn sm ghost" data-import="1" style="margin-left:6px">知道了</button></div>' : '');
+  }
+
+  function tabsBar(active) {
+    var badge = { library: SKILLS.length, stats: counts().cold || '' };
+    return '<div class="sk-tabs"><div class="u-tabs">' + TABS.map(function (t) {
+      return '<button data-tab="' + t.k + '" aria-selected="' + (t.k === active) + '">' + t.label +
+        (badge[t.k] !== '' && badge[t.k] !== undefined ? '<span class="badge">' + badge[t.k] + '</span>' : '') + '</button>';
+    }).join('') + '</div></div>';
+  }
+
+  function budgetBar() {
+    var b = indexBytes(), pct = Math.min(100, Math.round(b / INDEX_BUDGET * 100));
+    var cls = b > INDEX_BUDGET ? 'over' : b > INDEX_BUDGET * 0.8 ? 'warn' : '';
+    return '<div class="budget"><div style="font-size:var(--text-xs);font-weight:600">' +
+      '索引片段预算 · priority 10</div>' +
+      '<div class="budget-track"><i class="' + cls + '" style="width:' + pct + '%"></i></div>' +
+      '<div class="budget-legend"><span>' + b + ' / ' + INDEX_BUDGET + ' B（' + pct + '%）</span>' +
+      '<span>' + indexRows() + ' / ' + INDEX_MAX_ROWS + ' 条</span>' +
+      '<span>超了 → <b>整块丢弃 + 每条一条 warn</b>，不截断</span></div>' +
+      (indexOver() ? '<div class="badbox">已超预算：索引片段将被<b>整块丢弃</b>，模型这一轮看不到任何技能，' +
+        '而界面上不会报任何错。停用几个或压缩描述。</div>' : '') +
+      '</div>';
+  }
+
+  function conflictNote(s) {
+    var c = CONFLICTS.filter(function (x) { return x.name === s.name; })[0];
+    if (!c) return '';
+    return '<div class="t-note"><span class="p-badge b-danger">同名冲突</span>' +
+      '另一个 owner <code class="mono">' + esc(c.rejected) + '</code> 在 ' + esc(c.at) +
+      ' publish 了同名技能 → <b>已拒绝注册</b>，生效的是这一份（' + esc(sourceLabel(s)) + '）</div>';
+  }
+
+  /* 列表与统计共用的那一格。列表里只给结论，细节留给统计 Tab。 */
+  function usageChip(s) {
+    var u = USAGE[s.name];
+    if (!u) return '';
+    var cold = isCold(s, win);
+    if (cold) {
+      return '<span class="p-badge b-danger" title="启用中 · 已装 ' + u.days + ' 天 · 这个窗口内一次没被读过">' +
+        '装了 ' + u.days + ' 天 · 0 次</span>';
+    }
+    if (!s.enabled) return '';
+    var n = callsIn(u, win);
+    if (!n) return '';
+    return '<span class="p-badge b-src">' + n + ' 次 · ' + esc(u.last) + '</span>';
+  }
+
+  function ownerDownNote(s) {
+    if (!s.ownerDown) return '';
+    return '<div class="t-note"><span class="p-badge b-danger">残留快照</span>' +
+      '来源插件 <code class="mono">' + esc(s.owner) + '</code> 当前未运行，本行是它上次 publish 时的状态</div>';
+  }
+
+  /* 没有「体检通过」绿标：六行里五行是绿的，绿标只是噪声。 */
+  function descBadge(s) {
+    var h = descIssue(s);
+    if (!h.length) return '';
+    var bad = h.some(function (x) { return x.lv === 'bad'; });
+    var txt = bad ? '模型不会读' : '描述过短';
+    return '<span class="p-badge ' + (bad ? 'b-danger' : 'b-warn') + '" title="' +
+      esc(h.map(function (x) { return x.d; }).join(' ')) + '">' + txt + '</span>';
+  }
+
+  /* 「绑了 N · 有效 M」—— AND 的唯一出口。
+     本机停用而角色还绑着时必须显红：绑定还在，只是本轮拿不到。 */
+  function roleCell(s) {
+    var n = s.boundTo.length;
+    var eff = s.enabled && !s.ownerDown ? n : 0;
+    if (!n) return '<span style="color:var(--color-text-muted);font-size:var(--text-xs)">没有角色绑它</span>';
+    if (eff === n) {
+      return '<span style="font-size:var(--text-xs)">绑了 ' + n + ' 个</span>' +
+        '<div class="t-note" style="justify-content:flex-end">有效 ' + eff + ' 个</div>';
+    }
+    return '<span style="font-size:var(--text-xs">绑了 ' + n + ' 个</span>' +
+      '<div class="t-note" style="justify-content:flex-end">' +
+      '<span class="p-badge b-danger">有效 0 个</span></div>';
+  }
+
+  function libraryTable() {
+    var q = filters.q.toLowerCase();
+    var rows = SKILLS.filter(function (s) {
+      if (filters.src && sourceLabel(s) !== filters.src) return false;
+      if (filters.st === 'on' && !s.enabled) return false;
+      if (filters.st === 'off' && s.enabled) return false;
+      if (filters.st === 'cold' && !isCold(s, win)) return false;
+      if (!q) return true;
+      return (s.name + ' ' + s.title + ' ' + s.desc).toLowerCase().indexOf(q) >= 0;
+    }).sort(function (a, b) {
+      var ka = a.source === 'custom' ? '0' : '1' + a.owner;
+      var kb = b.source === 'custom' ? '0' : '1' + b.owner;
+      return ka === kb ? a.name.localeCompare(b.name) : ka.localeCompare(kb);
+    });
+
+    var groups = [], seen = [];
+    rows.forEach(function (s) {
+      var g = s.source === 'custom' ? '用户自建' : '插件自带 · ' + s.owner;
+      if (seen.indexOf(g) < 0) { seen.push(g); groups.push(g); }
+    });
+
+    var body = '';
+    if (!rows.length) {
+      body = '<tr><td colspan="6"><div class="p-empty"><b>没有匹配的技能</b>' +
+        '换个关键词，或把状态过滤恢复成「全部」。</div></td></tr>';
+    } else {
+      groups.forEach(function (g) {
+        var items = rows.filter(function (s) {
+          return (s.source === 'custom' ? '用户自建' : '插件自带 · ' + s.owner) === g;
+        });
+        body += '<tr class="group-row"><td colspan="6">' + esc(g) +
+          '<span class="g-count">' + items.length + ' 个技能 · ' +
+          esc(g === '用户自建' ? '卸不掉（它不在任何插件里）' : '卸掉 ' + g.split(' · ')[1] + ' 会带走这批') +
+          '</span></td></tr>';
+        items.forEach(function (s) {
+          var preloads = s.children.filter(function (c) { return c.preload; }).length;
+          body += '<tr class="' + (s.enabled ? '' : 'row-off') + '">' +
+            '<td><div><span class="t-name">' + esc(s.name) + '</span>' +
+              (s.dirty ? '<span class="p-badge b-warn">未保存</span>' : '') +
+              '<span class="t-title">' + esc(s.title) + '</span></div>' +
+              '<div class="t-desc" title="' + esc(s.desc) + '">' + esc(s.desc) + '</div>' +
+              '<div class="t-note">' + descBadge(s) + conflictNote(s) + ownerDownNote(s) + usageChip(s) + '</div></td>' +
+            '<td><span class="p-badge ' + (s.source === 'custom' ? 'b-custom' : 'b-plugin') + '">' +
+              esc(sourceLabel(s)) + '</span>' +
+              (s.children.length ? '<div class="t-note" style="justify-content:flex-end">' +
+                s.children.length + ' 子技能' + (preloads ? ' · ' + preloads + ' preload' : '') + '</div>' : '') +
+            '</td>' +
+            '<td>' + roleCell(s) + '</td>' +
+            '<td class="mono">' + (s.enabled && !s.ownerDown ? s.bytes + ' B' :
+              '<span style="color:var(--color-text-muted)">不进索引</span>') + '</td>' +
+            '<td><label class="u-switch"><input type="checkbox" data-en="' + esc(s.name) + '"' +
+              (s.enabled ? ' checked' : '') + ' aria-label="' + esc(s.name) + ' 本机可用">' +
+              '<span class="track"><span class="thumb"></span></span></label></td>' +
+            '<td><div class="t-actions">' +
+              '<button class="u-btn sm ghost" data-detail="' + esc(s.name) + '">详情</button></div></td></tr>';
+        });
+      });
+    }
+
+    var srcs = ['用户自建'];
+    SKILLS.forEach(function (s) {
+      if (s.source === 'plugin' && srcs.indexOf(s.owner) < 0) srcs.push(s.owner);
+    });
+
+    return '<div class="sk-filters">' +
+      '<input class="u-input" id="skq" placeholder="按 name / 标题 / 描述过滤…" value="' + esc(filters.q) + '">' +
+      '<select class="u-select" id="sksrc"><option value="">全部来源</option>' +
+        srcs.map(function (v) {
+          return '<option value="' + esc(v) + '"' + (filters.src === v ? ' selected' : '') + '>' + esc(v) + '</option>';
+        }).join('') + '</select>' +
+      '<select class="u-select" id="skst"><option value="">全部状态</option>' +
+        '<option value="on"' + (filters.st === 'on' ? ' selected' : '') + '>本机可用</option>' +
+        '<option value="off"' + (filters.st === 'off' ? ' selected' : '') + '>本机停用</option>' +
+        '<option value="cold"' + (filters.st === 'cold' ? ' selected' : '') + '>从未被读过</option></select></div>' +
+      '<table class="tool-table"><thead><tr><th style="width:40%">技能</th><th style="width:13%">来源</th>' +
+        '<th style="width:14%">角色</th><th style="width:12%">索引</th>' +
+        '<th style="width:10%">本机可用</th><th style="width:11%"></th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table>' +
+      '<div style="margin-top:var(--space-3)">' + budgetBar() + '</div>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '模型这一轮看到的是 <b>本机可用 ∧ 角色绑定</b>的那些，顺序 <code class="mono">ownerPluginId → name</code>（与索引片段同序）。' +
+        '关掉「本机可用」<b>不动角色绑定</b>；关掉「本机可用」与卸载也是<b>两件事</b>：' +
+        '前者只是不进索引，目录还在、<code class="mono">skill_manager</code> 仍注册。</p>';
+  }
+
+  function renderLibrary() {
+    return panelHead() + tabsBar('library') + '<div class="sk-body">' + libraryTable() + '</div>';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ② 详情抽屉
+     ══════════════════════════════════════════════════════════ */
+  var drawerName = 'git-diff';
+
+  function childRows(s) {
+    if (!s.children.length) {
+      return '<div class="p-empty" style="padding:var(--space-4)">' +
+        '<b>单文件技能</b>没有子技能 —— 索引里那一行就是全部可披露信息，正文经一次读取回填。</div>';
+    }
+    return s.children.map(function (c) {
+      return '<div class="child-row"><span class="cid">' + esc(s.name) + '/' + esc(c.id) + '</span>' +
+        '<span class="cd" title="' + esc(c.desc) + '">' + esc(c.desc) + '</span>' +
+        '<label class="u-switch" title="preload：每轮自动激活并注入上下文">' +
+        '<input type="checkbox" data-pre="' + esc(s.name) + '|' + esc(c.id) + '"' + (c.preload ? ' checked' : '') +
+        ' aria-label="preload ' + esc(c.id) + '"><span class="track"><span class="thumb"></span></span></label>' +
+        '</div>';
+    }).join('');
+  }
+
+  function fileRows(s) {
+    var files = s.files.slice();
+    return files.map(function (f) {
+      var blocked = f.indexOf('scripts/') === 0;
+      return '<div class="file-row' + (blocked ? ' blocked' : '') + '">' +
+        '<span class="fk">' + (blocked ? '⨯' : f.indexOf('references/') === 0 ? '≡' : '▤') + '</span>' +
+        '<span class="fn">' + esc(f) + '</span>' +
+        (blocked ? '<span class="p-badge b-proc">不可执行</span>' : '') + '</div>';
+    }).join('');
+  }
+
+  function renderDrawerHost() {
+    var s = byName(drawerName);
+    if (!s) return '<div class="p-empty">选一行技能</div>';
+    var isCustom = s.source === 'custom';
+    var hs = descIssue(s);
+    var dangling = DANGLING.filter(function (d) {
+      return s.boundTo.some(function (r) { return d.roles.indexOf(r) >= 0; });
+    });
+
+    var sec = function (title, extra, body) {
+      return '<div class="dd-sec-title">' + title + (extra || '') + '</div>' + body;
+    };
+
+    var head =
+      '<div class="dd-head"><span class="dd-name">' + esc(s.name) + '</span>' +
+      '<span class="p-badge ' + (isCustom ? 'b-custom' : 'b-plugin') + '">' + esc(sourceLabel(s)) + '</span>' +
+      (s.enabled ? '' : '<span class="p-badge b-src">已停用</span>') +
+      descBadge(s) +
+      '<span style="flex:1"></span>' +
+      '<button class="u-btn sm ghost" data-close="1">✕</button></div>';
+
+    var ov =
+      '<div class="kv-list">' +
+        kv('name', s.name, true) + kv('description', s.desc) +
+        kv('触发条件', s.when || '（无 —— 体检不通过）') +
+        kv('version', s.version, true) + kv('更新于', s.updated) +
+        kv('索引占用', (s.enabled && !s.ownerDown ? s.bytes + ' B' : '不进索引（未启用）')) +
+        kv('磁盘目录', skillRoot(s), true) +
+        kv('本轮上下文', bodyBytes() ? ACTIVATIONS.length + ' 个子技能 · ' + bodyBytes() + ' B' : '本轮还没有激活任何子技能') +
+      '</div>' +
+      (isCustom
+        ? '<div class="okbox">正文与目录都在<b>本插件可读范围</b>内：' + esc(customRoot(s)) + '</div>'
+        : '<div class="warnbox">正文<b>不在本插件可读范围</b>。' + esc(pluginRoot(s)) +
+          ' 归 ' + esc(s.owner) + ' 管 —— 它由那个插件自己的服务读完并 publish 上来。' +
+          '所以这里只显示它交上来的 frontmatter 摘要。</div>');
+
+    /* 「子技能」与「目录结构」讲的是同一件事：这个技能由哪些文件组成、哪几块能被单独激活。
+       合在一段里，preload 开关才落在它描述的那一行上。 */
+    var structSec = sec('结构 · 文件与可单独激活的分节',
+      '<span class="p-badge b-src">' + s.files.length + ' 个文件' +
+      (s.children.length ? ' · ' + s.children.length + ' 个子技能' : '') + '</span>',
+      '<div class="pathbox">' + esc(skillRoot(s)) + '</div>' +
+      '<div style="margin-top:var(--space-2)">' + fileRows(s) + '</div>' +
+      (s.children.length
+        ? '<div class="dd-sec-title" style="margin:var(--space-3) 0 var(--space-2)">子技能 · 按需激活</div>' +
+          childRows(s) +
+          '<p style="font-size:11.5px;color:var(--color-text-muted);margin:var(--space-2) 0 0">' +
+          '子技能不是独立条目，是同一份正文里的分节。开关 = <b>preload</b>：每轮自动激活，' +
+          '代价是每轮都占 ' + BODY_BUDGET + ' B 预算里的份额。</p>'
+        : '<div class="p-empty" style="padding:var(--space-3)">单文件技能 · 索引里那一行就是全部可披露信息</div>') +
+      (s.scripts && s.scripts.length
+        ? '<div class="badbox"><b>scripts/ 在 P6 不可执行。</b>脚本执行就是进程执行，' +
+          '而审批位（<code>tool.approval.*</code>）还没落地 —— 所以这里显示为带删除线的只读文件，' +
+          '而不是一个能点的「运行」。</div>'
+        : ''));
+
+    var roleSec = sec('绑定角色 · <span style="font-weight:400">只读</span>',
+      '<span class="p-badge b-managed">在 widget.agents 改</span>',
+      (s.boundTo.length
+        ? s.boundTo.map(function (r) {
+            return '<span class="p-badge b-src" style="margin-right:4px">' + esc(r) + '</span>';
+          }).join('')
+        : '<span style="color:var(--color-text-muted);font-size:var(--text-xs)">没有角色绑它</span>') +
+      (dangling.length
+        ? '<div class="t-note" style="margin-top:6px"><span class="p-badge b-dangling">悬空绑定</span>' +
+          '角色「' + esc(dangling[0].roles[0]) + '」还绑着 <code class="mono">' + esc(dangling[0].name) +
+          '</code>，但目录里已无此项 → <b>忽略并标注，不报错</b>' +
+          '<button class="u-btn sm ghost" data-rmdangling="1">从角色绑定里清掉</button></div>'
+        : '') +
+      (s.enabled ? '' :
+        '<div class="warnbox"><b>本机已停用。</b>' + (s.boundTo.length
+          ? '角色「' + esc(s.boundTo.join('」「')) + '」的绑定<b>保留</b>，但它们<b>本轮拿不到</b>这个技能。' +
+            '重新打开「本机可用」即恢复 —— 与「卸载不回溯历史」是同一条纪律。'
+          : '没有任何角色绑它，所以这次停用对上下文没有任何影响。') + '</div>') +
+      '<p style="font-size:11.5px;color:var(--color-text-muted);margin:var(--space-2) 0 0">' +
+      '<b>本轮索引 = 本机可用 ∩ 角色绑定</b>。角色存的是 name 引用' +
+      '（<code class="mono">characters.json · skills[]</code>），绑引用不绑实现；' +
+      '本视图<b>不给绑 / 解绑按钮</b> —— 一处能改就够了。' +
+      '角色侧也不设 <code class="mono">enabled</code> 开关：<b>不选这个角色就是不用它</b>，' +
+      '再加一个开关只会制造「下拉里选了它，但它被停用了怎么办」。</p>');
+
+    var impactSec = sec('关掉「本机可用」会发生什么',
+      '<span class="p-badge b-warn">这一步是可逆的</span>',
+      '<ul style="font-size:11.5px;color:var(--color-text-muted);margin:0;padding-left:1.2em">' +
+        '<li>索引片段里这一行<b>消失</b>，下一轮起模型看不到它</li>' +
+        '<li>' + (s.boundTo.length
+          ? '绑了它的 <b>' + s.boundTo.length + ' 个角色本轮拿不到</b>它 —— 绑定保留，重开即恢复'
+          : '没有角色绑它，所以对上下文没有任何影响') + '</li>' +
+        '<li>历史消息里已经回填过的正文<b>不会被删</b>（append-only）—— 数据保留，只是不再可用</li>' +
+        '<li><b>不会级联删</b>历史里的 <code class="mono">role:\'tool\'</code> 记录</li>' +
+        '<li><b>与卸载是两件事</b>：目录还在，<code class="mono">skill_manager</code> 仍注册，' +
+        '<code class="mono">list_packages</code> 只是把它标成不可用</li>' +
+      '</ul>' +
+      (isCustom
+        ? '<div class="warnbox">这是用户自建技能，<b>删它 = 删目录</b>，本视图不提供删除按钮。' +
+          '真的要删，请去 <code class="mono">' + esc(customRoot(s)) + '</code> 手删。</div>'
+        : '<div class="warnbox">这是插件自带技能，<b>删它 = 卸插件</b>，同样不在本视图做。' +
+          '停用是可逆的，卸载不是。</div>'));
+
+    var body = '<div class="dd-scrim"></div><div class="dd-panel">' + head +
+      '<div class="dd-body">' +
+        sec('概览', '', ov) + structSec + roleSec + impactSec +
+      '</div>' +
+      '<div class="dd-foot">' +
+        '<button class="u-btn sm ghost" data-close="1">关闭</button>' +
+        (isCustom
+          ? '<button class="u-btn sm" data-edit="' + esc(s.name) + '">编辑 SKILL.md</button>'
+          : '<button class="u-btn sm ghost" disabled title="插件自带技能的正文本插件读不到">只读</button>') +
+        '<span style="flex:1"></span>' +
+        '<label class="u-switch"><input type="checkbox" data-en="' + esc(s.name) + '"' +
+          (s.enabled ? ' checked' : '') + ' aria-label="启用 ' + esc(s.name) + '">' +
+          '<span class="track"><span class="thumb"></span></span></label>' +
+      '</div></div>';
+
+    return body;
+  }
+
+  function kv(k, v, mono) {
+    return '<div class="kv"><span class="k">' + k + '</span><span class="v' + (mono ? ' mono' : '') + '">' +
+      esc(v) + '</span></div>';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ③ 体检
+     ══════════════════════════════════════════════════════════ */
+  /* ══════════════════════════════════════════════════════════
+     ② 统计
+     ══════════════════════════════════════════════════════════ */
+  function renderStats() {
+    var rows = SKILLS.filter(function (s) { return !s.ownerDown; });
+    var max = Math.max.apply(null, rows.map(function (s) { return callsIn(USAGE[s.name], win); }).concat([1]));
+    var totalCalls = rows.reduce(function (a, s) { return a + callsIn(USAGE[s.name], win); }, 0);
+    var cold = rows.filter(function (s) { return isCold(s, win); });
+    var fresh = rows.filter(function (s) {
+      return s.enabled && !s.ownerDown && !isCold(s, win) && callsIn(USAGE[s.name], win) === 0;
+    });
+
+    var body = rows.map(function (s) {
+      var u = USAGE[s.name];
+      var n = callsIn(u, win);
+      var pct = Math.round(n / max * 100);
+      var coldRow = isCold(s, win);
+      return '<tr class="' + (s.enabled ? '' : 'row-off') + '">' +
+        '<td><div><span class="t-name">' + esc(s.name) + '</span>' +
+          (s.enabled ? '' : '<span class="p-badge b-src">已停用</span>') + '</div>' +
+          '<div class="t-desc" title="' + esc(s.desc) + '">' + esc(s.title) + '</div></td>' +
+        '<td class="mono">' + u.days + ' 天</td>' +
+        '<td><div style="display:flex;align-items:center;gap:6px">' +
+          '<div style="flex:1;height:8px;border-radius:var(--radius-full);background:var(--color-surface-3);' +
+            'overflow:hidden;min-width:40px"><i style="display:block;height:100%;width:' + pct + '%;' +
+            'background:' + (coldRow ? 'var(--color-border-strong)' : 'var(--color-primary)') + '"></i></div>' +
+          '<span class="mono" style="width:26px;text-align:right">' + n + '</span></div>' +
+          (coldRow ? '<div class="t-note"><span class="p-badge b-danger">从没被读过</span>' +
+            '装了 ' + u.days + ' 天 · 索引里一直有它</div>' : '') + '</td>' +
+        '<td class="mono">' + (u.last === '从未' ? '—' : esc(u.last)) + '</td>' +
+        '<td class="mono">' + u.bytes + ' B</td>' +
+        '<td>' + (coldRow
+          ? '<div class="t-actions"><button class="u-btn sm ghost" data-goto="' + esc(s.name) + '">改描述</button>' +
+            '<button class="u-btn sm ghost" data-disable="' + esc(s.name) + '">停用</button></div>'
+          : '<div class="t-actions"><span style="font-size:var(--text-xs);color:var(--color-text-muted)">—</span></div>') +
+        '</td></tr>';
+    }).join('');
+
+    var seg = '<div class="seg">' + WINDOWS.map(function (w) {
+      return '<button data-win="' + w.k + '" aria-pressed="' + (win === w.k) + '">' + w.label + '</button>';
+    }).join('') + '</div>';
+
+    var verdict = cold.length
+      ? '<div class="badbox"><b>' + cold.length + ' 个技能启用了、白装了。</b>' +
+        '它们每轮都在索引片段里占着字节，而模型从来没读过 —— ' +
+        '最可能的原因是 description 没给出触发条件。' +
+        (fresh.length ? '<br>' + fresh.length + ' 个启用技能 0 次调用，但已装不足 ' + COLD_DAYS + ' 天，' +
+          '<b>还不到下结论的时候</b>，如实显示不报警。' : '') + '</div>'
+      : (fresh.length
+        ? '<div class="warnbox">有 ' + fresh.length + ' 个启用技能 0 次调用，但已装不足 ' + COLD_DAYS +
+          ' 天 —— <b>先别改描述</b>，再给它一点时间。</div>'
+        : '<div class="okbox">启用的技能都被读过，没有白装的。</div>');
+
+    return panelHead() + tabsBar('stats') + '<div class="sk-body">' +
+      '<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3)">' +
+        '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">时间窗</span>' + seg +
+        '<span style="flex:1"></span>' +
+        '<span class="p-badge b-src">只读 · 数字来自 skills.state.usage</span></div>' +
+      verdict +
+      '<table class="tool-table" style="margin-top:var(--space-3)"><thead><tr>' +
+        '<th style="width:30%">技能</th><th style="width:11%">已装</th><th style="width:30%">被读次数</th>' +
+        '<th style="width:14%">最近一次</th><th style="width:9%">正文</th><th style="width:6%"></th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table>' +
+      '<div class="budget" style="margin-top:var(--space-4)">' +
+        '<div style="font-size:var(--text-xs);font-weight:600">这段时间一共读了 ' + totalCalls + ' 次</div>' +
+        '<div class="budget-legend" style="margin-top:4px">' +
+          '<span>' + rows.length + ' 个技能参与统计（来源插件未运行的行已排除）</span>' +
+          '<span>调用次数 = skills 服务收到的 <code>tool.execute.result</code> 里属于它的那些</span>' +
+          '<span>落 usage.json，聚合搭 skills.state 的车 —— <b>零新 topic</b></span>' +
+        '</div></div>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '<b>没有趋势折线。</b>技能调用是稀疏事件（一个技能一周被读 0～3 次），' +
+        '折线画出来是锯齿噪声，读的人只会记住「好像在涨」。' +
+        '<b>也不下钻到单个会话</b> —— 那是事件流的活，而且从来没人靠它改过描述。</p>' +
+      '</div>';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ⑥ 编辑器
+     ══════════════════════════════════════════════════════════ */
+  var editName = 'pdf-extract';
+  var editDraft = null;
+
+  function draftOf(s) {
+    return editDraft && editDraft.name === s.name ? editDraft : {
+      name: s.name, title: s.title, version: s.version, desc: s.desc, body: bodyText(s)
+    };
+  }
+
+  function bodyText(s) {
+    return '# ' + s.title + '\n\n' +
+      '（这一段是模型调 skill_manager.read 时才拿到的正文。\n' +
+      '  它不进索引片段，也不进上下文 —— 直到模型决定读它。）\n\n' +
+      '## 步骤\n\n' +
+      '1. 确认输入形态\n' +
+      '2. 产出结构化结果\n' +
+      '3. 回填给对话\n\n' +
+      '## 注意\n\n' +
+      '- 不确定就问，不要猜\n' +
+      '- 产出必须能被下一轮直接引用';
+  }
+
+  function descHealth(desc) {
+    var when = /当|when|用于|适用于|如果|出现/.test(desc);
+    var out = [];
+    if (!when) out.push({ lv: 'bad', t: '没有触发条件',
+      d: '模型只能靠字面猜要不要读它。它猜不中时不会报错，技能在你这里是绿的。' });
+    if (desc.length < 30) out.push({ lv: 'warn', t: '只有 ' + desc.length + ' 字',
+      d: '索引片段按字节计费，但一次误读的成本远高于省下的几十字节。' });
+    return out;
+  }
+
+  function renderEditorHost() {
+    var s = byName(editName);
+    var isCustom = s.source === 'custom';
+
+    if (!isCustom) {
+      return '<div class="p-empty" style="text-align:left;padding:var(--space-5)">' +
+        '<b>' + esc(s.name) + ' 是插件自带技能，只读</b>' +
+        '<div style="margin-top:6px;max-width:560px">' +
+        esc(pluginRoot(s)) + ' 归 <code>' + esc(s.owner) + '</code> 管，' +
+        '而 <code>plugins.readFile</code> 只限本插件目录 —— 我们既读不到正文，也写不进去。' +
+        '所以这里只显示它 publish 上来的 frontmatter 摘要，' +
+        '<b>不提供「去那个插件改」的超链接</b>（我们连它在哪都不知道）。</div></div>';
+    }
+
+    var d = draftOf(s);
+    var dh = descHealth(d.desc);
+    var scripts = s.scripts || [];
+
+    var left =
+      '<div class="fm"><div class="fm-title">--- frontmatter ---</div>' +
+        '<div class="ed-lab">标题 <span class="req">*</span></div>' +
+        '<input class="u-input" data-f="title" value="' + esc(d.title) + '">' +
+        '<div class="ed-lab" style="margin-top:8px">name <span class="req">*</span>　<span class="p-badge b-src">改了就等于换技能</span></div>' +
+        '<input class="u-input mono" data-f="name" value="' + esc(d.name) + '" disabled>' +
+        '<div class="ed-lab" style="margin-top:8px">description <span class="req">*</span>　' +
+          '<span class="p-badge b-src">契约字段</span></div>' +
+        '<textarea class="u-textarea" data-f="desc" style="min-height:74px">' + esc(d.desc) + '</textarea>' +
+        '<div class="ed-lab" style="margin-top:8px">version</div>' +
+        '<input class="u-input mono" data-f="version" value="' + esc(d.version) + '">' +
+      '</div>' +
+      '<div class="ed-lab">正文 <span class="p-badge b-src">不进索引</span></div>' +
+      '<textarea class="u-textarea ed-body" data-f="body">' + esc(d.body) + '</textarea>';
+
+    var right =
+      '<div class="ed-lab">体检</div>' +
+      (dh.length
+        ? dh.map(function (h) {
+            return '<div class="hx ' + h.lv + '" style="padding:var(--space-2)">' +
+              '<span class="hx-ico">' + (h.lv === 'bad' ? '!' : '?') + '</span>' +
+              '<div class="hx-main"><div class="hx-t" style="font-size:var(--text-xs)">' + esc(h.t) + '</div>' +
+              '<div class="hx-d">' + h.d + '</div></div></div>';
+          }).join('')
+        : '<div class="hx ok" style="padding:var(--space-2)"><span class="hx-ico">✓</span>' +
+          '<div class="hx-main"><div class="hx-t" style="font-size:var(--text-xs)">description 体检通过</div>' +
+          '<div class="hx-d">' + d.desc.length + ' 字 · 含触发条件</div></div></div>') +
+      '<div class="ed-lab" style="margin-top:var(--space-4)">目录 · <span class="mono">' + esc(customRoot(s)) + '</span></div>' +
+      '<div>' + s.files.map(function (f) {
+        var blocked = f.indexOf('scripts/') === 0;
+        return '<div class="file-row' + (blocked ? ' blocked' : '') + '">' +
+          '<span class="fk">' + (blocked ? '⨯' : f.indexOf('references/') === 0 ? '≡' : '▤') + '</span>' +
+          '<span class="fn">' + esc(f) + '</span>' +
+          (blocked ? '<span class="p-badge b-proc">不可执行</span>' : '') + '</div>';
+      }).join('') + '</div>' +
+      (scripts.length
+        ? '<div class="badbox" style="margin-top:var(--space-3)">' +
+          '<b>scripts/ 在 P6 不可执行。</b>脚本执行就是进程执行，而审批位还没落地。' +
+          '文件在目录里 ≠ 它能跑 —— 所以这里不做「运行」按钮，只显示为不可用。</div>'
+        : '') +
+      '<div class="ed-lab" style="margin-top:var(--space-4)">写入去向</div>' +
+      '<div class="pathbox">userData/plugin/skills/custom/' + esc(s.name) + '/SKILL.md</div>' +
+      '<div class="warnbox">模型侧<b>没有</b> create/update/delete 动作 —— 写盘只从这里走。' +
+      '否则 description 会变成模型的输出，而它是模型自己决定读不读的依据。</div>';
+
+    return panelHead() +
+      '<div class="sk-body"><div class="sk-tabs" style="padding:0;margin-bottom:var(--space-3)">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span class="sk-title" style="font-size:var(--text-md)">编辑 ' + esc(s.name) + '</span>' +
+          '<span class="p-badge b-custom">用户自建 · 可写</span>' +
+          '<span style="flex:1"></span>' +
+          '<select class="u-select" id="edpick" style="width:auto">' +
+            SKILLS.map(function (x) {
+              return '<option value="' + esc(x.name) + '"' + (x.name === editName ? ' selected' : '') + '>' +
+                esc(x.name) + (x.source === 'custom' ? '' : '（只读）') + '</option>';
+            }).join('') +
+          '</select></div></div>' +
+      '<div class="ed"><div>' + left + '</div><div class="ed-side">' + right + '</div></div>' +
+      '<div style="display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-4);' +
+        'padding-top:var(--space-3);border-top:1px solid var(--color-border)">' +
+        '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">' +
+          '<b>下一轮生效</b>：prompt 每轮重算，历史里的 system 一律丢弃 —— 不追溯任何已有会话。</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="u-btn sm ghost" data-edreset="1">放弃改动</button>' +
+        '<button class="u-btn sm" data-edsave="1">保存并重新注册</button>' +
+      '</div></div>';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ⑦ 边界情形
+     ══════════════════════════════════════════════════════════ */
+  var edge = 0;
+  var EDGES = [
+    { t: '① 技能列表为空', d: 'skill_manager 根本不注册，工具目录里没有它；本视图显示空态与引导。' },
+    { t: '② 同名冲突', d: '第二个被拒绝、不覆盖；界面标 ⚠ 并写清是哪两个 owner 撞了。' },
+    { t: '③ 脚本 · 审批位未落地', d: 'scripts/ 在编辑器里只读 + 删除线，没有「运行」按钮。' },
+    { t: '④ 索引超预算', d: '整块丢弃 + 每条一条 warn；界面把预算条变红并说明后果。' },
+    { t: '⑤ 卸载不回溯历史', d: '抽屉的「关掉本机可用会发生什么」把五条后果写在按钮上方。' },
+    { t: '⑥ 角色绑了已卸载的技能', d: '悬空引用：灰显 + 标注，忽略不报错。' },
+    { t: '⑦ 本机停用但角色还绑着', d: '绑定保留、「有效 0 个」标红 —— 这是两个开关最容易让人以为坏了的地方。' },
+    { t: '⑧ 来源插件未运行', d: '残留快照行：标 ⚠ 而不是灰掉 —— 这条链路本身有问题。' }
+  ];
+
+  function renderEdge() {
+    var s = byName('git-diff');
+    var body = '';
+
+    if (edge === 0) {
+      body = '<div class="p-empty"><b>还没有任何技能</b>' +
+        '<div style="max-width:520px;margin:8px auto 0">' +
+        '技能列表为空时，<code class="mono">skill_manager</code> <b>根本不注册</b> —— ' +
+        '工具目录里没有这一行，模型这一轮也就没有技能索引片段。' +
+        '这是正常状态，不是故障，所以空态给的是「怎么装」，不是一句报错。</div>' +
+        '<div style="margin-top:12px;display:flex;gap:6px;justify-content:center">' +
+        '<button class="u-btn sm">+ 新建技能</button>' +
+        '<button class="u-btn sm ghost">从目录导入</button></div></div>';
+    } else if (edge === 1) {
+      body = '<div class="warnbox" style="margin-bottom:var(--space-2)">' +
+        '<b>fail fast：第二个被拒绝，不覆盖。</b>' +
+        '若反过来（后者覆盖前者），症状是「我改了技能却不生效」，而原因在另一个插件里，几乎无法排查。</div>' +
+        '<table class="tool-table"><thead><tr><th style="width:22%">name</th><th style="width:22%">来源</th>' +
+        '<th>结果</th></tr></thead><tbody>' +
+        '<tr><td class="mono">git-diff</td><td><span class="p-badge b-custom">用户自建</span></td>' +
+          '<td><span class="p-badge b-ok">生效</span> 09:12:00 先到</td></tr>' +
+        '<tr class="row-off"><td class="mono">git-diff</td><td><span class="p-badge b-plugin">web-dev</span></td>' +
+          '<td><span class="p-badge b-danger">已拒绝注册</span> 09:12:07 → skill.unregistered{ownerPluginId:"web-dev"}</td></tr>' +
+        '</tbody></table>' +
+        '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '界面上<b>不提供「选一个生效」</b>：注册那一刻就只有一个答案了。' +
+        '要改名，去拥有它的那一份里改。</p>';
+    } else if (edge === 2) {
+      body = '<div class="badbox" style="margin-bottom:var(--space-2)">' +
+        '<b>脚本执行就是进程执行。</b>P6 阶段审批位（<code class="mono">tool.approval.*</code>）还没落地，' +
+        '所以「禁用执行」是一个可兑现的承诺 —— 而不是一个待办。</div>' +
+        '<div class="pathbox">userData/plugin/skills/custom/skill-authoring/</div>' +
+        '<div style="margin-top:8px">' +
+        '<div class="file-row"><span class="fk">▤</span><span class="fn">SKILL.md</span></div>' +
+        '<div class="file-row"><span class="fk">≡</span><span class="fn">references/contract.md</span></div>' +
+        '<div class="file-row blocked"><span class="fk">⨯</span><span class="fn">scripts/check_desc.mjs</span>' +
+        '<span class="p-badge b-proc">不可执行</span></div></div>' +
+        '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '文件在目录里 <b>≠</b> 它能跑。给一个灰掉的「运行」按钮等于教用户这个界面不可信。</p>';
+    } else if (edge === 3) {
+      var fake = SKILLS.map(function (x) { var c = JSON.parse(JSON.stringify(x)); c.bytes = 2400; return c; });
+      var b = fake.filter(function (x) { return x.enabled && !x.ownerDown; })
+        .reduce(function (a, x) { return a + x.bytes; }, 0);
+      body = '<div class="budget"><div style="font-size:var(--text-xs);font-weight:600">' +
+        '索引片段预算 · priority 10</div>' +
+        '<div class="budget-track"><i class="over" style="width:100%"></i></div>' +
+        '<div class="budget-legend"><span>' + b + ' / ' + INDEX_BUDGET + ' B（150%）</span>' +
+        '<span>' + fake.length + ' / ' + INDEX_MAX_ROWS + ' 条</span></div>' +
+        '<div class="badbox"><b>整块丢弃 + 每条一条 warn</b>回填给模型，<b>不截断</b>。' +
+        '症状是「装上插件之后模型变笨」—— 而没人会想到去查字节数。<br>' +
+        '截断更糟：剩下的目录是<b>随机子集</b>，行为变成「有时灵有时不灵」，同样零报错。</div></div>';
+    } else if (edge === 4) {
+      body = '<div class="dd-sec-title" style="margin-top:0">停用 git-diff 之后</div>' +
+        '<ul style="font-size:var(--text-sm);margin:0 0 var(--space-2);padding-left:1.3em">' +
+          '<li>索引片段里这一行<b>消失</b> —— 下一轮起模型看不到它</li>' +
+          '<li>历史消息里已经回填过的正文<b>不会被删</b>（append-only）—— 数据保留，只是不再可用</li>' +
+          '<li>角色「代码评审员」「架构评审」的绑定<b>保留</b>，重装即恢复</li>' +
+          '<li><b>不级联删</b>历史里的 <code class="mono">role:\'tool\'</code> 记录</li>' +
+        '</ul>' +
+        '<div class="warnbox">这一段<b>放在按钮上方，而不是折叠区</b>：' +
+        '「停用」是可逆的那一半，删除不是 —— 而删除根本不在本视图做（删目录 / 卸插件）。</div>';
+    } else if (edge === 5) {
+      body = '<div class="warnbox" style="margin-bottom:var(--space-2)">' +
+        '<b>缺一份绑定只是「少一点能力」，所以忽略并标注，不报错。</b>' +
+        '报错会让那个角色整个打不开 —— 而它本来还能用另外两个技能。</div>' +
+        '<div class="child-row"><span class="cid">运维</span>' +
+          '<span class="cd">角色 · 绑了 2 个技能，其中 1 个已悬空</span>' +
+          '<span class="p-badge b-src">loop-trace ✓</span></div>' +
+        '<div class="child-row" style="border-style:dashed;opacity:.8">' +
+          '<span class="cid">mcp-doctor</span><span class="cd">目录里已无此项（来源目录被删）</span>' +
+          '<span class="p-badge b-dangling">悬空引用</span></div>' +
+        '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '清理动作写 <code class="mono">agent.state.set</code>（角色的 <code class="mono">skills[]</code>），' +
+        '<b>不动技能目录</b> —— 技能目录是能力声明，它不该知道自己被谁引用过。</p>';
+    } else if (edge === 6) {
+      var cs = byName('pdf-extract');
+      var csSave = cs.enabled;
+      cs.enabled = false;
+      body = '<div class="warnbox" style="margin-bottom:var(--space-2)">' +
+        '<b>两个开关最容易让人以为界面坏了，就发生在这里。</b>' +
+        '角色「裸会话」还绑着 pdf-extract，而本机已关掉「可用」—— ' +
+        '于是<b>绑定还在、能力没了</b>。用户看到的症状是「我绑了它，模型就是不用」，' +
+        '而两边都没有报错。</div>' +
+        '<table class="tool-table"><thead><tr><th style="width:34%">技能</th><th style="width:16%">来源</th>' +
+        '<th style="width:16%">角色</th><th style="width:12%">索引</th><th style="width:10%">本机可用</th>' +
+        '<th>状态</th></tr></thead><tbody>' +
+        '<tr><td><div><span class="t-name">pdf-extract</span><span class="t-title">PDF 表格提取</span></div>' +
+          '<div class="t-desc">处理 PDF 文件。</div>' +
+          '<div class="t-note"><span class="p-badge b-danger">模型不会读</span>' +
+          'description 没有触发条件</div></td>' +
+        '<td><span class="p-badge b-custom">用户自建</span></td>' +
+        '<td><span style="font-size:var(--text-xs)">绑了 1 个</span>' +
+          '<div class="t-note" style="justify-content:flex-end">' +
+          '<span class="p-badge b-danger">有效 0 个</span></div></td>' +
+        '<td class="mono"><span style="color:var(--color-text-muted)">不进索引</span></td>' +
+        '<td><label class="u-switch"><input type="checkbox" aria-label="pdf-extract 本机可用">' +
+          '<span class="track"><span class="thumb"></span></span></label></td>' +
+        '<td><span class="p-badge b-warn">绑定保留</span> 重开即恢复</td></tr>' +
+        '</tbody></table>' +
+        '<div style="margin-top:var(--space-3);font-size:var(--text-xs);color:var(--color-text-muted)">' +
+        '<b>三条纪律：</b><br>' +
+        '① <b>不级联解绑</b> —— 关掉可用不动 <code class="mono">characters.json</code>，' +
+        '与「卸载不回溯历史」同源。<br>' +
+        '② <b>「有效 0 个」必须显红</b> —— 这是 AND 的唯一出口，藏起来用户就只能自己猜。<br>' +
+        '③ <b>反向也要成立</b>：在角色侧把一个本机不可用的技能绑上时，' +
+        '绑定<b>照样保留</b>，并标注「本机不可用」+ 一个跳到本视图的入口 —— ' +
+        '不能静默成功，也不能静默失败。</div>';
+      cs.enabled = csSave;
+    } else {
+      body = '<div class="badbox" style="margin-bottom:var(--space-2)">' +
+        '正常情况下 <code class="mono">research</code> 服务退出会发 ' +
+        '<code class="mono">skill.unregistered</code>，目录里就不该还有这一行。' +
+        '<b>行还在，说明这条链路本身有问题</b> —— 所以标 ⚠ 而不是灰掉。</div>' +
+        '<table class="tool-table"><thead><tr><th style="width:34%">技能</th><th style="width:18%">来源</th>' +
+        '<th style="width:14%">索引</th><th style="width:12%">本机可用</th><th>状态</th></tr></thead><tbody>' +
+        '<tr class="row-off"><td><div><span class="t-name">web-research</span>' +
+          '<span class="t-title">联网调研</span></div>' +
+          '<div class="t-desc">先出检索式再抓正文，最后给带链接的要点清单。</div>' +
+          '<div class="t-note"><span class="p-badge b-danger">残留快照</span>' +
+          '来源插件 <code class="mono">research</code> 当前未运行</div></td>' +
+        '<td><span class="p-badge b-plugin">research</span></td>' +
+        '<td class="mono"><span style="color:var(--color-text-muted)">不进索引</span></td>' +
+        '<td><label class="u-switch"><input type="checkbox" checked aria-label="web-research 本机可用">' +
+          '<span class="track"><span class="thumb"></span></span></label></td>' +
+        '<td><span class="p-badge b-warn">待确认</span> 它还会被 ' +
+          'skill_manager.list_packages 读到吗？</td></tr>' +
+        '</tbody></table>' +
+        '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '<b>开关仍可点</b>，而且<b>点了也不注销工具</b> —— 关掉可用只让它不进索引；' +
+        '要真的让这一行消失，得让那个插件把 <code class="mono">skill.unregistered</code> 发出来。</p>';
+    }
+
+    var bar = '<div class="scn-bar"><span class="lbl">第 ' + (edge + 1) + ' / ' + EDGES.length + ' 种</span>' +
+      EDGES.map(function (e, i) {
+        return '<button class="u-btn sm ' + (edge === i ? '' : 'ghost') + '" data-edge="' + i + '">' + esc(e.t) + '</button>';
+      }).join('') + '</div>';
+    var note = '<div style="padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border);' +
+      'background:var(--color-surface);font-size:var(--text-sm)"><b>' + esc(EDGES[edge].t) + '</b><br>' +
+      '<span style="color:var(--color-text-muted)">' + EDGES[edge].d + '</span></div>';
+    return bar + '<div style="padding:var(--space-4)">' + body + '</div>' + note;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     渲染调度
+     ══════════════════════════════════════════════════════════ */
+  var activeTab = 'library';
+  function render() {
+    byId('skView').innerHTML = activeTab === 'library' ? renderLibrary() : renderStats();
+    byId('skCatalog').innerHTML = renderLibrary();
+    byId('skStats').innerHTML = renderStats();
+    byId('skDrawer').innerHTML = renderDrawerHost();
+    byId('skEditor').innerHTML = renderEditorHost();
+    byId('skEdge').innerHTML = renderEdge();
+  }
+
+  /* preload 开关与本轮上下文摘要联动：开了就立刻进摘要，關了就去掉。
+     激活表不上总线，所以它只活在 skills 服务进程内（§5）。 */
+  function syncActivation(skill, child) {
+    var ref = skill.name + '/' + child.id;
+    var i = -1;
+    for (var k = 0; k < ACTIVATIONS.length; k++) if (ACTIVATIONS[k].ref === ref) i = k;
+    if (child.preload && i < 0) {
+      ACTIVATIONS.push({
+        ref: ref, title: child.name, hash: 'pending', at: '下一轮自动',
+        bytes: child.bytes || 900, via: 'preload'
+      });
+    } else if (!child.preload && i >= 0) {
+      ACTIVATIONS.splice(i, 1);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     事件委托
+     ══════════════════════════════════════════════════════════ */
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+
+    /* Tab 切换 */
+    var tab = el.closest('[data-tab]');
+    if (tab) { activeTab = tab.getAttribute('data-tab'); render(); return; }
+
+    /* 抽屉 */
+    var det = el.closest('[data-detail]');
+    if (det) { drawerName = det.getAttribute('data-detail'); byId('skDrawer').innerHTML = renderDrawerHost(); return; }
+    if (el.closest('[data-close]')) { byId('skDrawer').innerHTML = renderLibrary(); return; }
+
+    /* 去编辑 / 去体检项定位 */
+    var edn = el.closest('[data-edit]');
+    if (edn) {
+      editName = edn.getAttribute('data-edit'); editDraft = null;
+      document.querySelector('nav.toc a[href="#s7"]').click(); render(); return;
+    }
+    var gt = el.closest('[data-goto]');
+    if (gt) {
+      var gs = byName(gt.getAttribute('data-goto'));
+      if (gs.source === 'custom') {
+        editName = gs.name; editDraft = null;
+        document.querySelector('nav.toc a[href="#s7"]').click();
+      } else {
+        drawerName = gs.name;
+        document.querySelector('nav.toc a[href="#s3"]').click();
+        byId('skDrawer').innerHTML = renderDrawerHost();
+      }
+      render(); return;
+    }
+
+    /* 悬空绑定：清理动作写在角色的 agent.state.set 上，不动技能目录 */
+    if (el.closest('[data-rmdangling]')) { render(); return; }
+
+    /* 统计：一键停用那个白装的（停用是可逆的，所以给按钮不给「建议」） */
+    var dis = el.closest('[data-disable]');
+    if (dis) { byName(dis.getAttribute('data-disable')).enabled = false; render(); return; }
+
+    /* 「导入目录…」：Demo 里没有本机目录选择器，如实说明而不是装死 */
+    if (el.closest('[data-import]')) {
+      notice = 'Demo 不能选本机目录。实际实现是一个目录选择器，落到 ' +
+        'userData/plugin/skills/custom/&lt;name&gt;/ —— 导入后由 skills 服务读 frontmatter 并 publish skill.registered。';
+      render(); return;
+    }
+
+    /* 统计：时间窗 */
+    var w = el.closest('[data-win]');
+    if (w) { win = w.getAttribute('data-win'); render(); return; }
+
+    /* 编辑器 */
+    if (el.closest('[data-edsave]')) {
+      var s2 = byName(editName), d2 = draftOf(s2);
+      s2.title = d2.title; s2.desc = d2.desc; s2.version = d2.version; s2.dirty = false;
+      editDraft = null; render(); return;
+    }
+    if (el.closest('[data-edreset]')) { editDraft = null; render(); return; }
+
+    /* 边界情形切换 */
+    var eb = el.closest('[data-edge]');
+    if (eb) { edge = Number(eb.getAttribute('data-edge')); render(); return; }
+
+    /* Demo 视图切换 */
+    if (el.closest('#sw1')) {
+      document.getElementById('sw1').setAttribute('aria-pressed', 'true');
+      document.getElementById('sw2').setAttribute('aria-pressed', 'false');
+      document.querySelector('nav.toc a[href="#s1"]').click();
+      return;
+    }
+    if (el.closest('#sw2')) {
+      document.getElementById('sw1').setAttribute('aria-pressed', 'false');
+      document.getElementById('sw2').setAttribute('aria-pressed', 'true');
+      document.querySelector('nav.toc a[href="#s6"]').click();
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+
+    /* 启用开关：真的能改 */
+    var en = el.closest ? el.closest('[data-en]') : null;
+    if (en) {
+      var s4 = byName(en.getAttribute('data-en'));
+      s4.enabled = en.checked;
+      render(); return;
+    }
+
+    /* 子技能 preload */
+    var pr = el.closest ? el.closest('[data-pre]') : null;
+    if (pr) {
+      var parts = pr.getAttribute('data-pre').split('|');
+      var s5 = byName(parts[0]);
+      var c5 = s5.children.filter(function (c) { return c.id === parts[1]; })[0];
+      if (c5) { c5.preload = pr.checked; syncActivation(s5, c5); }
+      render(); return;
+    }
+
+    if (el.id === 'sksrc') { filters.src = el.value; byId('skCatalog').innerHTML = renderLibrary(); return; }
+    if (el.id === 'skst') { filters.st = el.value; byId('skCatalog').innerHTML = renderLibrary(); return; }
+    if (el.id === 'edpick') { editName = el.value; editDraft = null; byId('skEditor').innerHTML = renderEditorHost(); return; }
+  });
+
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+
+    if (el.id === 'skq') {
+      filters.q = el.value;
+      byId('skCatalog').innerHTML = renderLibrary();
+      restoreFocus('skq', el.value);
+      return;
+    }
+
+    /* 编辑器字段：实时体检 */
+    var f = el.getAttribute ? el.getAttribute('data-f') : null;
+    if (f && el.closest('.ed')) {
+      var s3 = byName(editName);
+      var d3 = draftOf(s3);
+      d3[f] = el.value;
+      s3.dirty = true;
+      byId('skEditor').innerHTML = renderEditorHost();
+      restoreFocusField(f);
+      return;
+    }
+  });
+
+  /* 重渲染后保持焦点与光标 */
+  function restoreFocus(id, val) {
+    var el = byId(id);
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(val.length, val.length);
+  }
+  function restoreFocusField(f) {
+    var el = document.querySelector('.ed [data-f="' + f + '"]');
+    if (!el || el.disabled) return;
+    el.focus();
+    var n = el.value.length;
+    el.setSelectionRange(n, n);
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

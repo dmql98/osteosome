@@ -31,18 +31,20 @@ import { startSessionSync } from './state'
 import ChatComposerView from './views/ChatComposerView.vue'
 import ChatTimelineView from './views/ChatTimelineView.vue'
 import SessionListView from './views/SessionListView.vue'
+import SessionWorkspaceView from './views/SessionWorkspaceView.vue'
 
 /** view id（= widget id 的最后一段）→ 组件 */
 const VIEWS = {
   'session-list': SessionListView,
   'chat-timeline': ChatTimelineView,
   'chat-composer': ChatComposerView,
+  'session-workspace': SessionWorkspaceView,
 } as const
 
 type ViewId = keyof typeof VIEWS
 
 /** 与 plugin.json 的 ui.views 一一对应；**改一处必须改另一处**，下面有断言守着 */
-const VIEW_IDS: ViewId[] = ['session-list', 'chat-timeline', 'chat-composer']
+const VIEW_IDS: ViewId[] = ['session-list', 'chat-timeline', 'chat-composer', 'session-workspace']
 
 function viewFromHash(hash: string): ViewId | null {
   const id = hash.replace(/^#/, '') as ViewId

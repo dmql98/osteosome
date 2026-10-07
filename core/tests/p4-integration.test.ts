@@ -236,7 +236,7 @@ describe('P4 集成冒烟 · 模型目录 + 第二厂商实例 + 错误码化', 
   ]
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
-  const serviceIds = ['llm', 'session', 'loop', 'credentials', 'llm-provider-openai', 'llm-retry']
+  const serviceIds = ['llm', 'session', 'loop', 'llm-provider-openai', 'llm-retry']
 
   beforeAll(async () => {
     upstream = await startFakeUpstream()
@@ -271,7 +271,7 @@ describe('P4 集成冒烟 · 模型目录 + 第二厂商实例 + 错误码化', 
   }, 30_000)
 
   it(
-    '六个服务全部 ready（session + loop + provider + credentials + retry）',
+    '五个服务全部 ready（session + loop + provider + retry；凭证位已退休）',
     async () => {
       await waitFor(async () => {
         const res = await fetch(`${base()}/health`)

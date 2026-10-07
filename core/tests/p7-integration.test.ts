@@ -122,7 +122,7 @@ interface UpstreamState {
  * - 第 2 次起 → 正常正文 + `finish_reason:'stop'`
  */
 function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: UpstreamState }> {
-  const state: UpstreamState = { bodies: [], finalText: '目录里有 a.txt' }
+  const state: UpstreamState = { bodies: [], finalText: 'a.txt 的内容是 hello' }
   const send = (res: ServerResponse, o: unknown) => res.write(`data: ${JSON.stringify(o)}\n\n`)
 
   const server = createServer((req, res) => {
@@ -142,12 +142,12 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
       res.writeHead(200, { 'Content-Type': 'text/event-stream' })
 
       if (state.bodies.length === 1) {
-        // 首帧：name 与空 arguments 同帧（真实 openai 行为）
+        // 首帧：name 与空 arguments 同帧（真实 openai 行为）；工具名沿用新目录（read）
         send(res, {
           id: 'x',
-          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'list_dir', arguments: '' } }] }, finish_reason: null }],
+          choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'read', arguments: '' } }] }, finish_reason: null }],
         })
-        send(res, { id: 'x', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"path":""}' } }] }, finish_reason: null }] })
+        send(res, { id: 'x', choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: '{"path":"a.txt"}' } }] }, finish_reason: null }] })
         send(res, { id: 'x', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 7, completion_tokens: 0 } })
       } else {
         for (const c of [...state.finalText]) {
@@ -171,10 +171,10 @@ function startFakeUpstream(): Promise<{ server: Server; baseUrl: string; state: 
 describe('P7 集成冒烟 · 最小工具循环', () => {
   let core: Core | undefined
   let dataDir = ''
-  let toolRoot = ''
+  let workspaceDir = ''
   let upstream: { server: Server; baseUrl: string; state: UpstreamState } | undefined
 
-  const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'LLM_PROVIDER', 'LLM_TOOL_ROOT']
+  const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'LLM_PROVIDER']
   const base = (): string => `http://127.0.0.1:${core!.port}`
 
   beforeAll(async () => {
@@ -186,10 +186,9 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
     process.env.ANTHROPIC_API_KEY = 'test-anthropic-key'
     process.env.LLM_PROVIDER = 'openai'
 
-    // 工具根目录：list_dir 的路径守卫基准（P7 安全边界：只读 + 锁在 root 内）
-    toolRoot = mkdtempSync(path.join(tmpdir(), 'ost-p7-tools-'))
-    writeFileSync(path.join(toolRoot, 'a.txt'), 'hello')
-    process.env.LLM_TOOL_ROOT = toolRoot
+    // 会话工作区（P7 沙箱 = 会话工作区 ∪ 授权根）：read 的路径守卫基准
+    workspaceDir = mkdtempSync(path.join(tmpdir(), 'ost-p7-tools-'))
+    writeFileSync(path.join(workspaceDir, 'a.txt'), 'hello')
 
     dataDir = mkdtempSync(path.join(tmpdir(), 'ost-p7-smoke-'))
     core = await startCore({
@@ -211,23 +210,39 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
     for (const k of envKeys) delete process.env[k]
     upstream?.server.close()
     if (dataDir) rmSync(dataDir, { recursive: true, force: true })
-    if (toolRoot) rmSync(toolRoot, { recursive: true, force: true })
+    if (workspaceDir) rmSync(workspaceDir, { recursive: true, force: true })
   }, 30_000)
 
   it(
-    '端到端：tool_calls → 执行 list_dir → role:tool 回填 → 第二轮续答 → stop',
+    '端到端：tool_calls → 跨进程执行 read → role:tool 回填 → 第二轮续答 → stop',
     async () => {
-      // message.appended 属 message.**（不归 session.** 前缀 —— 三个都要订）
-      const sse = await openSse(base(), '?topics=session.**,message.**,loop.**')
+      // message.appended 属 message.**；tools.state 属 tools.**
+      const sse = await openSse(base(), '?topics=session.**,message.**,loop.**,tools.**')
       try {
         await waitFor(async () => {
           const res = await fetch(`${base()}/health`)
           if (!res.ok) return false
           const body = (await res.json()) as { services: Array<{ id: string; status: string }> }
-          return ['loop', 'llm', 'llm-provider-openai', 'session'].every((id) =>
+          return ['loop', 'llm', 'llm-provider-openai', 'session', 'fs-tools', 'tools'].every((id) =>
             body.services.some((s) => s.id === id && s.status === 'ready'),
           )
         }, 40_000, 'services ready')
+
+        // 主动请闸门重播工具目录（SSE 连上时初始那份已播过）
+        await post(base(), 'tools.list', {})
+
+        // 等 loop 收到工具目录（tools.state 里有 read）—— 否则第一轮请求不带 tools
+        await waitFor(
+          () =>
+            parseSseEvents(sse.text()).some(
+              (e) =>
+                e.topic === 'tools.state' &&
+                Array.isArray((e.payload as { tools?: { name?: string }[] }).tools) &&
+                (e.payload as { tools: { name?: string }[] }).tools.some((t) => t.name === 'read'),
+            ),
+          15_000,
+          'tools.state (read)',
+        )
 
         // 1) 建会话
         const createId = `sess-${Date.now()}`
@@ -239,6 +254,9 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
         )
         const created = parseSseEvents(sse.text()).find((e) => e.topic === 'session.create.result' && e.payload.requestId === createId)!
         const sessionId = created.payload.sessionId as string
+
+        // 1b) 绑定工作区（M0）：沙箱 = 会话工作区 ∪ 授权根 —— loop 不再有 tool-root
+        await post(base(), 'session.set.workspace', { requestId: `ws-${Date.now()}`, sessionId, workspace: workspaceDir })
 
         // 2) 发问（带 provider/model —— P4 参数链路）
         const a = `run-${Date.now()}`
@@ -258,18 +276,19 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
         )
         const events = parseSseEvents(sse.text())
 
-        // 断言①：第一轮请求带 tools（openai wire 形状）
+        // 断言①：第一轮请求带 tools（openai wire 形状）—— 目录来自各执行者（M3）
         expect(upstream!.state.bodies.length, '上游应收到两轮请求').toBe(2)
         const first = upstream!.state.bodies[0]
         expect(first.tools, '第一轮请求未带 tools（模型无从发起 tool_calls）').toBeTruthy()
-        expect((first.tools as { function: { name: string } }[]).map((t) => t.function.name)).toEqual(['read_file', 'list_dir'])
+        const toolNames = (first.tools as { function: { name: string } }[]).map((t) => t.function.name)
+        expect(toolNames).toContain('read')
 
         // 断言②：工具执行事件（前端工具块的即时反馈源）
         // 工具调用 id 是**主位中立化的块 id**（`c-<requestId>-<index>-<seq>`），不是上游的 `call_1`；
         // 不变式是「同一个 id 贯穿 assistant.toolCalls / role:tool / 下一轮 wire 的 tool_call_id」。
         const executed = events.filter((e) => e.topic === 'loop.tool.executed' && e.payload.requestId === a)
         expect(executed).toHaveLength(1)
-        expect(executed[0].payload).toMatchObject({ name: 'list_dir', ok: true })
+        expect(executed[0].payload).toMatchObject({ name: 'read', ok: true })
         expect(String(executed[0].payload.summary)).toContain('a.txt')
         const toolCallId = executed[0].payload.toolCallId as string
         expect(toolCallId).toBeTruthy()
@@ -281,7 +300,7 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
         expect(toolMsg!.tool_call_id).toBe(toolCallId)
         // 模型也要看到自己上一轮发起过什么
         const assistantWithCalls = (second.messages ?? []).find((m) => m.role === 'assistant' && m.tool_calls?.length)
-        expect(assistantWithCalls?.tool_calls?.[0]).toMatchObject({ id: toolCallId, function: { name: 'list_dir' } })
+        expect(assistantWithCalls?.tool_calls?.[0]).toMatchObject({ id: toolCallId, function: { name: 'read' } })
 
         // 断言④：会话落了 4 条消息
         // 注意：`loop.state.changed{idle}` 由 loop 发，而 `message.appended` 由 session 异步回
@@ -295,11 +314,11 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
         const roles = appended.map((e) => (e.payload.message as { role: string }).role)
         expect(roles).toEqual(['user', 'assistant', 'tool', 'assistant'])
         const toolCallMsg = appended[1].payload.message as { toolCalls?: { id: string; name: string }[] }
-        expect(toolCallMsg.toolCalls?.[0]).toMatchObject({ name: 'list_dir' })
+        expect(toolCallMsg.toolCalls?.[0]).toMatchObject({ name: 'read' })
         expect(toolCallMsg.toolCalls?.[0]?.id).toBe(toolCallId)
         const toolMsgRow = appended[2].payload.message as { toolCallId?: string; toolName?: string }
-        expect(toolMsgRow).toMatchObject({ toolCallId, toolName: 'list_dir' })
-        expect(String(appended[3].payload.message ? (appended[3].payload.message as { content: string }).content : '')).toBe('目录里有 a.txt')
+        expect(toolMsgRow).toMatchObject({ toolCallId, toolName: 'read' })
+        expect(String(appended[3].payload.message ? (appended[3].payload.message as { content: string }).content : '')).toBe('a.txt 的内容是 hello')
 
         // 断言⑤：工具轮中间没有多余的 idle（state 只在最后收一次）
         const states = events.filter((e) => e.topic === 'loop.state.changed' && e.payload.requestId === a)

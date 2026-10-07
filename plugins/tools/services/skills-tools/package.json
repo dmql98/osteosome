@@ -1,0 +1,21 @@
+{
+    "name":  "@osteosome/skills-tools",
+    "version":  "0.0.0",
+    "private":  true,
+    "description":  "skills-tools 执行者（P7）：skill_manager",
+    "buildOutput":  "../../dist/server/skills-tools/index.js",
+    "scripts":  {
+                    "build":  "node ../../../../scripts/build-service.mjs",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run --passWithNoTests"
+                },
+    "dependencies":  {
+                         "@osteosome/shared":  "workspace:*",
+                         "@osteosome/service-sdk":  "workspace:*"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^24.0.0",
+                            "typescript":  "^5.7.2",
+                            "vitest":  "^3.1.1"
+                        }
+}

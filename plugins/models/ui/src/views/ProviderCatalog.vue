@@ -31,7 +31,7 @@ export interface PendingRow {
   label: string
   /** 空串 = 免凭证（本地端点） */
   credentialEnv: string
-  /** Core 凭证库里已有这家的密钥 */
+  /** 本插件的凭证文件里已有这家的密钥 */
   hasKey: boolean
 }
 

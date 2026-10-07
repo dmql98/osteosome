@@ -1,0 +1,9 @@
+{
+  "name": "@osteosome/plugin-agents",
+  "version": "1.0.0",
+  "private": true,
+  "description": "智能体角色 —— 插件根包。只有 pack 一个脚本：源码与产物在 ui/ 与 services/，本包只是装配入口。",
+  "scripts": {
+    "pack": "node ../../scripts/pack-plugin.mjs"
+  }
+}

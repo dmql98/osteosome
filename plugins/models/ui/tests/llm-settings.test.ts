@@ -66,25 +66,33 @@ function emit(topic: string, payload: unknown): void {
 }
 
 /**
- * 造一份偏好读回。
+ * 种一份接入清单 —— **owner（models 插件的服务）重播整份**。
  *
- * `llm.connectedVendors` 是「谁在已连接」的**唯一**判据（见 LlmSettingsView 文件头），
- * 所以凡是断言**卡片**的用例都得先把它种下去 —— 只有注册事件不再足以让一家进已连接。
+ * 接入清单归插件自己的服务所有（`userData/plugin/models/preferences.json`），前端经总线订阅，
+ * 所以这里**不是** mock 一个 HTTP 响应，而是往 SSE 里投一条 `models.prefs.state`。
  *
- * 这一版刻意**统一了 mock 的形状**（原来每个用例各写一份 `mockResolvedValue`）：
- * 差异只在这一个 `llm` 参数上，读起来就不用在每个用例里重新找「偏好怎么 mock 的」。
+ * 这一点与实现无关紧要，但**时机**要跟真实的运行时契约一致：
+ * 事件必须在**挂载之后**才有订阅者。所以这函数只**记下**要播的内容，
+ * 由 {@link mountLlm} 在 `mount()` 之后立刻播出去（所有用例都是「种 → 挂 → flush」，
+ * 这个顺序天然成立）。以前那版是「在 mount 前 mock `/api/preferences` 的 GET 回包」——
+ * 运行时契约换了（拉取式 → 订阅式），顺序也跟着换了。
  */
-function mockPrefs(llm: Record<string, unknown> = {}): void {
-  vi.mocked(fetch).mockImplementation(async (input: unknown, init?: { method?: string }) => {
-    const url = String(input)
-    if (url.includes('/api/preferences')) {
-      return new Response(init?.method === 'PUT' ? '{}' : JSON.stringify({ llm }), { status: 200 })
-    }
-    if (url.includes('/api/credentials')) {
-      return new Response(JSON.stringify({ credentials: [] }), { status: 200 })
-    }
-    return new Response(null, { status: 202 })
+let pendingPrefs: Record<string, unknown> = {}
+
+function mockPrefs(prefs: Record<string, unknown> = {}): void {
+  pendingPrefs = prefs
+}
+
+/** 投一次 owner 的重播（`prefs` 缺省的键取空，语义与「文件里没写」一致） */
+function emitPrefs(patch: Record<string, unknown> = {}): void {
+  emit('models.prefs.state', {
+    prefs: { connectedVendors: [], vendorOverrides: [], enabledModels: [], ...pendingPrefs, ...patch },
   })
+}
+
+/** owner 重播的密钥掩码列表 */
+function emitCredentials(list: Array<Record<string, unknown>>): void {
+  emit('models.credentials.state', { credentials: list })
 }
 
 /** 取出每次 POST /api/command 的请求体（页面还会发没 body 的 GET，不按 URL 过滤会炸） */
@@ -92,6 +100,22 @@ function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<stri
   return fetchMock.mock.calls
     .filter((c) => String(c[0]).includes('/api/command'))
     .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)) as Record<string, unknown>)
+}
+
+/** 最后一次 `models.prefs.set` 里的 patch（合并式写，所以断言看「这一份」而不是整体文件） */
+function lastPatch(bodies: Record<string, unknown>[]): {
+  connectedVendors: string[]
+  vendorOverrides: Array<Record<string, unknown>>
+  enabledModels: string[]
+} {
+  const last = bodies.at(-1)
+  if (!last) throw new Error('没有 models.prefs.set 命令')
+  const patch = (last.payload as { patch?: Record<string, unknown> }).patch ?? {}
+  return {
+    connectedVendors: (patch.connectedVendors as string[]) ?? [],
+    vendorOverrides: (patch.vendorOverrides as Array<Record<string, unknown>>) ?? [],
+    enabledModels: (patch.enabledModels as string[]) ?? [],
+  }
 }
 
 /**
@@ -111,16 +135,10 @@ function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<stri
  * 于是「12 家预设全可见」这类断言读到的是真数据，而且新增用例不必知道目录这回事。
  */
 function stubFetch(): void {
-  const inner = vi.fn(async (input: unknown, init?: { method?: string }) => {
-    const url = String(input)
-    if (url.includes('/api/preferences')) {
-      return new Response(init?.method === 'PUT' ? '{}' : '{}', { status: 200 })
-    }
-    if (url.includes('/api/credentials')) {
-      return new Response(JSON.stringify({ credentials: [] }), { status: 200 })
-    }
-    return new Response(null, { status: 202 })
-  })
+  // 默认应答：除厂商目录外一律 202。接入清单与密钥改走总线（SSE 事件 + 命令），
+  // 所以这里**不再**有 `/api/preferences` 与 `/api/credentials` 的分支 ——
+  // 留着它们会让「界面还在走旧通道」这件事在测试里看起来是正常的。
+  const inner = vi.fn(async (_input?: unknown, _init?: { method?: string }) => new Response(null, { status: 202 }))
 
   const stub = ((input: unknown, init?: { method?: string }) => {
     if (String(input).includes('catalog.json')) {
@@ -156,6 +174,9 @@ beforeEach(() => {
   // SSE 是**模块级单例**：跨用例不清订阅，后一个用例会收到前一个用例的 handler，
   // 症状是「用例之间互相影响、单独跑都过」—— 那种红最难查
   sse.close()
+  // 同理：`mockPrefs` 记的是「下一轮 owner 会重播什么」，不重置就会漏给下一个用例 ——
+  // 症状是「某个用例明明没种偏好，却看到上一条用例连上的厂商」
+  pendingPrefs = {}
   fakeSse = installFakeEventSource()
   stubFetch()
 })
@@ -188,7 +209,11 @@ describe('LlmSettingsView 服务商配置（widget.llm-settings，归 models 插
  */
   function mountLlm(attach = false) {
     // 不挂 pinia / i18n / UiPlugin：这个界面一个 store、一个 i18n key、一个全局组件都没用到
-    return mount(LlmSettings, { attachTo: attach ? document.body : undefined })
+    const wrapper = mount(LlmSettings, { attachTo: attach ? document.body : undefined })
+    // owner 的重播必须晚于 mount —— 订阅者在 onMounted 才挂上
+    emitPrefs()
+    emitCredentials([])
+    return wrapper
   }
 
   it('厂商清单来自预设表全量 12 家 —— 已连接 + 未连接 相加等于 12', async () => {
@@ -368,7 +393,7 @@ const text = wrapper.text()
     wrapper.unmount()
   })
 
-  it('设置密钥 → PUT /api/credentials 且 provider 字段=厂商 id（不发 service.stop）', async () => {
+  it('设置密钥 → models.credentials.put 且 provider 字段=厂商 id（不发 service.stop）', async () => {
     const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }))
     const wrapper = mountLlm(true)
     await flushPromises()
@@ -387,11 +412,9 @@ const text = wrapper.text()
     expect(saveBtn, '保存按钮没渲染').toBeDefined()
     saveBtn!.click()
     await flushPromises()
-    const put = fetchMock.mock.calls
-      .filter((c) => String(c[0]).includes('/api/credentials') && (c[1] as { method?: string })?.method === 'PUT')
-      .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+    const put = commandBodies(fetchMock).filter((b) => b.topic === 'models.credentials.put')
     expect(put).toHaveLength(1)
-    expect(put[0]).toMatchObject({ provider: 'deepseek', value: 'sk-user' })
+    expect(put[0]!.payload).toMatchObject({ provider: 'deepseek', value: 'sk-user' })
     // 关键：不再有指向已删服务的假开关
     const commands = fetchMock.mock.calls
       .filter((c) => String(c[0]).includes('/api/command'))
@@ -401,7 +424,7 @@ const text = wrapper.text()
     document.body.innerHTML = ''
   })
 
-  it('自定义端点 → 写入 preferences 的 llm.vendorOverrides，保存即探测', async () => {
+  it('自定义端点 → 写 models 接入清单的 vendorOverrides，保存即探测', async () => {
     const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
     const wrapper = mountLlm(true)
     await flushPromises()
@@ -422,11 +445,9 @@ const text = wrapper.text()
     )
     saveBtn!.click()
     await flushPromises()
-    const put = fetchMock.mock.calls
-      .filter((c) => String(c[0]).includes('/api/preferences') && (c[1] as { method?: string })?.method === 'PUT')
-      .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+    const put = commandBodies(fetchMock).filter((b) => b.topic === 'models.prefs.set')
     expect(put.length).toBeGreaterThan(0)
-    expect(put.at(-1)!.llm.vendorOverrides).toEqual([
+    expect((put.at(-1)!.payload as { patch: { vendorOverrides: unknown } }).patch.vendorOverrides).toEqual([
       { id: 'my-proxy', baseUrl: 'http://127.0.0.1:8080/v1', credentialRef: '' },
     ])
     // 新增端点的首要疑问就是「它通不通」→ 保存后必须自动探一次
@@ -441,18 +462,21 @@ const text = wrapper.text()
     document.body.innerHTML = ''
   })
 
-  it('自定义端点区只列非预设的；改了预设不会在这重复出现', async () => {
-    const fetchMock = vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ llm: { vendorOverrides: [{ id: 'lm-studio', baseUrl: 'http://127.0.0.1:9999/v1' }, { id: 'my-proxy', baseUrl: 'http://10.0.0.5:8000/v1' }] } }), { status: 200 }),
-    )
-const wrapper = mountLlm()
+it('自定义端点区只列非预设的；改了预设不会在这重复出现', async () => {
+    // 接入清单由 owner 重播：这里给一份带 override 的
+    mockPrefs({
+      vendorOverrides: [
+        { id: 'lm-studio', baseUrl: 'http://127.0.0.1:9999/v1' },
+        { id: 'my-proxy', baseUrl: 'http://10.0.0.5:8000/v1' },
+      ],
+    })
+    const wrapper = mountLlm()
     await flushPromises()
     // 选择器要够窄：`endpoint-` 前缀会把「新增端点」按钮也算进来
     const endpointRows = wrapper.findAll('div[data-testid^="endpoint-"]')
     // 只剩 my-proxy —— lm-studio 那条是「覆盖预设」，该在服务商区就地编辑
     expect(endpointRows.length).toBe(1)
     expect(endpointRows[0]!.attributes('data-testid')).toBe('endpoint-my-proxy')
-    expect(fetchMock).toBeDefined()
     wrapper.unmount()
   })
 
@@ -475,17 +499,15 @@ const wrapper = mountLlm()
     const save = wrapper.findAll('button').find((b) => b.text() === '保存')
     await save!.trigger('click')
     await flushPromises()
-    const put = fetchMock.mock.calls
-      .filter((c) => String(c[0]).includes('/api/preferences') && (c[1] as { method?: string })?.method === 'PUT')
-      .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)))
+    const put = commandBodies(fetchMock).filter((b) => b.topic === 'models.prefs.set')
     expect(put.length).toBeGreaterThan(0)
     // 同 id 覆盖 —— buildVendorInstances 里 byId.set 同 key 会盖掉预设
-    expect(put.at(-1)!.llm.vendorOverrides.some((o: { id: string; baseUrl: string }) => o.id === 'lm-studio' && o.baseUrl === 'http://127.0.0.1:4321/v1')).toBe(true)
+    expect(lastPatch(put).vendorOverrides.some((o) => o.id === 'lm-studio' && o.baseUrl === 'http://127.0.0.1:4321/v1')).toBe(true)
     expect(wrapper.text()).toContain('已覆盖预设')
     wrapper.unmount()
   })
 
-  it('模型墙开关 → 写 preferences.llm.enabledModels（`${provider}::${model}`，空数组=全启用）', async () => {
+  it('模型墙开关 → 写接入清单的 enabledModels（`${provider}::${model}`，空数组=全启用）', async () => {
     const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
     mockPrefs({ connectedVendors: ['lm-studio'] })
     const wrapper = mountLlm()
@@ -507,22 +529,19 @@ const wrapper = mountLlm()
     await sw!.trigger('click')
     await flushPromises()
 
-    const put = () =>
-      fetchMock.mock.calls
-        .filter((c) => String(c[0]).includes('/api/preferences') && (c[1] as { method?: string })?.method === 'PUT')
-        .map((c) => JSON.parse(String((c[1] as { body?: unknown }).body)) as { llm: { enabledModels: string[] } })
+    const put = () => commandBodies(fetchMock).filter((b) => b.topic === 'models.prefs.set')
     expect(put().length).toBeGreaterThan(0)
     // 用 `::` 分隔：模型名里本来就有冒号（qwen2.5:7b），拿 `:` 一刀两断会切错
-    expect(put().at(-1)!.llm.enabledModels).toEqual(['lm-studio::qwen2.5-7b'])
+    expect(lastPatch(put()).enabledModels).toEqual(['lm-studio::qwen2.5-7b'])
     expect(wrapper.text()).toContain('已停用')
 
     // 全部禁用 → 整家进名单；再全部启用 → 清成空数组（= 全启用，不是留一堆残条目）
     await wrapper.findAll('button').find((b) => b.text() === '全部禁用')!.trigger('click')
     await flushPromises()
-    expect(put().at(-1)!.llm.enabledModels).toEqual(['lm-studio::qwen2.5-7b', 'lm-studio::qwen3-4b'])
+    expect(lastPatch(put()).enabledModels).toEqual(['lm-studio::qwen2.5-7b', 'lm-studio::qwen3-4b'])
     await wrapper.findAll('button').find((b) => b.text() === '全部启用')!.trigger('click')
     await flushPromises()
-    expect(put().at(-1)!.llm.enabledModels).toEqual([])
+    expect(lastPatch(put()).enabledModels).toEqual([])
     wrapper.unmount()
   })
 
@@ -624,23 +643,10 @@ const wrapper = mountLlm()
     wrapper.unmount()
   })
 
-  it('凭证：GET 掩码列表可见；新建 PUT 后刷新出现新凭证', async () => {
-    const fetchMock = vi.mocked(fetch)
-    let saved = false
-    fetchMock.mockImplementation(async (input: unknown, init?: { method?: string; body?: unknown }) => {
-      const url = String(input)
-      if (url.includes('/api/credentials') && init?.method === 'PUT') {
-        saved = true
-        return new Response(JSON.stringify({ id: 'c1', name: 'k1', provider: 'openai', masked: 'sk-…' }), { status: 200 })
-      }
-      if (url.includes('/api/credentials')) {
-        return new Response(
-          JSON.stringify({ credentials: saved ? [{ id: 'c1', name: 'k1', provider: 'openai', masked: 'sk-…' }] : [] }),
-          { status: 200 },
-        )
-      }
-      return new Response(null, { status: 202 })
-    })
+  it('凭证：owner 重播的掩码列表可见；发 put 命令后新凭证出现在列表里', async () => {
+    const fetchMock = vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 202 }))
+    // 已连接的厂商才渲染成卡片（默认展开），凭证那行在卡片上 —— 所以先把它接进来
+    mockPrefs({ connectedVendors: ['openai'] })
     const wrapper = mountLlm(true)
     await flushPromises()
     emit('llm.provider.registered', DESCRIPTOR)
@@ -662,7 +668,17 @@ const wrapper = mountLlm()
     expect(saveBtn).toBeTruthy()
     saveBtn!.click()
     await flushPromises()
-    expect(saved).toBe(true)
+
+    // 命令确实发出去了（明文只走这一条路 → 总线 → owner）
+    const put = commandBodies(fetchMock).filter((b) => b.topic === 'models.credentials.put')
+    expect(put).toHaveLength(1)
+    expect(put[0]!.payload).toMatchObject({ provider: 'openai', value: 'sk-secret-value' })
+    // 列表由 owner 重播：模拟它存好之后的那一次，界面据此显示「已保存 · 环境变量名」
+    emitCredentials([{ id: 'c1', name: 'openai API Key', provider: 'openai', kind: 'apiKey', masked: 'sk-s…alue' }])
+    await flushPromises()
+    expect(wrapper.text()).toContain('已保存 · OPENAI_API_KEY')
+    // 顺带钉住红线：掩码本身**根本不进 DOM**（界面只说「存了」，不显示值）
+    expect(wrapper.text()).not.toContain('sk-s…alue')
     wrapper.unmount()
     document.body.innerHTML = ''
   })

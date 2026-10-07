@@ -1,0 +1,33 @@
+{
+  "id": "tools",
+  "name": "工具管理",
+  "version": "1.0.0",
+  "icon": "🔧",
+  "author": "osteosome",
+  "license": "Apache-2.0",
+  "description": "工具管理：把工具从 loop 进程拆成能力位。1 个审批闸门（tools，owner: approvals.json / constraints.json）+ 1 个工作区服务（workspace，只列目录不读文件）+ 6 个执行者（fs/shell/web/misc/skills/mcp-tools，各自 tools.json）。沙箱 = 会话工作区 ∪ 授权根（执行者算，loop 不算）；约束在 shared 里唯一一份实现，审批由闸门按 risk 判定。越界产 escape，由 loop 发起工作区审批并重派。装这个插件模型才有工具；没装则没有执行者、没人发 tool.execute。",
+  "services": [
+    "workspace",
+    "tools",
+    "fs-tools",
+    "shell-tools",
+    "web-tools",
+    "misc-tools",
+    "skills-tools",
+    "mcp-tools"
+  ],
+  "components": [],
+  "ui": {
+    "views": [
+      { "id": "widget.tools", "title": "工具", "entry": "index.html" }
+    ]
+  },
+  "capabilities": [
+    { "name": "tool.execute", "detail": "派发一次工具执行给执行者（loop → 执行者）" },
+    { "name": "tool.approval.resolved", "detail": "审批应答（闸门 / loop）" },
+    { "name": "tools.state", "detail": "工具目录 + 策略 + 约束 + MCP（重播整份）" },
+    { "name": "workspace.list", "detail": "列目录（只列目录不读文件）" }
+  ],
+  "dependencies": [],
+  "autoStart": true
+}

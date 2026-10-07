@@ -1,0 +1,21 @@
+{
+    "name":  "@osteosome/fs-tools",
+    "version":  "0.0.0",
+    "private":  true,
+    "description":  "fs-tools 执行者（P7）：read/glob/grep/write/edit",
+    "buildOutput":  "../../dist/server/fs-tools/index.js",
+    "scripts":  {
+                    "build":  "node ../../../../scripts/build-service.mjs",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run --passWithNoTests"
+                },
+    "dependencies":  {
+                         "@osteosome/shared":  "workspace:*",
+                         "@osteosome/service-sdk":  "workspace:*"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^24.0.0",
+                            "typescript":  "^5.7.2",
+                            "vitest":  "^3.1.1"
+                        }
+}

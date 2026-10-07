@@ -33,7 +33,7 @@ export interface EndpointRow {
    * 要不要密钥。
    *
    * `credentialRef: ''` = 显式免凭证；**字段缺省 = 要密钥**（由 provider 去
-   * env / Core 凭证库按端点 id 找，找不到就不注册）。
+   * env / 本插件凭证文件按端点 id 找，找不到就不注册）。
    * 不能用「字符串是否为空」在展示层推断，所以视图层先算成布尔。
    */
   needsKey: boolean

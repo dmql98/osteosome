@@ -87,12 +87,14 @@ beforeAll(() => {
 }, 180_000)
 
 describe('插件可分发（P8）', () => {
-  it('五个插件都装配出来了', () => {
+  it('七个插件都装配出来了（凭证退休后 4 个，P5/P6/P7 加 agents/skills/tools 成 7 个）', () => {
     expect(packedIds().sort()).toEqual([
+      'agents',
       'chat-workbench',
-      'credentials',
       'models',
       'reliability',
+      'skills',
+      'tools',
       'workbench',
     ])
   })

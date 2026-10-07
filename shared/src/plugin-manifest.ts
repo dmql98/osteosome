@@ -48,9 +48,6 @@ const VersionRangeSchema = z
   })
   .optional()
 
-/** 别的插件的数据命名空间，本插件**只读**（P2 只声明，P3 才真正生效） */
-const DataReadableBySchema = z.array(z.string().min(1)).default([])
-
 /**
  * 插件 UI 里的一个**命名视图**（P3，形态 1）。
  *
@@ -119,17 +116,6 @@ export const PluginManifestSchema = z.object({
    * 不满足时插件**可见但不启动**（照「依赖环内成员」的既有语义），reason 说清差在哪。
    */
   coreCompatibility: VersionRangeSchema,
-  /**
-   * 允许**只读**本插件用户数据的其他插件 id（P3 生效）。
-   *
-   * 为什么要有它：一个插件的 UI 常常要读另一个插件的数据（chat-workbench 的输入框
-   * 要读 models 的模型开关）。今天那种共享靠「都塞进同一个 preferences.json」——
-   * 而那意味着 Core 必须解析插件内容。拆成命名空间后，跨命名空间读就得**显式授权**，
-   * 否则任何插件都能读到任何插件的密钥。
-   *
-   * 写**永远只限自己**，没有对应的「可写别人」字段 —— 那条路不开。
-   */
-  dataReadableBy: DataReadableBySchema,
   /**
    * 这个插件的 WebUI（P3）。**没有它 = 纯服务插件**（credentials / reliability 就不是）。
    *

@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>插件落地 · 总开发计划 · OST</title>
+<style>
+  /* 沿用 docs/插件标准.html 与各插件设计稿的同一套皮肤，
+     变量名与 sdk/ui/src/tokens.css 同源（--color-* 是组件库真值，--* 是文档壳） */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    /* Demo 区直接借用 tokens.css 的真名，让 demo 与组件库同源 */
+    --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-warning:#9a6700;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-warning:#d29922;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width:1240px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:20; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:19; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s1); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px; border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  h4 { font-size:var(--sm); margin:var(--s4) 0 var(--s2); font-weight:700; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background:var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  td.nowrap { white-space:nowrap; }
+
+  pre { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3); font-size:12.5px; line-height:1.65; overflow-x:auto; margin:0 0 var(--s4); }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .note.bus { border-left-color:var(--bus); background:var(--bus-soft); }
+  .note.ext { border-left-color:var(--ext); background:var(--ext-soft); }
+  .note.proc { border-left-color:var(--proc); background:var(--proc-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); white-space:nowrap; vertical-align:middle; }
+  .tag.have { background:var(--success); }
+  .tag.todo { background:var(--danger); }
+  .tag.part { background:var(--warning); }
+  .tag.spec { background:var(--primary); }
+  .tag.bus { background:var(--bus); }
+  .tag.ext { background:var(--ext); }
+  .tag.proc { background:var(--proc); }
+  .tag.star { background:var(--danger); }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.8;
+    margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .std { color:var(--primary); font-weight:600; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .free { color:var(--warning); }
+  .tree .dim { color:var(--muted); }
+  .tree .new { color:var(--danger); font-weight:600; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); }
+  .three { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s3); }
+  @media (max-width:980px){ .two,.three{grid-template-columns:1fr} }
+
+  .board { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s3) var(--s4); box-shadow:var(--shadow-sm); margin:0 0 var(--s4); }
+  .board.phase { border-left:4px solid var(--primary); }
+  .board.phase.d { border-left-color:var(--danger); }
+  .board.phase.e { border-left-color:var(--bus); }
+  .board > .bh { display:flex; align-items:center; gap:var(--s2); margin:0 0 var(--s2); flex-wrap:wrap; }
+  .board > .bh b { font-size:var(--md); }
+  .board > .bh .sp { flex:1; }
+
+  .kv { display:grid; grid-template-columns:150px 1fr; gap:var(--s1) var(--s3); font-size:var(--sm); margin:0 0 var(--s4); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  /* 甘特条 */
+  .gantt { display:grid; grid-template-columns:170px 1fr; gap:6px var(--s3); align-items:center; font-size:var(--sm); }
+  .gantt .gl { color:var(--muted); font-size:var(--xs); }
+  .gantt .gt { position:relative; height:16px; background:var(--surface-2); border-radius:var(--r-full); overflow:hidden; }
+  .gantt .gt i { position:absolute; top:0; bottom:0; border-radius:var(--r-full); background:var(--primary); opacity:.85; }
+  .gantt .gt i.crit { background:var(--danger); }
+  .gantt .gt i.opt { background:var(--muted); opacity:.5; }
+
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  @media print { nav.toc { display:none; } header.bar { position:static; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>插件落地 · 总开发计划</h1>
+    <span class="sp"></span>
+    <span class="sub">docs/插件demo/ 五份设计稿 → 一条落地顺序 · 基于 阶段追踪 / P7 详细计划 / shared 现状</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s1">1 总览</a>
+    <a href="#s2">2 共同范式</a>
+    <a href="#s3">3 现状盘点</a>
+    <a href="#s4">4 公共前置</a>
+    <a href="#s5">5 分期落地</a>
+    <a href="#s6">6 排期与关键路径</a>
+    <a href="#s7">7 测试与验收</a>
+    <a href="#s8">8 风险台账</a>
+    <a href="#s9">9 决策清单</a>
+    <a href="#s10">10 一句话纪律</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>一句话：五个插件不是五套设计，是同一条「能力位」范式的五个实例。</b>
+  本计划把 <code>docs/插件demo/</code> 下的工具管理、皮肤管理、对话工作台、技能管理、智能体角色五份稿
+  收成一条统一顺序 —— <b>从「阶段 0 全量确认」开始，不把任何「已完成」当作已验证；再冻结决策与共享契约，按「角色 → 技能 → 工具 → 皮肤」推进，对话工作台止血并行</b>。
+  <br>
+  <b>起点是阶段 0</b>：Core 与工作台（client 壳 + plugins/workbench）逐模块从头核对、列出优化项 ——
+  它们承载后面所有插件，必须先确认再往上盖。里程碑追踪里的 P1a–P4 / S0–S8 在本计划里只算「<b>声称完成</b>」，逐项确认后才计入基线。
+  <br>
+  <b>判据贯穿全篇</b>：能力住在服务进程里、一个收集命令 + 一个重播事件、owner 独占写自己的 dataDir、
+  缺失是合法的、顺序必须确定、失败也要产结果、写只限自己且 Core 不解释 payload。
+  <br>
+  <b>本计划不新增协议机制</b>：所有新 topic 都是 <code>shared/src/events.ts</code> 的 EventMap / CommandMap 上的新行。
+</div>
+
+<!-- ══════════════════ 1 总览 ══════════════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>总览：五个插件的定位与依赖</h2>
+
+  <table>
+    <thead>
+      <tr><th>插件</th><th>里程碑</th><th>一句话定位</th><th>服务</th><th>拥有的用户数据(owner)</th><th>关键新协议</th><th>设计成熟度</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="nowrap"><b>agents</b> 角色</td><td class="nowrap">P5</td>
+        <td>角色 = 一组引用（prompt / skills / tools / model）</td>
+        <td class="mono">agent</td>
+        <td class="mono">agents/characters.json</td>
+        <td class="mono">agent.state · agent.state.set · agent.resolve · prompt.fragment.*</td>
+        <td><span class="tag have">P5 已落地</span><br><span class="mono">协议在 智能体Loop与插件协同设计.html</span></td>
+      </tr>
+      <tr>
+        <td class="nowrap"><b>skills</b> 技能</td><td class="nowrap">P6</td>
+        <td>SKILL.md 目录 + 懒激活；模型只读、界面可写</td>
+        <td class="mono">skills</td>
+        <td class="mono">skills/skills.json</td>
+        <td class="mono">skills.state/list · skill.enabled.set · skill.package.write · skill.registered</td>
+        <td><span class="tag have">P6 已落地</span><br><span class="mono">协议在 智能体Loop与插件协同设计.html</span></td>
+      </tr>
+      <tr>
+        <td class="nowrap"><b>tools</b> 工具</td><td class="nowrap">P7</td>
+        <td>1 审批闸门 + 7 执行者 + 工作区；把工具从 loop 进程拆成能力位</td>
+        <td class="mono">workspace · tools(闸门) · fs/shell/web/misc/skills/mcp-tools</td>
+        <td class="mono">approvals.json · constraints.json · mcp-servers.json</td>
+        <td class="mono"><b>19 个新 topic</b>（tool.* / tools.* / workspace.*）</td>
+        <td><span class="tag have">设计稿 + 详细计划(M0~M6 / WS-1~14)</span></td>
+      </tr>
+      <tr>
+        <td class="nowrap"><b>skins</b> 皮肤</td><td class="nowrap">未编号</td>
+        <td>皮肤目录 + 可复用 SkinRenderer；资产是用户数据</td>
+        <td class="mono">skin</td>
+        <td class="mono">skins/skins.json + 资产字节</td>
+        <td class="mono">skin.state · skin.list · skin.set · skin.set.result</td>
+        <td><span class="tag have">设计稿完整</span> <span class="tag have">M1 已完成</span></td>
+      </tr>
+      <tr>
+        <td class="nowrap"><b>chat-workbench</b></td><td class="nowrap">P4b / P0-P3</td>
+        <td>会话列表重做 + 存储正确性；宿主侧三视图</td>
+        <td class="mono">session · loop · llm（已存在）</td>
+        <td class="mono">chat-workbench/sessions/（已有）</td>
+        <td class="mono">无新增（只补字段 / 命令）</td>
+        <td><span class="tag have">优化计划 + 重设计稿完整</span> <span class="tag part">P0/P1/P2 已落地</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>依赖关系（谁能独立、谁在关键路径上）</h3>
+  <div class="tree">
+<span class="dim">能力/协议方向 ──►</span>
+
+  <span class="std">agents(P5)</span> ──绑定 role.tools[] ──► <span class="std">tools(P7)</span> 的目录交集侧
+      │
+      └─ 只存 <span class="own">skinId</span>（一个字符串） ──► <span class="std">skins</span> 的「绑定」行
+      │
+  <span class="std">skills(P6)</span> ──p10 索引片段──► loop 装配器
+      │            └──skill.registered──► <span class="std">tools/skills-tools</span> 执行者（skill_manager）
+      │
+  <span class="std">workspace(M0)</span> ──沙箱根──► <span class="std">tools(P7)</span> 的 fs/shell 执行者
+      │
+  <span class="std">chat-workbench(P0-P3)</span> ── 宿主 ──► ComposerRolePicker / 审批卡片 / SkinRenderer 的落点
+      │
+  <span class="std">skins</span> ──SkinRenderer + motion 映射──► chat-workbench 时间线（P0-14 motion 已就位）
+
+<span class="dim">硬前置（不解决就各写各的）</span>
+  <span class="free">★ 决策冻结</span> · <span class="free">shared 契约先写</span> · <span class="free">sdk/ui 补 Badge/StatusDot/motion 令牌</span> · <span class="free">Core 加一条 /data/* 路由</span> · <span class="free">Node 运行时锁定（仅 SQLite 阶段）</span>
+  </div>
+
+  <div class="note info">
+    <b>「缺失是合法的」让依赖不是硬阻塞。</b>
+    每个插件都能单独装上并降级工作：没装 tools 插件 → 模型没有文件工具，对话照常；没装 agents → composer 角色下拉消失、回落裸会话；
+    没装 skills → 技能索引片段为空。所以顺序由<b>价值与可观测性</b>决定，而不是由编译依赖决定。
+  </div>
+</section>
+
+<!-- ══════════════════ 2 共同范式 ══════════════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>共同范式：五个插件共享的七条纪律</h2>
+  <p>这是「整体看」最重要的结论 —— 每份稿都在重复同一条纪律。落在实现上就是 <code>docs/插件标准.html</code>。</p>
+
+  <table>
+    <thead><tr><th>#</th><th>纪律</th><th>怎么守</th><th>破坏后的症状</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>能力位 = 独立服务进程</b></td>
+        <td>装插件 = 多起进程；卸载 = 能力消失，不是报错。Core 只启「已安装插件声明的服务」。</td>
+        <td>卸了插件但模型还假装拥有能力；或没装插件整个应用不可用（S7 差点 bricking 的坑）。</td></tr>
+      <tr><td>2</td><td><b>一个收集命令 + 一个重播事件</b></td>
+        <td><code>xxx.list</code>（收集方上线问一次）+ <code>xxx.state</code>（owner 每次变更重播整份）。订阅方只写一行订阅就拿到全量。</td>
+        <td>晚启动的订阅方永远看不到目录（provider 那个坑，已踩过两次）。</td></tr>
+      <tr><td>3</td><td><b>owner 独占写自己的 dataDir</b></td>
+        <td>握手发的 <code>dataDir</code> 指向 <code>pluginDataDir(dataDir, pluginId)</code>，服务直接 fs 读写；跨插件只读别人的事件。</td>
+        <td>两个真源；「数据目录必须有主人」被打破（凭证插件退休的教训）。</td></tr>
+      <tr><td>4</td><td><b>缺失是合法的</b></td>
+        <td>未注册工具 / 技能 / 皮肤 / 角色 → 忽略 + 标一条悬空引用，不报错、不阻止保存。</td>
+        <td>用户把可选插件卸了，对话直接不可用；或界面显示「无效」逼用户重装。</td></tr>
+      <tr><td>5</td><td><b>顺序必须确定</b></td>
+        <td>目录排序键 <code>serviceId → name</code>；策略 map 按 key 渲染；落盘按码位。</td>
+        <td>顺序抖动 → prompt 缓存整片失效 → token 费用翻十倍，且零报错。</td></tr>
+      <tr><td>6</td><td><b>失败也要产结果</b></td>
+        <td>被拒 / 超时 / 禁用 / 未知工具，四种都发 <code>ok:false</code> + 人话原因，让模型自我纠正。</td>
+        <td>模型一直转圈（静默丢弃的等价物）；或把失败当成功。</td></tr>
+      <tr><td>7</td><td><b>写只限自己 + Core 不解释 payload</b></td>
+        <td>本插件只写 <code>${dataDir}/</code>；Core 只做「查白名单 + 搬字节 + 记生命周期」。</td>
+        <td>Core 被迫理解 characters.json / 皮肤语义 → 破「不解析插件内容」这条不变式。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bus">
+    <b>同构复刻的清单（不新增插件交互方式）</b>：
+    <code>llm.provider.reannounce</code> · <code>models.prefs.state</code> · <code>tools.state</code> ·
+    <code>skills.state</code> · <code>skin.state</code> · <code>agent.state</code> —— 全部是「收集命令 + 重播事件」的同一套机制。
+  </div>
+</section>
+
+<!-- ══════════════════ 3 现状盘点 ══════════════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>现状盘点：声称完成了什么、缺口在哪、哪些要先确认</h2>
+
+  <div class="note ok">
+    <b>阶段 0 已完成（2026-10-07）。</b> 确认结论已回填本节，基线已冻结。
+    详见 <code>docs/插件demo/阶段0-确认报告.md</code>。
+  </div>
+
+  <div class="two">
+    <div>
+      <h3>已确认完成 <span class="tag have">已验证</span></h3>
+      <ul>
+        <li><b>Core 与工作台</b>：<code>core/src/</code>（service-manager / sse-bridge / config）与
+          <code>client/</code> + <code>plugins/workbench/</code>（dockview 布局 / widget 宿主 / 组件库一致性 / 三视图边界）——
+          <b>阶段 0 逐模块核对通过，零阻塞性问题</b>。9 项优化项全部为测试覆盖缺口，可后置。</li>
+        <li><b>P1a–P4</b>：Core 微内核 + 工作台骨架 + 5 插件/6 服务 LLM 聚合 + 会话存储 + 最小可用 agent。</li>
+        <li><b>S0–S8</b>：对话界面重构 + 插件聚合；<code>plugins/&lt;id&gt;/plugin.json</code> 成为清单唯一真源，Core 只启已安装插件的服务。</li>
+        <li><b>P7 WS-1</b>：最小工具循环（<code>read_file</code> / <code>list_dir</code> 进程内、loop 的 agentic 循环、工具块 UI）。</li>
+        <li><b>skins M1</b>：<code>shared/src/skin.ts</code> + <code>shared/tests/skin.test.ts</code>（65 单测）+ 4 行 skin.* topic 已进 events.ts。</li>
+        <li>现有插件目录：<code>workbench</code> · <code>chat-workbench</code> · <code>models</code> · <code>reliability</code>。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>缺口 <span class="tag todo">todo</span></h3>
+      <ul>
+        <li><b>P5 agents 已由阶段 B 完成</b>：<code>plugins/agents/</code> 服务 + <code>characters.json</code> + <code>agent.*</code> / <code>prompt.fragment.*</code> topic；composer 角色下拉 + widget.agents 5 Tab。</li>
+        <li><b>P6 skills 已由阶段 C 完成</b>：<code>plugins/skills/</code> 服务 + SKILL.md 目录 + <code>skills.*</code> topic；p10 索引片段（AND 服务端）+ widget.skills 2 Tab。</li>
+        <li><b>P7 已完成（阶段 D）</b>：<b>M0–M6 全部完成</b>（工作区 / 契约骨架 / fs-tools + 闸门 / 主线切换 / 六个执行者含 MCP / 界面 / 收尾清理）。</li>
+        <li><b>工作区 M0 已完成</b>：<code>workspace</code> 服务（只列目录不读文件）+ <code>session.set.workspace</code>。</li>
+        <li><b>skins M1.5–M6 未做</b>：Core 无 <code>/plugins/&lt;id&gt;/data/*</code> 路由；无 skin 服务 / SkinRenderer / widget.skins。</li>
+        <li><b>chat-workbench P0/P1/P2 已由阶段 A 全部完成</b>（P0 组件重设计；P1 存储正确性 + P1-6 JSONL；P2 <code>archived/lastMessage/pinned/parentId/export</code>）。</li>
+        <li><b>shared 契约</b>：<code>agent.* / skills.* / tool.* / tools.* / workspace.*</code> <b>全部未进表</b>（实测 events.ts 仅含 skin.*；session 命令已由阶段 A 补齐）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note ok">
+    <b>基线口径（阶段 0.1 已复核；2026-10-07 修正）</b>：全量测试 <b>939 全绿</b>（含 shared + sdk 四个包）。
+    <br><b>修正说明</b>：阶段 0.1 首测输出被截断，漏计了 <code>shared(122)</code> / <code>sdk/ui(48)</code> /
+    <code>sdk/ts(48)</code> / <code>sdk/core-client(23)</code> 四个包，当时记成 698；真实冻结基线是 <b>939</b>。
+    阶段 A 落地后当前为 <b>1052</b>（含阶段 A/B/C/D-M0~M6；M5 新增 tools/ui 7 + 聊天审批卡 4，M6 删 loop 种子工具测试 15）。
+    每阶段验收命令统一为 <code>pnpm -r run typecheck</code> / <code>pnpm -r run test</code> /
+    <code>node scripts/smoke.mjs</code> / <code>node scripts/pack-plugin.mjs</code>。
+  </div>
+</section>
+
+<!-- ══════════════════ 4 公共前置 ══════════════════ -->
+<section id="s4">
+  <h2><span class="n">4</span>公共前置：不解决就会各写各的</h2>
+
+  <div class="note bad">
+    <b>① 决策冻结 <span class="tag star">★ 阻塞开工</span></b> —— P7 详细计划 §7.1 的 8 个 ★：
+    审批待决时按停止是否自动 deny、硬超时分档（read 15s / write 60s / net 60s / proc 120s）、
+    同名工具冲突权威（后者拒绝不覆盖）、<code>tools.invoke</code> 是否额外收权限、
+    工具名是否沿用天枢（<code>read_file</code> → <code>read</code>）、一插件还是多插件（一个插件 8 服务）、
+    <code>bash</code> 空白名单是否全禁、auto 门控工具是否进目录。
+    外加 skins 的 <code>--skin-motion-*</code> 令牌命名与插件 id 单复数（<code>tools</code> / <code>skins</code>）。
+    <b>改一个，后面的代码就改一片</b>。 → <b>阶段 A5 已冻结</b>，单一真源 <code>docs/插件demo/决策冻结.md</code>。
+  </div>
+
+  <div class="note info">
+    <b>② shared 契约先写</b> —— 按「只增不改」把新 topic 全部进
+    <code>shared/src/events.ts</code> 的 EventMap / CommandMap，并同步 <code>COMMAND_TOPICS</code>（命令不进白名单 → POST 直接 400）。
+    新类型 <code>ToolRisk</code> / <code>ApprovalPolicy</code> 放 <code>shared/src/llm/types.ts</code> 旁。
+    <br>两处「在既有 topic 上加字段」比新增更危险：<code>tool.execute</code> 加 <code>workspaces</code>、
+    <code>tool.approval.requested</code> 加 <code>kind</code> —— 都必须可缺省（老节点按「无工作区 / 普通 exec」处理，不能拒绝）。
+  </div>
+
+  <div class="note bus">
+    <b>③ sdk/ui 补公共件</b> —— <code>Badge</code> + <code>StatusDot</code> + <code>--motion-*</code> 令牌进
+    <code>sdk/ui/src/tokens.css</code>。三个消费方：chat-workbench 运行态圆点（P0-14）、skins motion、tools 风险徽章。
+    <b>先定，否则三处各自硬编码</b>；<code>core/tests/tokens-parity.test.ts</code> 就是防这件事复发。 → <b>阶段 A 已落地</b>。
+  </div>
+
+  <div class="note ext">
+    <b>④ Core 的唯一改动</b> —— <code>GET /plugins/&lt;id&gt;/data/*</code>（skins 需要，约 60 行）：
+    根换成 <code>pluginDataDir(cfg.dataDir, id)</code>，穿越检查 / MIME / 缓存头沿用 <code>plugin-ui.ts</code> 现成几行；
+    <b>唯一行为差异是不做 SPA fallback</b>（它伺服数据不是页面），且必须过 Origin 白名单。
+    其余全部零 Core 改动。
+  </div>
+
+  <div class="note proc">
+    <b>⑤ Node 运行时锁定（仅 SQLite 阶段）</b> —— <code>node:sqlite</code> 需 Node ≥22.5，而仓库无任何版本约束
+    （Tauri 壳不启动 Node，Core 跑用户 PATH 上的 node）。是 P3-1 的硬前置，可后置。
+    <b>红线：永不引入 better-sqlite3</b>（天枢 963 行迁移指南的教训）。
+  </div>
+</section>
+
+<!-- ══════════════════ 5 分期落地 ══════════════════ -->
+<section id="s5">
+  <h2><span class="n">5</span>分期落地计划</h2>
+  <p>七个阶段（<b>0</b> + A–F）。每阶段可独立验收、独立 revert（strangler 纪律：小步、全绿、可单独回退）。</p>
+
+  <div class="board phase d">
+    <div class="bh"><b>阶段 0 · 从零确认 + Core / 工作台优化</b><span class="sp"></span><span class="tag have">已完成</span><span class="tag part">2026-10-07</span></div>
+    <p style="margin-top:0"><b>只确认与记录，不顺手改功能。</b>输出两份清单：① 确认结论（含证据）；② Core / 工作台优化项（按「阻塞后续 / 可后置」分类）。优化项的实做并入阶段 A/D，或单列。</p>
+    <table>
+      <thead><tr><th>工作</th><th>核对对象</th><th>产出 / 证据</th></tr></thead>
+      <tbody>
+        <tr><td><b>0.1</b> 基线复核</td>
+          <td class="mono">全仓：typecheck / test / smoke / pack；包与服务进程清单</td>
+          <td><span class="tag have">完成</span> 全量 <b>939 tests</b>（声称 853；阶段 0.1 首测漏计 shared/sdk，2026-10-07 修正）；typecheck 全绿；smoke PASS；pack 4 插件成功</td></tr>
+        <tr><td><b>0.2</b> <b>Core 逐模块核对</b></td>
+          <td class="mono">core/src/{service-manager, sse-bridge, config, credentials, logger, main}</td>
+          <td><span class="tag have">完成</span> <b>零阻塞性问题</b>；6 项优化项全部可后置（C1-C6，均为测试覆盖缺口）</td></tr>
+        <tr><td><b>0.3</b> <b>工作台逐组件核对</b></td>
+          <td class="mono">client/ 壳 + plugins/workbench/ + sdk/ui/</td>
+          <td><span class="tag have">完成</span> <b>零阻塞性问题</b>；3 项优化项全部可后置（W1-W3，均为测试覆盖缺口）</td></tr>
+        <tr><td><b>0.4</b> 回填与冻结</td>
+          <td class="mono">本文 §3 / §8</td>
+          <td><span class="tag have">完成</span> 确认结果已回填 §3；基线冻结为 <b>939 tests / 14 包 / 5 服务</b>（2026-10-07 修正）；优化项挂进阶段 A/D</td></tr>
+      </tbody>
+    </table>
+    <div class="note ok"><b>阶段 0 结论</b>：Core 与工作台承载后面全部插件。逐模块核对通过，零阻塞性问题。
+      9 项优化项全部为测试覆盖缺口，可后置到阶段 A/D。基线已冻结：<b>939 tests / 14 包 / 5 服务 / 4 插件</b>（2026-10-07 修正）。
+      详见 <code>docs/插件demo/阶段0-确认报告.md</code>。</div>
+  </div>
+
+  <div class="board phase">
+    <div class="bh"><b>阶段 A · 基座止血与共享前置（含 chat-workbench 全量优化）</b><span class="sp"></span><span class="tag have">A1–A6 全部完成</span><span class="tag part">2026-10-07</span></div>
+    <div class="note info" style="margin-top:0">
+      <b>本阶段范围比上一版大。</b>上一版只列 A1（P0 17 项）与 A2（P1-1~5）；但
+      <code>docs/插件demo/chat-workbench/</code> 下两份稿（<b>优化计划</b> P0~P3 + <b>会话列表重设计</b>）
+      是一体的：<b>组件优化（重设计）× 存储正确性 × 契约补齐</b>必须同阶段收口。故阶段 A 覆盖到 P2，P3-0 单列可后置。
+      依据：<code>对话工作台-优化计划.html</code> §3~§6、<code>对话工作台-会话列表重设计.html</code> §0~§13。
+    </div>
+    <div class="note ok" style="margin-top:0"><b>进度（2026-10-07）</b>：<b>A1–A6 全部完成</b>。
+      全量验证：typecheck 全绿 / <b>987 tests</b> / smoke PASS / pack 4 插件成功。
+      基线修正为 939（阶段 0.1 首测漏计 shared+sdk 四包）。</div>
+    <table>
+      <thead><tr><th>工作</th><th>落点</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td><b>A1</b> 公共前置 ②③（shared 契约 + sdk/ui 公共件）<br><span class="tag have">完成</span></td>
+          <td class="mono">shared/src/events.ts · sdk/ui/src/tokens.css · sdk/ui/src/{motion.ts,components/}</td>
+          <td><span class="tag have">完成</span> <code>SessionMeta.{archived,parentId,lastMessage}</code>、<code>session.pin</code>/<code>session.archive</code> 命令与结果事件、<code>session.updated</code> 加可选字段；<code>--motion-*</code>（深浅两套）进 tokens.css；<code>Badge</code>+<code>StatusDot</code> 就位（+7 测试）</td></tr>
+        <tr><td><b>A2</b> chat-workbench P1 存储正确性与止血（<b>6 项</b>）<br><span class="tag star">数据安全</span> <span class="tag have">完成</span></td>
+          <td class="mono">plugins/chat-workbench/services/session/src/{store,index}.ts</td>
+          <td><span class="tag have">完成</span> P1-1 删 <code>rmSync</code>；P1-2 反转 unlink 顺序；P1-3 启动 readdir 对账；P1-4 tmp 名唯一化；P1-5 <code>Message.reasoning?</code>；<b>P1-6 <code>.json</code>→<code>.jsonl</code></b>（append <code>appendFileSync</code>，O(M)→O(1)）。另加 <code>setPinned</code>/<code>setArchived</code>（不改 updatedAt）+ <code>lastMessage</code>；<b>P0-0</b> append 后补发 <code>session.updated</code>；D5 快照只在 clear 分支取。测试 27→43</td></tr>
+        <tr><td><b>A3</b> chat-workbench P0 会话列表层（<b>17 项</b>）<br><span class="tag spec">组件优化</span> <span class="tag have">完成</span></td>
+          <td class="mono">ui/src/views/{SessionListView,ChatTimelineView}.vue · ui/src/state/{buckets,list-prefs,motion}.ts</td>
+          <td><span class="tag have">完成</span> 去 <code>&lt;Card&gt;</code>；时间桶分组；行解剖（圆点/预览/相对时间↔操作）；行内菜单（对象=本行）；就地改名；listbox 键盘；搜索；三空态；拖拽拒绝提示；<code>@container</code> 窄栏退化；<b>P0-14 会话级 motion</b>；<b>P0-16</b> 修 <code>--color-accent</code>/<code>--color-surface-1</code>。测试 47→64</td></tr>
+        <tr><td><b>A4</b> chat-workbench P2 字段与命令<br><span class="tag have">完成</span></td>
+          <td class="mono">shared/src/events.ts · services/session/src/{store,session,index}.ts · ui/src/views/SessionListView.vue</td>
+          <td><span class="tag have">完成</span> P2-1 <code>session.pin</code>、P2-2 <code>archived?</code>+命令、P2-4 <code>lastMessage?</code>（服务端拼）、
+            P2-3 <code>parentId?</code>（<code>session.create</code> 收 parentId + 前端子会话树/折叠）、P2-5 <code>session.export</code>（Markdown + 前端下载）。均带 store/命令/UI 测试</td></tr>
+        <tr><td><b>A5</b> 决策冻结 ①<br><span class="tag have">完成</span></td><td class="mono">本文 §9 / P7 §7.1 / 决策冻结.md</td>
+          <td><span class="tag have">完成</span> P7 §7.1 的 8 个 ★（共 12 项）全部拍板；chat-workbench DR-1~9 复核确认；单一真源 <code>docs/插件demo/决策冻结.md</code></td></tr>
+        <tr><td><b>A6</b> chat-workbench P3-0 Node 运行时锁定<br><span class="tag have">完成</span></td>
+          <td class="mono">package.json(engines.node) · .node-version · start-client.cmd</td>
+          <td><span class="tag have">完成</span> 根 <code>engines.node "&gt;=22.5.0"</code> + <code>.node-version 24.14.0</code>；
+            <code>start-client.cmd</code> 启动前校验（缺 Node / 版本过低都给明确版本号 + 下载地址，非静默降级）。
+            <b>仅锁 P3-0</b>；<code>node:sqlite</code> 落地（P3-1）仍属阶段 F</td></tr>
+      </tbody>
+    </table>
+    <div class="note bad"><b>顺序纪律</b>：A1 先行（契约/令牌/组件）→ A2 与 A3 可并行（P1 只动 store.ts，P0 只动 UI 目录）→
+      A4 依赖 A1 的字段，紧跟 A3 落地后按实际缺口做。P1-2 与 P1-3 <b>必须同一 PR</b>（单独上 P1-2 会引入「删了又活」）；
+      <b>P1-6 是本阶段投入产出比最高的一项</b>（append 从 O(M) 变 O(1)）。</div>
+    <div class="note ok"><b>阶段 0 → A 的衔接</b>：阶段 0 判定为「阻塞后续」的 Core / 工作台优化项并入本阶段（或先做）。
+      本阶段自身：P0 的三项（重命名对象错误、键盘不可达、令牌不存在）是今天就在报错的；P1-1~6 是数据安全与性能止血。
+      <b>P3-1（换 <code>node:sqlite</code>）不在本阶段</b> —— 它依赖 P3-0，且 P1-6 的输出就是它的迁移输入，不浪费。</div>
+  </div>
+
+  <div class="board phase">
+    <div class="bh"><b>阶段 B · 角色 P5（agents）</b><span class="sp"></span><span class="tag have">已完成</span><span class="tag part">2026-10-07</span></div>
+    <table>
+      <thead><tr><th>工作</th><th>落点</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td><b>B1</b> agent 服务 + characters.json</td><td class="mono">plugins/agents/services/agent/</td>
+          <td><span class="tag have">完成</span> <code>agent.state</code> 重播整份；<code>agent.state.set{patch}</code> 合并式落盘（原子写、坏档降级）；<code>agent.resolve</code> 两跳回 <code>agent.resolve.result</code>（store 测试 7 项）</td></tr>
+        <tr><td><b>B2</b> prompt 片段注册</td><td class="mono">prompt.fragment.* · loop 装配器</td>
+          <td><span class="tag have">完成</span> 有 prompt 的角色注册 <code>role:&lt;id&gt;</code>（priority 5），空 prompt 不注册；loop 收集片段 + 按 <code>(priority,id)</code> 确定排序；<code>loop.run.characterId</code> 决定纳入哪条 <code>role:*</code>；<code>prompt.fragments.list</code> 重播（+5 测试）</td></tr>
+        <tr><td><b>B3</b> widget.agents 5 Tab + ComposerRolePicker</td><td class="mono">plugins/agents/ui/ · chat-workbench composer</td>
+          <td><span class="tag have">完成</span> 角色 / 绑定 / 模型 / 装配预览 / 事件 5 Tab；composer 角色下拉（没装 agents → 消失）；选角色 → <code>loop.run</code> 带 <code>characterId</code> + 预填模型偏好；装配预览标「悬空引用」（+7 agents-ui / +4 composer 测试）</td></tr>
+      </tbody>
+    </table>
+    <div class="note ok"><b>验收信号</b>：切角色影响 p5 层注入（装配器按 <code>role:&lt;id&gt;</code> 纳入）；装配预览 = 本机可用 ∩ 角色绑定，且 tools/skills 缺失时按「悬空引用」呈现而非报错 —— 验证第 4 条纪律。外观（<code>skinId</code>）只存一个字符串，本阶段留字段占位（阶段 E 落地）。</div>
+  </div>
+
+  <div class="board phase">
+    <div class="bh"><b>阶段 C · 技能 P6（skills）</b><span class="sp"></span><span class="tag have">已完成</span><span class="tag part">2026-10-07</span></div>
+    <table>
+      <thead><tr><th>工作</th><th>落点</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td><b>C1</b> skills 服务 + skills.json</td><td class="mono">plugins/skills/services/skills/</td>
+          <td><span class="tag have">完成</span> SKILL.md（frontmatter + 正文）解析；收集各插件 <code>skill.registered</code> + 用户自建 <code>custom/</code>；<code>skills.state</code> 重播整份；<code>skill.enabled.set</code> 机器级开关（持久化、容错）</td></tr>
+        <tr><td><b>C2</b> 写入口唯一</td><td class="mono">skill.package.write</td>
+          <td><span class="tag have">完成</span> skills 服务是用户自建 SKILL.md 的唯一写者（原子写、非法 name 拒绝）；模型只读（正文回吐归 P7 的 <code>skill_read</code>）</td></tr>
+        <tr><td><b>C3</b> p10 索引片段接入 loop</td><td class="mono">loop 装配器 · skills.list{characterId}</td>
+          <td><span class="tag have">完成</span> <b>AND 在 skills 服务端成立</b>：<code>skills.list{characterId}</code> 返回「本机可用 ∩ 角色绑定」；loop 角色轮先要清单再注入 p10，并按 8 KB / 20 条**整块丢弃**。看得见的就一定读得到</td></tr>
+        <tr><td><b>C4</b> widget.skills 2 Tab</td><td class="mono">plugins/skills/ui/src/views/</td>
+          <td><span class="tag have">完成</span> 技能库（按 owner 分组；同名冲突 ⚠；「绑了 N · 有效 M」AND 出口；索引 B）/ 统计（预算条 8 KB · 20 条）（+6 测试）</td></tr>
+      </tbody>
+    </table>
+    <div class="note ok"><b>为什么 C 在 D 前</b>：tools 插件的 <code>skills-tools</code> 执行者（skill_manager）要消费 <code>skill.registered</code>，且 loop 的 p10 片段是工具目录的姊妹机制。先有技能目录，工具侧那行才有意义（缺失时它不注册，合法）。</div>
+  </div>
+
+  <div class="board phase d">
+    <div class="bh"><b>阶段 D · 工作区 + 工具 P7（最大、关键路径）</b><span class="sp"></span><span class="tag have">M0–M6 全部完成</span></div>
+    <table>
+      <thead><tr><th>里程碑</th><th>内容</th><th>绿灯（必须全过）</th><th>回滚成本</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><b>M0 工作区</b> <span class="tag star">前置</span> <span class="tag have">完成</span></td>
+          <td class="mono">workspace 服务（list/resolve/open，只列目录不读文件）+ session.set.workspace + 越界审批与重派</td>
+          <td><span class="tag have">完成</span> 契约（SessionMeta.workspace/workspaces）+ <code>session.set.workspace</code>（合并式、不改 updatedAt）+ workspace 服务（只 readdir/stat）+ loop 透传 <code>workspaces</code>/escape/重派（待 M3 接线）</td>
+          <td>低（多为新增）</td></tr>
+        <tr><td class="nowrap"><b>M1 契约与骨架</b> <span class="tag have">完成</span></td>
+          <td class="mono">8 份 service.json + shared/tools/{constraints,paths}.ts + 19 topic</td>
+          <td><span class="tag have">完成</span> <code>pnpm build</code> 后 <code>dist/server/</code> 下 8 个服务目录（workspace/tools/fs/shell/web/misc/skills/mcp-tools）全部存在；19 topic 进两张清单</td>
+          <td>极低</td></tr>
+        <tr><td class="nowrap"><b>M2 执行者与闸门</b> <span class="tag part">部分</span></td>
+          <td class="mono">fs-tools（read/glob/grep/write/edit）+ tools 闸门</td>
+          <td><span class="tag part">fs-tools 真实实现（5 工具 + 路径守卫 + escape + 约束/审批）+ 闸门（策略/审批/目录/同名冲突）已落地</span>；<b>待办</b>：硬超时分档、幂等/孤儿测试、<code>tools.invoke</code> 试调</td>
+          <td>中</td></tr>
+        <tr><td class="nowrap"><b>M3 主线切换</b> <span class="tag star">破坏性</span> <span class="tag have">完成</span></td>
+          <td class="mono">loop 外包工具执行；152 行 tools.ts 作废</td>
+          <td><span class="tag have">完成</span> loop 只查表派发：目录来自 <code>tools.state</code>，执行走 <code>tool.execute</code> 往返；workspaces 透传（session 工作区）；越界 <code>escape</code> → 工作区审批 → <code>session.set.workspace{addRoot}</code> → <b>重派同一 T</b>；硬超时分档。P7 集成冒烟已重写并全绿（<code>read</code> 跨进程执行）</td>
+          <td><b>高</b>（单独 PR + 合并前打 tag）</td></tr>
+        <tr><td class="nowrap"><b>M4 补齐执行者</b> <span class="tag have">完成</span></td>
+          <td class="mono">shell / web / misc / skills / mcp-tools（各一个目录）</td>
+          <td><span class="tag have">完成</span> shell-tools（bash/pwsh，<b>空 allowed_commands=全禁</b>，超时杀进程组）、web-tools（webfetch，协议白名单 + 5 MB 截断）、misc-tools（get_time/debug_sessions）、skills-tools（技能空则不注册）、<b>mcp-tools（stdio MCP 客户端：initialize/tools/list/call，恒 risk proc 逐次审批，断开杀进程并注销其那批）</b>。MCP 客户端 +3 测试</td>
+          <td>极低（各自独立）</td></tr>
+        <tr><td class="nowrap"><b>M5 界面</b> <span class="tag have">完成</span></td>
+          <td class="mono">widget.tools 5 Tab + widget.session-workspace + 对话侧审批卡</td>
+          <td><span class="tag have">完成</span> <code>plugins/tools/ui</code>（目录[服务分组/风险 Badge/策略 Select/约束/同名冲突/<code>managedBy:auto</code> 只读] · 审批[exec·workspace 就地答 + proc 记住] · 试调[<code>tools.invoke</code>] · MCP[<code>tools.mcp.set</code>] · 事件）+ chat-workbench <code>widget.session-workspace</code>（项目/授权根/目录选择器走 <code>workspace.list</code>）+ <code>ChatTimelineView</code> 审批卡（监听 <code>tool.approval.requested</code>，<code>tool.approval.resolved</code>）。真 Core + 真产物 e2e 覆盖（<code>UI_PLUGINS</code> 已登记 tools）+ tools/ui 7 单测 + 聊天审批卡 4 单测</td>
+          <td>低</td></tr>
+        <tr><td class="nowrap"><b>M6 收尾</b> <span class="tag have">完成</span></td>
+          <td class="mono">删 loop/src/tools.ts · 删 dataReadableBy · 工具改名 read_file→read</td>
+          <td><span class="tag have">完成</span> 删除 <code>loop/src/tools.ts</code>（P7 种子）+ 其测试（-15 用例）；<code>dataReadableBy</code> 从 <code>shared/src/plugin-manifest.ts</code> schema 移除；工具名 <code>read_file/list_dir → read/glob</code>（fs-tools 已注册新名，无代码引用旧名）；顺带清掉各集成测试里作废的 <code>LLM_TOOL_ROOT</code>。<b>chat-workbench 不再有路径常量</b>（p7 集成测试改用会话工作区）。全量测试绿</td>
+          <td>中（删除不可逆，Git 历史里有）</td></tr>
+      </tbody>
+    </table>
+    <div class="note bad"><b>关键路径</b>：<code>M0 → M1 → M2 → M3 → M5</code> 串联，链上任一步延期整体延期。最早可用切点 = M0+M1+M2+M3 ≈ 12 人日。M4/M5 可增量交付，每个执行者是一个目录，每个视图是 plugin.json 里的一行。</div>
+  </div>
+
+  <div class="board phase e">
+    <div class="bh"><b>阶段 E · 皮肤 skins</b><span class="sp"></span><span class="tag part">2–3 周</span><span class="tag todo">依赖 B + A(motion)</span></div>
+    <table>
+      <thead><tr><th>里程碑</th><th>内容</th><th>依赖</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><b>M1</b> <span class="tag have">已完成</span></td><td class="mono">shared/src/skin.ts + 65 单测 + 4 行 topic</td><td>—</td></tr>
+        <tr><td class="nowrap"><b>M1.5</b></td><td class="mono">Core 新路由 GET /plugins/&lt;id&gt;/data/*（约 60 行）+ 四条契约测试</td><td>公共前置 ④</td></tr>
+        <tr><td class="nowrap"><b>M2</b></td><td class="mono">plugins/skins 骨架：plugin.json + skin 服务 + 内置资产</td><td>M1.5</td></tr>
+        <tr><td class="nowrap"><b>M3</b></td><td class="mono">SkinRenderer.vue（三个 mode + 四级回退链）</td><td>M2 · <b>先有组件再谈让谁用</b></td></tr>
+        <tr><td class="nowrap"><b>M4</b></td><td class="mono">widget.skins 三 Tab 可写（新建 / 上传 / 改名 / 停用 / 删除）</td><td>M3</td></tr>
+        <tr><td class="nowrap"><b>M5</b></td><td class="mono">agents 侧 characters.json 加 skinId + 绑定 Tab 底部一行</td><td>M4 · 阶段 B</td></tr>
+        <tr><td class="nowrap"><b>M6</b></td><td class="mono">chat-timeline 接 SkinRenderer（avatar + stage）+ motion 映射</td><td>M5 · A(motion) · loop.state.changed</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><b>M2 → M4 必须一次交付</b>：A 形态下插件拥有用户数据（与 tools 的 approvals.json 同一条），中途停手会留下半套数据（数据在、没有界面能看见）。M1.5 是纯增量、与插件无关，可随时停。<b>M6 之前不要碰 motion 映射</b>（依赖 loop.state.changed 与工具块状态）。</div>
+  </div>
+
+  <div class="board phase">
+    <div class="bh"><b>阶段 F · 对话工作台 P3 存储升级（独立工作线）</b><span class="sp"></span><span class="tag part">视情况</span></div>
+    <div class="note info" style="margin-top:0"><b>P1-6 / P2 已并入阶段 A</b>（见上）；本阶段只剩真正的存储形态升级。
+      chat-workbench 优化计划 §6.5 的三步走：<b>P1-6（阶段 A）→ P3-0 → P3-1</b>。</div>
+    <table>
+      <thead><tr><th>工作</th><th>内容</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><b>P3-0 Node 锁定</b> <span class="tag have">已完成</span></td><td class="mono">engines.node + .node-version + 启动前校验</td>
+          <td><code>node:sqlite</code> 的硬前置；<b>已由阶段 A6 交付</b>（<code>engines.node&gt;=22.5.0</code> + <code>.node-version</code> + <code>start-client.cmd</code> 校验）</td></tr>
+        <tr><td><b>P3-1 node:sqlite</b></td><td class="mono">store.ts 换实现：两张表 + 迁移器 + 四索引 + get 游标分页</td>
+          <td>解决 JSONL 解决不了的三件：rename 全量写 / cache 无界 / get 全量 SSE。<b>P1-6 的 JSONL 输出就是迁移输入</b></td></tr>
+        <tr><td><b>P2-5 导出（若 A4 未做）</b></td><td class="mono">session.export</td>
+          <td>会话是用户唯一的原创内容；要么实现，要么本版不放这个菜单项（A4 已实现）</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════════════════ 6 排期与关键路径 ══════════════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>排期与关键路径</h2>
+  <p>单位：人日（单人串行）。红色 = 关键路径，蓝色 = 可并行，灰色 = 可选 / 后置。</p>
+
+  <div class="board">
+    <div class="gantt">
+      <div class="gl">0 从零确认 + Core/工作台</div><div class="gt"><i class="crit" style="left:0;width:14%"></i></div>
+      <div class="gl">A 基座止血与前置</div><div class="gt"><i class="crit" style="left:14%;width:10%;background:var(--success)"></i></div>
+      <div class="gl">B 角色 P5</div><div class="gt"><i class="crit" style="left:24%;width:8%;background:var(--success)"></i></div>
+      <div class="gl">C 技能 P6</div><div class="gt"><i class="crit" style="left:32%;width:12%;background:var(--success)"></i></div>
+      <div class="gl">D 工作区 + 工具 P7</div><div class="gt"><i class="crit" style="left:44%;width:36%"></i></div>
+      <div class="gl">E 皮肤 skins</div><div class="gt"><i style="left:34%;width:26%"></i></div>
+      <div class="gl">F 对话工作台 P3</div><div class="gt"><i class="opt" style="left:80%;width:20%"></i></div>
+    </div>
+    <p class="mono" style="margin-top:var(--s3);color:var(--muted)">横轴 0 → 100%（约 11–17 周）。0 已完成；<b style="color:var(--success)">A / B / C 已完成</b>；D 为关键路径；E 与 D 后半可并行；D 的 M4 各执行者可并行。</p>
+  </div>
+
+  <table>
+    <thead><tr><th>阶段</th><th>估时</th><th>可并行性</th><th>阻塞谁</th></tr></thead>
+    <tbody>
+      <tr><td><b>0 从零确认 + Core/工作台优化</b></td><td class="nowrap"><span class="tag have">已完成</span></td><td>—</td><td>基线已冻结 939 tests（修正）；9 项优化项挂进 A/D</td></tr>
+      <tr><td>A 基座止血与前置（<b>含 chat-workbench P0/P1/P2</b>）</td><td class="nowrap"><span class="tag have">A1–A6 完成</span></td><td>—</td><td>解锁 B/C/D/E 的共享件</td></tr>
+      <tr><td>B 角色 P5</td><td class="nowrap"><span class="tag have">已完成</span></td><td>—</td><td>解锁 D 的 role.tools 绑定、E 的 skinId 行</td></tr>
+      <tr><td>C 技能 P6</td><td class="nowrap"><span class="tag have">已完成</span></td><td>—</td><td>解锁 D 的 skills-tools + p10 片段</td></tr>
+      <tr><td>D 工作区 + 工具 P7</td><td class="nowrap"><span class="tag have">M0–M6 完成</span></td><td>—</td><td>核心交付</td></tr>
+      <tr><td>E 皮肤 skins</td><td class="nowrap">2–3 周</td><td>可与 C/D 后半并行</td><td>依赖 B</td></tr>
+      <tr><td>F 对话工作台 P3 存储升级</td><td class="nowrap">1–2 周</td><td>完全独立</td><td>P3-0 是 P3-1 的硬前置</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>总估时</b>：单开发者串行约 <b>11–17 周</b>（含阶段 0 与扩围后的 A）。若 A 与 E 并行、D 的 M4 并行，可压缩到 <b>~9–12 周</b>。
+    其中 P7 的 M3（主线切换）是唯一破坏性步骤，必须单独一天、单独 PR、合并前打 tag。
+    <b>阶段 0 已完成（2026-10-07）</b>，产出确认 A/D 的范围：9 项优化项全部可后置。
+    <b>阶段 A 全部完成（2026-10-07）</b>：chat-workbench P0（组件重设计）/ P1（存储正确性 + P1-6 JSONL 止血）/ P2（pin/archive/lastMessage/parentId/export）已落地并全绿；
+    A5 决策冻结、A6 Node 运行时锁定亦完成。P3-1（node:sqlite）留阶段 F。依据 <code>docs/插件demo/chat-workbench/</code> 两份稿。
+  </div>
+</section>
+
+<!-- ══════════════════ 7 测试与验收 ══════════════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>测试与验收口径</h2>
+
+  <div class="two">
+    <div>
+      <h3>统一命令</h3>
+      <pre>pnpm -r run typecheck      # 14+ 包全过
+pnpm -r run test           # 基线 939（修正）→ P7 目标 ≥ 1069
+node scripts/smoke.mjs     # Core 起停 + 服务自愈 + 新增断言
+node scripts/pack-plugin.mjs  # 打包产物只含 dist/ 与清单</pre>
+      <h3>测试跟着被测物走</h3>
+      <ul>
+        <li>纯函数（约束引擎 / 路径守卫 / 匹配器）留在 <code>shared</code>，跨进程拆分后一条不用改。</li>
+        <li>协议落在各执行者包；端到端留在 <code>core/tests</code>。</li>
+        <li><b>集成冒烟必须串行</b>（<code>fileParallelism:false</code>）—— 每个冒烟拉起真 Core + 多服务（≈36 进程），并行会挤破握手预算导致假红。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>四类必须存在的测试</h3>
+      <ul>
+        <li><b>故障注入</b>（P1）：在 renameSync 前抛错 → 目录里是完整旧文件或完整新文件，不允许都没有。</li>
+        <li><b>kill -9 集成</b>（P7）：本地测试走优雅停机，看不到「残留注册」；必须真 kill。</li>
+        <li><b>字节稳定性</b>：同一输入两次调用，<code>tool.execute.result.content</code> 与目录数组字节级一致（prompt 缓存）。</li>
+        <li><b>幂等</b>：同一 <code>T</code> 收到两条 <code>tool.approval.resolved</code>，只生效一条（防副作用跑两遍）。</li>
+      </ul>
+      <h3>手工 e2e（P7，每条能眼睛验）</h3>
+      <ul>
+        <li>绑真实项目目录 → 发「列出文件」→ 摘要里是真实文件名。</li>
+        <li>写类工具弹审批；只读不弹；越界触发工作区审批并批准后重派成功。</li>
+        <li>kill -9 shell-tools → tools.state 少 bash/pwsh，其余照常。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>会被改动的既有测试（削峰点，不是顺手改）</b>：
+    <code>core/tests/p7-integration.test.ts</code>（唯一跑完整工具轮的端到端，跨进程化后时序要重校，占 M3 一半工期）·
+    <code>loop/tests/tools.test.ts</code>（<code>import '../src/tools'</code>，文件将被删）·
+    <code>core/tests/service-manifest-sync.test.ts</code>（8 份 service.json 进共享表校验）·
+    <code>core/tests/plugin-ui-e2e.test.ts</code>（新视图要能构建并伺服）。
+  </div>
+</section>
+
+<!-- ══════════════════ 8 风险台账 ══════════════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>风险台账</h2>
+  <table>
+    <thead><tr><th>#</th><th>风险</th><th>触发条件</th><th>缓解</th></tr></thead>
+    <tbody>
+      <tr><td>R1</td><td>重派幂等前提被破坏</td><td>将来有工具「先写一半再发现越界」</td><td>前提写成测试；<code>tools.json</code> 的 handler 约定写死「路径校验必须在任何副作用之前」</td></tr>
+      <tr><td>R2</td><td>同名工具冲突</td><td>两个服务注册同一 name</td><td>后者拒绝注册不覆盖，界面标 ⚠；对 MCP 尤其要紧</td></tr>
+      <tr><td>R3</td><td>残留注册（kill -9）</td><td>执行者被强杀来不及注销</td><td>订阅 <code>service.failed/stopped</code> 按 serviceId 清目录；必须有 kill -9 集成测试</td></tr>
+      <tr><td>R4</td><td>相对路径基准漂移</td><td>历史里的 <code>src/a.ts</code> 换了根</td><td>workspace 创建时绑定、之后只读；多根时 workspace 排第一（有测试）</td></tr>
+      <tr><td>R5</td><td>6 份 service.json 复制后漂移</td><td>手改其中一份</td><td>service-manifest-sync 共享表校验 + 一条「六份逐字节相同」测试</td></tr>
+      <tr><td>R6</td><td>MCP 子进程泄漏</td><td>删 server / 插件被 kill 后进程还在</td><td>删除时杀进程组；订阅 service.failed 清理；kill -9 测试</td></tr>
+      <tr><td>R7</td><td>漏把新 topic 加进 COMMAND_TOPICS</td><td>只写 EventMap 没写白名单</td><td><code>satisfies readonly CommandKey[]</code> 编译期挡；manifest 校验启动前再挡</td></tr>
+      <tr><td>R8</td><td>无工作区时界面一片失败</td><td>用户没绑目录</td><td>widget.session-workspace 空态明说「未绑定项目」；工具块失败原因写明「点击授权」</td></tr>
+      <tr><td>R9</td><td>拥有用户数据的插件中途停手</td><td>tools / skins 拆碎交付</td><td>M2→M4 一次交付；数据保留、重装即恢复</td></tr>
+      <tr><td>R10</td><td>Node 版本校验拦住现有用户</td><td>P3-0 加 engines.node 但用户 Node 旧</td><td>校验失败给明确版本号与下载地址，不静默降级；在 start-client.cmd 里检查</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════ 9 决策清单 ══════════════════ -->
+<section id="s9">
+  <h2><span class="n">9</span>决策清单：开工前必须拍板</h2>
+  <p>标 <span class="tag star">★</span> 的会阻塞开工 —— 它们改一个，后面的代码就改一片。</p>
+  <div class="note ok">
+    <b>已冻结（2026-10-07，阶段 A5）。</b>下表 14 项（其中 8 个 ★：#1 #2 #3 #7 #8 #9 #11 #12）已全部拍板，
+    单一真源 <code>docs/插件demo/决策冻结.md</code>；chat-workbench DR-1~9 亦已复核确认。下表「建议」列即冻结值。
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>问题</th><th>建议（= 冻结值）</th><th>阻塞</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>审批待决时用户按停止</td><td>自动 deny 且必须产结果（否则 loop 超时兜底先触发，用户看到「工具超时」而不是「你取消了这一轮」）</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>2</td><td>硬超时定多少</td><td>按 risk 分档：read 15s · write 60s · net 60s · proc 120s</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>3</td><td>同名工具冲突权威</td><td>后者拒绝注册，不覆盖，界面标 ⚠</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>4</td><td><code>tools.invoke</code> 是否额外收权限</td><td>不收：已过审批策略，弹窗本身就是授权</td><td>—</td></tr>
+      <tr><td>5</td><td>audit.log 做不做</td><td>不做（role:'tool' + loop.tool.executed 已是可导出流水，再存一份会变成第二个真源）</td><td>—</td></tr>
+      <tr><td>6</td><td>未装 tools 插件时写类工具</td><td>没有写类工具（没有执行者就没人发 tool.execute）</td><td>—</td></tr>
+      <tr><td>7</td><td>工具名沿用天枢还是自起</td><td>沿用 <code>read/glob/grep/bash/…</code>；改名排在 P7 收尾前，之后永不改名</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>8</td><td>工具一插件还是多插件</td><td>一个插件 8 服务（共用一份 approvals.json 与一个 widget.tools）</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>9</td><td>bash 空白名单</td><td>全禁（默认放行等于让插件单方面获得任意代码执行）</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>10</td><td>自动门控工具是否进目录</td><td>进，但只读展示、不给开关（开关点了不生效比没有更糟）</td><td>—</td></tr>
+      <tr><td>11</td><td>工作区能改吗</td><td>创建时绑定、之后只读；换项目 = 显式「换项目」动作</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>12</td><td>多个授权根的解析基准</td><td>workspace 排第一，其余按加入序；assertPathSafe 逐根试</td><td><span class="tag star">★</span></td></tr>
+      <tr><td>13</td><td>皮肤 motion 令牌命名</td><td>皮肤侧一律 <code>--skin-motion-*</code>，不进 tokens.css（<code>--motion-*</code> 已被会话列表状态色占用）</td><td>—</td></tr>
+      <tr><td>14</td><td>插件 id 单复数</td><td><code>tools</code> / <code>skins</code> 复数（决定 URL 与 userData 两处前缀，越早定越好）</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════ 10 一句话纪律 ══════════════════ -->
+<section id="s10">
+  <h2><span class="n">10</span>一句话纪律（贯穿全程）</h2>
+  <div class="note ok">
+    <b>先确认基座，再往上盖</b>（Core 与工作台逐模块核对，不信任「已完成」）；<br>
+    先让服务能各自工作，再切主线；每个执行者是一个目录（可独立删）；<br>
+    越界与副作用各走各的闸（约束不弹窗、审批才放行）；<br>
+    loop 手里不留路径；能力住在服务里、不住在插件清单里；<br>
+    拥有用户数据的插件，卸载保留、重装即恢复。
+  </div>
+  <div class="note bus">
+    <b>如果只记四句</b>：
+    ① 五个插件是同一套「收集命令 + 重播事件 + owner 独占数据」的实例，不新增交互方式；
+    ② 缺失是合法的，所以顺序由价值而非编译依赖决定；
+    ③ 顺序必须确定、失败也要产结果 —— 这两条不写进测试就会以「token 翻倍」和「永久转圈」的形式回来；
+    ④ Core 只加一条 <code>/data/*</code> 路由，其余全部是 shared 表上的新行。
+  </div>
+</section>
+
+<div class="foot">
+  Osteosome · 插件落地总开发计划 · 2026-10 · 综合自
+  <code>docs/插件demo/{tool_manager,skin_manager,chat-workbench,skill_manager,character_manager}</code> ·
+  <code>docs/开发进度/P7-工具管理-详细计划.html</code> · <code>docs/开发进度/阶段追踪.md</code> ·
+  <code>docs/{插件标准,插件化架构优化,插件协作与AI能力装配,智能体Loop与插件协同设计,AgentLoop对照教程}.html</code> ·
+  现状依据 <code>shared/src/{events,skin}.ts</code> · <code>plugins/*/plugin.json</code> ·
+  基线 939 tests / 14 包（阶段 0.1 实测，2026-10-07 修正）。样式与 <code>sdk/ui/src/tokens.css</code> 同源。
+  <br>
+  <b>本版修订</b>：起点改为<b>阶段 0 · 从零确认 + Core / 工作台优化</b>；不再默认 P1a–P4 / S0–S8 为已验证完成，
+  里程碑状态一律先确认为准。
+  <br><b>2026-10-07 更新</b>：阶段 0 完成并冻结基线（修正为 939 tests）；阶段 A 扩围为「含 chat-workbench 全量优化」
+  （P0 组件重设计 / P1 存储正确性与 P1-6 JSONL 止血 / P2 字段）并<b>完成 A1–A6</b>；
+  A5 决策冻结、A6 Node 运行时锁定完成；<b>阶段 B（角色 P5 / agents）、阶段 C（技能 P6 / skills）完成</b>；
+  <b>阶段 D（工作区 + 工具 P7）已完成：M0–M6 全部完成（工作区 / 契约骨架 / fs-tools + 闸门 / 主线切换 / 六个执行者含 MCP / widget.tools 5 Tab + widget.session-workspace + 对话审批卡 / 收尾清理：删 loop 种子工具、删 dataReadableBy、工具改名）</b>。P3-1（node:sqlite）留阶段 F。
+  当前全量 <b>1052 tests 全绿</b>。
+</div>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  /* ══ 主题 ══ */
+  var themeBtn = document.getElementById('theme');
+  themeBtn.addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ══ 锚点高亮 ══ */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var sections = tocLinks.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncToc() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < sections.length; i++) { if (sections[i] && sections[i].offsetTop <= y) idx = i; }
+    tocLinks.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', syncToc, { passive: true });
+  syncToc();
+})();
+</script>
+
+</body>
+</html>

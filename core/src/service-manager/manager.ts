@@ -6,7 +6,7 @@
  * - stdio JSON-RPC：Core 应答 initialize，受理 bus.publish / bus.subscribe / bus.unsubscribe /
  *   shutdown，按 topic 把事件推给对应服务（bus.event）
  * - 崩溃 / 协议错误 / 心跳超时 → 重启（backoff，超 maxRestarts → failed）
- * - 特权只读方法：credentials.* / preferences.get / plugins.readFile（后者 P3）
+ * - 特权只读方法：preferences.get / plugins.readFile（后者 P3）
  */
 import { readFileSync, statSync, type Stats as FsStats } from 'node:fs'
 import { resolve as pathResolve, sep } from 'node:path'
@@ -39,7 +39,6 @@ import { HealthMonitor } from './health'
 import { loadServicesFrom } from './manifest'
 import { forceKill, sendSigterm, spawnServiceProcess, waitExit, type ManagedProcess } from './process'
 import { topologicalOrder } from './topology'
-import { CredentialApi, CredentialStoreError } from '../credentials/api'
 
 const DEFAULT_STOP_GRACE_MS = 5000
 const DEFAULT_BACKOFF_BASE_MS = 1000
@@ -139,8 +138,6 @@ export interface ServiceManagerOptions {
   consecutiveHealthFailures?: number
   /** 可注入 sleep（测试用） */
   sleep?: (ms: number) => Promise<void>
-  /** 凭证能力（P4 WS-1）：注入后开放 `credentials.*` JSON-RPC 方法（只给服务进程） */
-  credentials?: CredentialApi
   /**
    * 允许启动的服务 id 集合（S7-2b B 语义）。
    *
@@ -474,15 +471,9 @@ export class ServiceManager {
         case 'shutdown':
           void this.stopService(svc, this.stopGraceMs)
           return { ok: true }
-        // ── credentials.*（P4 WS-1）：只给服务进程；credentials.get 返回原值 ──
-        case 'credentials.get':
-        case 'credentials.set':
-        case 'credentials.delete':
-        case 'credentials.list':
-          return this.handleCredentialRpc(method, params)
-        // ── preferences.get（S3）：只给服务进程；读回自己的配置（如用户自填的端点）──
-        // 与 credentials.* 同为「点对点特权读」，不经总线、不落事件：
-        // 偏好里没有凭证原值（那在 credentials.json），所以这条通道不破「凭证值不过总线」。
+        // ── preferences.get（S3）：只给服务进程；读回**Core 自己**那份配置 ──
+        // 点对点特权读，不经总线、不落事件。密钥与接入清单**不在这里**：
+        // 它们归使用方插件（`userData/plugin/models/`），由那个插件的服务自己读。
         case 'preferences.get':
           return this.handlePreferencesGet()
         // ── plugins.readFile（P3）：只读、只限**自己插件目录** ──
@@ -523,57 +514,14 @@ export class ServiceManager {
   }
 
   /**
-   * `credentials.*` JSON-RPC（P4 WS-1）—— 服务进程取凭证原值的唯一通道。
+   * `preferences.get` —— 服务读回 Core 自己那份配置（布局 / 主题 / 插件启停）。
    *
-   * - `credentials.get { id }` → `{ value }`（**原值只在此返回，永不进总线/事件**）
-   * - `credentials.set { id?, name, provider, value }` → 掩码形态
-   * - `credentials.delete { id }` → `{ ok }`
-   * - `credentials.list` → 掩码列表
-   */
-  private handleCredentialRpc(method: string, params: unknown): unknown {
-    const api = this.options.credentials
-    if (!api) throw jsonRpcError(-32001, `${method}: credentials not enabled`)
-    const p = (params ?? {}) as { id?: string; name?: string; provider?: string; value?: string }
-    try {
-      switch (method) {
-        case 'credentials.get': {
-          if (!p.id) throw jsonRpcError(-32602, 'credentials.get: id required')
-          return api.getRaw(p.id)
-        }
-        case 'credentials.set': {
-          if (typeof p.value !== 'string' || !p.value) {
-            throw jsonRpcError(-32602, 'credentials.set: value required')
-          }
-          return api.set({
-            ...(p.id ? { id: p.id } : {}),
-            name: p.name ?? '',
-            provider: p.provider ?? '',
-            value: p.value,
-          })
-        }
-        case 'credentials.delete': {
-          if (!p.id) throw jsonRpcError(-32602, 'credentials.delete: id required')
-          return { ok: api.delete(p.id) }
-        }
-        case 'credentials.list':
-          return { credentials: api.list() }
-        default:
-          throw jsonRpcError(-32601, `method not found: ${method}`)
-      }
-    } catch (err) {
-      if (err instanceof CredentialStoreError) {
-        throw jsonRpcError(-32010, `${method}: ${err.message}`)
-      }
-      throw err
-    }
-  }
-
-  /**
-   * `preferences.get` —— 服务读回自己的配置。
+   * 为什么容错而不报错：偏好文件坏了不该让服务起不来。
+   * 但**不能静默** —— 记一条 warn，否则「我的配置没生效」会变成一件查不出原因的事。
    *
-   * 为什么容错而不报错：偏好文件坏了不该让服务起不来（与 `credentials.*` 的
-   * 「操作报错但 store 可用」同一纪律）。但**不能静默** —— 记一条 warn，
-   * 否则「我的自填端点没生效」会变成一件查不出原因的事。
+   * ⚠️ 这里返回的**只有 Core 自己的键**。密钥与模型接入清单归 models 插件
+   * （`userData/plugin/models/`），它们不再经过 Core ——「Core 保管所有插件的数据」
+   * 正是这一版要拆掉的东西。
    */
   private handlePreferencesGet(): { preferences: Record<string, unknown>; corrupted: boolean } {
     const { value, corrupted } = readPreferences(this.options.dataDir)

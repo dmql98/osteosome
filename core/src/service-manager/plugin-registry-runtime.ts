@@ -210,6 +210,43 @@ export class PluginRegistry {
   }
 
   /**
+   * 插件的**用户数据目录**（`<dataDir>/plugin/<id>/`）—— `GET /plugins/<id>/data/*` 的根。
+   *
+   * **和 `uiDir` 的三处不同，都是有意的**：
+   *
+   * 1. **不要求它声明 `ui`**。纯服务插件（没有界面）也完全可以有用户数据 ——
+   *    断言「有 UI 才能有数据」是错的，UI 与数据是两件事。
+   * 2. **不要求目录已存在**。`uiDir` 的 `not built` 是一条有用的诊断，而用户数据
+   *    「还没有」是完全正常的状态（用户还没上传过任何东西）——
+   *    把它报成 404 就变成「这个插件的数据坏了」。
+   * 3. **理由还少了三条**，但判定的那几条一字不差：装了吗 / 卸载了吗 / 停用了吗 / Core 版本合不合适。
+   *    <b>停用必须连数据一起停</b>，否则「停用插件」只是个摆设 ——
+   *    一个停用了的插件，用户的数据仍然可以通过 HTTP 读到，那不叫停用。
+   *
+   * 路径本身由 `shared` 的 `pluginDataDir` 算 —— 与服务握手时拿到的那个目录
+   * **必须是同一个**（`serviceDataDirs` 用的是同一个函数）。
+   * 两处各算一次的话，用户会在「服务写进去、界面读不到」这种症状上浪费整个下午。
+   */
+  dataDir(pluginId: string): PluginUiLookup {
+    const found = this.scan.plugins.find((p) => p.manifest.id === pluginId)
+    if (!found) return { ok: false, error: `unknown plugin '${pluginId}'` }
+    const manifest = found.manifest
+
+    const uninstalled = this.options.uninstalledIds?.() ?? new Set<string>()
+    if (uninstalled.has(manifest.id)) {
+      return { ok: false, error: `plugin '${pluginId}' is uninstalled` }
+    }
+    const disabled = this.options.disabledIds?.() ?? new Set<string>()
+    if (disabled.has(manifest.id)) {
+      return { ok: false, error: `plugin '${pluginId}' is disabled` }
+    }
+    const incompat = describeRangeMismatch(this.options.coreVersion, manifest.coreCompatibility)
+    if (incompat) return { ok: false, error: `plugin '${pluginId}': ${incompat}` }
+
+    return { ok: true, dir: pluginDataDir(this.options.dataDir, manifest.id) }
+  }
+
+  /**
    * 服务 id → 它所属**插件的目录**（`plugins/<id>/`）（P3）。
    *
    * 唯一的用途是 `plugins.readFile` 的边界：服务只能读自己插件目录里的文件，

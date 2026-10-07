@@ -52,7 +52,34 @@ export class SseClient {
   getState(): SseState { return this.state }
   get activeTopics(): string[] { return [...this.topics] }
 
-  subscribe(topic: string, handler: SseHandler): () => void {
+  /**
+ * 订阅一个 topic。返回退订函数。
+ *
+ * ## ⚠️ 订阅「新 topic」会**换一条连接**，别在命令旁边这么干
+ *
+ * EventSource 的订阅集是**建在 URL 里**的（SSE 协议没法给一条已建立的连接加 topic），
+ * 所以每多一个 topic 就必须重开一次：`reconnect()` 会 `close()` 旧流、另开一条新的。
+ * 而新流**此刻还没 open** —— 对端尚未登记它。这中间有一个「两条都不在」的窗口，
+ * **落在这个窗口里的事件就永远丢了**：handler 还在（`handlers` map 是共享的），
+ * 但那一刻没有任何一条流在传输。
+ *
+ * 这个坑已经咬过两次，形态不同、根因同一：
+ * - `chat-workbench` 的 `create()`：为一次命令临时订阅 `session.create.result` → 换流 →
+ *   紧接着发的 `session.create` 的回执与 `session.created` 双双丢失 →
+ *   **会话列表不刷新**，且 `create()` 干等 10 秒兜底（用户要切走再切回来才看见）。
+ * - `useLlmProviders`：挂载后立刻发 `llm.provider.reannounce` → 回放的清单投递给空气 →
+ *   provider 下拉永远空着。
+ *
+ * **规矩：不要为一次命令临时订阅 topic。**
+ * 要等回执，就**常驻订阅**（在 `onMounted` / `bindEvents` 里）再在本地按 requestId 配对，
+ * 像 `useEndpointProbe` 按 provider 归档那样；或者像 `useLlmProviders` 那样，
+ * 把「问一次」挂在 `state === 'connected'` 上（连上就问、重连就再问，天然自愈）。
+ *
+ * 也不能改成「新流 open 之后再关旧流」来兜住 —— 重叠期同一事件会被投递两次，
+ * 而 `loop.token.streamed` 是直接追加、无去重（payload 里也没有序号可去重），
+ * 那会把刚修好的「事件只到一次」打回原形。
+ */
+subscribe(topic: string, handler: SseHandler): () => void {
     let handlers = this.handlers.get(topic)
     if (!handlers) {
       handlers = new Set()

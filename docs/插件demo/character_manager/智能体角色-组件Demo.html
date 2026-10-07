@@ -1,0 +1,2681 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>智能体角色 · 前端组件 Demo（widget.agents + ComposerRolePicker）· OST P5</title>
+<style>
+  /* ══ 文档壳：与 docs/插件demo/tool_manager/* 同一套皮肤 ══ */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+    /* ══ Demo 内联令牌：与 sdk/ui/src/tokens.css 同名同值 ══ */
+    --color-bg:#f5f6f8; --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-success-soft:#e7f6ec;
+    --color-warning:#9a6700; --color-warning-soft:#fdf6e3;
+    --color-proc:#c2410c; --color-proc-soft:#fdeee2;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px; --text-xl:20px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+    --color-bg:#14171c; --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-success-soft:#16301f;
+    --color-warning:#d29922; --color-warning-soft:#33280f;
+    --color-proc:#fb923c; --color-proc-soft:#3a2314;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family: var(--mono); }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:30; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:29; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s2); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px;
+    border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  td.mono, .mono { font-size:12px; }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .note.bus { border-left-color:var(--bus); background:var(--bus-soft); }
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+
+  /* ══ 设备框：模拟 iframe 里插件 UI 的实际尺寸 ══ */
+  .stage { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    box-shadow:var(--shadow-sm); overflow:hidden; margin:0 0 var(--s4); }
+  .stage > .stage-bar { display:flex; align-items:center; gap:var(--s2); padding:6px 10px;
+    background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--xs); color:var(--muted); }
+  .stage > .stage-bar b { color:var(--text); font-size:var(--sm); }
+  .stage > .stage-bar .sp { flex:1; }
+  .stage > .stage-bar .dots::before { content:'\25CF \25CF \25CF'; color:var(--border-strong); letter-spacing:2px; font-size:9px; }
+  .stage > .frame { background:var(--color-bg); position:relative; }
+  .caption { font-size:var(--xs); color:var(--muted); margin:0 0 var(--s4); }
+
+  /* ══════════════════════════════════════════════════════════
+     ↓↓↓ Demo 本体：widget.agents 与 ComposerRolePicker
+     取值全部走 sdk/ui/src/tokens.css 的真名
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── 通用控件（对应 sdk/ui 组件） ── */
+  .u-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid transparent;
+    border-radius:var(--radius-md); padding:5px 11px; font:inherit; font-size:var(--text-sm);
+    cursor:pointer; background:var(--color-primary); color:#fff; white-space:nowrap; }
+  .u-btn:hover:not(:disabled) { filter:brightness(1.06); }
+  .u-btn.sm { padding:3px 9px; font-size:var(--text-xs); }
+  .u-btn.ghost { background:var(--color-surface); color:var(--color-text); border-color:var(--color-border); }
+  .u-btn.ghost:hover:not(:disabled) { background:var(--color-surface-2); filter:none; }
+  .u-btn.danger { background:var(--color-danger); }
+  .u-btn.soft { background:var(--color-surface-2); color:var(--color-text); border-color:var(--color-border); }
+  .u-btn.soft:hover:not(:disabled) { background:var(--color-surface-3); filter:none; }
+  .u-btn:disabled { opacity:.45; cursor:not-allowed; }
+
+  .u-input, .u-select, .u-textarea { background:var(--color-surface); color:var(--color-text);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:6px 9px;
+    font:inherit; font-size:var(--text-sm); width:100%; }
+  .u-textarea { font-family:var(--font-sans); font-size:var(--text-sm); min-height:70px; resize:vertical; line-height:1.65; }
+  .u-input:focus, .u-textarea:focus, .u-select:focus { outline:2px solid var(--color-primary-soft);
+    border-color:var(--color-primary); }
+  .u-input::placeholder { color:var(--color-text-muted); }
+  .u-input.mono, .u-textarea.mono { font-family:var(--font-mono); font-size:12px; }
+  .u-input:disabled { background:var(--color-surface-2); color:var(--color-text-muted); cursor:not-allowed; }
+
+  .u-switch { display:inline-flex; align-items:center; gap:var(--space-2); cursor:pointer; }
+  .u-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .u-switch .track { width:32px; height:18px; border-radius:var(--radius-full);
+    background:var(--color-surface-3); position:relative; transition:background .18s; flex:none; }
+  .u-switch .thumb { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.3); transition:transform .18s; }
+  .u-switch input:checked + .track { background:var(--color-primary); }
+  .u-switch input:checked + .track .thumb { transform:translateX(14px); }
+
+  .seg { display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius-md); overflow:hidden; }
+  .seg button { border:0; background:var(--color-surface); color:var(--color-text-muted); cursor:pointer;
+    font:inherit; font-size:var(--text-xs); padding:4px 10px; border-right:1px solid var(--color-border); }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--color-primary); color:#fff; font-weight:600; }
+
+  .p-empty { padding:var(--space-5); text-align:center; color:var(--color-text-muted); font-size:var(--text-sm); }
+  .p-empty b { display:block; color:var(--color-text); margin-bottom:4px; }
+
+  /* 徽章 */
+  .p-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600;
+    border-radius:var(--radius-full); padding:1px 7px; white-space:nowrap; vertical-align:middle; }
+  .b-read  { background:var(--color-success-soft); color:var(--color-success); }
+  .b-write { background:var(--color-warning-soft); color:var(--color-warning); }
+  .b-net   { background:var(--ext-soft); color:var(--ext); }
+  .b-proc  { background:var(--color-proc-soft); color:var(--color-proc); }
+  .b-src   { background:var(--color-surface-2); color:var(--color-text-muted); font-family:var(--font-mono); font-weight:500; }
+  .b-layer { background:var(--color-surface-3); color:var(--color-text-muted); font-family:var(--font-mono); font-weight:500; }
+  .b-dangling { background:var(--color-danger-soft); color:var(--color-danger); border:1px dashed currentColor; }
+  .b-warn   { background:var(--color-warning-soft); color:var(--color-warning); }
+  .b-danger { background:var(--color-danger-soft); color:var(--color-danger); }
+  .src2 { font-size:10px; color:var(--color-text-muted); background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-full); padding:0 6px;
+    font-family:var(--font-mono); font-weight:500; }
+
+  /* ── 组件 1：AgentRolesView（widget.agents）──
+     形态来自天枢 dev 的 CharactersPage（左列表 + 右详情），
+     但字段、Tab 与纪律按 OST 的「角色 = 一组绑定」重做。 */
+  .ag-view { display:flex; flex-direction:column; height:100%; background:var(--color-surface);
+    color:var(--color-text); font: var(--text-sm)/1.6 var(--font-sans); overflow:hidden; }
+
+  .ag-head { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3);
+    border-bottom:1px solid var(--color-border); background:var(--color-surface); }
+  .ag-title { font-size:var(--text-md); font-weight:700; display:flex; align-items:center; gap:6px; }
+  .ag-title .cnt { font-size:var(--text-xs); font-weight:500; color:var(--color-text-muted); }
+  .ag-head .sp { flex:1; }
+  .ag-src { font-size:10px; font-family:var(--font-mono); color:var(--color-text-muted);
+    background:var(--color-surface-2); border:1px solid var(--color-border);
+    border-radius:var(--radius-full); padding:1px 7px; }
+  .ag-kpi { display:flex; align-items:center; gap:10px; padding:6px 12px 0; font-size:11px;
+    color:var(--color-text-muted); border-bottom:1px solid var(--color-border); background:var(--color-surface); }
+
+  .ag-md { flex:1; display:flex; min-height:0; }
+
+  /* 左栏：角色列表 */
+  .ag-side { width:236px; flex:none; border-right:1px solid var(--color-border);
+    display:flex; flex-direction:column; min-height:0; background:var(--color-surface); }
+  .ag-side-search { padding:var(--space-2) var(--space-3) var(--space-1); }
+  .ag-filters { display:flex; flex-wrap:wrap; gap:4px; padding:0 var(--space-3) var(--space-2); }
+  .ag-filter { font-size:10.5px; padding:1px 7px; border-radius:var(--radius-full);
+    border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-muted);
+    cursor:pointer; font-family:inherit; }
+  .ag-filter[aria-pressed="true"] { background:var(--color-primary-soft); border-color:var(--color-primary);
+    color:var(--color-primary); font-weight:600; }
+  .ag-list { flex:1; overflow:auto; padding:0 var(--space-2) var(--space-3); display:flex;
+    flex-direction:column; gap:5px; }
+
+  .ag-item { display:flex; align-items:center; gap:9px; border:1px solid var(--color-border);
+    background:var(--color-surface); border-radius:var(--radius-lg); padding:8px 9px;
+    cursor:pointer; text-align:left; font:inherit; color:inherit; width:100%;
+    transition:border-color .15s, background .15s; }
+  .ag-item:hover { border-color:var(--color-border-strong); background:var(--color-surface-2); }
+  .ag-item[aria-current="true"] { border-color:var(--color-primary); background:var(--color-primary-soft); }
+  .ag-av { width:34px; height:34px; border-radius:var(--radius-md); flex:none; display:grid;
+    place-items:center; font-size:16px; background:var(--color-surface-2);
+    box-shadow:inset 0 0 0 1px var(--color-border); }
+  .ag-item[aria-current="true"] .ag-av { background:var(--color-surface); }
+  .ag-item-main { flex:1; min-width:0; }
+  .ag-item-name { font-size:var(--text-sm); font-weight:600; white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; display:block; }
+  .ag-item[aria-current="true"] .ag-item-name { color:var(--color-primary); }
+  .ag-item-sub { font-size:10.5px; color:var(--color-text-muted); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; display:block; margin-top:1px; font-family:var(--font-mono); }
+  .ag-item-flags { display:flex; gap:3px; flex:none; }
+  .ag-flag { width:6px; height:6px; border-radius:50%; flex:none; display:block; }
+  .ag-flag.d { background:var(--color-danger); }
+  .ag-flag.m { background:var(--color-primary); }
+  .ag-flag.n { background:var(--color-border-strong); }
+
+  /* 右栏：详情 */
+  .ag-detail { flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;
+    background:var(--color-bg); }
+  .ag-dhead { display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4);
+    background:var(--color-surface); border-bottom:1px solid var(--color-border); flex:none; }
+  .ag-dhead-av { width:44px; height:44px; border-radius:var(--radius-lg); flex:none; display:grid;
+    place-items:center; font-size:22px; background:var(--color-surface-2);
+    box-shadow:inset 0 0 0 1px var(--color-border); }
+  .ag-dhead-info { flex:1; min-width:0; }
+  .ag-dhead-info h3 { margin:0; font-size:var(--text-lg); font-weight:700; color:var(--color-text);
+    display:flex; align-items:center; gap:7px; }
+  .ag-dhead-id { font-family:var(--font-mono); font-size:var(--text-xs); font-weight:500;
+    color:var(--color-text-muted); background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:0 5px; }
+  .ag-dhead-sub { font-size:var(--text-xs); color:var(--color-text-muted); margin-top:2px;
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ag-dhead-act { display:flex; align-items:center; gap:6px; flex:none; }
+
+  .ag-tabs { display:flex; gap:var(--space-1); padding:0 var(--space-4); background:var(--color-surface);
+    border-bottom:1px solid var(--color-border); flex:none; }
+  .ag-tabs button { padding:7px var(--space-3); border:0; border-bottom:2px solid transparent;
+    background:transparent; color:var(--color-text-muted); cursor:pointer; font:inherit;
+    font-size:var(--text-sm); display:inline-flex; align-items:center; gap:5px; }
+  .ag-tabs button[aria-selected="true"] { border-bottom-color:var(--color-primary);
+    color:var(--color-primary); font-weight:600; }
+  .ag-tabs .n { font-size:10px; padding:0 5px; border-radius:var(--radius-full);
+    background:var(--color-surface-3); color:var(--color-text-muted); font-weight:600; }
+  .ag-tabs button[aria-selected="true"] .n { background:var(--color-primary-soft); color:var(--color-primary); }
+  .ag-tabs .n.hot { background:var(--color-danger-soft); color:var(--color-danger); }
+
+  .ag-dbody { flex:1; overflow:auto; padding:var(--space-4); }
+  .ag-page { display:none; } .ag-page.on { display:block; }
+
+  /* 卡片（对应天枢 .form-card） */
+  .ag-card { background:var(--color-surface); border:1px solid var(--color-border);
+    border-radius:var(--radius-lg); overflow:hidden; margin-bottom:var(--space-3); }
+  .ag-card-hd { display:flex; align-items:baseline; gap:var(--space-2); padding:9px var(--space-4);
+    border-bottom:1px solid var(--color-border); font-weight:600; font-size:var(--text-sm); flex-wrap:wrap; }
+  .ag-card-hd .sp { flex:1; }
+  .ag-card-hd .sub { font-weight:400; font-size:var(--text-xs); color:var(--color-text-muted); }
+  .ag-card-bd { padding:var(--space-4); }
+
+  .ag-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-3) var(--space-4); }
+  .ag-grid.one { grid-template-columns:1fr; }
+  .ag-grid.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .ag-f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .ag-f.full { grid-column:1/-1; }
+  .ag-f > label { font-size:var(--text-xs); font-weight:600; color:var(--color-text);
+    display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .ag-hint { font-weight:400; color:var(--color-text-muted); font-size:11px; line-height:1.55; }
+
+  /* setting-row（对应天枢 .setting-row） */
+  .ag-srow { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3);
+    padding:9px 0; border-bottom:1px solid var(--color-surface-2); }
+  .ag-srow:last-child { border-bottom:0; }
+  .ag-srow .nm { font-size:var(--text-sm); color:var(--color-text); }
+  .ag-srow .ds { font-size:11px; color:var(--color-text-muted); margin-top:1px; line-height:1.55; }
+  .ag-nostore { display:flex; flex-direction:column; gap:2px; padding:5px 0; }
+  .ag-nostore .nm { font-size:var(--text-sm); color:var(--color-text); font-weight:600; }
+  .ag-nostore .ds { font-size:11px; color:var(--color-text-muted); line-height:1.55; }
+
+  /* 下一轮生效 toast */
+  .ag-toast { position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+    background:var(--color-text); color:var(--color-surface); font-size:var(--text-xs);
+    border-radius:var(--radius-md); padding:6px 12px; box-shadow:var(--shadow-lg);
+    display:flex; align-items:center; gap:6px; z-index:6; pointer-events:none; white-space:nowrap; }
+  .ag-toast .mono { opacity:.8; }
+  .ag-wrap { position:relative; min-height:0; }
+
+  /* ── 绑定选择器 ── */
+  .ag-bind { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-3); }
+  .ag-bind-col { border:1px solid var(--color-border); border-radius:var(--radius-md);
+    display:flex; flex-direction:column; min-height:200px; overflow:hidden; background:var(--color-surface); }
+  .ag-bind-col.bound { border-color:var(--color-success); }
+  .ag-bind-hd { padding:6px 10px; font-size:var(--text-xs); font-weight:600;
+    border-bottom:1px solid var(--color-border); background:var(--color-surface-2);
+    display:flex; align-items:center; gap:6px; }
+  .ag-bind-col.bound .ag-bind-hd { background:var(--color-success-soft); color:var(--color-success); }
+  .ag-bind-hd .n { margin-left:auto; font-weight:700; }
+  .ag-bind-bd { flex:1; overflow:auto; padding:var(--space-2); display:flex; flex-direction:column; gap:5px; }
+  .ag-brow { display:flex; align-items:flex-start; gap:7px; padding:7px 8px; border-radius:var(--radius-sm);
+    border:1px solid var(--color-border); background:var(--color-surface); flex-wrap:wrap; }
+  .ag-brow.on { border-color:transparent; background:var(--color-success-soft); }
+  .ag-brow.off { border-style:dashed; background:var(--color-surface-2); }
+  .ag-brow .nm { font-family:var(--font-mono); font-size:12px; font-weight:600; }
+  .ag-brow .ds { font-size:11px; color:var(--color-text-muted); line-height:1.5; }
+  .ag-brow .x { border:0; background:transparent; cursor:pointer; color:var(--color-text-muted);
+    font-size:14px; line-height:1; padding:0 2px; margin-left:auto; }
+  .ag-brow .x:hover { color:var(--color-danger); }
+  .ag-brow .x.add:hover { color:var(--color-success); }
+  .ag-brow.dead { border-color:var(--color-danger); border-style:dashed; }
+  .ag-brow .deadnote { font-size:10.5px; color:var(--color-danger); line-height:1.5; }
+  /* 本机不可用：不是错误（绑定合法且保留），但也不是「可用」—— 降透明 + 琥珀边 */
+  .ag-brow.dim { border-color:var(--color-warning); opacity:.85; }
+  .ag-brow.dim .deadnote { color:var(--color-warning); }
+  .ag-brow.dim .x.add { color:var(--color-warning); }
+
+  .ag-chips { display:flex; flex-wrap:wrap; gap:5px; }
+  .ag-chip { display:inline-flex; align-items:center; gap:4px; font-family:var(--font-mono);
+    font-size:11.5px; background:var(--color-surface-2); border:1px solid var(--color-border);
+    border-radius:var(--radius-full); padding:2px 4px 2px 9px; }
+  .ag-chip.on { background:var(--color-primary-soft); border-color:var(--color-primary); color:var(--color-primary); }
+  .ag-chip.dead { border-style:dashed; border-color:var(--color-danger); color:var(--color-danger); }
+  .ag-chip button { border:0; background:transparent; cursor:pointer; color:inherit;
+    font-size:13px; line-height:1; padding:0 3px; }
+  .ag-chip input { border:0; background:transparent; font:inherit; font-size:11.5px;
+    font-family:var(--font-mono); color:inherit; width:12ch; outline:none; }
+
+  /* ── 装配摘要（OST 特有）── */
+  .ag-asm { border:1px solid var(--color-primary); border-radius:var(--radius-md);
+    background:var(--color-primary-soft); overflow:hidden; }
+  .ag-asm-hd { display:flex; align-items:center; gap:7px; padding:7px 10px; flex-wrap:wrap;
+    font-size:11px; font-weight:700; color:var(--color-primary); letter-spacing:.3px;
+    text-transform:uppercase; border-bottom:1px solid var(--color-primary); }
+  .ag-asm-hd .sp { flex:1; }
+  .ag-asm-hd .sub { font-weight:500; text-transform:none; letter-spacing:0; }
+  .ag-asm-row { display:grid; grid-template-columns:36px 1fr auto auto; gap:9px; align-items:center;
+    padding:6px 10px; border-bottom:1px solid var(--color-border); background:var(--color-surface); }
+  .ag-asm-row:last-child { border-bottom:0; }
+  .ag-asm-p { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); }
+  .ag-asm-n { font-size:var(--text-xs); }
+  .ag-asm-n b { font-weight:600; }
+  .ag-asm-pub { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); }
+  .ag-asm-b { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted);
+    min-width:46px; text-align:right; }
+  .ag-asm-row.empty { opacity:.6; }
+  .ag-asm-row.gone { opacity:.6; }
+  .ag-asm-row.gone .ag-asm-n { text-decoration:line-through; }
+  .ag-asm-tools { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px;
+    background:var(--color-surface); border-top:1px solid var(--color-border); }
+  .ag-asm-tools span { font-family:var(--font-mono); font-size:11px; border-radius:var(--radius-full);
+    background:var(--color-success-soft); color:var(--color-success); border:1px solid var(--color-success);
+    padding:1px 8px; }
+  .ag-asm-tools span.appr { background:var(--color-warning-soft); color:var(--color-warning);
+    border-color:var(--color-warning); }
+  .ag-asm-tools span.dang { background:var(--color-danger-soft); color:var(--color-danger);
+    border-color:var(--color-danger); border-style:dashed; text-decoration:line-through; }
+  .ag-asm-ft { padding:6px 10px; font-size:11px; color:var(--color-text-muted);
+    background:var(--color-surface-2); border-top:1px solid var(--color-border); }
+  .ag-asm-ft b { color:var(--color-primary); }
+
+  .ag-budget { height:6px; border-radius:var(--radius-full); background:var(--color-surface-3);
+    overflow:hidden; margin-top:5px; }
+  .ag-budget > i { display:block; height:100%; background:var(--color-primary); }
+  .ag-budget.over > i { background:var(--color-danger); }
+
+  /* ── 回落链 ── */
+  .ag-chain { display:flex; align-items:stretch; flex-wrap:wrap; font-size:11.5px; }
+  .ag-chain .step { display:inline-flex; align-items:center; gap:5px; padding:5px 10px;
+    border:1px solid var(--color-border); background:var(--color-surface-2); color:var(--color-text-muted); }
+  .ag-chain .step:first-child { border-radius:var(--radius-md) 0 0 var(--radius-md); }
+  .ag-chain .step:last-child { border-radius:0 var(--radius-md) var(--radius-md) 0; }
+  .ag-chain .step + .step { border-left:0; }
+  .ag-chain .step.hit { background:var(--color-primary-soft); border-color:var(--color-primary);
+    color:var(--color-primary); font-weight:600; }
+  .ag-chain .step.ghost { border-style:dashed; }
+  .ag-chain .step .o { opacity:.7; font-family:var(--font-mono); font-size:10.5px; }
+  .ag-chain .arr { display:inline-flex; align-items:center; color:var(--color-text-muted);
+    border:1px solid var(--color-border); border-left:0; padding:0 3px; background:var(--color-surface); }
+
+  /* ── 事件流 ── */
+  .ag-evlog { font-family:var(--font-mono); font-size:11.5px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); max-height:340px; overflow:auto; }
+  .ag-evlog div { padding:4px 8px; border-bottom:1px dashed var(--color-border); display:flex; gap:8px; }
+  .ag-evlog div:last-child { border-bottom:0; }
+  .ag-evlog .t { color:var(--color-text-muted); flex:none; }
+  .ag-evlog .tp { color:var(--bus); flex:none; }
+  .ag-evlog .tp.out { color:var(--color-primary); }
+  .ag-evlog .pl { color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ── composer 里的角色下拉（跨插件消费侧）── */
+  .cmp { background:var(--color-bg); font: var(--text-sm)/1.65 var(--font-sans);
+    color:var(--color-text); display:flex; flex-direction:column; height:100%; position:relative; }
+  .cmp-bar { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap;
+    padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--color-border);
+    background:var(--color-surface); }
+  .cmp-field { display:inline-flex; align-items:center; gap:5px; }
+  .cmp-field > label { font-size:var(--text-xs); color:var(--color-text-muted);
+    display:inline-flex; align-items:center; gap:4px; }
+  .csel { border:1px solid var(--color-border-strong); border-radius:var(--radius-sm);
+    padding:4px 7px; font-size:var(--text-sm); background:var(--color-surface); color:var(--color-text);
+    display:inline-flex; align-items:center; gap:6px; font-family:inherit; cursor:pointer; }
+  .csel.ghost { border-style:dashed; color:var(--color-text-muted); cursor:not-allowed;
+    background:transparent; }
+  .csel[aria-disabled="true"] { opacity:.55; }
+  .csel .cv { font-weight:600; }
+  .csel .cn { font-family:var(--font-mono); font-size:10.5px; color:var(--color-text-muted); }
+  .cmenu { position:absolute; z-index:9; background:var(--color-surface); border:1px solid var(--color-border);
+    border-radius:var(--radius-md); box-shadow:var(--shadow-md); padding:4px; min-width:270px; }
+  .cmenu .it { display:flex; align-items:flex-start; gap:8px; padding:6px 8px; border-radius:var(--radius-sm);
+    cursor:pointer; }
+  .cmenu .it:hover { background:var(--color-surface-2); }
+  .cmenu .it[aria-current="true"] { background:var(--color-primary-soft); }
+  .cmenu .it .nm { font-weight:600; font-size:var(--text-sm); }
+  .cmenu .it .id { font-family:var(--font-mono); font-size:10.5px; color:var(--color-text-muted); }
+  .cmenu .it .ds { font-size:11px; color:var(--color-text-muted); line-height:1.5; margin-top:2px;
+    max-width:230px; }
+  .cmp-msgs { flex:1; overflow:auto; padding:var(--space-4); display:flex; flex-direction:column;
+    gap:var(--space-3); }
+  .bubble { max-width:76%; padding:var(--space-2) var(--space-3); border-radius:var(--radius-md);
+    font-size:var(--text-sm); }
+  .bubble.user { align-self:flex-end; background:var(--color-primary); color:#fff; }
+  .bubble.ai { align-self:flex-start; background:var(--color-surface); border:1px solid var(--color-border); }
+  .cmp-foot { border-top:1px solid var(--color-border); padding:var(--space-3);
+    background:var(--color-surface); }
+  .cmp-row { display:flex; gap:var(--space-2); align-items:flex-end; }
+  .cmp-row textarea { flex:1; min-height:52px; }
+  .cmp-hint { font-size:11px; color:var(--color-text-muted); margin-top:6px;
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
+  /* 服务管理器里的一行（e5 用） */
+  .svcrow { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--color-border);
+    border-radius:var(--radius-md); background:var(--color-surface); font-size:var(--text-sm); }
+  .svcrow .id { font-family:var(--font-mono); font-weight:600; }
+  .svcrow .o { flex:1; color:var(--color-text-muted); font-family:var(--font-mono); font-size:11px; }
+
+  .switcher { position:fixed; right:18px; bottom:18px; z-index:40; display:flex; gap:6px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-full);
+    padding:5px; box-shadow:var(--shadow-md); }
+  .switcher button { border:0; background:transparent; cursor:pointer; width:34px; height:34px;
+    border-radius:50%; font-size:15px; color:var(--muted); display:grid; place-items:center; }
+  .switcher button[aria-pressed="true"] { background:var(--primary); color:#fff; }
+  @media print { .switcher { display:none; } nav.toc { display:none; } header.bar { position:static; } }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+  @media (max-width: 980px) {
+    .ag-bind { grid-template-columns:1fr; }
+    .ag-grid.three { grid-template-columns:1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>智能体角色 · 前端组件 Demo</h1>
+    <span class="sp"></span>
+    <span class="sub">① widget.agents 管理视图　② ComposerRolePicker 对话侧角色下拉 · 形态参考天枢 dev 的 CharactersPage / CharacterDetailPage / CharacterPicker</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s0">0 与天枢的形态差异</a>
+    <a href="#s1">1 管理视图 · 总览</a>
+    <a href="#s2">2 Tab 角色</a>
+    <a href="#s3">3 Tab 绑定</a>
+    <a href="#s4">4 Tab 模型偏好</a>
+    <a href="#s5">5 Tab 装配预览</a>
+    <a href="#s6">6 Tab 事件</a>
+    <a href="#s7">7 composer 角色下拉</a>
+    <a href="#s8">8 五种边界情形</a>
+    <a href="#s9">9 组件映射</a>
+    <a href="#s10">10 外观：只存引用，皮肤是用户数据</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>这份稿画 OST 角色相关前端组件的最终形态与交互。</b>角色设计的权威出处是
+  <code class="inl">docs/AgentLoop对照教程.html</code>（第 ④ 步装配、§9 一页速查）与
+  <code class="inl">docs/智能体Loop与插件协同设计.html</code>（§3.4 agents 插件、§11 不变式、§12 W2）。
+  <br>
+  <b>① <code class="inl">widget.agents</code></b>（agents 插件唯一视图，5 个 Tab）—— 管「这个角色这一轮会被装配成什么」。
+  数据全部来自 <code class="inl">agent.state</code>（owner 每次变更<b>重播整份</b>），只订阅事件；
+  写只走一条 <code class="inl">POST /api/command</code> → <code class="inl">agent.state.set{patch}</code>（合并式：没给的键不变）。
+  <br>
+  <b>② <code class="inl">ComposerRolePicker</code></b>（住在 chat-workbench 的 <code class="inl">widget.chat-composer</code>）——
+  管「这一轮用哪个角色」。它也订阅 <code class="inl">agent.state</code>；<b>没装 agents 插件时这个下拉要消失</b>。
+  <br>
+  <b>两者零通信</b>：共享的只有 <code class="inl">characterId</code> 这一个字符串 —— 它随 <code class="inl">loop.run</code> 的
+  payload 一起走数据通路，与 <code class="inl">sessionId</code> 同级。
+</div>
+<!-- ══════════ 0 ══════════ -->
+<section id="s0">
+  <h2><span class="n">0</span>与天枢的形态差异：为什么不能照抄</h2>
+  <p>天枢的角色管理界面（<code class="inl">CharactersPage.tsx</code> + 1109 行的 <code class="inl">CharacterDetailPage.tsx</code>）
+  是成熟的 master–detail，本次<b>形态骨架照搬</b>：左列表 / 右详情 / 详情内 Tab / 双栏绑定 / 自动保存。
+  但<b>字段集、Tab 划分与纪律</b>必须按 OST 重做 —— 天枢的角色是一个「有人格有记忆有皮肤有帮手的完整实体」，
+  OST 的角色是<b>一组引用</b>。照抄字段会造出一堆无处落地的存储。</p>
+
+  <table>
+    <thead><tr><th style="width:14%">维度</th><th style="width:32%">天枢 Character</th><th style="width:32%">OST Character</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>本质</td><td>一个完整实体：人格 + 记忆 + 皮肤 + 动画 + 帮手 + 审批偏好</td>
+        <td><b>一组绑定</b>：<code class="inl">prompt · skills[] · tools[] · provider/model/thinking · params</code></td>
+        <td>「绑引用不绑实现」。角色存技能包、工具代码、沙箱路径，就是把抽象层次写错了</td></tr>
+      <tr><td>存储</td><td>后端 <code class="inl">characterStore</code> + 一堆子表（memory / skin / revisions / assets）</td>
+        <td>一个文件 <code class="inl">userData/plugin/agents/characters.json</code>，<b>owner 是 agent 服务</b></td>
+        <td>UI 不拥有数据。视图只订阅 <code class="inl">agent.state</code>，不读文件、不发 GET</td></tr>
+      <tr><td>分组</td><td><code class="inl">groups[]</code>，影响记忆共享范围与知识库绑定，左栏按组折叠</td>
+        <td><b>没有这个字段</b>。左栏改为「搜索 + 状态筛选」</td>
+        <td>天枢的分组承载真实语义。OST 没有这些概念，保留一个只用来折叠列表的字段是纯装饰，
+          而装饰性存储会被用户当成语义</td></tr>
+      <tr><td>审批 / 权限</td><td><code class="inl">default_strategy</code>（Ask Risky / Ask All / Auto）+ helpers 审批链</td>
+        <td><b>没有这个字段</b>。审批在 <code class="inl">tools</code> 插件的 <code class="inl">approvals.json</code></td>
+        <td>Core 不该知道有哪些工具、更不该知道哪些危险。角色层再放一份审批口径，用户改角色就会以为绕过了审批</td></tr>
+      <tr><td>记忆</td><td><code class="inl">memory.md</code> + 记忆浏览器 + 审计日志三个子 Tab</td>
+        <td><b>没有这个字段</b>。会话历史是 <code class="inl">session</code> 服务的职责（append-only 不可变）</td>
+        <td>会话层与角色层是两个 bounded context。角色可变的部分只有「这一轮装什么」</td></tr>
+      <tr><td>视觉 / 皮肤</td><td><code class="inl">skinId</code> + 6 个动作槽 + 裁剪器 + 预览弹窗</td>
+        <td><b>没有</b>。只留一个 32px 的 emoji 标记，用于列表识别</td>
+        <td>characters.json 里不该出现二进制与路径。列表识别用 emoji 足够</td></tr>
+      <tr><td>帮手</td><td><code class="inl">helpers[]</code>，可递归委派</td><td><b>没有</b></td>
+        <td>委派是 loop 的编排能力，不是角色档案里的一条引用</td></tr>
+      <tr><td>生效时机</td><td>自动保存，立即生效</td>
+        <td>自动保存，但<b>下一轮才生效</b>，且<b>不追溯历史会话</b></td>
+        <td>prompt 每轮重算（历史里的 <code class="inl">system</code> 一律丢弃）。
+          改提示词对已有会话立刻生效 —— 既是特性也是意外来源，所以<b>界面必须写明</b>，见 §2</td></tr>
+      <tr><td>独有</td><td>—</td>
+        <td><b>装配预览 Tab</b>：p0/p5/p10/p30 四层 + 工具交集 + 预算条 + 悬空引用</td>
+        <td>天枢完全没有这个视图，而它恰好是 OST 角色界面<b>唯一能回答
+          「我改的这些到底会不会被模型看到」</b>的地方。见 §5</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>三条不变量，界面上必须处处可见，不能只写在文档里：</b>
+    <br>
+    ① <b>角色存引用，技能与工具归服务。</b>本插件的 <code class="inl">dist/server/</code> 里不许出现
+    <code class="inl">tool.execute</code> 的<b>执行</b>实现 —— 它只能出现在 <code class="inl">service.json</code> 的
+    <code class="inl">publishes</code> 里（发命令，不是执行）。所以本视图<b>没有「上传工具」「编辑工具代码」入口</b>，
+    绑定列表只从 <code class="inl">tools.state</code> / <code class="inl">skills.state</code> 取。
+    <br>
+    ② <b>缺失是合法的。</b>绑一个未注册的工具 → <b>忽略并标一条悬空引用，不报错</b>；一个技能都没绑 → 空集，合法；
+    没选角色 → p5 层为空，<b>回落裸会话，不是错误</b>。
+    <br>
+    ③ <b>顺序抖动会让 prompt 缓存全部失效。</b>所以装配预览里工具的展示顺序必须就是
+    <code class="inl">serviceId → name</code>，<b>界面顺序 = 模型看到的顺序</b>。
+  </div>
+</section>
+
+<!-- ══════════ 1 ══════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>管理视图 · 总览（widget.agents）</h2>
+  <p>面板本体。骨架照搬天枢 <code class="inl">char-md</code>（左 <code class="inl">char-side</code> + 右 <code class="inl">char-detail</code>），
+  但 Tab 按「角色这一轮会被装配成什么」重排。切 Tab 不重新取数、不重新订阅 —— 五个 Tab 共用同一份 <code class="inl">agent.state</code>。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>AgentRolesView</b>
+      <span class="mono">index.html</span><span class="sp"></span>
+      <span>订阅 <code class="inl">agent.state</code> · 发 <code class="inl">agent.state.set{patch}</code></span></div>
+    <div class="frame" style="height:660px;"><div class="ag-view" id="agMain"></div></div>
+  </div>
+  <p class="caption">点击左侧角色切换、点击顶部 Tab 切换。编辑任意字段即发一条 patch，底部出现「下一轮生效」提示。
+    窄于 980px 时绑定双栏退化为单栏（见 <a href="#s9">§9</a>）。</p>
+
+  <table>
+    <thead><tr><th style="width:13%">Tab</th><th style="width:36%">回答</th><th style="width:35%">为什么在这</th><th>章节</th></tr></thead>
+    <tbody>
+      <tr><td><b>角色</b></td><td>它叫什么、人格提示词是什么、要不要在输入框里露出来</td>
+        <td>只有这三样是「角色自己」；其余全是绑定，别混在一起</td><td><a href="#s2">§2</a></td></tr>
+      <tr><td><b>绑定</b></td><td>它能调哪些技能、哪些工具；哪些引用已经悬空了</td>
+        <td>天枢把「工具」「技能」做成两个独立 Tab，OST 合成一个 —— 因为从用户视角它们是同一个问题的两半：
+          <b>这一轮它能碰到什么</b></td><td><a href="#s3">§3</a></td></tr>
+      <tr><td><b>模型偏好</b></td><td>provider / model / thinking / params；省略即「不覆盖」，最终落到哪个值</td>
+        <td>这是一个<b>回落链</b>，不是四个独立字段。界面必须把回落链画出来，
+          否则用户看不出「我留空了」到底会用什么</td><td><a href="#s4">§4</a></td></tr>
+      <tr><td><b>装配预览</b></td><td>下一轮的四层提示词分别是谁 publish 的、多大；工具目录是并集还是交集；超预算会丢哪块</td>
+        <td><b>OST 角色界面真正的核心。</b>前三个 Tab 都是输入，这里是唯一的输出</td><td><a href="#s5">§5</a></td></tr>
+      <tr><td><b>事件</b></td><td>这个角色在总线上说了什么、解析成了什么配方</td>
+        <td>绑定是<b>运行期才解析</b>的（插件可以随时装卸）。排障只能看这里</td><td><a href="#s6">§6</a></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>左栏没有「分组折叠」，改成了状态筛选</b>（全部 / 有悬空 / 覆盖模型 / 空绑定）。
+    每个条目右侧三个小圆点分别是：<b>有悬空引用</b>（红）/ <b>覆盖了模型偏好</b>（蓝）/ <b>绑定为空</b>（灰）。
+    —— 没有分组字段，但「这个角色现在是不是坏的」必须一眼可见。
+    <br>
+    <b>头部三个数字</b>（角色数 / 有悬空 / 覆盖模型）沿用工具管理面板的做法：
+    它们直接告诉用户<b>现在有几处配错了</b>，而这个数在纯列表形态里完全看不出来。
+  </div>
+</section>
+
+<!-- ══════════ 2 ══════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>Tab 角色：只有三样东西属于「角色自己」</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>RoleIdentityTab</b>
+      <span class="sp"></span><span>失焦即发 patch（合并式）。改 prompt 不追溯历史会话</span></div>
+    <div class="frame" style="height:470px;"><div class="ag-view" id="agBasic"></div></div>
+  </div>
+
+  <h3>七个决定</h3>
+  <table>
+    <thead><tr><th style="width:28%">决定</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>没有「删除」以外的破坏性操作</b></td>
+        <td>唯一能删掉一个角色的动作就是删除。而删除是<b>立刻</b>生效的（下一轮 p5 层变空，回落裸会话），
+          所以删除要二次确认，确认框里要写明后果：<code class="inl">不会追溯已有会话</code>。</td></tr>
+      <tr><td>没有 <code class="inl">enabled</code> 开关</td>
+        <td>天枢有停用开关，OST <b>不需要</b>：不选这个角色就是不用它。
+          输入框那个下拉本来就是每轮选的。再给一个开关等于多一个与下拉冲突的状态源
+          ——「下拉里选了它，但它被停用了怎么办」是经典的自相矛盾</td></tr>
+      <tr><td><b>id 创建后不可改</b></td>
+        <td><code class="inl">id</code> 出现在 <code class="inl">prompt.fragment.registered</code> 的片段 id
+          （<code class="inl">role:&lt;characterId&gt;</code>）里。改它 = 注销一条片段 + 注册一条新的。
+          天枢允许改 id 并自动重命名，代价是每次改名都要 navigate 刷新；
+          OST 这里直接把它做成创建后只读，并说明原因</td></tr>
+      <tr><td>prompt 是 <b>textarea 而不是富文本</b>，且标注字节数</td>
+        <td>预算闸门按<b>字节</b>算（默认 8 KB / 20 条），超了<b>整块丢弃 + warn</b>，不许静默截断。
+          一个不告诉你字节数的编辑器，用户写到 20 KB 才发现「提示词不见了」</td></tr>
+      <tr><td><b>「下一轮生效」写成常驻提示，不是 toast</b></td>
+        <td>这是文档明确要求的文案。它是<b>永久属性</b>，不是一次操作的结果 ——
+          用 toast 意味着没改东西时这句话消失，而恰恰是「没改东西的时侯生效方式最需要解释」</td></tr>
+      <tr><td><b>emoji 标记可选，只有 32px</b></td>
+        <td>characters.json 里只存一个短字符串。给上传位就是给路径，二进制不进用户数据档案</td></tr>
+      <tr><td>描述字段<b>可以有也可以没有</b></td>
+        <td>天枢的 <code class="inl">description</code> 用于列表副标题与选择器 tooltip。
+          OST 把它降级为可选的「给自己看的备注」，<b>不进装配</b> —— 界面上要写清它不进模型</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>为什么 prompt 不叫「系统提示词」。</b>它只是四层里的 <b>p5 角色层</b>。
+    p0 身份层是 loop 内置常量、恒在不可卸；p10 是技能索引；p30~90 是各服务自愿 publish 的能力层。
+    所以编辑器标题写的是 <b>「人格提示词 → p5 角色层」</b>，旁边一个 <code class="inl">role:&lt;id&gt;</code> 的片段 id 预览。
+    叫「系统提示词」会让用户以为改它能替换掉整个 system message —— 而实际上 p0 恒在，他删不掉。
+  </div>
+</section>
+
+<!-- ══════════ 3 ══════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>Tab 绑定：技能选择器 + 工具选择器</h2>
+  <p>天枢把「工具」「技能」做成两个独立 Tab，OST 合成一个 —— 因为从用户视角它们是同一个问题的两半：
+  <b>这一轮它能碰到什么</b>。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>RoleBindingsTab</b>
+      <span class="sp"></span><span>左 已绑定 / 右 可绑定。悬空引用红框虚线、灰显但<b>不隐藏</b></span></div>
+    <div class="frame" style="height:640px;"><div class="ag-view" id="agBind"></div></div>
+  </div>
+
+  <h3>技能与工具的十处不对称</h3>
+  <table>
+    <thead><tr><th style="width:18%">维度</th><th style="width:41%">工具 <code class="inl">tools[]</code></th><th style="width:41%">技能 <code class="inl">skills[]</code></th></tr></thead>
+    <tbody>
+      <tr><td>取值</td>
+        <td><code class="inl">string[]</code>，<b>且允许 <code class="inl">"*"</code></b> = 全部已注册</td>
+        <td><code class="inl">string[]</code>，<b>没有 <code class="inl">"*"</code></b></td></tr>
+      <tr><td>界面表达</td>
+        <td>顶部一个 <b>seg 开关</b>：<code class="inl">绑定全部已注册</code> / <code class="inl">显式挑选</code>。
+          选「全部」时右侧列表整体降为只读预览</td>
+        <td>没有这个开关 —— 一个角色通常只需要 1~2 个技能，全绑没有意义</td></tr>
+      <tr><td>未注册</td>
+        <td>忽略 + <b>标一条悬空引用</b>，不报错</td><td>同左</td></tr>
+      <tr><td>来源标签</td>
+        <td><b>必显</b> <code class="inl">serviceId</code>（<code class="inl">tools/fs-tools</code>…），
+          因为排序键就是它</td>
+        <td><b>必显</b> <code class="inl">ownerPluginId</code>：<code class="inl">用户自建</code> 或
+          <code class="inl">chat-workbench</code> 这样的具体插件。
+          <b>技能没有 category 字段</b> —— 分组维度只有 owner，因为它的运维含义是
+          「卸掉哪个插件会带走哪些技能」，而分类没有这个含义
+          （见 <code class="inl">../skill_manager/技能管理-组件Demo.html</code> §2）</td></tr>
+      <tr><td><b>本机可用性</b></td>
+        <td>无对应物（工具只有「注册 / 未注册」）</td>
+        <td><b>要有这一态，且不能省</b>：技能多一个机器级开关
+          <code class="inl">skill.enabled</code>（<code class="inl">skills.json</code>）。
+          于是 <b>本轮索引 = 本机可用 ∩ 角色绑定</b>，
+          与工具目录 <code class="inl">union(registered) ∩ role.tools</code> 同一条式子。
+          绑上一个本机不可用的技能 → <b>绑定保留、不生效</b>，
+          必须显式标注（<code class="inl">本机不可用</code> + 「本轮生效 N」），
+          <b>不能静默成功也不能静默失败</b></td></tr>
+      <tr><td>风险徽章</td>
+        <td><b>必显</b>（read / write / net / proc）。它决定这一轮会弹几次审批窗</td>
+        <td>无</td></tr>
+      <tr><td>名字是否可编辑</td>
+        <td><b>不可</b>，只能从列表里挑</td>
+        <td><b>可</b>：底部一个 chip 输入框，回车直接加一个技能名。
+          因为技能可能来自任何插件甚至没装 —— 允许手写名字，悬空引用照常标</td></tr>
+      <tr><td>自动托管项</td>
+        <td><code class="inl">managedBy:'auto'</code> 的（如 <code class="inl">skill_manager</code>）
+          由技能列表状态决定注入，<b>不进角色绑定</b>，在两侧都灰掉</td>
+        <td>—</td></tr>
+      <tr><td>进不进 system 文本</td>
+        <td><b>不进</b>。工具进的是 API 的 <code class="inl">tools</code> 参数（前缀缓存友好）</td>
+        <td><b>进</b>：技能索引是 p10 一条片段，一行一个「name + 什么时候该用它」</td></tr>
+      <tr><td>排序</td>
+        <td><code class="inl">serviceId → name</code>，<b>界面顺序即模型顺序</b></td>
+        <td>与模型无关，按名字排即可</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>两个开关的分工，跨插件看才完整。</b>
+    <br>
+    <b>本视图不设 <code class="inl">enabled</code></b>（§2 那条决定）：不选这个角色就是不用它。
+    <br>
+    <b>机器级那个在 <code class="inl">widget.skills</code></b>，列头叫「<b>本机可用</b>」不叫「启用」——
+    否则它和这里的「绑定」听着像同一件事，而它们是 AND 不是覆盖。
+    <br>
+    <b>那一侧存在的原因是预算闸门</b>：p10 索引片段 8 KB / 20 条，超了整块丢弃；
+    而角色绑定是分散的，<b>所有角色的并集照样能撑爆它</b>，只有机器级开关能保证这个不变量。
+    <br>
+    所以两边合起来正好两个开关，缺一个都不成立。而 <b>AND 必须在服务端成立</b>：
+    装配器先 <code class="inl">agent.resolve</code> 拿角色，再拿
+    <code class="inl">skills.list{characterId}</code> 取过滤后的清单，
+    <code class="inl">skill_manager</code> 的可读范围<b>就是那份清单</b> ——
+    看得见的就一定读得到。
+  </div>
+
+  <div class="note ok">
+    <b>悬空引用<b>灰显但不隐藏</b></b>，是这个 Tab 最重要的一条。
+    灰色 = 不参与这一轮；隐藏 = 用户以为是自己配错了，然后跑去重装插件。
+    而实际情况常常是<b>正常</b>的：用户把某个可选插件卸了，角色少一点能力而已。
+    <br>
+    每条悬空引用旁边都写清<b>是谁没提供它</b>（<code class="inl">mcp</code> 插件未安装 / <code class="inl">skills</code>
+    插件未安装），而不是只标一个红框 —— 用户要知道<b>该装什么</b>，或者<b>这条绑定可以直接删掉</b>。
+  </div>
+
+  <div class="note">
+    <b>已绑定区与可绑定区的比例是 1:1，不是天枢的「窄列表 + 宽详情」。</b>
+    天枢的工具行有长描述，OST 的工具只有一行名字 + 来源 + 风险，
+    <b>一行能装下 2~3 个</b>。双栏等宽换来了「一屏看到全部可用能力」——
+    而这正是配绑定时唯一需要横向对照的信息。
+  </div>
+</section>
+
+<!-- ══════════ 4 ══════════ -->
+<section id="s4">
+  <h2><span class="n">4</span>Tab 模型偏好：一个回落链，不是四个字段</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>RoleModelTab</b>
+      <span class="sp"></span><span>每个下拉都带 src 徽章；链上高亮当前实际生效的那一环</span></div>
+    <div class="frame" style="height:500px;"><div class="ag-view" id="agModel"></div></div>
+  </div>
+
+  <div class="note bad">
+    <b>这一 Tab 存在的唯一理由，是把回落链画出来。</b>
+    <code class="inl">resolve(provider ?? 角色偏好 ?? preferences.json ?? env → 硬编码)</code> ——
+    <b>角色偏好排第三</b>。也就是说：用户这一轮在 composer 上手选了模型，<b>角色的模型偏好就被覆盖了</b>。
+    <br>
+    天枢的界面里没有这个问题（角色就是唯一的模型选择源）。如果 OST 照抄天枢那四个独立下拉，用户会理所当然地以为
+    「我给这个角色设的模型永远生效」。所以：每个下拉都要标 <code class="inl">角色偏好</code> 这个来源，
+    链上<b>当前真正命中的那一环高亮</b>，并且有一行文字说明
+    <b>「这一轮在输入框手选模型会临时覆盖它」</b>。
+  </div>
+
+  <table>
+    <thead><tr><th style="width:20%">字段</th><th style="width:28%">来源</th><th style="width:24%">缺省</th><th>界面</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">provider</code></td><td>llm 服务的已注册 provider id</td><td>省略 = 不覆盖</td>
+        <td>下拉，选项来自 <code class="inl">llm.provider.registered</code>；首项 <code class="inl">（不覆盖）</code></td></tr>
+      <tr><td><code class="inl">model</code></td><td>模型目录 id</td><td>省略 = 不覆盖</td>
+        <td>下拉，选项按 provider 分组（<code class="inl">optgroup</code>）</td></tr>
+      <tr><td><code class="inl">thinking</code></td><td><code class="inl">off/low/medium/high</code></td><td>省略 = 不覆盖</td>
+        <td>五段 seg（含首段「不覆盖」），不是下拉 —— 只有五个值，下拉框里全是废话</td></tr>
+      <tr><td><code class="inl">params</code></td><td>透传给 provider 的采样参数</td><td>省略 = 不覆盖</td>
+        <td><b>键值对编辑器</b>，只暴露白名单键（<code class="inl">temperature</code> / <code class="inl">max_tokens</code> /
+          <code class="inl">top_p</code>）。其余键手工加会被拒绝并给出原因</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>没有「恢复默认」按钮，只有一个「全部不覆盖」。</b>
+    天枢的运行策略用 4 个「空 = 继承」的空输入框表达继承，代价是<b>用户看不出空着的那个到底继承了什么</b>。
+    OST 的做法是让下拉首项就是 <code class="inl">（不覆盖）</code>，并在旁边实时显示
+    <b>「实际会用：deepseek-chat（来自 models 偏好）」</b>。空是一个<b>被命名的状态</b>，不是一个空单元格。
+  </div>
+</section>
+
+<!-- ══════════ 5 ══════════ -->
+<section id="s5">
+  <h2><span class="n">5</span>Tab 装配预览：这个角色下一轮会被装成什么</h2>
+  <p><b>OST 角色界面与天枢最大的新增块。</b>天枢的角色页没有任何地方能回答
+  「我绑的这 4 个工具，最后真的进了模型看得见的目录吗」。在 OST 里这个问题有确定答案，而答案<b>完全可以算出来</b>
+  —— 所以必须算给用户看。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>RoleAssemblyPreview</b>
+      <span class="sp"></span><span>切角色实时重算 · 纯前端模拟，真实实现走 <code class="inl">agent.resolve</code></span></div>
+    <div class="frame" style="height:620px;"><div class="ag-view" id="agAsm"></div></div>
+  </div>
+
+  <h3>为什么是这个形状</h3>
+  <p>它逐字对应第 ④ 步的装配代码：</p>
+  <pre class="mono" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:var(--s3);overflow:auto;font-size:12px;line-height:1.7">prompt = composePrompt([
+  { id:"identity",       priority:0  },   // chat-workbench/loop 内置，恒在
+  { id:"role:reviewer",  priority:5  },   // agents/agent   服务 publish  ← 本页配置的那一条
+  { id:"skill-index",    priority:10 },   // skills/skills  服务 publish
+  { id:"reliability",    priority:30 }    // reliability/llm-retry 服务 publish
+])
+// 排序：priority → 发布者 id → 片段 id（字典序）
+tools = union(tool.registered) ∩ role.tools      // 4 / 6
+// 预算闸门：8 KB / 20 条，超了整块丢弃 + warn（不许静默截断）</pre>
+
+  <table>
+    <thead><tr><th style="width:28%">界面元素</th><th>对应的代码事实</th></tr></thead>
+    <tbody>
+      <tr><td>四行表格：<code class="inl">p</code> / 层名 / 发布者 / 字节</td>
+        <td>排序键 <code class="inl">priority → 发布者 id → 片段 id</code>。
+          <b>发布者 id 必须显示</b> —— 它是排序键第二段，而用户判断「这块能不能删」靠的正是「谁 publish 的」</td></tr>
+      <tr><td>p0 行<b>没有删除按钮</b>，且标注「恒在不可卸」</td>
+        <td>身份层是 loop 内置常量。给一个点了没反应的控件，比不给更糟 —— 它同时教会用户「这个界面不可信」</td></tr>
+      <tr><td>p5 行高亮</td>
+        <td>这一行就是当前编辑的角色。切角色时它跟着换名字，用户能直接看到「哦，我改的是这一块」</td></tr>
+      <tr><td>被预算丢弃的行 → <b>划掉 + 标 <code class="inl">DROPPED</code></b></td>
+        <td>「超了整块丢弃 + warn（不许静默截断）」。<b>划掉而不是隐藏</b> ——
+          隐藏等于用户不知道自己的提示词根本没生效，而那会导致他去调 temperature 去救一个根本不存在的问题</td></tr>
+      <tr><td>工具 chip：绿 = 策略免审，琥珀 = 需审批，红虚线划掉 = 悬空引用</td>
+        <td>绿/琥珀来自 <code class="inl">tools.state</code> 的 risk 与 policy 判定
+          （<code class="inl">risk=read → auto</code>；<code class="inl">write/net/proc → ask</code>）。
+          红虚线来自本角色绑了但未注册的工具</td></tr>
+      <tr><td>底部 <code class="inl">tools = 注册并集(6) ∩ 角色绑定(4) · 排序 serviceId → name · 不过 Core</code></td>
+        <td>把整条算式连同中间结果一起印出来。<b>「不过 Core」四个字是刻意保留的</b> ——
+          它提醒用户这个界面显示的东西<b>一个字节也没有经过 Core</b>，
+          所以 Core 的事件流里<b>看不到</b>这些内容（排障时会去找错地方）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bus">
+    <b>装配摘要是纯前端推导，不是一个命令的返回值。</b>
+    真实实现里 <code class="inl">agent.resolve</code> 是两跳（总线不提供返回值），
+    而这个预览要<b>失焦即出</b>，所以它按同一套规则在客户端算：
+    <code class="inl">角色绑定 ∩ 已注册工具</code> + <code class="inl">四层片段字节数求和</code>。
+    <br>
+    <b>不一致的风险写在界面上</b>：如果注册表与 <code class="inl">agent.state</code> 不同源，
+    预览可能与真实装配有出入 —— 所以底部那行写的是<b>「按当前注册表推导」</b>，
+    而不是「这就是本轮的真实提示词」。这个措辞不能省。
+  </div>
+</section>
+
+<!-- ══════════ 6 ══════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>Tab 事件：这个角色在总线上说了什么</h2>
+  <p>照搬工具管理面板的「事件」Tab 做法。绑定是运行期才解析的（插件可以随时装卸），
+  出了问题「界面看着对但模型没拿到」只能靠这里定位。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>RoleEventsTab</b>
+      <span class="sp"></span><span>只读。所有行都是真 topic，紫色 = 总线事件，蓝色 = 本页发出的命令</span></div>
+    <div class="frame" style="height:520px;"><div class="ag-view" id="agEv"></div></div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:34%">topic</th><th>什么时候出现在这个列表里</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">agent.state</code></td>
+        <td>服务启动时重播整份（这是下拉数据的来源）；每次 <code class="inl">agent.state.set</code> 落盘后再重播一次。
+          <b>「重播整份」是这个 topic 的全部语义</b> —— 订阅方永远拿到全量，不需要增量合并逻辑</td></tr>
+      <tr><td><code class="inl">prompt.fragment.registered</code></td>
+        <td>服务启动时为每个<b>有 prompt</b> 的角色注册一条（<code class="inl">id: "role:&lt;characterId&gt;"</code>,
+          <code class="inl">priority: 5</code>）。<b>没有 prompt 的角色不注册</b> —— 它的 p5 层就是空的</td></tr>
+      <tr><td><code class="inl">prompt.fragment.unregistered</code></td>
+        <td>角色被删，或 prompt 被改成空串</td></tr>
+      <tr><td><code class="inl">agent.state.set</code> <span style="color:var(--muted)">（去向）</span></td>
+        <td>本页每次编辑发的那一条。带 <code class="inl">requestId</code>，日志里标 <b>→</b> 以示方向</td></tr>
+      <tr><td><code class="inl">agent.resolve</code> / <code class="inl">.result</code> <span style="color:var(--muted)">（非本页发出）</span></td>
+        <td>由 <b>loop</b> 在第 ④ 步发出，<b>不经过本视图</b>。列出来是为了让用户知道
+          「绑定什么时候被真正读了一次」—— 只在每轮的第 ④ 步，不在保存时</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>「保存时解析一次」是错的。</b>绑定是<b>每轮第 ④ 步现解析</b>的：
+    用户装了插件、启用了 MCP，目录可能在这几秒里变了，所以装配必须每轮重做。
+    <br>
+    这个事件 Tab 的价值就在这里：它让「保存了」与「被读过了」这两件事<b>在界面上分开</b>。
+    天枢的界面里这两者是同一件事（保存即生效），OST 里差一轮。
+  </div>
+</section>
+
+<!-- ══════════ 7 ══════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>composer 侧角色下拉（ComposerRolePicker）</h2>
+  <p>第二个组件。住在 chat-workbench 的 <code class="inl">widget.chat-composer</code>，与
+  <code class="inl">widget.agents</code> <b>零通信</b> —— 它也订阅 <code class="inl">agent.state</code>，
+  选的 <code class="inl">characterId</code> 随 <code class="inl">loop.run</code> 的 payload 走。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ComposerRolePicker</b>
+      <span class="sp"></span><span>点「🎭 代码评审员」打开菜单；<b>没装 agents 插件时整个下拉消失</b></span></div>
+    <div class="frame" style="height:340px;"><div class="cmp" id="cmpMain"></div></div>
+  </div>
+  <p class="caption">用 composer 上方那组按钮切换「装了 agents」「没装 agents」「运行中」三种状态。</p>
+
+  <div class="note bad">
+    <b>没装 agents 插件时，这个下拉要消失。</b>
+    不能留一个空的，也不能留一个写死的「默认」—— 那是在对用户说谎：
+    <b>界面上有个能点的角色，但它背后没有服务</b>。而这恰恰是最容易漏的一处归属问题：
+    角色的存在性由 <code class="inl">agents · agent</code> 服务<b>注册</b>，
+    而输入框是 chat-workbench 的界面，它需要<b>跨插件读到角色的存在</b>。
+    <br>
+    正确通路是<b>总线事件</b>（<code class="inl">agent.state</code>，owner 每次变更重播整份），
+    <b>不是文件</b>。所以下拉的渲染条件是：<b>收到过至少一条 <code class="inl">agent.state</code> 且 characters 非空</b>。
+    还没收到 ≠ 不存在 —— 这两种情况用同一个「消失」渲染，但日志里能区分。
+  </div>
+
+  <table>
+    <thead><tr><th style="width:26%">决定</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>下拉在<b>输入框上方那一行</b>，与模型下拉、思考强度并排</td>
+        <td>三者都是「这一轮用哪个」。它们的字段地位完全一样：
+          <code class="inl">loop.run{ text, characterId, model, thinking }</code>。
+          分散到别处会暗示角色比模型更重要，而它并不</td></tr>
+      <tr><td>每个字段标签右侧带一个 <code class="inl">src</code> 徽章</td>
+        <td><code class="inl">角色 · agent.state</code> / <code class="inl">模型 · models.prefs.state</code> /
+          <code class="inl">思考强度 · 本地值</code>。来源可见是这套架构的基本要求 ——
+          <b>用户看到一个下拉就该知道它会不会消失</b></td></tr>
+      <tr><td>选项里带<b>一行摘要</b>（工具数 / 技能数）</td>
+        <td>用户挑角色的实际依据就是「它能不能干这件事」，也就是绑了什么。一行 <code class="inl">4 工具 · 1 技能</code> 比进管理页快得多</td></tr>
+      <tr><td><b>「裸会话」作为一个真实的角色存在</b></td>
+        <td>而不是「不选角色」。因为「不选」在 <code class="inl">loop.run</code> 里是
+          <code class="inl">characterId</code> 缺失，而文档要求<b>角色不存在 = p5 层为空，不是错误</b>。
+          把它做成一个可选项，界面状态与协议状态就一一对应了</td></tr>
+      <tr><td>切换角色<b>不清空输入框</b>，也不改已发消息</td>
+        <td>「下一轮生效」。已发出的消息里那一轮用的是哪个角色，已经写在历史里了</td></tr>
+      <tr><td>运行中（<code class="inl">loop.state.changed</code> = running）下拉<b>置灰但可见</b></td>
+        <td>与模型下拉同样的处理。置灰而不是隐藏 —— 隐藏会让用户以为它坏了</td></tr>
+      <tr><td>没有「在管理页打开」按钮</td>
+        <td>那是 <code class="inl">widget.agents</code> 的事。两个 iframe 之间的通信为零，
+          唯一的联系是 Core 的插件注册表。给一个跨 iframe 的跳转按钮等于开一条本设计明令禁止的通路</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 8 ══════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>五种边界情形</h2>
+  <p>这一节专门验证「缺失是合法的」这条不变量没有被界面破坏。
+  点下面的按钮切换：<b>每一种情形都不应该出现红色报错块</b>。</p>
+
+  <div class="seg" style="margin-bottom:var(--s3)" id="edgeSeg">
+    <button data-edge="0" aria-pressed="true">e0 正常</button>
+    <button data-edge="1" aria-pressed="false">e1 一个角色都没有</button>
+    <button data-edge="2" aria-pressed="false">e2 全部悬空</button>
+    <button data-edge="3" aria-pressed="false">e2b 技能本机不可用</button>
+    <button data-edge="4" aria-pressed="false">e3 超预算丢弃</button>
+    <button data-edge="5" aria-pressed="false">e4 角色层为空</button>
+    <button data-edge="6" aria-pressed="false">e5 没装 agents</button>
+  </div>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b id="edgeStageName">AgentRolesView</b>
+      <span class="sp"></span><span id="edgeNote">e0 · 正常形态</span></div>
+    <div class="frame" style="height:540px;"><div class="ag-view" id="agEdge"></div></div>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:8%">情形</th><th style="width:28%">系统行为</th><th style="width:34%">界面必须</th><th>绝不能</th></tr></thead>
+    <tbody>
+      <tr><td><b>e1</b></td>
+        <td><code class="inl">agent.state</code> 重播一份<b>空数组</b></td>
+        <td>左栏空状态：<b>「还没有角色」</b> + 一个「新建角色」按钮 + 一行说明
+          「角色是一组绑定（提示词 / 技能 / 工具 / 模型偏好）」。右栏不显示</td>
+        <td>不显示骨架屏转圈（事件已经回来了，是确定为空的）</td></tr>
+      <tr><td><b>e2</b></td>
+        <td>绑的工具所属插件全被卸了 → 装配时<b>忽略并标悬空引用</b></td>
+        <td>列表条目目标红点；头部「有悬空 1」；装配预览的工具区出现
+          <b>红色虚线划掉的 chip</b> + 一行 <code class="inl">2 条悬空引用（mcp 插件未安装）</code></td>
+        <td>不弹错误框、不把角色标成「无效」、不阻止保存</td></tr>
+      <tr><td><b>e2b</b></td>
+        <td>绑的技能<b>本机不可用</b>（<code class="inl">skill.enabled=false</code>），
+          但来源插件在位 —— 所以不是「未注册」，是<b>被挡住</b></td>
+        <td>已绑定栏里它<b>保留</b>并标「本机不可用」；详情卡头一条
+          <code class="inl">N 条被本机挡住</code>；绑定 Tab 底部一句
+          <b>「要生效去 widget.skills 打开『本机可用』」</b>。
+          <b>本轮索引里没有它</b>，所以 p10 少一行、预算也少占</td>
+        <td>与悬空引用<b>分开成两态</b>：悬空 = 没人提供它（要装插件才有用）；
+          挡住 = 有人提供但被机器级开关关了（<b>改一个开关就好</b>）。
+          混成一类，用户就会跑去重装插件 —— 而真正要做的只是翻一个开关</td></tr>
+      <tr><td><b>e3</b></td>
+        <td>四层字节和超 8 KB → <b>整块丢弃 + warn</b>，不许静默截断</td>
+        <td>预算条变红；被丢弃的那一行<b>划掉 + 标 <code class="inl">DROPPED</code></b>；
+          一行 warn：「p5 角色层因超预算被整块丢弃，本轮模型<b>看不到人格提示词</b>」</td>
+        <td>不自动截断、不静默丢弃、不把超长的行藏起来</td></tr>
+      <tr><td><b>e4</b></td>
+        <td>角色 prompt 为空 → <b>不注册片段</b>，p5 层为空，<b>回落裸会话</b></td>
+        <td>Tab 角色里提示一块<b>信息条</b>（不是警告）：
+          「这个角色没有人格提示词，p5 层为空，会话<b>回落到裸会话</b>」。
+          装配预览里 p5 行显示为 <code class="inl">（空）</code> 而<b>不是 0 B</b> —— 因为它根本没被注册</td>
+        <td>不显示为错误、不禁用这个角色、不阻止选它</td></tr>
+      <tr><td><b>e5</b></td>
+        <td>agents 插件未安装 → <b>这个视图根本不存在</b></td>
+        <td>正常情况下没有任何界面（视图是插件产物，插件没装就没有它）。
+          这一格演示的是<b>排障视图</b>：workbench 的服务管理器里显示
+          「<code class="inl">agents · agent</code> 未安装」，composer 里的角色下拉<b>消失</b></td>
+        <td>不显示空白的角色面板；不在 composer 里留一个写死的「默认」</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>e4 是最容易被做错的一格。</b>天枢的角色管理器允许「角色什么技能都没绑、提示词为空」——
+    它照样是一个完整角色。而在 OST 里，<b>prompt 为空 = 这个角色对模型而言不存在</b>：
+    它没有身份、没有能力，区别只在输入框里有个人类可读的标签。
+    所以界面必须把这件事说出来，而且要说得<b>平静</b>（信息条，不是警告）——
+    因为「裸会话」是一个<b>合法的、常用</b>配置（文档的回落行为就是往它落）。
+    <br>
+    <b>反过来</b>：<b>提示词为空但绑了工具</b>是完全正常的，
+    界面<b>不应</b>暗示用户「你这个角色没填提示词所以是坏的」—— 那只是一份默认配方。
+  </div>
+</section>
+
+<!-- ══════════ 9 ══════════ -->
+<section id="s9">
+  <h2><span class="n">9</span>组件映射：天枢 → OST</h2>
+  <table>
+    <thead><tr><th style="width:32%">天枢组件</th><th style="width:28%">OST 对应</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">CharactersPage.tsx</code> 左栏</td><td><code class="inl">AgentRolesView</code> 左栏</td>
+        <td>骨架照搬（搜索 / 卡片列表 / 选中态 / 空状态）；<b>分组折叠 → 状态筛选</b></td></tr>
+      <tr><td><code class="inl">CharacterDetailPage</code> · 基础</td><td><code class="inl">RoleIdentityTab</code></td>
+        <td>保留 名称 / id / 简介 / 分组 → <b>删分组</b>；保留 主题色 → <b>换成 emoji</b>；
+          删 角色类型 / 启用开关 / 默认审批模式</td></tr>
+      <tr><td>人格与提示词（Soul / User / 自定义提示词）</td><td>人格提示词（p5 单字段）</td>
+        <td><b>三合一。</b>三选一开关（自定义 vs 默认）是被天枢的历史包袱逼出来的；
+          OST 的 p5 是一条片段，填了就用，没填就是空层，没有第三种状态</td></tr>
+      <tr><td>运行策略（收敛轮次 / 宽限 / 自动续跑）</td><td>—</td>
+        <td>整个删掉。收敛与续跑是 loop 的编排策略，不是角色档案</td></tr>
+      <tr><td>记忆 Tab（概览 / 浏览器 / 审计）</td><td>—</td>
+        <td>整个删掉。会话历史是 <code class="inl">session</code> 服务的职责</td></tr>
+      <tr><td>视觉与动画 Tab（皮肤绑定）</td><td>—</td><td>整个删掉</td></tr>
+      <tr><td>工具 Tab（已绑定 / 未绑定双栏）</td><td><code class="inl">RoleBindingsTab</code> · 工具列</td>
+        <td>结构照搬；<b>加</b>：<code class="inl">"*"</code> 开关、serviceId 标签、风险徽章、悬空引用标记</td></tr>
+      <tr><td>技能 Tab（已绑定 / 未绑定双栏）</td><td><code class="inl">RoleBindingsTab</code> · 技能列</td>
+        <td>结构照搬；<b>加</b>：手写技能名的 chip 输入框、悬空引用标记</td></tr>
+      <tr><td>统计 Tab（会话数 / 成功率 / 最近活跃）</td><td>—</td>
+        <td>整个删掉。角色不是实体，没有可归属的统计。运行数据在 <code class="inl">chat-workbench</code> 的会话列表里</td></tr>
+      <tr><td>—</td><td><code class="inl">RoleModelTab</code></td>
+        <td><b>新增。</b>天枢的模型选择在别处（每个会话）</td></tr>
+      <tr><td>—</td><td><code class="inl">RoleAssemblyPreview</code></td>
+        <td><b>新增。</b>天枢完全没有这个概念</td></tr>
+      <tr><td>—</td><td><code class="inl">RoleEventsTab</code></td>
+        <td><b>新增。</b>照搬 tools 面板的事件 Tab 做法</td></tr>
+      <tr><td><code class="inl">CharacterPicker.tsx</code>（会话选角色）</td><td><code class="inl">ComposerRolePicker</code></td>
+        <td>从 Modal 改成<b>输入行内联下拉</b>。因为 OST 的选角色是<b>每轮</b>的事，不是「给会话定一个角色」；
+          弹窗每次都要开关一次</td></tr>
+      <tr><td><code class="inl">EditField</code>（点一下变输入框）</td><td>—</td>
+        <td>不采用。天枢那是空间紧张的产物；这里字段都有标签有分组，
+          永远可编辑比「点一下才知道能改」更好</td></tr>
+      <tr><td>自动保存（<code class="inl">onBlur</code> → PATCH，串行化队列）</td>
+        <td>自动保存（<code class="inl">onBlur</code> → <code class="inl">agent.state.set{patch}</code>）</td>
+        <td><b>机制照搬</b>（串行化 promise 链防乱序落盘），但<b>没有「保存」按钮</b>，
+          只有 patch。合并式语义天然适合逐字段自动保存</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>实现落点</b>：<code class="inl">plugins/agents/ui/src/views/</code> ——
+    <code class="inl">AgentRolesView.vue</code>（壳与 Tab 路由）、
+    <code class="inl">tabs/RoleIdentityTab.vue</code>、<code class="inl">tabs/RoleBindingsTab.vue</code>、
+    <code class="inl">tabs/RoleModelTab.vue</code>、<code class="inl">tabs/RoleAssemblyPreview.vue</code>、
+    <code class="inl">tabs/RoleEventsTab.vue</code>；composer 侧在
+    <code class="inl">plugins/chat-workbench/ui/src/views/ChatComposerView.vue</code> 里加一个
+    <code class="inl">components/RolePicker.vue</code>。
+    <br>
+    <b>全部走 <code class="inl">@osteosome/ui</code> 已有组件</b>（Card / Tabs / Select / Switch / Input /
+    Textarea / Badge / EmptyState / Tooltip），本 Demo 里没有引入任何新组件 ——
+    缺的那几个（Badge、角色项、chip 输入）是插件内联样式，与工具管理面板的做法一致。
+  </div>
+
+  <div class="note">
+    <b>与工具管理面板共享的三个 id 概念：</b>
+    <code class="inl">name</code>（技能名 / 工具名）、<code class="inl">requestId</code>（patch 的幂等标识）、
+    以及「由 owner 重播整份」这条订阅约定。两个视图都靠这三条做到零通信。
+  </div>
+</section>
+
+<!-- ══════════ 10 ══════════ -->
+<section id="s10">
+  <h2><span class="n">10</span>外观：角色只存引用，皮肤是用户数据</h2>
+  <p>§0 那张表里「视觉 / 皮肤」那一行写的是<b>「没有」</b> —— 但那只是描述
+  <code class="inl">characters.json</code> <b>今天</b>的样子，不是一条设计结论。
+  这一节把那个问题摊开：<b>皮肤该不该有、有的话归谁、落在界面的哪一格。</b>
+  服务与协议设计在 <a href="../skin_manager/皮肤管理插件设计.html"><code class="inl">../skin_manager/皮肤管理插件设计.html</code></a>。</p>
+
+  <div class="note info">
+    <b>先纠正一个前提：天枢现在<b>不是</b>「皮肤归到角色」，它已经拆了。</b>
+    <code class="inl">CharactersPage.tsx</code> 顶部是 <code class="inl">角色 / 皮肤</code> 两个 Tab；
+    <code class="inl">CharacterDetailPage</code> 的「视觉与动画」Tab 里装的是
+    <code class="inl">CharacterSkinBinder</code> —— <b>它只做绑定，一行上传代码都没有</b>。
+    原来那套 <code class="inl">CharacterVisualEditor.tsx</code>（上传 / 裁剪 / 预览弹窗）还在仓库里，
+    但<b>没有任何地方 import 它</b>，是死代码。
+    <br>
+    改造记录在 <code class="inl">天枢 dev/docs/skin-decouple-plan.md</code>，§一原话：
+    「把角色主观定义与『视觉/动画』解耦：角色绑定皮肤，皮肤是一组<b>可复用的</b>视觉组合」，
+    §五.4 进一步确认「<b>皮肤可被多个角色复用</b>」。
+    所以要决策的不是「抄不抄天枢改造前」，而是「<b>抄不抄它改造后</b>」。
+  </div>
+
+  <h3>10.1 三条路线，三份 characters.json</h3>
+  <div class="three">
+    <div class="board">
+      <h4 style="font-size:var(--text-sm);margin:0 0 var(--s2)">A · 折进角色（天枢改造前）</h4>
+      <div class="tree" style="font-size:11px;padding:var(--s3)">{ "id": "reviewer",
+  "prompt": "…",
+  "tools": ["read_file"],
+  <span class="new">"portrait": "assets/reviewer/p.png",</span>
+  <span class="new">"motions": {</span>
+  <span class="new">  "idle": "assets/r/i.mp4",</span>
+  <span class="new">  "working": "assets/r/w.mp4"</span>
+  <span class="new">}</span> }</div>
+      <p style="font-size:var(--text-xs);margin:0">
+        <span class="tag todo">破坏</span> 角色档案从「纯引用」变成「引用 + <b>资产路径</b>」。
+        踩 §2 那张「这个角色<b>不</b>存什么」的表最后一行（沙箱路径）。
+      </p>
+    </div>
+    <div class="board">
+      <h4 style="font-size:var(--text-sm);margin:0 0 var(--s2)">B · 独立实体 + 只存引用 <span class="tag have">推荐</span></h4>
+      <div class="tree" style="font-size:11px;padding:var(--s3)">{ "id": "reviewer",
+  "prompt": "…",
+  "tools": ["read_file"],
+  <span class="std">"skinId": "miku"</span> }
+
+<span class="dim">── 另一个插件的目录 ──</span>
+skin/miku/  portrait · avatar
+           idle · working</div>
+      <p style="font-size:var(--text-xs);margin:0">
+        <span class="tag have">合法</span> <code class="inl">skinId</code> 与
+        <code class="inl">tools:["read_file"]</code> <b>同类</b> —— 都是引用。
+        皮肤可复用，agents 的产物里不会出现任何资产代码。
+      </p>
+    </div>
+    <div class="board">
+      <h4 style="font-size:var(--text-sm);margin:0 0 var(--s2)">C · 按约定推导，不存字段</h4>
+      <div class="tree" style="font-size:11px;padding:var(--s3)">{ "id": "reviewer",
+  "prompt": "…",
+  "tools": ["read_file"] }
+  <span class="dim">（没有 skinId）</span>
+
+<span class="dim">── 约定 ──</span>
+skin/  找 <span class="free">skin/&lt;characterId&gt;/</span>
+  有就用，没有就空</div>
+      <p style="font-size:var(--text-xs);margin:0">
+        <span class="tag part">将就</span> characters.json 一个字段都不用加，
+        但<b>隐式约定 = 路径耦合</b>：用户没法表达「这个角色用别处那套皮肤」。
+        这是天枢 §五.3 的 fallback 规则，作为<b>兜底</b>合理，作为<b>唯一机制</b>太弱。
+      </p>
+    </div>
+  </div>
+
+  <div class="note bad">
+    <b>A 踩的不是审美问题，是一条已经写死的不变量。</b>
+    OST 的 §11 第一条是「<b>写只限自己</b>」，AgentLoop 教程 §9.3 那条更直接：
+    <code class="inl">角色 → 只存引用，永远不持有路径</code>。
+    折进角色意味着 <code class="inl">agents</code> 服务要能<b>写</b>资产文件，
+    于是 <code class="inl">agent.state.set{patch}</code> 这个「合并角色字段」的语义
+    要长出第二类操作（写文件），而它<b>是一个 HTTP 命令</b>，不是进程内调用。
+    <br>
+    更麻烦的是<b>做不出来</b>：见 10.2。
+  </div>
+
+  <h3>10.2 B 落点的硬阻塞在 Core 的字节层，而它只需要一条路由</h3>
+  <p>下面五条都是<b>在仓库里核对过的事实</b>，不是推演：</p>
+  <table>
+    <thead><tr><th style="width:26%">通路</th><th style="width:34%">它实际能做什么</th><th>能不能送皮肤资产</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">plugins.readFile</code><br><span style="font-size:11px;color:var(--muted)">特权 JSON-RPC</span></td>
+        <td><b>utf8 字符串</b> · 上限 <b>2 MiB</b> · <b>只限自己插件目录</b> ·
+          <code class="inl">node_modules</code> 不可读 · <b>只有服务能调</b>（UI 走不到）</td>
+        <td><span class="tag todo">不能</span> 三重否决：不是二进制、有大小上限、且读不到 userData</td></tr>
+      <tr><td><code class="inl">GET /plugins/&lt;id&gt;/ui/*</code><br><span style="font-size:11px;color:var(--muted)">Core 唯一的静态路由</span></td>
+        <td>伺服 <code class="inl">registry.uiDir(id)</code>，也就是插件的 <code class="inl">dist/ui</code>。
+          有<b>穿越检查</b>（<code class="inl">startsWith(root + sep)</code> → 403）</td>
+        <td><span class="tag part">只能读 dist/ui</span> userData 里的文件<b>没有任何路由伺服</b></td></tr>
+      <tr><td>插件服务自己起 HTTP 端口</td>
+        <td>技术上能，但 <code class="inl">plugin-ui.ts</code> 开头那段「同源」论证明确否决了它
+          —— 同源才有同源存储与 <code class="inl">postMessage</code>，多一个源就多一处 CSRF 面</td>
+        <td><span class="tag todo">不走</span> 与既有决策相反</td></tr>
+      <tr><td>资产走总线的 <code class="inl">base64</code></td>
+        <td>技术上能，但 JSON 序列化 + 33% 膨胀，且撞 2 MiB 与总线帧大小</td>
+        <td><span class="tag todo">不能</span> 一段 8 MB 的立绘走不通</td></tr>
+      <tr><td><b>构建时把资产复制进 <code class="inl">dist/ui/</code></b></td>
+        <td><b>已有先例</b>：<code class="inl">plugins/models/catalog.json</code> 在
+          <code class="inl">vite.config.ts</code> 的 <code class="inl">closeBundle</code> 里被复制进
+          <code class="inl">dist/ui/catalog.json</code>，UI <code class="inl">fetch()</code> 读它</td>
+        <td><span class="tag have">能</span> 但它<b>只伺服构建产物</b> ——
+          用户上传的东西在构建期还不存在（上面第 2 行那个缺口才是真缺口）</td></tr>
+      <tr><td><b>新加 <code class="inl">GET /plugins/&lt;id&gt;/data/*</code></b><br>
+        <span style="font-size:11px;color:var(--muted)">← 本设计采纳</span></td>
+        <td>根换成 <code class="inl">pluginDataDir(cfg.dataDir, id)</code>，
+          也就是<b>握手时就发给服务、那个本来就属于它的可写目录</b>。
+          穿越检查、MIME、缓存头<b>全部沿用 <code class="inl">plugin-ui.ts</code> 现成的那几行</b>；
+          唯一的行为差异是<b>不做 SPA fallback</b>（它伺服的是数据不是页面）</td>
+        <td><span class="tag have">能</span> 且<b>用户可传、可改、可删</b>。
+          <br><b>它没有让 Core 理解任何插件内容</b> —— Core 仍然不知道什么是 portrait，
+          也不知道 userData 里哪个目录归哪个插件（那是注册表给的现成答案）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>于是 §10.5 第 2 条选了 A：皮肤是<b>用户数据</b>。</b>
+    <code class="inl">userData/plugin/skins/</code> 存在，清单与资产都在那里，
+    由上面那条新路由伺服。
+    <br>
+    这不是妥协，<b>判据与 <code class="inl">tools/approvals.json</code>、
+    <code class="inl">models/preferences.json</code> 完全同一条</b>：
+    <b>「这个角色长什么样」是用户的决定，还是产品的一部分？</b>
+    它是用户的决定 → 进 userData，<b>卸载保留、重装即恢复</b>。
+    <br>
+    <b>而这条的收益正好落在本节的主题上</b>：用户有了可编辑的皮肤之后，
+    绑定 Tab 底部的「外观」这一行才<b>有选择可给</b>。
+    在 B 形态下这一行的下拉里只有发版时定下的那几张 ——
+    <b>「皮肤」只是个只读目录，而「给角色选一张脸」才是这件事真正的用户动作。</b>
+    <br>
+    <b>代价也要写清楚</b>：Core 多一条路由（skin 稿 §6），而
+    <code class="inl">widget.skins</code> 从只读视图变成<b>编辑器</b>。
+    这与 tools 插件形态相同 —— 它也拥有用户数据（<code class="inl">approvals.json</code>）。
+  </div>
+
+  <h3>10.3 角色页里的落点：绑定 Tab 底部一行，不是身份 Tab 一个字段</h3>
+  <p>下面这段可以点。它是「外观」这一行在 §3 绑定 Tab 底部应有的三种形态
+  —— <b>形态由 <code class="inl">skin.state</code> 决定，不由界面决定</b>：</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>RoleBindingsTab · 底部三段</b>
+      <span class="mono">← 绑定 Tab 的最后一张卡</span><span class="sp"></span>
+      <span>发 <code class="inl">agent.state.set{ patch:{ "&lt;charId&gt;.skinId": … } }</code></span></div>
+    <div class="frame" style="height:300px;">
+      <div class="ag-view" id="skStage" style="padding:0"></div>
+    </div>
+  </div>
+  <p class="caption">切上面的按钮看七种形态。<b>「绑着但停用」与「悬空引用」的区别，
+    以及最后两种（悬空 / 无法校验）的区别，都是这一节最要紧的两条</b>：
+    前者是「皮肤在但用户关了它」，恢复动作是<b>启用</b>；
+    后者是「一份清单都没拿到」，<b>不能说</b>是哪个插件没提供。
+    但两种情况下<b>解绑按钮都必须在</b>。</p>
+
+  <table>
+    <thead><tr><th style="width:14%">形态</th><th style="width:28%">系统行为</th><th>界面</th></tr></thead>
+    <tbody>
+      <tr><td><b>未绑定</b></td><td><code class="inl">skinId</code> 缺失或 <code class="inl">null</code></td>
+        <td>写「未绑定」。<b>不是</b>一个空的皮肤选择器框，也<b>不是</b>一个写死的「默认」——
+          后者是在对用户说谎「界面上有个能点的外观，但它背后没有服务」。
+          下拉里列的是 <code class="inl">skin.state</code> 里真实存在的那些，<b>一项都不是写死的</b></td></tr>
+      <tr><td><b>已绑定</b></td><td><code class="inl">skin.state</code> 里有这个 id</td>
+        <td>缩略图 + 名字 + <b>来源徽章（内置 / 我自建的）</b>；
+          <b>点缩略图就地预览六个 motion</b>。
+          <br><b>不给「新建皮肤」「上传」入口</b> —— 那些在
+          <code class="inil">widget.skins</code>（另一个插件的视图，<a href="#s10">§10.6</a>），
+          而<b>两个插件之间通信为零</b>。
+          <br>给一个「点这里去 skins 面板」按钮也不行：Dockview 开指定面板是一条
+          <b>尚不存在</b>的宿主能力，而<b>跨 iframe 直接调另一个插件的函数更不行</b></td></tr>
+      <tr><td><b>绑到内置</b></td><td><code class="inl">skinId: "default"</code></td>
+        <td>和「已绑定」同形，但界面上要写清它<b>不是零配置</b>：这是<b>显式写进 characters.json 的一条引用</b>，
+          和写 <code class="inl">tools:["read_file"]</code> 同级；卸掉 skins 插件它同样会失效。
+          <br><b>还有第二层</b>：内置皮可以被<b>停用</b>（用户在 skin 面板里关掉了它），
+          而停用<b>不改任何人的 <code class="inl">skinId</code></b> ——
+          于是这个角色会从「已绑定」变成<b>「绑着但不可用」</b>，这一格要显示得出来</td></tr>
+      <tr><td><b>绑到自建</b><br><span style="font-size:11px;color:var(--muted)">用户上传的</span></td>
+        <td><code class="inl">skin.state</code> 里有这个 id，<code class="inl">builtin:false</code></td>
+        <td>和「已绑定」同形，徽章写「<b>我自建的</b>」。这个徽章不是装饰 ——
+          它回答的是「<b>升级插件会不会覆盖/弄丢它</b>」：不会（用户皮以数据为准）。
+          <br>不给「编辑」入口，同「已绑定」那条理由</td></tr>
+      <tr><td><b>绑着但停用</b><br><span style="font-size:11px;color:var(--muted)">已确认存在</span></td>
+        <td>清单里有这个 id，但 <code class="inl">enabled:false</code></td>
+        <td>选择器<b>灰显</b>并写「（已停用）」，给「<b>启用</b>」而不是给「解绑」。
+          <br><b>不要给解绑当主按钮</b>：停用是<b>可逆</b>的，资产还在那儿；
+          解绑会让用户丢掉选择，而正确动作是去 skins 面板把它开回来。
+<br>回退到纯文字气泡，角色一切照常</td></tr>
+      <tr><td><b>悬空引用</b><br><span style="font-size:11px;color:var(--muted)">已确认</span></td>
+        <td>收到了 <code class="inl">skin.state</code>，而清单里<b>没有</b>这个 id</td>
+        <td>红框虚线 + 标<b>提供方</b>（<code class="inil">skins</code> 插件，<b>说得出</b>因为清单收到了）+
+          <b>一键解绑</b>。<b>不报错、不阻止保存</b> —— 缺一层外观只是「少一点东西」，
+          而角色<b>仍然完全可用</b>。
+          <br><b>最常见的成因是用户自己在 skins 面板删掉了那张脸</b>，
+          而<b>skins 插件不会替这里清引用</b>（§10.6）</td></tr>
+      <tr><td><b>无法校验</b><br><span style="font-size:11px;color:var(--muted)">未确认</span></td>
+        <td><b>没收到</b> <code class="inl">skin.state</code>（skins 插件未安装）</td>
+        <td>幽灵选择器 + 「skins 插件未安装，<code class="inl">skinId</code> 仍在 characters.json 里」。
+          <b>界面上不能说是谁没提供</b> —— 它一份清单都没拿到，说出来就是猜。
+          但<b>解绑仍然要给</b>：<b>校验不了 ≠ 清不掉</b>，恢复成本必须是一个点击</td></tr>
+    </tbody>
+  </table>
+
+<div class="note">
+    <b>「绑着但停用」和「悬空引用」不能合并成同一个灰态。</b>
+    一个是<b>皮肤在、用户主动关了它</b>（恢复 = 启用），
+    一个是<b>皮肤已经不在清单里</b>（恢复 = 装回来，或解绑）。
+    两者都只让会话退回纯文字气泡，<b>看起来一样</b> ——
+    而这正是要区分的理由：用户的下一步动作<b>不一样</b>。
+    <br>
+    <b>最后两行（悬空 / 无法校验）也是两条不同的诊断。</b>
+    工具侧的悬空引用（§3）遵守同一条区分：
+    能说出「<code class="inl">mcp</code> 插件未安装」与只能说出「无法确认」，
+    用户的下一步动作<b>不一样</b> —— 前者是「装回来或删掉那条绑定」，后者是「先看插件装没装」。
+    合并成一行的话，两种情况都只剩下一句含混的「绑定无效」。
+  </div>
+
+  <div class="note">
+    <b>为什么放在绑定 Tab 而不是身份 Tab。</b>身份 Tab（§2）装的是「角色自己」——
+    名字、提示词、人格。而 <code class="inl">skinId</code> 是<b>指向另一个插件的引用</b>，
+    和 <code class="inl">tools[]</code> / <code class="inl">skills[]</code> 同类。
+    放进身份 Tab 会让它看起来像角色的固有属性，而它<b>可以被卸掉、可以被别的插件提供</b>。
+    <br>
+    同一条理由让它<b>不参与 §5 的装配预览</b>：皮肤不进 prompt、不进 <code class="inl">tools</code> 参数，
+    它<b>一个字节也不进模型</b>。装配摘要里加一行「外观：不影响本轮装配」是诚实的做法，
+    而默默不提会让用户去找「为什么这段提示词算不出字节数」。
+  </div>
+
+  <h3>10.4 两个必须先处理的坑</h3>
+  <div class="two">
+    <div class="note bad" style="margin:0">
+      <b>坑 1 · <code class="inl">--motion-*</code> 令牌已经被占用了，含义完全不同。</b>
+      <code class="inl">../chat-workbench/对话工作台-会话列表重设计.html</code> 刚引入：
+      <div class="tree" style="margin:var(--s2) 0;font-size:11px;padding:var(--s3)">--motion-idle:#8a95a1;
+--motion-thinking:#d29922;
+--motion-listening:#0f8a8a;
+--motion-working:#2f6feb;</div>
+      那是<b>「一行会话正在干什么」的状态色</b>。皮肤动画也叫
+      <code class="inl">idle / thinking / working / speaking / error</code>，
+      两套语义会在同一份 CSS 里撞名 —— 而「idle」在两处都出现，是最容易撞的一个。
+      <br><br>
+      <b>处置</b>：皮肤侧一律用 <code class="inl">--skin-motion-*</code> 前缀，
+      并且<b>不要</b>把这套令牌放进 <code class="inl">sdk/ui/src/tokens.css</code> ——
+      它是某个具体视图的状态色，不是组件库真值。
+    </div>
+    <div class="note bad" style="margin:0">
+      <b>坑 2 · OST 目前没有任何渲染器，皮肤没有落点。</b>
+      <code class="inl">ChatTimelineView</code> 只有 <code class="inl">msg--agent</code> 气泡，
+      <b>没有 stage / portrait 这条通路</b>。天枢的 <code class="inl">CharacterRenderer</code> 有
+      <code class="inl">portrait / avatar / stage</code> 三种 mode 加一条
+      <code class="inl">&lt;video&gt;</code>→<code class="inl">&lt;img&gt;</code> 回退链，OST 一个都没有。
+      <br><br>
+      <b>所以真实成本不在管理界面，在渲染侧要先有落点</b> ——
+      否则建了一套皮肤管理，界面上没地方显示。
+      这也是为什么 skin 那一稿要自带 <code class="inl">SkinRenderer</code>：
+      <b>先有一个能播的组件，再谈让谁用它。</b>
+      <br><br>
+      <b>第三条（顺带）</b>：<code class="inl">contentTypeFor</code> 的 MIME 表<b>没有 mp4 / webm</b>，
+      会回落成 <code class="inl">application/octet-stream</code>，<code class="inl">&lt;video&gt;</code> 放不出来。
+      <b>动画 webp / gif 在 <code class="inl">&lt;img&gt;</code> 里就能播</b>，
+      所以 v1 只支持静态图 + 动画 webp/gif 的话，<b>那条新路由一行都不用改</b>
+      —— <b>MIME 表是共用的</b>，动它会影响到别的插件，而没有必要。
+    </div>
+  </div>
+
+  <h3>10.5 待决清单</h3>
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:34%">问题</th><th style="width:26%">选项</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>皮肤归角色还是独立实体？</b></td>
+        <td>① 折进角色 ② 独立实体 + 只存 <code class="inl">skinId</code> ③ 按约定推导</td>
+        <td><b>②</b>。① 让 <code class="inl">characters.json</code> 持有路径（违反已写死的不变量），
+        且在今天的 Core 通路上<b>做不出来</b>；③ 只适合当兜底规则，不适合当唯一机制</td></tr>
+<tr><td>2</td><td><b>资产是用户数据还是插件自带数据？</b></td>
+        <td>① <code class="inl">userData/plugin/skins/</code> ② 构建进 <code class="inl">dist/ui/</code></td>
+        <td><b>①</b>。判据与 <code class="inl">approvals.json</code>、
+        <code class="inil">preferences.json</code> 同一条：
+        <b>这是用户的决定还是产品的一部分？</b>「这个角色长什么样」是用户的决定，
+        所以卸载<b>保留</b>、重装<b>即恢复</b>。
+        <br>② 的代价是 §10.2 那条：<b>皮肤管理界面只能是只读的</b>，
+        于是「外观」这一行的下拉里只有发版时定下的那几张。
+        <br>① 需要 Core 新增一条伺服 userData 的路由，而它<b>没有让 Core 理解任何插件内容</b> ——
+        它仍然只做「查白名单 + 搬字节」，只是根目录换了一个</td></tr>
+      <tr><td>3</td><td><b>允许用户自定义皮肤吗？</b></td>
+        <td>① 允许（运行期上传）② 不允许，用户自己装 skins 插件</td>
+        <td><b>①</b>。② 的问题不是技术，是<b>产品形态</b>：
+        「我想让这个角色用我自己的图」是这件事最核心的用户动作，
+        而 ② 让它变成「先写一个插件、发一版、等升级」——
+        <b>那是把用户的一次点击变成一次发版请求。</b>
+        <br>① 在选定 2 的①之后<b>没有新增架构代价</b>：
+        写入走服务握手里已有的可写 <code class="inil">dataDir</code>，
+        <b>不需要 Core 参与</b>；读走新增的那条路由。
+        剩下的是 UI 工作量与四条约束（格式 / 大小 / 新 assetId / 失败要说清哪一步），
+        不是架构问题</td></tr>
+      <tr><td>4</td><td><b>动画格式？</b></td>
+        <td>① 只支持 png / webp / gif（新路由不改）② 支持 mp4 / webm（补 MIME 表 2 行）</td>
+        <td><b>① 先上</b>，② 作为增量。动画 webp 在 <code class="inl">&lt;img&gt;</code> 里就能播，
+        体积换清晰度不值当先动共享的 MIME 表</td></tr>
+      <tr><td>5</td><td><b>一个角色能绑几个皮肤？</b></td>
+        <td>① 恰好一个 ② 多个 + 按场景挑</td>
+        <td><b>①</b>。「多个 + 按场景挑」会立刻要求「这一轮用哪个」，
+        于是外观也变成 <code class="inl">loop.run</code> 的一个字段 —— 而外观<b>一个字节也不进模型</b>，
+        让它占数据通路的字段是不划算的</td></tr>
+<tr><td>6</td><td><b>资产文件名的缓存策略？</b></td>
+        <td>① 全部 <code class="inl">no-cache</code> ② 用内容寻址的 <code class="inl">assetId</code>，换图即换 URL</td>
+        <td><b>②</b>。用户换一张图 = 服务生成<b>一个新的 <code class="inl">assetId</code></b> = 新 URL ——
+        <b>「浏览器还在显示旧图」结构上不会发生</b>，不需要版本号、查询参数或任何缓存失效技巧。
+        <br>代价要说清：它<b>匹配不上</b> <code class="inil">plugin-ui.ts</code> 的 immutable 判据
+        （<code class="inl">/-[0-9a-zA-Z_-]{6,}\.[a-z0-9]+$</code> 要求哈希段前带 <code class="inil">-</code>），
+        所以实际走的是 <code class="inl">no-cache</code> —— avatar 是 32px 无所谓，
+        <b>立绘和 motion 是要看流量的</b>（skin 稿 §6 已把这个列为待决）</td></tr>
+      <tr><td>7</td><td><b>本界面要不要「管理皮肤」入口？</b></td>
+        <td>① 不给，只显示绑定与状态 ② 给一个「打开 skins 面板」按钮</td>
+        <td><b>①</b>。② 要一条<b>尚不存在</b>的宿主能力（Dockview 开指定面板），
+        而直接跨 iframe 调另一个插件的函数<b>会毁掉「零跨插件通信」这条性质</b>。
+        <br>写清「被哪些角色引用、缺哪个动作」已经够用 ——
+        而「创建一个新皮肤」在它自己的面板里，不需要从角色页跳过去</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bus">
+    <b>如果现在什么都不做</b>，最省事的做法是<b>什么都不加</b>：<code class="inl">characters.json</code>
+    里既没有 <code class="inl">skinId</code>，界面上也没有「外观」这一行 ——
+    <b>缺失是合法的</b>，而一个<b>永远显示「未绑定」的行</b>比没有这行更糟：
+    它会让用户去找「为什么我装不上皮肤」。
+    <br>
+    真要留位置，就在绑定 Tab 底部加<b>一行</b>，而不是先造一个空 Tab。
+  </div>
+
+  <h3>10.6 两边各管各的：一份数据一个 owner</h3>
+  <p>选定 §10.5 的 ①① 之后，这件事最容易被搞混的就是
+  <b>「谁写谁」</b>。下面这张表是 <code class="inil">widget.skins</code> 与
+  <code class="inil">widget.agents</code> 的职责边界 —— <b>它俩是两个插件，通信为零</b>：</p>
+  <table>
+    <thead><tr><th style="width:26%">数据</th><th style="width:20%">owner</th><th style="width:26%">谁写</th><th>另一个插件能做什么</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">userData/plugin/skins/skins.json</code><br>
+        <span style="font-size:11px;color:var(--muted)">皮肤清单</span></td>
+        <td><code class="inl">skin</code> 服务</td>
+        <td><code class="inl">widget.skins</code> 发 <code class="inl">skin.set</code></td>
+        <td><code class="inl">widget.agents</code> <b>一个字都不写</b>；
+          它只是<b>读</b> <code class="inil">skin.state</code> 来填那个下拉</td></tr>
+      <tr><td><code class="inil">userData/plugin/skins/&lt;skinId&gt;/</code><br>
+        <span style="font-size:11px;color:var(--muted)">立绘 / 动作字节</span></td>
+        <td><code class="inl">skin</code> 服务</td>
+        <td>同上（上传 / 删目录）</td>
+        <td>只能经 <code class="inil">GET /plugins/skins/data/*</code> <b>读</b>，
+          <b>不能写</b> —— 那里没有 PUT（§10.2）</td></tr>
+      <tr><td><code class="inl">characters.json</code> 的 <code class="inil">skinId</code></td>
+        <td><code class="inl">agents</code> 服务</td>
+        <td><code class="inil">widget.agents</code> 发 <code class="inil">agent.state.set</code></td>
+        <td><code class="inil">skin</code> 服务<b>一个字都不写</b>；
+          它删除皮肤前只<b>读</b> <code class="inil">agent.state</code> 来核对引用</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>最后一行是唯一一处「跨插件读」，而它必须留在读这一侧。</b>
+    删除一道皮肤要确认「没有角色在用」，而那份数据在 <code class="inil">agents</code> 的
+    <code class="inil">agent.state</code> 里 —— 所以 <code class="inil">skin</code> 服务订阅它、
+    <b>只读不写</b>。
+    <br>
+    <b>反过来不成立</b>：如果 <code class="inil">agents</code> 要在皮肤被删时「顺手清掉角色的
+    <code class="inil">skinId</code>」，那就要求 agents <b>写</b> skins 插件的清单，
+    或者要求 skins <b>命令</b> agents 去改角色 —— 两者都破了 §11「写只限自己」。
+    <br>
+    <b>所以处置是<b>让引用悬空</b></b>：删掉皮肤后角色的 <code class="inil">skinId</code>
+    仍指向一个不存在的 id，界面显示<b>「已确认悬空」</b>并给<b>一键解绑</b>。
+    <br>
+    <b>这不是妥协，是本设计里 <code class="inil">missing 是合法的</code> 那条不变式的直接应用。</b>
+    角色档案里存的是一个<b>引用</b>，引用失效不该让「谁负责删」变成一个跨插件协商问题。
+  </div>
+
+  <div class="note ok">
+    <b>反过来的一次删除拦截（同一份数据，另一个方向）也一样是读。</b>
+    <code class="inil">skin</code> 服务在处理 <code class="inil">skin.set{removed}</code> 时
+    拿 <code class="inil">agent.state</code> 核对，有引用就<b>拒绝并回
+    <code class="inil">blockedBy</code></b>，一个字都不改。
+    <br>
+    <b>而「核对不到」不等于「没人用」</b>：那份 <code class="inil">agent.state</code>
+    可能根本没来（agents 插件没装 / 服务挂了）。
+    所以删除要带一个显式的 <code class="inil">confirmUnreferenced</code>，
+    <b>并把这件事写在删除确认框里</b> ——
+    用户看到的是「我确认了没人用」，而不是「系统说没人用」。
+  </div>
+</section>
+
+<div class="foot">
+  样式全部取自 <code class="inl">sdk/ui/src/tokens.css</code> 的真名（<code class="inl">--color-*</code> /
+  <code class="inl">--space-*</code> / <code class="inl">--radius-*</code>），所以这份 demo 与真正组件库同源；
+  <b>交互是手写的，用来说明行为，不是产物代码</b>。<br>
+  依据：<code class="inl">docs/AgentLoop对照教程.html</code> §2 / §6 步骤④ / §9 一页速查 ·
+  <code class="inl">docs/智能体Loop与插件协同设计.html</code> §3.4 / §9 / §11 / §12 W2 ·
+  形态参考 <code class="inl">天枢 dev/web/client/src/pages/CharactersPage.tsx</code> 与
+  <code class="inl">CharacterDetailPage.tsx</code> ·
+  <b>§10 外观</b>依据 <code class="inl">天枢 dev/docs/skin-decouple-plan.md</code>（§一 / §五.3 / §五.4，
+  即天枢自己的解耦结论）与仓库核对结果：<code class="inl">core/src/sse-bridge/plugin-ui.ts</code>、
+  <code class="inl">core/src/sse-bridge/util.ts</code>（<code class="inl">contentTypeFor</code> 的 MIME 表）、
+  <code class="inl">core/src/service-manager/manager.ts</code>（<code class="inl">plugins.readFile</code> 的
+  utf8 / 2 MiB / 插件目录三重边界）、<code class="inl">plugins/models/ui/vite.config.ts</code>
+  （<code class="inl">closeBundle</code> 复制 catalog.json 进 dist/ui 的先例）·
+  配套 <code class="inl">../skin_manager/皮肤管理插件设计.html</code>
+</div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  function byId(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function bytes(s) { return new TextEncoder().encode(s || '').length; }
+  function byTool(n) { for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i].name === n) return TOOLS[i]; return null; }
+  function bySkill(id) { for (var i = 0; i < SKILLS.length; i++) if (SKILLS[i].id === id) return SKILLS[i]; return null; }
+  function charById(id) { for (var i = 0; i < CHARS.length; i++) if (CHARS[i].id === id) return CHARS[i]; return null; }
+  function now() {
+    var d = new Date();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+  }
+
+  /* ══ 注册表（来自 tools.state / skills.state，本视图只读）══ */
+  var TOOLS = [
+    { name: 'read_file',        svc: 'fs-tools', risk: 'read',  desc: '读文件内容，支持行区间' },
+    { name: 'list_dir',         svc: 'fs-tools', risk: 'read',  desc: '列目录，带 glob 过滤' },
+    { name: 'write_file',       svc: 'fs-tools', risk: 'write', desc: '整文件覆写' },
+    { name: 'run_tests',        svc: 'tools',    risk: 'proc',  desc: '执行测试套件' },
+    { name: 'http_get',         svc: 'tools',    risk: 'net',   desc: 'HTTP GET 请求' },
+    { name: 'apply_patch',      svc: 'tools',    risk: 'write', desc: '按上下文打补丁' },
+    { name: 'skill_read',       svc: 'skills',   risk: 'read',  desc: '读技能正文' },
+    { name: 'skill_manager',    svc: 'skills',   risk: 'write', desc: '管理技能安装', managedBy: 'auto' },
+    { name: 'mcp__web__search', svc: 'mcp',      risk: 'net',   desc: '联网搜索', registered: false },
+    { name: 'mcp__fs__tree',    svc: 'mcp',      risk: 'read',  desc: '远程目录树' }
+  ];
+  /* 与 widget.skills 读的是同一份 skills.state —— 字段逐个对应：
+       ownerPluginId : null = 用户自建（userData/plugin/skills/custom/）
+       available     : false = 本机「可用」被关掉（skills.json）
+       registered    : false = 来源插件未运行 → 悬空引用
+     ★ 技能没有 category 字段：分组维度只有 owner（= 卸载影响面）。 */
+  var SKILLS = [
+    { id: 'git-diff',        owner: null,             desc: '读 git diff 并只指出会导致故障、丢数据或难以回退的问题。当用户贴出 diff 时使用。' },
+    { id: 'skill-authoring', owner: null,             desc: '写出能被模型真正读到的技能。当你要新建或修一个技能包时使用。' },
+    { id: 'pdf-extract',     owner: null,             desc: '处理 PDF 文件。', available: false },
+    { id: 'loop-trace',      owner: 'chat-workbench',  desc: '按一次 loop.run 的三段日志定位卡在哪一格。当模型一直转圈时使用。' },
+    { id: 'composer-tips',   owner: 'chat-workbench',  desc: '帮你写提示词。' },
+    { id: 'web-research',    owner: 'research',        desc: '先出检索式再抓正文，最后给带链接的要点清单。', registered: false }
+  ];
+
+  /* ══ characters.json（owner = agent 服务）══ */
+  var CHARS = [
+    { id: 'reviewer', name: '代码评审员', emoji: '🔍',
+      note: '只看会导致故障、丢数据、难回退的问题',
+      prompt: '你是资深代码评审员。只指出会导致故障、丢数据或难以回退的问题，不评论风格。',
+      skills: ['git-diff'], tools: ['read_file', 'list_dir'],
+      provider: 'deepseek', model: 'deepseek-chat', thinking: 'medium', params: { temperature: '0.2' } },
+    { id: 'researcher', name: '调研员', emoji: '📚',
+      note: '先结论后依据，绝不编造来源',
+      prompt: '你是一个调研员。先给结论再给依据；不确定的地方明确说不确定，绝不编造来源。',
+      skills: ['web-research', 'pdf-extract', 'legacy-scraper'], tools: '*',
+      /* ↑ 一行里同时覆盖三种状态：web-research 来源插件未运行 → 悬空；
+           pdf-extract 本机不可用 → 绑定保留但无效；legacy-scraper 手写名字 → 悬空 */
+      provider: '', model: '', thinking: 'low', params: {} },
+    { id: 'ops', name: '运维值班', emoji: '🛠️',
+      note: '写操作先说影响面',
+      prompt: '你是运维值班。任何写操作都先说明影响面再等确认；不要主动重启服务。',
+      skills: ['loop-trace'], tools: ['run_tests', 'http_get', 'read_file', 'mcp__web__search'],
+      provider: '', model: '', thinking: '', params: {} },
+    { id: 'writer', name: '文档作者', emoji: '📝', note: '',
+      prompt: '你是技术文档作者。写给第一次接触这个系统的人看。',
+      skills: ['composer-tips'], tools: ['read_file', 'list_dir', 'write_file'],
+      provider: '', model: '', thinking: '', params: {} },
+    { id: 'bare', name: '裸会话', emoji: '○',
+      note: 'p5 层为空 —— 回落形态，不是错误',
+      prompt: '', skills: [], tools: [],
+      provider: '', model: '', thinking: '', params: {} }
+  ];
+
+  var BUDGET = 8192;
+  var PARAM_KEYS = ['temperature', 'max_tokens', 'top_p'];
+  var PROVIDERS = [
+    { id: 'deepseek',  models: ['deepseek-chat', 'deepseek-reasoner'] },
+    { id: 'openai',    models: ['gpt-4o-mini', 'gpt-4o', 'o4-mini'] },
+    { id: 'anthropic', models: ['claude-sonnet-4-5'] }
+  ];
+  var PREF = { provider: 'deepseek', model: 'deepseek-chat', thinking: 'medium' };
+
+  /* ══ 状态 ══ */
+  var cur = 'reviewer', tab = 'basic', q = '', filter = 'all';
+  var EV = [];
+  var reqSeq = 7;
+  var edge = 0;
+  var toastT = null;
+  /* 七个 stage 各渲染一份同构的视图，所以同类控件不能用 id（会重复）。
+     交互一律靠事件委托 + 「事件落在哪个 .ag-view 里」来定位作用域。 */
+  var HOST = null;
+  function hostOf(el) { return el && el.closest ? el.closest('.ag-view') : null; }
+  function inHost(host, sel) { return host && host.querySelector ? host.querySelector(sel) : null; }
+
+  function logEv(topic, payload, out) {
+    EV.unshift({ t: now(), topic: topic, pl: payload, out: !!out });
+    if (EV.length > 60) EV.pop();
+  }
+  function seed() {
+    logEv('agent.state', '{ characters: CharacterBrief[5] }   ← owner 重播整份');
+    logEv('prompt.fragment.registered', '{ pluginId:"agents", id:"role:reviewer",   priority:5 }');
+    logEv('prompt.fragment.registered', '{ pluginId:"agents", id:"role:researcher", priority:5 }');
+    logEv('prompt.fragment.registered', '{ pluginId:"agents", id:"role:ops",        priority:5 }');
+    logEv('prompt.fragment.registered', '{ pluginId:"agents", id:"role:writer",     priority:5 }');
+    logEv('prompt.fragment.unregistered', '{ pluginId:"agents", id:"role:bare" }   ← prompt 为空，不注册');
+    logEv('agent.resolve.result', '{ fragments[2], skills[1], tools[4], provider, model, thinking, params }');
+    logEv('agent.resolve', '{ requestId:"rg-A", characterId:"reviewer" }   ← loop 第 ④ 步发出（非本页）');
+    logEv('agent.state.set', '{ requestId:"r-6", patch:{ "researcher.thinking":"low" } }', true);
+  }
+
+  /* ══ 派生：模拟第 ④ 步装配 ══ */
+  function resolved(c) {
+    var allReg = TOOLS.filter(function (t) { return t.registered !== false && !t.managedBy; });
+    var names = c.tools === '*' ? allReg.map(function (t) { return t.name; }) : (c.tools || []).slice();
+    var list = [], dangling = [];
+    names.forEach(function (n) {
+      var t = byTool(n);
+      if (t && t.registered !== false && !t.managedBy) list.push(t);
+      else if (t && t.managedBy === 'auto') dangling.push({ name: n, why: t.svc + ' 服务自动注入，不进角色绑定' });
+      else if (t) dangling.push({ name: n, why: t.svc + ' 插件未安装' });
+      else dangling.push({ name: n, why: '没有名为 ' + n + ' 的已注册工具' });
+    });
+    /* 排序键 = serviceId → name（界面顺序即模型顺序） */
+    list.sort(function (a, b) { return a.svc === b.svc ? (a.name < b.name ? -1 : 1) : (a.svc < b.svc ? -1 : 1); });
+    dangling.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+
+    /* ★ 本轮技能索引 = 本机可用 ∩ 角色绑定（与工具目录同一条式子）。
+         blocked = 绑定保留但本机不可用 → 进不了索引，也不能被 skill_manager 读到。 */
+    var skills = [], dskills = [], blocked = [];
+    (c.skills || []).forEach(function (s) {
+      var k = bySkill(s);
+      if (!k || k.registered === false) {
+        dskills.push({ id: s, why: k ? (k.owner ? k.owner + ' 插件未运行' : 'skills 插件未安装')
+                                      : '没有名为 ' + s + ' 的已注册技能' });
+        return;
+      }
+      if (k.available === false) blocked.push({ k: k, why: '本机「可用」已关掉（skills.json）' });
+      else skills.push(k);
+    });
+    skills.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+    dskills.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+    blocked.sort(function (a, b) { return a.k.id < b.k.id ? -1 : 1; });
+
+    var pb = bytes(c.prompt);
+    /* blocked 的不计入 p10 —— 那是它「本轮拿不到」的字节后果 */
+    var idx = 41 + skills.length * 34;
+    var total = 96 + pb + idx + 52;
+    return {
+      tools: list, dangling: dangling, skills: skills, dskills: dskills, blocked: blocked,
+      promptBytes: pb, idxBytes: idx, total: total,
+      over: total > BUDGET, registeredCount: allReg.length,
+      boundCount: c.tools === '*' ? allReg.length : names.length
+    };
+  }
+  function flagsOf(c) {
+    var r = resolved(c);
+    return {
+      dang: r.dangling.length + r.dskills.length + r.blocked.length > 0,
+      model: !!(c.provider || c.model || c.thinking),
+      empty: (c.tools === '*' || (c.tools || []).length > 0) === false && (c.skills || []).length === 0 && !c.prompt
+    };
+  }
+  function patch(obj, why) {
+    var id = 'r-' + (++reqSeq);
+    logEv('agent.state.set', '{ requestId:"' + id + '", patch:' + JSON.stringify(obj) + ' }' + (why ? '   ← ' + why : ''), true);
+    flash();
+  }
+  function flash() {
+    var scope = HOST || document;
+    var t = scope.querySelector ? scope.querySelector('[data-toast]') : null;
+    if (!t) return;
+    t.style.display = 'flex';
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { t.style.display = 'none'; }, 2800);
+  }
+
+  /* ══ 左栏 ══ */
+  function filtered() {
+    return CHARS.filter(function (c) {
+      var f = flagsOf(c);
+      var okQ = !q || (c.name + ' ' + c.id + ' ' + (c.note || '')).toLowerCase().indexOf(q.toLowerCase()) >= 0;
+      var okF = filter === 'all' || (filter === 'dang' && f.dang) || (filter === 'model' && f.model) || (filter === 'empty' && f.empty);
+      return okQ && okF;
+    });
+  }
+  function fp(k, label) {
+    return '<button class="ag-filter" data-filter="' + k + '" aria-pressed="' + (filter === k) + '">' + label + '</button>';
+  }
+  function kpiBar(list) {
+    var n = list.length;
+    var dang = list.filter(function (c) { return flagsOf(c).dang; }).length;
+    var mdl = list.filter(function (c) { return flagsOf(c).model; }).length;
+    return '<div class="ag-kpi">' +
+      '<span><b style="color:var(--color-text)">' + n + '</b> 角色</span>' +
+      '<span><b style="color:var(--color-danger)">' + dang + '</b> 有悬空</span>' +
+      '<span><b style="color:var(--color-primary)">' + mdl + '</b> 覆盖模型</span>' +
+      '<span style="margin-left:auto" class="mono">characters.json</span></div>';
+  }
+  function side(list, opts) {
+    opts = opts || {};
+    var body;
+    if (list.length === 0) {
+      body = '<div class="p-empty"><b>' + (CHARS.length === 0 ? '还没有角色' : '没有匹配的角色') + '</b>' +
+        (CHARS.length === 0
+          ? '角色是一组绑定：提示词 · 技能 · 工具 · 模型偏好<br>' +
+            '<button class="u-btn sm" style="margin-top:10px" data-act="new">+ 新建角色</button>'
+          : '换个关键词，或把筛选切回「全部」') + '</div>';
+    } else {
+      body = list.map(function (c) {
+        var r = resolved(c), f = flagsOf(c);
+        return '<button class="ag-item" data-pick="' + c.id + '" aria-current="' + (c.id === cur) + '">' +
+          '<span class="ag-av">' + c.emoji + '</span>' +
+          '<span class="ag-item-main">' +
+            '<span class="ag-item-name">' + esc(c.name) + '</span>' +
+            '<span class="ag-item-sub">' + esc(c.id) + ' · ' + r.tools.length + ' 工具 · ' + r.skills.length + ' 技能</span>' +
+          '</span>' +
+          '<span class="ag-item-flags">' +
+            (f.dang ? '<i class="ag-flag d" title="有悬空引用"></i>' : '') +
+            (f.model ? '<i class="ag-flag m" title="覆盖了模型偏好"></i>' : '') +
+            (f.empty ? '<i class="ag-flag n" title="绑定为空"></i>' : '') +
+          '</span></button>';
+      }).join('');
+    }
+    return '<aside class="ag-side">' +
+      '<div class="ag-side-search"><input class="u-input" data-q="1" placeholder="搜索角色名 / id / 备注" value="' + esc(q) + '" /></div>' +
+      (opts.noFilter ? '' :
+        '<div class="ag-filters">' + fp('all', '全部') + fp('dang', '有悬空') + fp('model', '覆盖模型') + fp('empty', '空绑定') + '</div>') +
+      '<div class="ag-list">' + body + '</div></aside>';
+  }
+  function headRow(title, count) {
+    return '<div class="ag-head"><span class="ag-title">🎭 ' + title +
+      ' <span class="cnt">' + count + ' 个</span></span><span class="sp"></span>' +
+      '<span class="ag-src">agent.state</span>' +
+      '<button class="u-btn sm" data-act="new">+ 新建</button></div>';
+  }
+
+  /* ══ 详情壳 ══ */
+  function detailHead(c) {
+    var r = resolved(c);
+    var dang = r.dangling.length + r.dskills.length;
+    var blk = r.blocked.length;
+    return '<div class="ag-dhead">' +
+      '<div class="ag-dhead-av">' + c.emoji + '</div>' +
+      '<div class="ag-dhead-info">' +
+        '<h3>' + esc(c.name) + '<span class="ag-dhead-id">' + esc(c.id) + '</span></h3>' +
+        '<div class="ag-dhead-sub">' +
+          '<span class="p-badge b-layer">p5 角色层</span>' +
+          '<span>' + r.promptBytes + ' B</span><span>·</span>' +
+          '<span>片段 id <span class="mono">role:' + esc(c.id) + '</span></span>' +
+          (dang ? '<span class="p-badge b-dangling">' + dang + ' 条悬空引用</span>' : '') +
+          (blk ? '<span class="p-badge b-warn" title="绑定保留，但本机「可用」已关掉 → 本轮拿不到">' +
+            blk + ' 条被本机挡住</span>' : '') +
+          (r.over ? '<span class="p-badge b-danger">超预算</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="ag-dhead-act">' +
+        '<button class="u-btn ghost sm" data-act="dup">复制为新角色</button>' +
+        '<button class="u-btn danger sm" data-act="del">删除</button>' +
+      '</div></div>';
+  }
+  function tabRow(c) {
+    var r = resolved(c);
+    var dang = r.dangling.length + r.dskills.length + r.blocked.length;
+    var tabs = [
+      { id: 'basic',  n: '角色',        c: '' },
+      { id: 'bind',   n: '绑定',        c: '<span class="n' + (dang ? ' hot' : '') + '">' + (r.tools.length + r.skills.length) + '</span>' },
+      { id: 'model',  n: '模型偏好',    c: '' },
+      { id: 'asm',    n: '装配预览',    c: '' },
+      { id: 'events', n: '事件',        c: '<span class="n">' + EV.length + '</span>' }
+    ];
+    return '<div class="ag-tabs" role="tablist">' + tabs.map(function (x) {
+      return '<button role="tab" aria-selected="' + (tab === x.id) + '" data-tab="' + x.id + '">' + x.n + x.c + '</button>';
+    }).join('') + '</div>';
+  }
+  function toast() {
+    return '<div class="ag-toast" data-toast style="display:none">✓ 已写入 <span class="mono">characters.json</span> · <b>下一轮生效</b>（不追溯已有会话）</div>';
+  }
+  function shell(list, opts) {
+    opts = opts || {};
+    var c = charById(cur);
+    var showDetail = c && !opts.hideDetail;
+    return headRow(opts.title || '角色', list.length) + kpiBar(list) +
+      '<div class="ag-md">' + side(list, opts) +
+      '<section class="ag-detail"><div class="ag-wrap" style="flex:1;display:flex;flex-direction:column;min-height:0">' +
+        (showDetail ? detailHead(c) + tabRow(c) : '') +
+        '<div class="ag-dbody">' + (showDetail ? bodyPages(c) : (opts.body || '')) + '</div>' +
+      '</div></section></div>' + toast();
+  }
+  function bodyPages(c) {
+    return '<div class="ag-wrap">' +
+      '<div class="ag-page' + (tab === 'basic' ? ' on' : '') + '">' + pageBasic(c) + '</div>' +
+      '<div class="ag-page' + (tab === 'bind' ? ' on' : '') + '">' + pageBind(c) + '</div>' +
+      '<div class="ag-page' + (tab === 'model' ? ' on' : '') + '">' + pageModel(c) + '</div>' +
+      '<div class="ag-page' + (tab === 'asm' ? ' on' : '') + '">' + pageAsm(c) + '</div>' +
+      '<div class="ag-page' + (tab === 'events' ? ' on' : '') + '">' + pageEvents() + '</div>' +
+      '</div>';
+  }
+
+  /* ══ Tab 1 · 角色 ══ */
+  function pageBasic(c) {
+    var r = resolved(c);
+    var pct = Math.min(100, Math.round(r.promptBytes / BUDGET * 100));
+    return '<div class="ag-card">' +
+      '<div class="ag-card-hd">角色档案<span class="sp"></span><span class="sub">characters.json 的这一条</span></div>' +
+      '<div class="ag-card-bd"><div class="ag-grid">' +
+        '<div class="ag-f"><label>名称 <span class="ag-hint">显示在列表与输入框下拉里</span></label>' +
+          '<input class="u-input" data-f="name" value="' + esc(c.name) + '" /></div>' +
+        '<div class="ag-f"><label>标记 <span class="ag-hint">可选 · 仅用于列表识别，<b>不进装配</b></span></label>' +
+          '<input class="u-input" data-f="emoji" value="' + esc(c.emoji) + '" style="width:80px;text-align:center" /></div>' +
+        '<div class="ag-f full"><label>角色 ID <span class="ag-hint">创建后不可改</span></label>' +
+          '<input class="u-input mono" value="' + esc(c.id) + '" disabled />' +
+          '<div class="ag-hint">它出现在提示词片段 id <span class="mono">role:' + esc(c.id) + '</span> 里；改它等于注销一条片段再注册一条新的</div></div>' +
+        '<div class="ag-f full"><label>备注 <span class="ag-hint">可选 · 给自己看的，<b>不进装配</b></span></label>' +
+          '<input class="u-input" data-f="note" value="' + esc(c.note) + '" placeholder="留空即可" /></div>' +
+      '</div></div></div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">人格提示词 <span class="mono">→ p5 角色层</span><span class="sp"></span>' +
+        '<span class="sub">' + r.promptBytes + ' B / 预算 ' + BUDGET + ' B</span></div>' +
+      '<div class="ag-card-bd">' +
+        (c.prompt === ''
+          ? '<div class="note info" style="margin:0 0 12px">这个角色<b>没有人格提示词</b>，p5 层为空，会话<b>回落到裸会话</b>。' +
+            '这不是错误 —— 它仍然带着下面「绑定」里的技能与工具。</div>'
+          : '') +
+        '<div class="ag-f"><label>提示词正文 <span class="ag-hint">失焦即发 patch</span></label>' +
+          '<textarea class="u-textarea" data-f="prompt" style="min-height:130px" placeholder="留空 = p5 层为空 = 裸会话">' + esc(c.prompt) + '</textarea>' +
+          '<div class="ag-budget' + (r.over ? ' over' : '') + '"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="ag-hint">排序键 <span class="mono">priority 5 → 发布者 id → 片段 id</span>。' +
+            '它排在身份层（p0，恒在不可卸）之后、技能索引（p10）之前。</div></div>' +
+        '<div class="note" style="margin:12px 0 0"><b>下一轮生效，不追溯已有会话。</b>' +
+          'prompt 每轮重算，且历史里的 <span class="mono">system</span> 消息一律丢弃 —— ' +
+          '所以改这段文字对<b>已发出的</b>轮次没有任何影响，也不需要迁移任何历史数据。</div>' +
+      '</div></div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">这个角色<b>不</b>存什么<span class="sp"></span><span class="sub">不变量</span></div>' +
+      '<div class="ag-card-bd"><div class="ag-grid three">' +
+        noStore('技能包', '归 skills 服务与各插件的自带数据；角色只存 skill 的 name') +
+        noStore('工具代码', '本插件 dist/server/ 里不许出现 tool.execute 的执行实现') +
+        noStore('沙箱路径', '角色只存引用，永远不持有路径') +
+        noStore('审批策略', '归 tools 插件的 approvals.json，不放 Core') +
+        noStore('记忆 / memory.md', '会话层归 session 服务（append-only 不可变）') +
+        noStore('分组 / 帮手 / 皮肤', '天枢有，OST 没有 —— 没有这些概念就不该有这些字段') +
+      '</div></div></div>';
+  }
+  function noStore(k, v) {
+    return '<div class="ag-nostore"><span class="nm">✕ ' + k + '</span><span class="ds">' + v + '</span></div>';
+  }
+
+  /* ══ Tab 2 · 绑定 ══ */
+  function pageBind(c) {
+    var r = resolved(c);
+    var isStar = c.tools === '*';
+    var boundNames = r.tools.map(function (t) { return t.name; });
+    var avail = TOOLS.filter(function (t) { return !t.managedBy && boundNames.indexOf(t.name) < 0; })
+      .sort(function (a, b) { return a.svc === b.svc ? (a.name < b.name ? -1 : 1) : (a.svc < b.svc ? -1 : 1); });
+    var boundSk = r.skills;
+    var availSk = SKILLS.filter(function (s) {
+      for (var i = 0; i < boundSk.length; i++) if (boundSk[i].id === s.id) return false;
+      return true;
+    });
+
+    return '<div class="note info" style="margin:0 0 14px">绑定里存的<b>全是引用</b>。' +
+      '工具进的是 API 的 <span class="mono">tools</span> 参数（不进 system 文本，前缀缓存友好），' +
+      '技能进的是 p10 一条索引（每个技能一行「name + 什么时候该用它」）。' +
+      '最终目录 = <span class="mono">注册并集(' + r.registeredCount + ') ∩ 角色绑定(' + r.boundCount + ')</span>。</div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">🔧 工具绑定 <span class="mono">tools[]</span><span class="sp"></span>' +
+        '<span class="seg"><button data-starmode="list" aria-pressed="' + (!isStar) + '">显式挑选</button>' +
+        '<button data-starmode="star" aria-pressed="' + isStar + '">全部已注册（"*"）</button></span></div>' +
+      '<div class="ag-card-bd">' +
+        (isStar
+          ? '<div class="note ok" style="margin:0 0 10px">当前是 <span class="mono">tools: "*"</span> —— ' +
+            '装配时取<b>全部已注册</b>的工具。这意味着以后<b>新装的插件带的工具会自动进来</b>。' +
+            '要收紧就切到「显式挑选」。</div>'
+          : '') +
+        '<div class="ag-bind">' +
+          '<div class="ag-bind-col bound"><div class="ag-bind-hd">本轮可见 <span class="n">' + r.tools.length + '</span></div>' +
+            '<div class="ag-bind-bd">' +
+              (r.tools.length
+                ? r.tools.map(function (t) { return toolRow(t, true, isStar); }).join('')
+                : '<div class="p-empty" style="padding:14px">没绑工具 —— <b>空集是合法的</b></div>') +
+              r.dangling.map(function (d) {
+                return '<div class="ag-brow dead"><span class="nm">' + esc(d.name) + '</span>' +
+                  '<span class="p-badge b-dangling">悬空</span>' +
+                  (isStar ? '' : '<button class="x" data-untool="' + esc(d.name) + '">×</button>') +
+                  '<span class="deadnote">↳ ' + esc(d.why) + ' · 装配时<b>忽略</b>，不报错</span></div>';
+              }).join('') +
+            '</div></div>' +
+          '<div class="ag-bind-col"><div class="ag-bind-hd">可绑定 <span class="n">' + (isStar ? '只读' : avail.length) + '</span></div>' +
+            '<div class="ag-bind-bd">' +
+              (isStar
+                ? '<div class="p-empty" style="padding:12px">「*」模式下这里只读。<br>切到「显式挑选」才能增减。</div>'
+                : (avail.length
+                  ? avail.map(function (t) { return toolRow(t, false, false); }).join('')
+                  : '<div class="p-empty" style="padding:14px">没有可绑的工具</div>')) +
+            '</div></div>' +
+        '</div>' +
+      '</div></div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">📚 技能绑定 <span class="mono">skills[]</span><span class="sp"></span>' +
+        '<span class="sub">没有 "*" —— 技能通常只需要 1~2 个</span>' +
+        '<span class="p-badge b-src">本轮生效 ' + boundSk.length +
+          (r.blocked.length ? ' · <b style="color:var(--color-warning)">被本机挡住 ' + r.blocked.length + '</b>' : '') + '</span></div>' +
+      '<div class="ag-card-bd">' +
+        '<div class="note info" style="margin:0 0 10px">' +
+          '<b>本轮索引 = 本机可用 ∩ 角色绑定</b>。左边那一栏是<b>这个角色要什么</b>（存引用），' +
+          '右边那一栏是<b>这台机器上有什么</b>（来自 widget.skills 的同一份 <span class="mono">skills.state</span>）。' +
+          '本视图<b>不设 enabled 开关</b> —— 不选这个角色就是不用它。</div>' +
+      '<div class="ag-bind">' +
+        '<div class="ag-bind-col bound"><div class="ag-bind-hd">本轮生效 <span class="n">' + boundSk.length + '</span></div>' +
+          '<div class="ag-bind-bd">' +
+            (boundSk.length
+              ? boundSk.map(function (s) { return skillRow(s, 'on'); }).join('')
+              : '<div class="p-empty" style="padding:14px">没绑技能 —— <b>合法</b>，不带技能不报错</div>') +
+          '</div></div>' +
+        '<div class="ag-bind-col"><div class="ag-bind-hd">可绑定 <span class="n">' + availSk.length + '</span></div>' +
+          '<div class="ag-bind-bd">' +
+            (availSk.length
+              ? availSk.map(function (s) { return skillRow(s, 'off'); }).join('')
+              : '<div class="p-empty" style="padding:14px">没有可绑的技能</div>') +
+          '</div></div>' +
+      '</div></div>' +
+      '<div class="note ' + (r.blocked.length ? 'bad' : 'ok') + '" style="margin:12px 0 0">' +
+        (r.blocked.length
+          ? '<b>' + r.blocked.length + ' 个技能绑在本角色上，但本机不可用 → 本轮拿不到。</b>' +
+            r.blocked.map(function (b) { return esc(b.k.id); }).join('、') +
+            '。<b>绑定保留</b>（与「卸载不回溯历史」同源），要生效得去 widget.skills 把「本机可用」打开。'
+          : r.dskills.length
+            ? '本轮生效 ' + boundSk.length + ' 个。左边那些<b>悬空</b>的绑定<b>保留</b>，装配时忽略、不报错 —— ' +
+              '用户卸掉那个可选插件，角色只是少一点能力。'
+            : '本轮生效 ' + boundSk.length + ' 个。技能索引是 p10 的一条片段，每行「name + 什么时候该用它」。') +
+      '</div>' +
+      '<div class="ag-chips" style="padding:10px 2px 0">' +
+        '<span class="sub" style="font-size:var(--text-xs);color:var(--color-text-muted)">手写技能名（可能来自没装的插件）</span>' +
+        '<span class="ag-chip"><input data-skill-in="1" placeholder="技能名" /><button data-addskill="1">+</button></span>' +
+      '</div>' +
+      '</div>';
+  }
+  /* 技能行：来源标签是 ownerPluginId（不是分类 —— 技能没有 category 字段）。
+     available:false 的技能在「可绑定」栏里仍然列出来，但整行降透明并说明后果：
+     绑了会保留，但不生效 —— 不能静默成功，也不能静默失败。 */
+  function skillRow(s, state) {
+    var src = s.owner ? s.owner : '用户自建';
+    var dim = s.available === false;
+    return '<div class="ag-brow ' + state + (dim ? ' dim' : '') + '">' +
+      '<span class="nm">' + esc(s.id) + '</span>' +
+      '<span class="p-badge b-src">' + esc(src) + '</span>' +
+      (dim ? '<span class="p-badge b-warn">本机不可用</span>' : '') +
+      (state === 'on'
+        ? '<button class="x" data-unskill="' + esc(s.id) + '">×</button>'
+        : '<button class="x add" data-addskill="' + esc(s.id) + '"' +
+          (dim ? ' title="绑了会保留，但本机不可用 → 本轮不生效"' : '') + '>+</button>') +
+      '<span class="ds">' + esc(s.desc) + '</span>' +
+      (dim ? '<span class="deadnote">↳ 绑了也<b>不生效</b>：本机「可用」已关掉 → ' +
+        '要生效去 widget.skills 打开它（那里能看到「有效 0 个」）</span>' : '') +
+      '</div>';
+  }
+
+  function toolRow(t, on, readOnly) {
+    return '<div class="ag-brow ' + (on ? 'on' : 'off') + '">' +
+      '<span class="nm">' + esc(t.name) + '</span>' +
+      '<span class="p-badge b-src">' + t.svc + '</span>' +
+      '<span class="p-badge b-' + t.risk + '">' + t.risk + '</span>' +
+      (readOnly ? '' : '<button class="x ' + (on ? '' : 'add') + '" data-' + (on ? 'untool' : 'addtool') + '="' + esc(t.name) + '">' + (on ? '×' : '+') + '</button>') +
+      '<span class="ds">' + esc(t.desc) + '</span></div>';
+  }
+  /* ══ Tab 3 · 模型偏好 ══ */
+  function pageModel(c) {
+    var effP = c.provider || PREF.provider;
+    var effM = c.model || PREF.model;
+    var effT = c.thinking || PREF.thinking;
+    var hitRole = !!(c.provider || c.model || c.thinking);
+    return '<div class="note info" style="margin:0 0 14px"><b>这是一个回落链，不是三个独立字段。</b>' +
+      '角色偏好排<b>第三</b>：<span class="mono">resolve(loop.run 参数 → 角色偏好 → models preferences.json → env → 硬编码)</span>。' +
+      '所以<b>这一轮在输入框里手选了模型，会临时覆盖这里的设置</b>。' +
+      '省略即「不覆盖」—— 它是一个被命名的状态，不是一个空单元格。</div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">模型偏好<span class="sp"></span><span class="sub">全部可省略</span></div>' +
+      '<div class="ag-card-bd"><div class="ag-grid three">' +
+        '<div class="ag-f"><label>provider <span class="src2">角色偏好</span></label>' +
+          '<select class="u-select" data-f="provider">' +
+            '<option value=""' + (c.provider ? '' : ' selected') + '>（不覆盖）</option>' +
+            PROVIDERS.map(function (p) {
+              return '<option value="' + p.id + '"' + (c.provider === p.id ? ' selected' : '') + '>' + p.id + '</option>';
+            }).join('') + '</select>' +
+          '<div class="ag-hint">来源 <span class="mono">llm.provider.registered</span></div></div>' +
+
+        '<div class="ag-f"><label>model <span class="src2">角色偏好</span></label>' +
+          '<select class="u-select" data-f="model">' +
+            '<option value=""' + (c.model ? '' : ' selected') + '>（不覆盖）</option>' +
+            PROVIDERS.map(function (p) {
+              return '<optgroup label="' + p.id + '">' + p.models.map(function (m) {
+                return '<option value="' + m + '"' + (c.model === m ? ' selected' : '') + '>' + m + '</option>';
+              }).join('') + '</optgroup>';
+            }).join('') + '</select>' +
+          '<div class="ag-hint">按 provider 分组</div></div>' +
+
+        '<div class="ag-f"><label>thinking <span class="src2">角色偏好</span></label>' +
+          '<div class="seg" style="width:100%">' +
+            ['', 'off', 'low', 'medium', 'high'].map(function (v) {
+              return '<button style="flex:1" data-th="' + v + '" aria-pressed="' + (c.thinking === v) + '">' +
+                (v === '' ? '（不覆盖）' : v) + '</button>';
+            }).join('') +
+          '</div>' +
+          '<div class="ag-hint">五段 seg，不用下拉 —— 只有五个值，下拉框里全是废话</div></div>' +
+      '</div>' +
+      '<div class="note" style="margin:14px 0 0;font-size:12px"><b>这一轮实际会用：</b>' +
+        '<span class="mono">' + effP + ' · ' + effM + ' · thinking=' + effT + '</span>' +
+        (hitRole
+          ? ' <span style="color:var(--color-primary)">（前三环命中角色偏好；若输入框手选了则改走第一环）</span>'
+          : ' <span style="color:var(--color-text-muted)">（全部不覆盖 → 走 models 插件偏好）</span>') +
+      '</div></div></div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">解析链 <span class="mono">route = resolve(...)</span></div>' +
+      '<div class="ag-card-bd"><div class="ag-chain">' +
+        '<span class="step">① loop.run 参数<span class="o">本轮输入框手选</span></span>' +
+        '<span class="arr">›</span>' +
+        '<span class="step hit">② 角色偏好<span class="o">' + esc(c.id) + '</span></span>' +
+        '<span class="arr">›</span>' +
+        '<span class="step ghost">③ models preferences.json</span>' +
+        '<span class="arr">›</span>' +
+        '<span class="step ghost">④ env</span>' +
+        '<span class="arr">›</span>' +
+        '<span class="step ghost">⑤ 硬编码</span>' +
+      '</div>' +
+      '<div class="ag-hint" style="margin-top:8px">高亮的是<b>本角色</b>。每轮重新解析 —— 装了插件、启用了 MCP，' +
+        'provider / model / thinking 的可用集合可能在这几秒里就变了。</div>' +
+      '</div></div>' +
+
+      '<div class="ag-card">' +
+      '<div class="ag-card-hd">采样参数 <span class="mono">params</span><span class="sp"></span>' +
+        '<span class="sub">白名单键，其余手工加会被拒绝</span></div>' +
+      '<div class="ag-card-bd">' +
+        '<div class="ag-chips" style="margin-bottom:10px">' +
+          PARAM_KEYS.filter(function (k) { return c.params[k] !== undefined; }).map(function (k) {
+            return '<span class="ag-chip on">' + k +
+              '<input value="' + esc(c.params[k]) + '" data-param="' + k + '" />' +
+              '<button data-delparam="' + k + '">×</button></span>';
+          }).join('') +
+          '<span class="ag-chip"><input data-param-in="1" placeholder="添加键" /><button data-addparam="1">+</button></span>' +
+        '</div>' +
+        '<div class="ag-hint">其余键手工加会被<b>拒绝并给出原因</b> —— provider 未声明的参数名写进去也不会生效，' +
+          '静默接受等于骗用户。</div>' +
+      '</div></div>';
+  }
+
+  /* ══ Tab 4 · 装配预览 ══ */
+  function pageAsm(c) {
+    var r = resolved(c);
+    var pct = Math.min(100, Math.round(r.total / BUDGET * 100));
+    var hasP5 = !!c.prompt;
+    var dropped = r.over && hasP5;
+    var chips = r.tools.map(function (t) {
+      return '<span' + (t.risk === 'read' ? '' : ' class="appr"') + '>' + esc(t.name) + ' · ' + t.svc + ' · ' + t.risk + '</span>';
+    }).join('');
+    if (!chips) chips = '<span class="dang">（空集 —— 角色没绑工具就是没绑，合法）</span>';
+    chips += r.dangling.map(function (d) { return '<span class="dang">' + esc(d.name) + ' · 未注册</span>'; }).join('');
+    chips += r.dskills.map(function (d) { return '<span class="dang">skill:' + esc(d.id) + ' · 未注册</span>'; }).join('');
+    chips += r.blocked.map(function (b) {
+      return '<span class="dang">skill:' + esc(b.k.id) + ' · 本机不可用（绑定保留）</span>';
+    }).join('');
+
+    return '<div class="note bus" style="margin:0 0 14px">纯前端按同一套规则推导，<b>不经过 Core</b> —— ' +
+      '所以 Core 的事件流里<b>看不到</b>这些内容。真实实现由 loop 在第 ④ 步发 <span class="mono">agent.resolve</span> 解析，' +
+      '本页刻意<b>不等它</b>，好让预览失焦即出。</div>' +
+
+      '<div class="ag-asm">' +
+      '<div class="ag-asm-hd">本轮装配摘要 · chat-workbench/loop 进程内<span class="sp"></span>' +
+        '<span class="sub">' + esc(c.id) + ' · ' + r.total + ' B / ' + BUDGET + ' B</span></div>' +
+
+      asmRow('p0', '身份层 · <b>恒在不可卸</b>', 'chat-workbench · loop', '96 B', '', false) +
+      (hasP5
+        ? asmRow('p5', '角色层 · <b>' + esc(c.name) + '</b>' +
+            (dropped ? ' <span class="p-badge b-danger">DROPPED 超预算</span>' : ''),
+            'agents · agent', r.promptBytes + ' B', 'hi', dropped)
+        : asmRow('p5', '角色层 · <b>（空）</b>', '— 未注册 —', '—', 'empty', false)) +
+      asmRow('p10', '技能索引 · ' + r.skills.length + ' 条', 'skills · skills', r.idxBytes + ' B', '', false) +
+      asmRow('p30', '能力层 · 工具失败不得美化', 'reliability · llm-retry', '52 B', '', false) +
+
+      '<div class="ag-asm-tools">' + chips + '</div>' +
+      '<div class="ag-asm-ft">tools = 注册并集(' + r.registeredCount + ') ∩ 角色绑定(' + r.boundCount + ') · ' +
+        '排序 serviceId → name · <b>按当前注册表推导，不过 Core</b></div>' +
+      '</div>' +
+
+      '<div class="ag-card" style="margin-top:14px">' +
+      '<div class="ag-card-hd">预算闸门<span class="sp"></span>' +
+        '<span class="sub">' + r.total + ' B · ' + (dropped ? '1 块被丢弃' : (r.tools.length + r.skills.length + 4) + ' 条') + '</span></div>' +
+      '<div class="ag-card-bd">' +
+        '<div class="ag-budget' + (r.over ? ' over' : '') + '"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="ag-hint" style="margin-top:6px">上限 8 KB / 20 条。</div>' +
+        (dropped
+          ? '<div class="note bad" style="margin:10px 0 0"><b>p5 角色层因超预算被整块丢弃</b>，' +
+            '本轮模型<b>看不到人格提示词</b>。我们把这件事写在界面上，而不是静默截断 —— ' +
+            '静默会让模型永远不知道自己身上少了一块。</div>'
+          : (r.over
+            ? '<div class="note bad" style="margin:10px 0 0">已超预算。<b>告警归 loop 侧发到关联上下文</b>，' +
+              '并在 workbench 的「能力」视图里列出被丢了哪几块。</div>'
+            : '')) +
+      '</div></div>';
+  }
+  function asmRow(p, name, pub, b, cls, gone) {
+    return '<div class="ag-asm-row ' + (cls || '') + '"' + (cls === 'hi' ? ' style="background:var(--color-primary-soft)"' : '') + '>' +
+      '<span class="ag-asm-p">' + p + '</span>' +
+      '<span class="ag-asm-n">' + name + '</span>' +
+      '<span class="ag-asm-pub">' + pub + '</span>' +
+      '<span class="ag-asm-b">' + b + '</span></div>';
+  }
+
+  /* ══ Tab 5 · 事件 ══ */
+  function pageEvents() {
+    return '<div class="note" style="margin:0 0 14px">紫色 = 总线事件（收到），蓝色 = 本页发出的命令。' +
+      '<b>「保存」与「被读过」在这里是两件事</b>：绑定是每轮第 ④ 步现解析的，不在保存时。</div>' +
+      '<div class="ag-evlog">' +
+        (EV.length ? EV.map(function (e) {
+          return '<div><span class="t">' + e.t + '</span>' +
+            '<span class="tp' + (e.out ? ' out' : '') + '">' + (e.out ? '→ ' : '') + e.topic + '</span>' +
+            '<span class="pl">' + esc(e.pl) + '</span></div>';
+        }).join('') : '<div><span class="pl">暂无事件</span></div>') +
+      '</div>';
+  }
+  /* ══ 组件 2：ComposerRolePicker ══ */
+  var cmpRole = 'reviewer', cmpHasAgent = true, cmpRunning = false, cmpOpen = false;
+
+  function renderCmp() {
+    var c = charById(cmpRole);
+    var r = c ? resolved(c) : null;
+    var roleField = cmpHasAgent
+      ? '<label class="cmp-field"><span>角色 <span class="src2">agent.state</span></span>' +
+        '<button class="csel" data-cmp-open="1"' + (cmpRunning ? ' aria-disabled="true"' : '') + '>' +
+          '<span>' + (c ? c.emoji : '○') + '</span>' +
+          '<span class="cv">' + (c ? esc(c.name) : '—') + '</span>' +
+          '<span class="cn">' + (c ? r.tools.length + ' 工具 · ' + r.skills.length + ' 技能' : '') + '</span>' +
+          '<span style="opacity:.5">▾</span></button></label>'
+      : '';
+    return '<div class="cmp-bar">' +
+        '<span style="display:inline-flex;align-items:center;gap:6px">' +
+          '<span class="seg"><button data-cmp="agent" aria-pressed="' + cmpHasAgent + '">装了 agents</button>' +
+          '<button data-cmp="none" aria-pressed="' + (!cmpHasAgent && !cmpRunning) + '">没装 agents</button>' +
+          '<button data-cmp="running" aria-pressed="' + cmpRunning + '">运行中</button></span>' +
+        '</span>' +
+        roleField +
+        '<label class="cmp-field"><span>模型 <span class="src2">models.prefs.state</span></span>' +
+          '<button class="csel" aria-disabled="true"><span>🧠</span><span class="cv">deepseek-chat</span></button></label>' +
+        '<label class="cmp-field"><span>思考强度 <span class="src2">本地值</span></span>' +
+          '<button class="csel" aria-disabled="true"><span>⚡</span><span class="cv">中</span></button></label>' +
+        '<span style="margin-left:auto;font-size:11px;color:var(--color-text-muted)" class="mono">' +
+          (cmpRunning ? 'loop.state.changed = running' : 'idle') + '</span>' +
+      '</div>' +
+      '<div class="cmp-msgs">' +
+        '<div class="bubble user">这段 diff 里有没有会导致线上故障的改动？</div>' +
+        '<div class="bubble ai">有 2 处：<code>retries: 3 → 0</code> 与 <code>await 移出 try</code>。' +
+          '其余是风格问题，按本角色设定我不评论。</div>' +
+      '</div>' +
+      '<div class="cmp-foot">' +
+        '<div class="cmp-row"><textarea class="u-textarea" placeholder="输入消息…"' +
+          (cmpRunning ? ' disabled style="background:var(--color-surface-2)"' : '') + '></textarea>' +
+          '<button class="u-btn"' + (cmpRunning ? ' disabled' : '') + '>发送</button></div>' +
+        '<div class="cmp-hint">' +
+          (cmpHasAgent
+            ? '<span>下一轮生效 · 已发出的轮次不变</span>' +
+              '<span class="mono">loop.run{ sessionId, text, characterId:"' + esc(cmpRole) + '" }</span>'
+            : '<span><b>没装 agents 插件 → 角色下拉整块消失。</b>不写死「默认」—— 界面不能有一个背后没有服务的角色</span>') +
+        '</div>' +
+      '</div>' +
+      (cmpOpen && cmpHasAgent && !cmpRunning ? cmpMenu() : '');
+  }
+  function cmpMenu() {
+    return '<div class="cmenu" style="left:150px;top:38px">' +
+      CHARS.map(function (c) {
+        var r = resolved(c);
+        return '<div class="it" data-cmp-pick="' + c.id + '" aria-current="' + (c.id === cmpRole) + '">' +
+          '<span style="font-size:15px">' + c.emoji + '</span>' +
+          '<span style="flex:1;min-width:0">' +
+            '<span class="nm">' + esc(c.name) + '</span> <span class="id">' + esc(c.id) + '</span>' +
+            '<span class="ds">' + (c.prompt ? '' : '（无人格提示词 → p5 层为空，回落裸会话）') +
+              (c.note ? esc(c.note) : '') + '</span>' +
+            '<span class="ds mono">' + r.tools.length + ' 工具 · ' + r.skills.length + ' 技能生效' +
+              (r.dangling.length + r.dskills.length ? ' · ' + (r.dangling.length + r.dskills.length) + ' 悬空' : '') +
+              (r.blocked.length ? ' · ' + r.blocked.length + ' 被本机挡住' : '') + '</span>' +
+          '</span></div>';
+      }).join('') + '</div>';
+  }
+
+  /* ══ 边界情形 ══ */
+  var EDGE_NOTE = [
+    'e0 · 正常形态',
+    'e1 · agent.state 重播空数组（确定为空的，不是骨架屏）',
+    'e2 · 绑的工具所属插件被卸 → 忽略 + 悬空引用，不报错',
+    'e2b · 绑的技能本机不可用 → 绑定保留、不生效，显式标注',
+    'e3 · 四层字节和超 8 KB → 整块丢弃 + warn，不静默截断',
+    'e4 · prompt 为空 → 不注册片段，p5 层为空，回落裸会话',
+    'e5 · agents 插件未安装 → 这个视图根本不存在'
+  ];
+  function edgeView() {
+    /* 深拷贝快照：边界情形要临时改数据（悬空引用 / 超长 prompt / 空列表），
+       渲染完必须整体还原，否则 e2 / e3 会永久污染基础数据 */
+    var save = JSON.parse(JSON.stringify({ chars: CHARS, cur: cur, tab: tab, ev: EV, seq: reqSeq }));
+    var out;
+    if (edge === 1) { CHARS = []; cur = 'x'; }
+    if (edge === 2) {
+      cur = 'ops';
+      var o = charById('ops'); o.tools = ['mcp__web__search', 'nope_gone']; o.skills = ['legacy-scraper'];
+    }
+    if (edge === 3) {
+      /* 本机不可用：绑定合法、保留，但不进索引。与「未注册」是两件事，所以单列一态。 */
+      cur = 'researcher';
+      var rr = charById('researcher'); rr.skills = ['pdf-extract'];
+      tab = 'bind';
+    }
+    if (edge === 4) {
+      cur = 'writer';
+      var w = charById('writer');
+      w.prompt = new Array(141).join('你是技术文档作者。写给第一次接触这个系统的人看。');
+    }
+    if (edge === 5) { cur = 'bare'; }
+    if (edge === 6) {
+      out = '<div class="ag-wrap" style="padding:var(--space-4)">' +
+        '<div class="note bad" style="margin:0 0 14px"><b>正常情况下这里没有任何界面。</b>' +
+        '视图是插件产物（Core 只伺服 <code class="inl">&lt;pluginId&gt;/ui/*</code>），' +
+        'agents 没装 → 就没有这个视图、也不存在这条路由。</div>' +
+        '<div class="ag-card"><div class="ag-card-hd">排障视角 · workbench 的服务管理器<span class="sp"></span>' +
+        '<span class="sub">用户唯一能看到 agents 是否在位的地方</span></div>' +
+        '<div class="ag-card-bd"><div style="display:flex;flex-direction:column;gap:8px">' +
+        '<div class="svcrow"><span class="p-badge b-ok">运行</span><span class="id">chat-workbench · loop</span><span class="o">ws://127.0.0.1:1420</span></div>' +
+        '<div class="svcrow"><span class="p-badge b-ok">运行</span><span class="id">skills · skills</span><span class="o">ws://127.0.0.1:1420</span></div>' +
+        '<div class="svcrow"><span class="p-badge b-danger">未安装</span><span class="id">agents · agent</span><span class="o">插件未安装 → agent.state 无订阅者</span></div>' +
+        '</div>' +
+        '<div class="ag-hint" style="margin-top:10px">同时：composer 里的角色下拉<b>整块消失</b>，' +
+        '而 skills / tools 的能力照常工作 —— <b>缺失是合法的，只是少一份能力。</b></div>' +
+        '</div></div></div>';
+    } else {
+      out = shell(filtered(), { noFilter: edge === 1 });
+    }
+    CHARS = save.chars; cur = save.cur; tab = save.tab; EV = save.ev; reqSeq = save.seq;
+    return out;
+  }
+
+  /* ══ 渲染入口 ══ */
+  function renderAll() {
+    redraw(null);
+    var cp = byId('cmpMain');
+    if (cp) cp.innerHTML = renderCmp();
+  }
+
+  /* ══ 交互 ══ */
+  function commit(field, value, why) {
+    var c = charById(cur);
+    if (!c) return;
+    c[field] = value;
+    var o = {}; o[c.id + '.' + field] = value;
+    patch(o, why);
+  }
+
+  document.addEventListener('click', function (ev) {
+    var el = ev.target;
+    var t;
+    HOST = hostOf(el);
+
+    /* composer 菜单：点外面关闭 */
+    if (cmpOpen && !el.closest('.cmenu') && !el.closest('[data-cmp-open]')) { cmpOpen = false; renderAll(); }
+
+    /* composer */
+    t = el.closest('[data-cmp-open]');
+    if (t) { cmpOpen = !cmpOpen; renderAll(); return; }
+    t = el.closest('[data-cmp-pick]');
+    if (t) { cmpRole = t.getAttribute('data-cmp-pick'); cmpOpen = false; renderAll(); return; }
+    t = el.closest('[data-cmp]');
+    if (t) {
+      var m = t.getAttribute('data-cmp');
+      cmpHasAgent = m !== 'none';
+      cmpRunning = m === 'running';
+      cmpOpen = false; renderAll(); return;
+    }
+
+    /* 左栏 */
+    t = el.closest('[data-pick]');
+    if (t) { cur = t.getAttribute('data-pick'); renderAll(); return; }
+    t = el.closest('[data-filter]');
+    if (t) { filter = t.getAttribute('data-filter'); renderAll(); return; }
+
+    /* Tab */
+    t = el.closest('[data-tab]');
+    if (t) { tab = t.getAttribute('data-tab'); renderAll(); return; }
+
+    /* 边界情形切换 */
+    t = el.closest('[data-edge]');
+    if (t) {
+      edge = Number(t.getAttribute('data-edge'));
+      document.querySelectorAll('#edgeSeg button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-edge')) === edge));
+      });
+      byId('edgeNote').textContent = EDGE_NOTE[edge];
+      byId('edgeStageName').textContent = edge === 5 ? 'ServiceManager（排障视角）' : 'AgentRolesView';
+      renderAll(); return;
+    }
+
+    /* 工具绑定的 "*" 开关。
+       从 "*" 切回显式列表时，把当前可见的那批<b>物化</b>成显式列表（而不是清空）——
+       用户的意思是「把这 9 个摊开让我删几个」，清空等于替他做了别的决定。 */
+    t = el.closest('[data-starmode]');
+    if (t) {
+      var m2 = t.getAttribute('data-starmode');
+      var cs = charById(cur);
+      var next = m2 === 'star'
+        ? '*'
+        : resolved(cs).tools.map(function (x) { return x.name; });
+      commit('tools', next, m2 === 'star' ? 'tools → "*"' : 'tools → 显式列表（' + next.length + ' 项）');
+      renderAll(); return;
+    }
+    t = el.closest('[data-addtool]');
+    if (t) {
+      var tn = t.getAttribute('data-addtool'), c1 = charById(cur);
+      if (c1.tools === '*') { c1.tools = resolved(c1).tools.map(function (x) { return x.name; }); }
+      if (c1.tools.indexOf(tn) < 0) c1.tools = c1.tools.concat([tn]);
+      patch({ [c1.id + '.tools']: c1.tools }, '+ ' + tn);
+      renderAll(); return;
+    }
+    t = el.closest('[data-untool]');
+    if (t) {
+      var un = t.getAttribute('data-untool'), c2 = charById(cur);
+      c2.tools = c2.tools === '*' ? resolved(c2).tools.map(function (x) { return x.name; }) : c2.tools.slice();
+      c2.tools = c2.tools.filter(function (x) { return x !== un; });
+      patch({ [c2.id + '.tools']: c2.tools }, '− ' + un);
+      renderAll(); return;
+    }
+
+    /* 技能绑定 */
+    t = el.closest('[data-addskill]');
+    if (t) {
+      var sn = t.getAttribute('data-addskill');
+      if (sn === '1') {
+        var inp = inHost(HOST, '[data-skill-in]');
+        sn = inp ? inp.value.trim() : '';
+        if (!sn) return;
+      }
+      var c3 = charById(cur);
+      if (c3.skills.indexOf(sn) < 0) {
+        c3.skills = c3.skills.concat([sn]);
+        patch({ [c3.id + '.skills']: c3.skills }, '+ ' + sn);
+      }
+      renderAll(); return;
+    }
+    t = el.closest('[data-unskill]');
+    if (t) {
+      var us = t.getAttribute('data-unskill'), c4 = charById(cur);
+      c4.skills = c4.skills.filter(function (x) { return x !== us; });
+      patch({ [c4.id + '.skills']: c4.skills }, '− ' + us);
+      renderAll(); return;
+    }
+
+    /* thinking 分段 */
+    t = el.closest('[data-th]');
+    if (t) { commit('thinking', t.getAttribute('data-th'), 'thinking'); renderAll(); return; }
+
+    /* params */
+    t = el.closest('[data-delparam]');
+    if (t) {
+      var pk = t.getAttribute('data-delparam'), c5 = charById(cur);
+      delete c5.params[pk];
+      patch({ [c5.id + '.params']: c5.params }, '− params.' + pk);
+      renderAll(); return;
+    }
+    t = el.closest('[data-addparam]');
+    if (t) {
+      var pi = inHost(HOST, '[data-param-in]'); if (!pi) return;
+      var key = pi.value.trim();
+      if (!key) return;
+      if (PARAM_KEYS.indexOf(key) < 0) { alert('拒绝：provider 未声明的参数 "' + key + '"。\n白名单：' + PARAM_KEYS.join(' / ')); return; }
+      var c6 = charById(cur);
+      c6.params[key] = '0.7';
+      patch({ [c6.id + '.params']: c6.params }, '+ params.' + key);
+      renderAll(); return;
+    }
+
+    /* 头部动作 */
+    t = el.closest('[data-act]');
+    if (t) {
+      var act = t.getAttribute('data-act');
+      if (act === 'new') {
+        var id = 'role-' + (CHARS.length + 1);
+        CHARS.push({ id: id, name: '新角色', emoji: '✨', note: '', prompt: '',
+          skills: [], tools: [], provider: '', model: '', thinking: '', params: {} });
+        cur = id; filter = 'all'; q = '';
+        logEv('prompt.fragment.unregistered', '{ pluginId:"agents", id:"role:' + id + '" }   ← prompt 为空，不注册');
+        logEv('agent.state.set', '{ requestId:"r-' + (++reqSeq) + '", patch:{ id:"' + id + '" } }', true);
+        renderAll(); return;
+      }
+      if (act === 'dup') {
+        var s = charById(cur);
+        var nid = s.id + '-copy';
+        CHARS.push(JSON.parse(JSON.stringify(s)));
+        CHARS[CHARS.length - 1].id = nid;
+        CHARS[CHARS.length - 1].name = s.name + ' 副本';
+        cur = nid;
+        logEv('agent.state.set', '{ requestId:"r-' + (++reqSeq) + '", patch:{ id:"' + nid + '" } }', true);
+        renderAll(); return;
+      }
+      if (act === 'del') {
+        var d = charById(cur);
+        if (!confirm('删除角色「' + d.name + '」？\n\n下一轮它的 p5 层会变空，会话回落到裸会话。\n不会追溯已有会话 —— 已经发出的轮次里用的还是它。')) return;
+        CHARS = CHARS.filter(function (x) { return x.id !== cur; });
+        cur = CHARS.length ? CHARS[0].id : '';
+        logEv('prompt.fragment.unregistered', '{ pluginId:"agents", id:"role:' + d.id + '" }   ← 角色被删');
+        logEv('agent.state.set', '{ requestId:"r-' + (++reqSeq) + '", patch:{ removed:"' + d.id + '" } }', true);
+        renderAll(); return;
+      }
+    }
+  });
+
+  /* 字段编辑：失焦即发 patch（对应 onBlur → PATCH） */
+  document.addEventListener('change', function (ev) {
+    var el = ev.target;
+    HOST = hostOf(el);
+    if (el.hasAttribute && el.hasAttribute('data-f')) {
+      commit(el.getAttribute('data-f'), el.value);
+      renderAll(); return;
+    }
+    if (el.hasAttribute && el.hasAttribute('data-param')) {
+      var c = charById(cur);
+      c.params[el.getAttribute('data-param')] = el.value;
+      patch({ [c.id + '.params']: c.params }, el.getAttribute('data-param') + '=' + el.value);
+      renderAll(); return;
+    }
+  });
+
+  /* 搜索：重绘全部 stage，但重绘焦点所在的那个之后要还回焦点与光标 */
+  var STAGES = ['agMain', 'agBasic', 'agBind', 'agModel', 'agAsm', 'agEv', 'agEdge'];
+  function redraw(skip) {
+    STAGES.forEach(function (id) {
+      var n = byId(id);
+      if (!n || n === skip) return;
+      n.innerHTML = (id === 'agEdge') ? edgeView() : shell(filtered());
+    });
+  }
+  document.addEventListener('input', function (ev) {
+    var el = ev.target;
+    if (!el.hasAttribute || !el.hasAttribute('data-q')) return;
+    HOST = hostOf(el);
+    q = el.value;
+    redraw(null);
+    if (HOST) {
+      HOST.innerHTML = shell(filtered());
+      var q2 = HOST.querySelector('[data-q]');
+      if (q2) { q2.focus(); q2.setSelectionRange(q.length, q.length); }
+    }
+  });
+
+  /* 回车提交：chip 输入框 */
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter') return;
+    var el = ev.target;
+    if (el.hasAttribute && el.hasAttribute('data-skill-in')) {
+      ev.preventDefault();
+      HOST = hostOf(el);
+      var v = el.value.trim();
+      if (!v) return;
+      var c = charById(cur);
+      if (c.skills.indexOf(v) < 0) {
+        c.skills = c.skills.concat([v]);
+        patch({ [c.id + '.skills']: c.skills }, '+ ' + v);
+      }
+      renderAll();
+    }
+  });
+
+  /* 主题 + TOC 滚动高亮 */
+  function toggleTheme() {
+    var root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  }
+  document.getElementById('theme').addEventListener('click', toggleTheme);
+
+  document.querySelectorAll('nav.toc a').forEach(function (a) {
+    a.addEventListener('click', function () {
+      document.querySelectorAll('nav.toc a').forEach(function (b) { b.classList.remove('on'); });
+      a.classList.add('on');
+    });
+  });
+  document.addEventListener('scroll', function () {
+    var best = null;
+    document.querySelectorAll('section[id]').forEach(function (s) {
+      if (s.getBoundingClientRect().top <= 100) best = s;
+    });
+    if (!best) return;
+    document.querySelectorAll('nav.toc a').forEach(function (a) {
+      a.classList.toggle('on', a.getAttribute('href') === '#' + best.id);
+    });
+  });
+
+  seed();
+  renderAll();
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   §10 外观绑定行 —— 独立小控件，不复用上面的渲染 machinery
+   形态只由 skin.state 决定；skins 插件缺失 = 整个下拉消失
+   ══════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  var SKINS = [
+    { id: 'default', name: '默认',   src: 'skins · 内置',      n: 6, thumb: '◍', builtin: true,  enabled: true },
+    { id: 'miku',    name: '初音',   src: 'skins · 内置',      n: 6, thumb: '♪', builtin: true,  enabled: true },
+    { id: 'mine-1',  name: '我的纸片', src: 'skins · 我自建的', n: 3, thumb: '▤', builtin: false, enabled: true },
+    { id: 'ink',     name: '水墨',   src: 'skins · 我自建的', n: 0, thumb: '❋', builtin: false, enabled: false }
+  ];
+  var CHAR = 'reviewer';
+  /* hasPlugin = 有没有收到过 skin.state。这决定界面能<b>知道</b>什么 ——
+     收不到时只能说「无法校验」，不能说出「是哪个插件没提供」，那是猜。 */
+  var states = {
+    unbound:   { skinId: null,        hasPlugin: true,  label: '未绑定' },
+    bound:     { skinId: 'miku',      hasPlugin: true,  label: '已绑定' },
+    builtin:   { skinId: 'default',   hasPlugin: true,  label: '绑到内置' },
+    mine:      { skinId: 'mine-1',    hasPlugin: true,  label: '绑到自建' },
+    disabled:  { skinId: 'ink',       hasPlugin: true,  label: '绑着但停用' },
+    dangling:  { skinId: 'neon',      hasPlugin: true,  label: '悬空引用' },
+    unverified:{ skinId: 'neon',      hasPlugin: false, label: '无法校验' }
+  };
+  var st = 'unbound';
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function picker() {
+    var s = states[st];
+    var unbind = s.skinId
+      ? '<button class="u-btn ghost sm" title="skinId 是引用，清掉它永远安全">解绑</button>'
+      : '';
+    /* 没收到 skin.state → 幽灵选择器。但<b>解绑仍然要给</b>：
+       校验不了 ≠ 清不掉，而恢复成本必须是一个点击。 */
+    if (!s.hasPlugin) {
+      return '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span class="csel ghost">◌ 无法校验</span>' +
+        '<span style="font-size:11px;color:var(--color-text-muted)">skins 插件未安装' +
+        (s.skinId ? '，但 <span class="mono">' + esc(s.skinId) + '</span> 仍写在 characters.json 里' : '') + '</span>' +
+        unbind + '</div>';
+    }
+    var cur = SKINS.filter(function (x) { return x.id === s.skinId; })[0];
+    /* 停用是可逆的（资产保留），而它<b>不改任何人的 skinId</b> ——
+       所以角色会「绑着一个 id 存在但不可用」的皮肤。这一格要显示得出来。 */
+    var off = cur && cur.enabled === false;
+    return '<div style="display:flex;align-items:center;gap:8px">' +
+      '<button class="csel"' + (off ? ' disabled style="opacity:.6"' : ' style="cursor:pointer' + (cur ? ';border-color:var(--color-primary)' : '') + '"') + '>' +
+        '<span>' + (cur ? cur.thumb : '○') + '</span>' +
+        '<span class="cv">' + (cur ? esc(cur.name) : '未绑定') + (off ? '（已停用）' : '') + '</span>' +
+        '<span class="cn">' + (cur ? esc(cur.src) : '（回落：纯文字气泡）') + '</span>' +
+        '<span style="opacity:.5">▾</span>' +
+      '</button>' +
+      (cur ? '<button class="u-btn ghost sm"' + (off ? ' disabled' : '') + '>预览 ' + cur.n + ' 个动作</button>' : '') +
+      unbind + '</div>';
+  }
+
+  function note() {
+    var s = states[st];
+    if (!s.hasPlugin) {
+      return '<b>收不到 <span class="mono">skin.state</span>，所以只能说到这儿。</b>' +
+        '界面<b>不能</b>说「是 community-skins 没提供」—— 它根本没拿到任何皮肤清单，' +
+        '说出提供方就是<b>猜</b>。同一条纪律在 §3 的工具侧也一样：' +
+        '<b>悬空引用要能区分「已确认没有」与「无法确认」</b>，两者的恢复路径不同。' +
+        '<br>但<b>解绑按钮必须留着</b>：校验不了 ≠ 清不掉，而恢复成本必须是一个点击。' +
+        '角色本身<b>完全不受影响</b> —— 外观不参与装配。';
+    }
+    if (st === 'unbound') {
+      return '没绑外观时，会话里退回<b>纯文字气泡</b>——角色仍然完全可用' +
+        '（提示词 / 技能 / 工具一项不少）。下拉里列的是 <span class="mono">skin.state</span> 里真实存在的那些，' +
+        '<b>没有任何一项是写死的</b>：写死一个「默认」就是告诉用户「有个东西在这儿」，' +
+        '而它背后可能什么都没有。' +
+        '<br>其中「我自建的」那几条是<b>用户上传的</b>——它们在 <span class="mono">userData/plugin/skins/</span>，' +
+        '<b>卸载插件不会清掉</b>。写这一行时用的是用户自己的磁盘。';
+    }
+    if (st === 'bound') {
+      return '缩略图可就地预览 motion（idle / thinking / working / speaking / success / error）。' +
+        '<b>没有「新建皮肤」「上传」入口</b>——那些在 <span class="mono">widget.skins</span> 里，' +
+        '而<b>两个插件之间通信为零</b>；给一个「点这里去 skins 面板」按钮也不行，' +
+        '那要一条尚不存在的宿主能力。' +
+        '<br>这一格能做的只有<b>选</b>，不能<b>造</b>——分工在 §10.6。';
+    }
+    if (st === 'mine') {
+      return '绑到<b>用户自建</b>的皮肤是合法的，而且这正是「皮肤走 userData」这条决定的收益：' +
+        '这张脸<b>用户自己画的</b>，卸载再装 plugins 它还在。' +
+        '<br><b>但界面上不能出现「编辑这张脸」</b>——那属于 <span class="mono">widget.skins</span>。' +
+        '徽章「我自建的」的作用是告诉用户<b>升级不会覆盖它</b>（内置皮会被 fresh 覆盖）。';
+    }
+    if (st === 'disabled') {
+      return '<b>这一格与「悬空引用」不是一回事</b>：<span class="mono">skinId</span> 指向的皮肤<b>存在</b>，' +
+        '只是被用户在 skins 面板里<b>停用</b>了。' +
+        '<br>停用是<b>可逆</b>的（资产保留），所以界面的动作是「启用」而不是「解绑」——' +
+        '<b>解绑会丢掉用户的选择，而皮肤还在那儿</b>。' +
+        '<br><b>它必须与悬空分开</b>：恢复路径一个是「去 skins 面板启用」，一个是「解绑或装回插件」。';
+    }
+    if (st === 'builtin') {
+      return '绑到内置皮肤是<b>合法</b>的，但它不是「零配置」——' +
+        '<span class="mono">skinId: "default"</span> 是<b>显式写进 characters.json 的一条引用</b>，' +
+        '和写 <span class="mono">tools:["read_file"]</span> 同级。' +
+        '<br>卸掉 skins 插件它也会变成「无法校验」；' +
+        '而在 skins 面板里把它停用，它会变成「绑着但停用」。';
+    }
+    return '<b>已确认的悬空引用</b>：<span class="mono">skin.state</span> 收到了，而清单里没有 ' +
+      '<span class="mono">neon</span>。按 §3 的同一条纪律处理：<b>灰显但不隐藏、不报错、不阻止保存</b>。' +
+      '实际情形常常是<b>正常</b>的——用户把那张皮肤删了（或卸掉了提供它的插件），角色少一层外观而已。' +
+      '<br><b>解绑按钮必须留着</b>。' +
+      '<br><b>而 skins 插件不会替 agents 清这条引用</b>：那要跨插件写，破了「写只限自己」（§10.6）。';
+  }
+
+  function render() {
+    var s = states[st];
+    var cur = SKINS.filter(function (x) { return x.id === s.skinId; })[0];
+    var host = document.getElementById('skStage');
+    if (!host) return;
+
+    host.innerHTML =
+      '<div style="padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border);' +
+        'background:var(--color-surface);display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap">' +
+        '<span class="ag-title" style="font-size:var(--text-sm)">🎨 外观 <span class="cnt">skinId</span></span>' +
+        '<span style="flex:1"></span>' +
+        '<span class="seg">' +
+          ['unbound', 'bound', 'builtin', 'mine', 'disabled', 'dangling', 'unverified'].map(function (k) {
+            return '<button data-sk="' + k + '" aria-pressed="' + (st === k) + '">' + states[k].label + '</button>';
+          }).join('') +
+        '</span>' +
+      '</div>' +
+      '<div style="flex:1;overflow:auto;padding:var(--space-4)">' +
+        '<div class="ag-card" style="margin:0 0 var(--space-3)">' +
+          '<div class="ag-card-hd">外观绑定 <span class="mono">→ characters.json."' + CHAR + '".skinId</span>' +
+            '<span class="sp"></span>' +
+            '<span class="sub">' + (s.hasPlugin ? '订阅 skin.state（owner 重播整份）' : '未收到 skin.state') + '</span></div>' +
+          '<div class="ag-card-bd">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">' +
+              '<span style="width:52px;font-size:var(--text-xs);color:var(--color-text-muted);flex:none">皮肤</span>' +
+              picker() +
+            '</div>' +
+            (st === 'dangling'
+              ? '<div class="ag-brow dead" style="margin-bottom:12px">' +
+                  '<span class="nm">neon</span><span class="p-badge b-dangling">悬空</span>' +
+                  '<span class="deadnote">↳ 已收到 skin.state，清单里没有它 · <b>忽略</b>，不报错</span></div>'
+              : '') +
+            '<div class="note ' + (st === 'unverified' ? 'bad' : 'info') + '" style="margin:0 0 12px">' + note() + '</div>' +
+            '<div class="ag-srow" style="border-bottom:0;padding-bottom:0">' +
+              '<div><span class="nm">它进不进模型？</span>' +
+                '<div class="ds">皮肤<b>不参与 §5 的装配</b> —— 不进 prompt、不进 <span class="mono">tools</span> 参数，' +
+                '一个字节也不发给模型。装配摘要里那行「外观：不影响本轮装配」是诚实的做法。</div></div>' +
+              '<span class="p-badge b-off">0 B</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="tree" style="font-size:11.5px;padding:var(--space-3);margin:0">' +
+'<span class="dim">// characters.json（owner: agents 服务）</span>\n' +
+'[\n' +
+'  { "id": "' + CHAR + '",\n' +
+'    "prompt": "你是资深代码评审员。…",\n' +
+'    "skills": ["git-diff"],\n' +
+'    "tools": ["read_file", "list_dir"],\n' +
+'    <span class="std">"skinId": ' + (s.skinId ? '"' + s.skinId + '"' : 'null') + '</span> }\n' +
+']\n' +
+'\n' +
+'<span class="dim">// ← 与 tools[] 同类：一个引用，指向另一个插件的产物</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-sk]');
+    if (!b) return;
+    st = b.getAttribute('data-sk');
+    render();
+  });
+  render();
+})();
+
+</script>
+
+</body>
+</html>

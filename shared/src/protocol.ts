@@ -49,8 +49,13 @@ export interface InitializeResult {
   /** Core 读 manifest.healthCheck.interval 回发，服务接受 Core 权威 */
   heartbeatInterval: number
   /**
-   * 数据根目录（--data 未传时由 Core 定）—— 服务只写**它所属插件**的那一份
+   * 数据根目录（`--data` / `OST_DATA` / 引导配置 `ost.config.json` 都没给时用缺省）
+   * —— 服务只写**它所属插件**的那一份
    * `userData/plugin/<pluginId>/`（P1 起是 plugin 级，见 shared/paths.ts 的 pluginDataDir）
+   *
+   * ⚠️ 它在 `initialize` 响应里，也就是**握手之后**才有值；握手之前读它恒为 `''`。
+   * 要用它建长期持有的资源（文件句柄、仓库、缓存目录）就必须 `await service.start()` 之后
+   * —— 在模块顶层用它，落盘位置会是 `''`，于是写进 `dist/`（session 服务踩过这个坑）。
    */
   dataDir: string
   /**

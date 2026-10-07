@@ -14,6 +14,9 @@
     "session.rename.result",
     "session.delete.result",
     "session.clear.result",
+    "session.pin.result",
+    "session.archive.result",
+    "session.export.result",
     "message.append.result"
   ],
   "subscribes": [
@@ -23,6 +26,10 @@
     "session.rename",
     "session.delete",
     "session.clear",
+    "session.pin",
+    "session.archive",
+    "session.export",
+    "session.set.workspace",
     "message.append"
   ]
 }

@@ -104,6 +104,91 @@ describe('session 七命令（IPC 全链）', () => {
     expect(a.requestId).toBe('rid-A')
     expect(b.requestId).toBe('rid-B')
   })
+
+  it('session.pin → result 带 pinned；缺 pinned / 不存在 → error', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1' })
+    const pinned = dispatch(store, 'session.pin', { requestId: 'r2', sessionId, pinned: true })
+    expect(pinned).toMatchObject({ sessionId, pinned: true })
+    // 置顶不改 updatedAt
+    const meta = store.list().find((m) => m.id === sessionId)!
+    expect(meta.pinned).toBe(true)
+    expect(dispatch(store, 'session.pin', { requestId: 'r3', sessionId }).error).toMatchObject({ code: 'invalid_request' })
+    expect(dispatch(store, 'session.pin', { requestId: 'r4', sessionId: 'nope', pinned: true }).error).toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('session.archive → result 带 archived；缺 archived / 不存在 → error', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1' })
+    expect(dispatch(store, 'session.archive', { requestId: 'r2', sessionId, archived: true })).toMatchObject({
+      sessionId,
+      archived: true,
+    })
+    expect(dispatch(store, 'session.archive', { requestId: 'r3', sessionId }).error).toMatchObject({
+      code: 'invalid_request',
+    })
+    expect(
+      dispatch(store, 'session.archive', { requestId: 'r4', sessionId: 'nope', archived: true }).error,
+    ).toMatchObject({ code: 'not_found' })
+  })
+
+  it('message.append → lastMessage 预览进入索引（P2-4 / P0-0 的数据源）', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1' })
+    dispatch(store, 'message.append', {
+      requestId: 'r2',
+      sessionId,
+      message: { role: 'user', content: '帮我看看这段代码' },
+    })
+    expect(store.list().find((m) => m.id === sessionId)!.lastMessage).toBe('帮我看看这段代码')
+  })
+
+  it('session.create 带 parentId → 子会话挂到父下（P2-3）', () => {
+    const parent = dispatch(store, 'session.create', { requestId: 'r1', title: '父' })
+    const child = dispatch(store, 'session.create', { requestId: 'r2', title: '子', parentId: parent.sessionId })
+    expect(store.list().find((m) => m.id === child.sessionId)!.parentId).toBe(parent.sessionId)
+  })
+
+  it('session.set.workspace（P7 M0）：合并式写 workspace + addRoot/removeRoot，不改 updatedAt', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1' })
+    const before = store.list().find((m) => m.id === sessionId)!.updatedAt
+    const set = dispatch(store, 'session.set.workspace', { requestId: 'r2', sessionId, workspace: 'C:\\proj' })
+    expect(set).toMatchObject({ sessionId, workspace: 'C:\\proj', workspaces: [] })
+    dispatch(store, 'session.set.workspace', { requestId: 'r3', sessionId, addRoot: 'D:\\data' })
+    let meta = store.list().find((m) => m.id === sessionId)!
+    expect(meta.workspace).toBe('C:\\proj')
+    expect(meta.workspaces).toEqual(['D:\\data'])
+    dispatch(store, 'session.set.workspace', { requestId: 'r4', sessionId, removeRoot: 'D:\\data' })
+    meta = store.list().find((m) => m.id === sessionId)!
+    expect(meta.workspaces).toBeUndefined()
+    expect(meta.updatedAt).toBe(before)
+    expect(dispatch(store, 'session.set.workspace', { requestId: 'r5', sessionId: 'nope' }).error).toMatchObject({
+      code: 'not_found',
+    })
+    expect(dispatch(store, 'session.set.workspace', { requestId: 'r6' }).error).toMatchObject({ code: 'invalid_request' })
+  })
+
+  it('session.export → 返回 Markdown 文本与文件名（P2-5）', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1', title: '导出我' })
+    dispatch(store, 'message.append', { requestId: 'r2', sessionId, message: { role: 'user', content: '你好' } })
+    dispatch(store, 'message.append', {
+      requestId: 'r3',
+      sessionId,
+      message: { role: 'assistant', content: '回答', reasoning: '想一下' },
+    })
+    const res = dispatch(store, 'session.export', { requestId: 'r4', sessionId })
+    expect(res.filename).toBe(`${sessionId}.md`)
+    const content = res.content as string
+    expect(content).toContain('# 导出我')
+    expect(content).toContain('## 用户')
+    expect(content).toContain('你好')
+    expect(content).toContain('## 助手')
+    expect(content).toContain('> 思考过程：')
+    // 不存在的会话 → not_found
+    expect(dispatch(store, 'session.export', { requestId: 'r5', sessionId: 'nope' }).error).toMatchObject({
+      code: 'not_found',
+    })
+    expect(dispatch(store, 'session.export', { requestId: 'r6' }).error).toMatchObject({ code: 'invalid_request' })
+  })
 })
 
 describe('message.append 透传（S4 修的静默丢字段）', () => {

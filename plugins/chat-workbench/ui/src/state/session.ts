@@ -53,6 +53,12 @@ export interface SessionState {
   create: (title?: string) => Promise<string>
   rename: (sessionId: string, title: string) => Promise<boolean>
   remove: (sessionId: string) => Promise<boolean>
+  /** 置顶 / 取消置顶（P2-1）。**不改 updatedAt** */
+  pin: (sessionId: string, pinned: boolean) => Promise<boolean>
+  /** 归档 / 取消归档（P2-2） */
+  archive: (sessionId: string, archived: boolean) => Promise<boolean>
+  /** 导出会话为 Markdown（P2-5）；失败返回 null */
+  exportSession: (sessionId: string) => Promise<{ filename: string; content: string } | null>
   /**
    * 载入某个会话的历史（`session.get`）。
    *
@@ -74,6 +80,8 @@ function toMeta(payload: unknown): SessionMeta | undefined {
     title: typeof p.title === 'string' ? p.title : '新会话',
     createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
     updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : new Date().toISOString(),
+    ...(typeof p.workspace === 'string' ? { workspace: p.workspace } : {}),
+    ...(Array.isArray(p.workspaces) ? { workspaces: p.workspaces } : {}),
   }
 }
 
@@ -87,6 +95,17 @@ export function useSessionState(): SessionState {
 
   /** 本函数绑的退订函数；bindEvents 幂等，重复调用不叠加 */
   let unsubs: Array<() => void> = []
+
+  /**
+   * 在途的 `create()`：`requestId → 结算`。
+   *
+   * 常驻订阅 `session.create.result` 收到回执后按 requestId 找回来（见 bindEvents 里那段注释）。
+   * 为什么不是「每次创建临时订阅一次」：那会换流，缝里丢事件。
+   */
+  const pendingCreates = new Map<string, (sessionId: string) => void>()
+
+  /** 在途的 `exportSession()`：`requestId → 结算`（与 create 同一套常驻订阅配对手法） */
+  const pendingExports = new Map<string, (result: { filename: string; content: string } | null) => void>()
 
   function sortList(items: SessionMeta[]): SessionMeta[] {
     return [...items].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
@@ -130,7 +149,16 @@ export function useSessionState(): SessionState {
         list.value = sortList([...list.value.filter((m) => m.id !== meta.id), meta])
       }),
       sse.subscribe('session.updated', (payload) => {
-        const p = payload as { sessionId?: string; title?: string; updatedAt?: string }
+        const p = payload as {
+          sessionId?: string
+          title?: string
+          updatedAt?: string
+          pinned?: boolean
+          archived?: boolean
+          lastMessage?: string
+          workspace?: string
+          workspaces?: string[]
+        }
         if (!p?.sessionId) return
         list.value = sortList(
           list.value.map((m) =>
@@ -139,6 +167,12 @@ export function useSessionState(): SessionState {
                   ...m,
                   ...(p.title ? { title: p.title } : {}),
                   ...(p.updatedAt ? { updatedAt: p.updatedAt } : {}),
+                  // pinned/archived 用「显式出现才改」：undefined = 本条没提，不动
+                  ...(p.pinned !== undefined ? { pinned: p.pinned || undefined } : {}),
+                  ...(p.archived !== undefined ? { archived: p.archived || undefined } : {}),
+                  ...(p.lastMessage ? { lastMessage: p.lastMessage } : {}),
+                  ...(p.workspace !== undefined ? { workspace: p.workspace || undefined } : {}),
+                  ...(p.workspaces !== undefined ? { workspaces: p.workspaces } : {}),
                 }
               : m,
           ),
@@ -166,6 +200,47 @@ export function useSessionState(): SessionState {
           return
         }
         messages.value = (p.session.messages ?? []) as Message[]
+      }),
+      /**
+       * `session.create.result` **必须常驻**，不能在 `create()` 里临时订阅。
+       *
+       * ## 为什么（这个坑踩过两次，形态不同、根因同一）
+       *
+       * `sse.subscribe()` 遇到**新 topic** 会 `reconnect()` —— 关掉正在用的 EventSource、
+       * 另开一条新的，而新的那条**此刻还没 open**（对端尚未登记）。
+       * 于是紧接着发出的命令，回执与伴随事件就落进「旧流已关、新流未开」的缝里：
+       * - 这里的表现：`session.created` 丢了 → **会话列表不刷新**；
+       *   连 `session.create.result` 也丢了 → `create()` 干等 10 秒兜底才返回空串，
+       *   于是「新建后自动切到新会话」也没做。
+       * - `useLlmProviders` 那次是同一个病（清单一直空），修法也是「对齐等到 connected」。
+       *
+       * ## 为什么不能改成「两条流重叠、新的 open 之后再关旧的」
+       *
+       * 重叠期同一事件会被投递两次，而 `loop.token.streamed` 是**直接追加、无去重**
+       * （payload 里也没有序号可去重）—— 那是刚修的「事件只到一次」那套设计的前提。
+       * 所以这条路上**只能消灭触发点**，不能靠双流兜住。
+       *
+       * 规矩：**不要为一次命令临时订阅 topic**。要等回执，就常驻订阅 + 本地按 requestId 配对
+       * （就像 `useEndpointProbe` 按 provider 归档那样）。
+       */
+      sse.subscribe('session.create.result', (payload) => {
+        const p = payload as { requestId?: string; sessionId?: string }
+        const requestId = p?.requestId
+        if (!requestId) return
+        const resolve = pendingCreates.get(requestId)
+        if (!resolve) return // 不是本 iframe 发的那次创建（别的 iframe 也收这条广播）
+        pendingCreates.delete(requestId)
+        resolve(p.sessionId ?? '')
+      }),
+      // 导出结果同样按 requestId 常驻配对（不为一次命令临时订阅 topic，见上面的坑）
+      sse.subscribe('session.export.result', (payload) => {
+        const p = payload as { requestId?: string; filename?: string; content?: string; error?: unknown }
+        const requestId = p?.requestId
+        if (!requestId) return
+        const resolve = pendingExports.get(requestId)
+        if (!resolve) return
+        pendingExports.delete(requestId)
+        resolve(p.error || typeof p.content !== 'string' ? null : { filename: p.filename ?? 'session.md', content: p.content })
       }),
     )
   }
@@ -204,6 +279,8 @@ export function useSessionState(): SessionState {
       setCurrentSessionId(sessionId)
     },
     async create(title?: string): Promise<string> {
+      // 常驻订阅在 bindEvents 里；这里兜一道，别让「没 bootstrap 就 create」变成干等 10 秒
+      bindEvents()
       const { send } = useCommand()
       const requestId = `create-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
@@ -214,26 +291,18 @@ export function useSessionState(): SessionState {
 
       let done = false
       let timer: ReturnType<typeof setTimeout> | undefined
-      let off: () => void = () => {}
-      /** 全部出口都走这里：解订阅、停表、回值。重复调用第一次之外的一律忽略 */
+      /** 全部出口都走这里：停表、清登记、回值。重复调用第一次之外的一律忽略 */
       const finish = (value: string): void => {
         if (done) return
         done = true
         if (timer !== undefined) clearTimeout(timer)
-        off()
+        pendingCreates.delete(requestId)
         resolveResult(value)
       }
 
-      /**
-       * 订阅必须发生在**发命令之前**：SSE 与 HTTP 是两条连接，
-       * 先发后订的话回执可能早于订阅到达，那一份就永远等不到。
-       */
-      off = sse.subscribe('session.create.result', (payload) => {
-        const p = payload as { requestId?: string; sessionId?: string }
-        if (p?.requestId !== requestId) return
-        finish(p.sessionId ?? '')
-      })
-      // Core 挂了 / 回执丢了：不能把调用方永远吊着 ——
+      // **登记在发命令之前**：常驻订阅可能已经把回执送来了（bindEvents 的兜底保证了订阅在）
+      pendingCreates.set(requestId, finish)
+      // Core挂了 / 回执丢了：不能把调用方永远吊着 ——
       // ③ 会一直停在「发送中」，而用户看不出发生了什么
       timer = setTimeout(() => finish(''), 10_000)
 
@@ -259,6 +328,40 @@ export function useSessionState(): SessionState {
     async remove(sessionId: string): Promise<boolean> {
       const { send } = useCommand()
       return send('session.delete', { requestId: `del-${Date.now()}`, sessionId })
+    },
+    async pin(sessionId: string, pinned: boolean): Promise<boolean> {
+      const { send } = useCommand()
+      return send('session.pin', { requestId: `pin-${Date.now()}`, sessionId, pinned })
+    },
+    async archive(sessionId: string, archived: boolean): Promise<boolean> {
+      const { send } = useCommand()
+      return send('session.archive', { requestId: `arc-${Date.now()}`, sessionId, archived })
+    },
+    async exportSession(sessionId: string): Promise<{ filename: string; content: string } | null> {
+      bindEvents()
+      const { send } = useCommand()
+      const requestId = `exp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      let settle: (result: { filename: string; content: string } | null) => void = () => {}
+      const result = new Promise<{ filename: string; content: string } | null>((resolve) => {
+        settle = resolve
+      })
+      let done = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const finish = (value: { filename: string; content: string } | null): void => {
+        if (done) return
+        done = true
+        if (timer !== undefined) clearTimeout(timer)
+        pendingExports.delete(requestId)
+        settle(value)
+      }
+      pendingExports.set(requestId, finish)
+      timer = setTimeout(() => finish(null), 10_000)
+      const ok = await send('session.export', { requestId, sessionId })
+      if (!ok) {
+        finish(null)
+        return null
+      }
+      return result
     },
     loadHistory,
     dispose: () => {

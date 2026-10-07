@@ -17,7 +17,7 @@
  * - HTTP（人看）：回 500 + 错误信息，让用户知道偏好没存住 —— 静默回 `{}` 等于假装成功
  * - RPC（服务启动）：回 `{}` + 记日志，让服务照常起来 —— 偏好坏了不该连累整个系统起不来
  *
- * 这与 `CredentialStore` 的 `isCorrupted()` 是同一套纪律：**标记出来，让调用方决定严不严**。
+ * 这与插件侧 `ModelsStore` 的 `prefsCorrupted` 是同一套纪律：**标记出来，让调用方决定严不严**。
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'

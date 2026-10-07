@@ -1,0 +1,24 @@
+{
+  "id": "agents",
+  "name": "智能体角色",
+  "version": "1.0.0",
+  "icon": "🎭",
+  "author": "osteosome",
+  "license": "Apache-2.0",
+  "description": "智能体角色：角色 = 一组引用（提示词 / 技能 / 工具 / 模型偏好）。这份是用户数据（userData/plugin/agents/characters.json），由 agent 服务独占读写。角色服务只把角色解析成一份纯数据配方回给 loop（agent.resolve 两跳），并把角色的提示词作为普通片段注册进 prompt.fragment.* —— loop 侧零新增机制。切角色 = 换一组绑定，装配器下一轮用新的。装这个插件才有角色下拉与 widget.agents；没装则该下拉消失、会话回落裸会话。",
+  "services": ["agent"],
+  "components": [],
+  "ui": {
+    "views": [
+      { "id": "widget.agents", "title": "角色", "entry": "index.html" }
+    ]
+  },
+  "capabilities": [
+    { "name": "agent.state", "detail": "角色目录（重播整份，composer 下拉 / 编辑器数据源）" },
+    { "name": "agent.state.set", "detail": "合并式改角色目录（upsert / 删除）" },
+    { "name": "agent.resolve", "detail": "把角色解析成装配配方（两跳）" },
+    { "name": "prompt.fragment.registered", "detail": "角色的提示词片段（role:<id>，priority 5）" }
+  ],
+  "dependencies": [],
+  "autoStart": true
+}

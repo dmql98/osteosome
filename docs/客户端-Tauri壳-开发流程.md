@@ -66,7 +66,7 @@
 
 ```
 src-tauri/
-├── Cargo.toml          # tauri 2 + tray-icon + opener
+├── Cargo.toml          # tauri 2 + tray-icon + opener + dialog
 ├── tauri.conf.json     # devUrl=localhost:5173, frontendDist=../core/dist/client
 ├── build.rs
 ├── capabilities/default.json
@@ -79,6 +79,13 @@ src-tauri/
 
 > 注意：client 的 Vite `build.outDir` 是 `../core/dist/client`，所以
 > **`frontendDist` 必须指向 `../core/dist/client`**（不是 `../client/dist`）。
+
+> **`dialog:default` 能力**（`capabilities/default.json`）：设置页「数据目录」的
+> 「浏览…」按钮用 `tauri-plugin-dialog` 弹系统选择框。调用方在
+> `plugins/workbench/ui/src/tauri-dialog.ts`，它**先判断 `isTauri`** ——
+> 浏览器（Vite dev + Core，`start-client.cmd` 的 fallback 形态）没有这个能力，
+> 那边这个按钮根本不出现，只能手输路径。插件 UI 是同源 iframe，Tauri v2 默认
+> 不给 iframe 注入 IPC，拿不到时 `pickDirectory()` 会明确回 `unavailable` 而不是空转。
 
 ## 6. Windows 前置（一次性，首次编译必需）
 

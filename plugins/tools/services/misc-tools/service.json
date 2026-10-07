@@ -1,0 +1,15 @@
+{
+    "id":  "misc-tools",
+    "version":  "1.0.0",
+    "protocolVersion":  "1.0.0",
+    "entry":  "node dist/index.js",
+    "publishes":  [
+                      "tool.registered",
+                      "tool.unregistered",
+                      "tool.execute.result"
+                  ],
+    "subscribes":  [
+                       "tool.execute",
+                       "tools.list"
+                   ]
+}

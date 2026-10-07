@@ -1,0 +1,19 @@
+{
+  "id": "skills",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "skills.state",
+    "skills.list.result"
+  ],
+  "subscribes": [
+    "skill.registered",
+    "skill.unregistered",
+    "agent.state",
+    "prompt.fragments.list",
+    "skills.list",
+    "skill.enabled.set",
+    "skill.package.write"
+  ]
+}

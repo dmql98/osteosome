@@ -13,6 +13,10 @@
  * 绝对定位没有 flex，所以 flex 那部分在**首次渲染时按当前画布尺寸换算**成像素。
  * 用户拖过之后以保存的 rect 为准 —— 那是用户的选择，不该被覆盖。
  *
+ * 这里给的仍是**像素**：预设的语义就是「按当前画布量出来的初始几何」。
+ * 单位换算由 `PanelContainer` 用 `toPercent` 收口 —— 落盘与渲染统一吃百分比，
+ * 工作台缩放时盒子跟着按比例变（见 `rect.ts`）。
+ *
  * ## 极小窗口
  *
  * 本轮明确不做「窄窗降级」（计划 §不做清单），所以这里只保证**不出负数**：
@@ -22,6 +26,7 @@ import type { DockviewApi } from 'dockview-core'
 import type { MovableBoxRect } from 'vue-movable-box'
 import type { PluginView } from '../plugins/registry'
 import { defaultWidgetIds } from '../widgets/registry'
+import { FALLBACK_H, FALLBACK_W } from './rect'
 import { PANEL_COMPONENT } from './types'
 
 /** 三盒的 widget id（① 会话列表 / ② 对话 / ③ 输入） */
@@ -35,9 +40,6 @@ export const CHAT_BOX = {
 const GAP = 8
 const SESSION_W = 240
 const COMPOSER_H = 120
-/** 兜底画布尺寸：首次渲染量不到（jsdom / 隐藏容器）时按这个算，不至于全是 0 */
-const FALLBACK_W = 1080
-const FALLBACK_H = 720
 
 /**
  * 三盒初始几何。

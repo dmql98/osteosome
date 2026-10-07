@@ -147,7 +147,6 @@ function startFakeUpstream(tag: string): Promise<{ server: Server; baseUrl: stri
 describe('S1 集成冒烟 · 通用 provider 多实例', () => {
   let core: Core | undefined
   let dataDir = ''
-  let toolRoot = ''
   let openaiUp: { server: Server; baseUrl: string; models: string[] } | undefined
   let deepseekUp: { server: Server; baseUrl: string; models: string[] } | undefined
 
@@ -159,7 +158,6 @@ describe('S1 集成冒烟 · 通用 provider 多实例', () => {
     'MISTRAL_API_KEY',
     'DEEPSEEK_MODEL',
     'LLM_PROVIDER',
-    'LLM_TOOL_ROOT',
   ]
   const base = (): string => `http://127.0.0.1:${core!.port}`
 
@@ -174,9 +172,6 @@ describe('S1 集成冒烟 · 通用 provider 多实例', () => {
     delete process.env.MISTRAL_API_KEY // 故意不配 → 该厂商不应注册
     process.env.DEEPSEEK_MODEL = 'deepseek-reasoner' // 顺带覆盖默认模型
     process.env.LLM_PROVIDER = 'openai'
-
-    toolRoot = mkdtempSync(path.join(tmpdir(), 'ost-s1-tools-'))
-    process.env.LLM_TOOL_ROOT = toolRoot
 
     dataDir = mkdtempSync(path.join(tmpdir(), 'ost-s1-smoke-'))
     core = await startCore({
@@ -199,7 +194,6 @@ describe('S1 集成冒烟 · 通用 provider 多实例', () => {
     openaiUp?.server.close()
     deepseekUp?.server.close()
     if (dataDir) rmSync(dataDir, { recursive: true, force: true })
-    if (toolRoot) rmSync(toolRoot, { recursive: true, force: true })
   }, 30_000)
 
   it(

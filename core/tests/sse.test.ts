@@ -151,17 +151,19 @@ describe('loadConfig', () => {
     expect(cfg.servicesDir).toBe(path.resolve('/tmp/base', 'env-svc'))
   })
 
-  it('defaults port to 1420 and paths to repo-relative defaults; data goes to the USER dir', () => {
+  it('defaults port to 1420 and paths to repo-relative defaults; data goes to <应用根>/userData', () => {
     const cfg = loadConfig([], {}, '/tmp/base')
     expect(cfg.port).toBe(1420)
     expect(cfg.distDir).toBe(path.resolve('/tmp/base', './dist/client'))
     // P1：服务目录**没有缺省**了 —— 没给 --services 时由 main.ts 从插件清单算
     expect('servicesDir' in cfg).toBe(false)
-    // 数据根**不跟工作副本**：没给 --data 时落用户目录
-    expect(cfg.dataDir).toBe(userDataDir())
-    expect(path.isAbsolute(cfg.dataDir)).toBe(true)
-    expect(cfg.dataDir.startsWith(path.resolve('/tmp/base'))).toBe(false)
+    // 数据根缺省 = **应用根**下的 userData —— 应用根由入口 `core/dist/main.js` 反推，
+    // 不随 cwd 漂。vitest 的入口不在那个布局里（appRoot 取不到 → 退回 cwd），
+    // 所以这里落 `<cwd>/userData`；真实启动见 boot-config.test.ts 的 appRoot 组。
+    expect(cfg.dataDir).toBe(path.resolve('/tmp/base', 'userData'))
+    expect(cfg.dataDirSource).toBe('default')
     expect(cfg.dataDirIsDefault).toBe(true)
+    expect(cfg.defaultDataDir).toBe(cfg.dataDir)
     // 没发行标记 → 不是发行版（开发跑）
     expect(cfg.installRoot).toBeUndefined()
   })

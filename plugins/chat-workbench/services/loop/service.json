@@ -12,7 +12,13 @@
     "loop.token.streamed",
     "loop.tool.executed",
     "message.append",
-    "session.get"
+    "session.get",
+    "prompt.fragments.list",
+    "skills.list",
+    "tools.list",
+    "tool.execute",
+    "tool.approval.requested",
+    "session.set.workspace"
   ],
   "subscribes": [
     "loop.run",
@@ -21,6 +27,13 @@
     "llm.request.finished",
     "llm.request.failed",
     "llm.request.tool_call",
-    "session.get.result"
+    "session.get.result",
+    "prompt.fragment.registered",
+    "prompt.fragment.unregistered",
+    "skills.list.result",
+    "tools.state",
+    "tool.execute.result",
+    "tool.approval.resolved",
+    "session.updated"
   ]
 }

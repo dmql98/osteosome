@@ -168,4 +168,27 @@ describe('useSessionState', () => {
     es.emit('session.created', META('x', 'X', '2024-01-01'))
     expect(sessions.list.value).toEqual([])
   })
+
+  it('exportSession：发 session.export，按 requestId 等 session.export.result（P2-5）', async () => {
+    const sessions = useSessionState()
+    await sessions.bootstrap()
+    const p = sessions.exportSession('a')
+    await new Promise((r) => setTimeout(r, 0))
+    const req = sent.find((c) => c.topic === 'session.export')?.payload as { requestId: string }
+    expect(req).toBeTruthy()
+    es.emit('session.export.result', { requestId: req.requestId, sessionId: 'a', filename: 'a.md', content: '# hi' })
+    await expect(p).resolves.toEqual({ filename: 'a.md', content: '# hi' })
+    sessions.dispose()
+  })
+
+  it('exportSession：error 结果 → null', async () => {
+    const sessions = useSessionState()
+    await sessions.bootstrap()
+    const p = sessions.exportSession('nope')
+    await new Promise((r) => setTimeout(r, 0))
+    const req = sent.find((c) => c.topic === 'session.export')?.payload as { requestId: string }
+    es.emit('session.export.result', { requestId: req.requestId, sessionId: 'nope', filename: '', content: '', error: { code: 'not_found', message: 'x' } })
+    await expect(p).resolves.toBeNull()
+    sessions.dispose()
+  })
 })

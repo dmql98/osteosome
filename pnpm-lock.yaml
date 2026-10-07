@@ -104,6 +104,67 @@ importers:
         specifier: ^3.1.1
         version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
 
+  plugins/agents: {}
+
+  plugins/agents/services/agent:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/agents/ui:
+    dependencies:
+      '@osteosome/core-client':
+        specifier: workspace:*
+        version: link:../../../sdk/core-client
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../shared
+      '@osteosome/ui':
+        specifier: workspace:*
+        version: link:../../../sdk/ui
+      vue:
+        specifier: ^3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.6
+        version: 24.13.6
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.9
+        version: 6.0.9(vite@7.3.6(@types/node@24.13.6))(vue@3.5.43(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.5.1
+        version: 2.5.1(@vue/compiler-dom@3.5.43)(@vue/server-renderer@3.5.43)(vue@3.5.43(typescript@5.9.3))
+      jsdom:
+        specifier: ^30.1.1
+        version: 30.1.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.6
+        version: 7.3.6(@types/node@24.13.6)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+      vue-tsc:
+        specifier: ^3.3.11
+        version: 3.3.11(typescript@5.9.3)
+
   plugins/chat-workbench: {}
 
   plugins/chat-workbench/services/llm:
@@ -203,27 +264,6 @@ importers:
         specifier: ^3.3.11
         version: 3.3.11(typescript@5.9.3)
 
-  plugins/credentials: {}
-
-  plugins/credentials/services/credentials:
-    dependencies:
-      '@osteosome/service-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdk/ts
-      '@osteosome/shared':
-        specifier: workspace:*
-        version: link:../../../../shared
-    devDependencies:
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.13.6
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^3.1.1
-        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
-
   plugins/models: {}
 
   plugins/models/services/llm-provider-openai:
@@ -306,6 +346,261 @@ importers:
         specifier: ^3.1.1
         version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
 
+  plugins/skills: {}
+
+  plugins/skills/services/skills:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/skills/ui:
+    dependencies:
+      '@osteosome/core-client':
+        specifier: workspace:*
+        version: link:../../../sdk/core-client
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../shared
+      '@osteosome/ui':
+        specifier: workspace:*
+        version: link:../../../sdk/ui
+      vue:
+        specifier: ^3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.6
+        version: 24.13.6
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.9
+        version: 6.0.9(vite@7.3.6(@types/node@24.13.6))(vue@3.5.43(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.5.1
+        version: 2.5.1(@vue/compiler-dom@3.5.43)(@vue/server-renderer@3.5.43)(vue@3.5.43(typescript@5.9.3))
+      jsdom:
+        specifier: ^30.1.1
+        version: 30.1.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.6
+        version: 7.3.6(@types/node@24.13.6)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+      vue-tsc:
+        specifier: ^3.3.11
+        version: 3.3.11(typescript@5.9.3)
+
+  plugins/tools: {}
+
+  plugins/tools/services/fs-tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/mcp-tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/misc-tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/shell-tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/skills-tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/web-tools:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/services/workspace:
+    dependencies:
+      '@osteosome/service-sdk':
+        specifier: workspace:*
+        version: link:../../../../sdk/ts
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+
+  plugins/tools/ui:
+    dependencies:
+      '@osteosome/core-client':
+        specifier: workspace:*
+        version: link:../../../sdk/core-client
+      '@osteosome/shared':
+        specifier: workspace:*
+        version: link:../../../shared
+      '@osteosome/ui':
+        specifier: workspace:*
+        version: link:../../../sdk/ui
+      vue:
+        specifier: ^3.5.43
+        version: 3.5.43(typescript@5.9.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.6
+        version: 24.13.6
+      '@vitejs/plugin-vue':
+        specifier: ^6.0.9
+        version: 6.0.9(vite@7.3.6(@types/node@24.13.6))(vue@3.5.43(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.5.1
+        version: 2.5.1(@vue/compiler-dom@3.5.43)(@vue/server-renderer@3.5.43)(vue@3.5.43(typescript@5.9.3))
+      jsdom:
+        specifier: ^30.1.1
+        version: 30.1.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^7.3.6
+        version: 7.3.6(@types/node@24.13.6)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.6)(jsdom@30.1.1)(msw@2.15.0(@types/node@24.13.6)(typescript@5.9.3))
+      vue-tsc:
+        specifier: ^3.3.11
+        version: 3.3.11(typescript@5.9.3)
+
   plugins/workbench: {}
 
   plugins/workbench/ui:
@@ -316,6 +611,9 @@ importers:
       '@osteosome/ui':
         specifier: workspace:*
         version: link:../../../sdk/ui
+      '@tauri-apps/plugin-dialog':
+        specifier: ^2.2.0
+        version: 2.8.1
       vue:
         specifier: ^3.5.43
         version: 3.5.43(typescript@5.9.3)
@@ -915,6 +1213,9 @@ packages:
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
 
+  '@tauri-apps/api@2.12.1':
+    resolution: {integrity: sha512-DeyFHa3wynpyoqTDikDEDGTJIq4LQ5USfolQGRmGIWT6JMADyxZBTDa5cAdT3tDg73rUXufPaCwN7aXBos4OnQ==}
+
   '@tauri-apps/cli-darwin-arm64@2.11.5':
     resolution: {integrity: sha512-tggOiVOohjIHdiElbjeBfB41s6cmfsq+ZQ0PX0fEtCdsDdZ9cCi54e5gNK7tdPbR6JbdDe7RA4kbQdyyBUUk/Q==}
     engines: {node: '>= 10'}
@@ -990,6 +1291,9 @@ packages:
     resolution: {integrity: sha512-YbeJ6tctNoo40purO4u3Eeo3RVqmsjJr0NoKQRu+4pvO4gMLzkjta7x0k96SxSLmx+rQ+8um1ThOlw+HLpgFug==}
     engines: {node: '>= 10'}
     hasBin: true
+
+  '@tauri-apps/plugin-dialog@2.8.1':
+    resolution: {integrity: sha512-/DtE3B62JgpYuWFL5ATXM6KOXUq7pca7cJWOgSqULhZsgyjLk0PWKek1dbRDvhNBW6flNsOfWphsKnb+738Dmw==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -2158,6 +2462,8 @@ snapshots:
 
   '@tauri-apps/api@2.11.1': {}
 
+  '@tauri-apps/api@2.12.1': {}
+
   '@tauri-apps/cli-darwin-arm64@2.11.5':
     optional: true
 
@@ -2204,6 +2510,10 @@ snapshots:
       '@tauri-apps/cli-win32-arm64-msvc': 2.11.5
       '@tauri-apps/cli-win32-ia32-msvc': 2.11.5
       '@tauri-apps/cli-win32-x64-msvc': 2.11.5
+
+  '@tauri-apps/plugin-dialog@2.8.1':
+    dependencies:
+      '@tauri-apps/api': 2.12.1
 
   '@types/chai@5.2.3':
     dependencies:

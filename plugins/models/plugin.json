@@ -1,11 +1,11 @@
 {
   "id": "models",
   "name": "模型接入",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "icon": "🧠",
   "author": "osteosome",
   "license": "Apache-2.0",
-  "description": "模型接入层：wire 层 provider（services/llm-provider-openai），一个进程内承载多家厂商实例（12 家预设走 OpenAI 兼容 wire），运行期按 credential.saved / deleted 增量注册与注销。厂商目录是插件自带数据 catalog.json —— 服务经 plugins.readFile 读它、UI 经 dist/ui/catalog.json 读它，于是「界面上有的厂商，服务一定认」。唯一界面组件 widget.llm-settings 同时管「接入清单」（谁已连接 / 未连接）与该家的端点、凭证、模型墙。",
+  "description": "模型接入层：wire 层 provider（services/llm-provider-openai），一个进程内承载多家厂商实例（12 家预设走 OpenAI 兼容 wire）。这个插件**自己拥有它的用户数据**：接入清单与密钥落在 userData/plugin/models/（preferences.json + credentials.json），由 provider 服务读写，前端经总线（models.prefs.* / models.credentials.*）访问，Core 不持有。运行期按接入清单/密钥的变更增量注册与注销。厂商目录是插件自带数据 catalog.json —— 服务经 plugins.readFile 读它、UI 经 dist/ui/catalog.json 读它，于是「界面上有的厂商，服务一定认」。唯一界面组件 widget.llm-settings 同时管「接入清单」（谁已连接 / 未连接）与该家的端点、凭证、模型墙。",
   "services": ["llm-provider-openai"],
   "components": [],
   "ui": {
@@ -15,10 +15,14 @@
   },
   "capabilities": [
     { "name": "llm.provider.registered", "detail": "provider 注册（defaultModel / credentialRef / retryPolicy）" },
-    { "name": "llm.provider.unregistered", "detail": "provider 注销（凭证位删除）" },
-    { "name": "credentials.resolve", "detail": "向凭证位申请 API Key（返回值不落日志）" },
-    { "name": "llm.models.list", "detail": "列出该厂商可用模型" }
+    { "name": "llm.provider.unregistered", "detail": "provider 注销（凭证删了 / 端点改了）" },
+    { "name": "llm.models.list", "detail": "列出该厂商可用模型" },
+    { "name": "models.prefs.get", "detail": "重播接入清单（前端订阅 models.prefs.state）" },
+    { "name": "models.prefs.set", "detail": "合并式改接入清单" },
+    { "name": "models.credentials.list", "detail": "重播密钥**掩码**列表" },
+    { "name": "models.credentials.put", "detail": "新建/覆盖密钥（明文只到 owner 进程）" },
+    { "name": "models.credentials.delete", "detail": "删除密钥" }
   ],
-  "dependencies": [{ "pluginId": "credentials" }],
+  "dependencies": [],
   "autoStart": true
 }

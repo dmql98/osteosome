@@ -7,16 +7,28 @@
  * - 命令不是事件：命令 topic 走 /api/command，声明在 {@link CommandMap}
  */
 import type {
+  ApprovalPolicy,
   ChatMessage,
+  DirEntry,
+  DirRoot,
+  MCPServerConfig,
   ProviderDescriptor,
   RetryPolicy,
   StreamChunk,
   StreamError,
   ThinkingEffort,
   ToolCall,
+  ToolEscape,
+  ToolRecord,
+  ToolRisk,
   ToolSpec,
   Usage,
 } from './llm'
+import type { ConstraintField, ConstraintValues } from './tools/constraints'
+import type { MaskedCredential, ModelsPrefs } from './llm'
+import type { SkinBrief, SkinSetPatch, SkinSetResult } from './skin'
+import type { AgentRecipe, AgentStatePatch, CharacterBrief } from './agent'
+import type { SkillIndexEntry, SkillSource } from './skills'
 
 /** 所有事件 payload 的公共字段（ts / source 必填，其余可选） */
 export interface EventBase {
@@ -51,6 +63,29 @@ export interface SessionMeta {
   createdAt: string
   updatedAt: string
   pinned?: boolean
+  /**
+   * 归档（P4b P2-2，只增不改）。归档桶内部纯按时间排，不接受手动顺序。
+   *
+   * **归档不得改 `updatedAt`** —— 与 `pinned` 同一条纪律（P4b DR-6）：
+   * 用户操作的是「分类」，不是「活动时间」。否则归档一下会话就跳进「今天」最顶上。
+   */
+  archived?: boolean
+  /**
+   * 父会话 id（P4b P2-3，只增不改）—— 子代理发起的对话归属到父会话，
+   * 前端按它在前端归组（不学天枢对每个根会话各发一次子会话请求的 N+1）。
+   */
+  parentId?: string
+  /**
+   * 最后一条 user/assistant 消息的预览（P4b P2-4，只增不改）—— 由 session 服务在 append 时截断拼接。
+   *
+   * 为什么服务端拼而不是前端各拉一次：前端要为每个会话各发一次 `session.get`
+   * 才能拿到最后一条消息（N+1，天枢已经中过这个招）。服务端拼一次，列表直接有。
+   */
+  lastMessage?: string
+  /** 会话绑定的项目目录（P7 M0，只增不改）—— 工具沙箱的权威来源（session 服务是唯一写者） */
+  workspace?: string
+  /** 额外授权根（越界审批批准后加入；`workspace` 排第一，其余按加入序） */
+  workspaces?: string[]
   /** 全文/索引损坏标记（读到但不可用） */
   corrupted?: boolean
 }
@@ -155,12 +190,6 @@ export interface EventMap {
   'llm.provider.unregistered': EventBase & { provider: string }
   /** provider → 主位：流式块（块结构不出 wire，主位翻译成 llm.token.streamed 等对外事件） */
   'llm.provider.chunk': EventBase & { requestId: string; chunk: StreamChunk }
-  /** credentials → provider：凭证解析结果（值只在服务间总线传播，永不进 SSE） */
-  'credentials.resolved': EventBase & {
-    requestId: string
-    apiKey?: string
-    error?: StreamError
-  }
   /** llm-retry 记账输出（P2 只声明消费 + 记账，P4 执行器） */
   'llm.metrics.usage': EventBase & { requestId: string; provider: string; usage: Usage }
   /**
@@ -178,11 +207,21 @@ export interface EventMap {
     models: string[]
     catalog: 'remote' | 'static'
   }
-  // ── credential（P4 §3.4，只增不改；**值永不入 payload**）──
-  /** 凭证写入（只带 { id, name, provider }；明文值不出 Core） */
-  'credential.saved': EventBase & { id: string; name: string; provider: string }
-  /** 凭证删除（只带 { id }） */
-  'credential.deleted': EventBase & { id: string }
+  // ── models 插件的用户数据（只增不改；**明文凭证永不入 payload**）──
+  /**
+   * models 插件的接入清单（`userData/plugin/models/preferences.json`）。
+   *
+   * **所有者是 models 插件的服务**（它同时是 UI 与会话输入框的数据源），Core 不持有也不转发。
+   * 任何一次变更后由 owner **主动重播整份**（不是增量），所以订阅方不需要 diff 也不需要补偿逻辑。
+   */
+  'models.prefs.state': EventBase & { prefs: ModelsPrefs }
+  /**
+   * models 插件的凭证**掩码**列表（`userData/plugin/models/credentials.json`）。
+   *
+   * ⚠️ 只有掩码（`sk-abc…xyz`）。明文值只存在于 owner 进程的内存与那个文件里 ——
+   * 这是「密钥归使用方插件」之后仍然成立的那条红线。
+   */
+  'models.credentials.state': EventBase & { credentials: MaskedCredential[] }
   // ── session（P3 §3.3/§3.4，只增不改）──
   /** session 命令结果（`session.get` 不存在时 session:null，调用方回退最近会话） */
   'session.list.result': EventBase & { requestId: string; sessions: SessionMeta[]; error?: EventError }
@@ -191,10 +230,33 @@ export interface EventMap {
   'session.rename.result': EventBase & { requestId: string; sessionId: string; title: string; error?: EventError }
   'session.delete.result': EventBase & { requestId: string; sessionId: string; error?: EventError }
   'session.clear.result': EventBase & { requestId: string; deletedCount: number; error?: EventError }
+  'session.pin.result': EventBase & { requestId: string; sessionId: string; pinned: boolean; error?: EventError }
+  'session.archive.result': EventBase & { requestId: string; sessionId: string; archived: boolean; error?: EventError }
+  /** 导出结果（P2-5）：`content` 是完整 Markdown 文本，`filename` 建议下载名 */
+  'session.export.result': EventBase & {
+    requestId: string
+    sessionId: string
+    filename: string
+    content: string
+    error?: EventError
+  }
   'message.append.result': EventBase & { requestId: string; sessionId: string; message: Message; error?: EventError }
   /** session 领域事件（前端列表 + loop 旁路消费） */
   'session.created': EventBase & { sessionId: string; title: string; updatedAt: string }
-  'session.updated': EventBase & { sessionId: string; title?: string; updatedAt: string }
+  'session.updated': EventBase & {
+    sessionId: string
+    title?: string
+    updatedAt: string
+    /** 置顶变化（P4b P2-1，只增不改）。**bump 它不代表改 updatedAt** */
+    pinned?: boolean
+    /** 归档变化（P4b P2-2，只增不改） */
+    archived?: boolean
+    /** 预览行更新（P4b P2-4 / P0-0：append 后补发）。只取 user/assistant 的正文前 120 码点 */
+    lastMessage?: string
+    /** 工作区变化（P7 M0，只增不改）：loop 据此更新本地副本 + 可用于重派 */
+    workspace?: string
+    workspaces?: string[]
+  }
   'session.deleted': EventBase & { sessionId: string }
   'message.appended': EventBase & { sessionId: string; message: Message }
   // ── loop（P3 §3.2/§3.4，只增不改）──
@@ -225,6 +287,137 @@ export interface EventMap {
     arguments: string
     ok: boolean
     summary: string
+  }
+  // ── skins 插件的皮肤目录（只增不改）──
+  /**
+   * 皮肤清单（`plugins/skins/skins.json`）。
+   *
+   * ## 为什么只有一条事件、而且是「重播整份」
+   *
+   * skins 插件是**只读能力位** —— 资产是构建产物，运行期不可写
+   * （详见 `shared/src/skin.ts` 与 docs/插件demo/skin_manager/皮肤管理插件设计.html）。
+   * 所以没有 `skin.set`，也就没有「改完之后要广播什么」这个问题。
+   *
+   * **重播整份**让订阅方不需要 diff、不需要补偿逻辑：view 晚于 owner 启动时，
+   * 那批变更早就发完了（与 `models.prefs.state` / `tools.state` 同一个理由）。
+   *
+   * ## 订阅方有三个，各取所需
+   * - `widget.skins`：目录与预览（只读）
+   * - `widget.agents`：绑定选择器的候选 —— 它**只读**，写的是 `characters.json`
+   *   里 `skinId` 那一条，owner 是 agents 服务
+   * - `widget.chat-timeline`：把 `skinId` 换成资产 URL
+   *
+   * ## 收不到时怎么表现
+   *
+   * **没收到 ≠ 空清单**。两者在界面上必须能区分开（§8 第 3 条）：
+   * 没收到显示「无法校验」，空清单显示「没有皮肤」。
+   * 前者不能说出是哪个插件没提供 —— 一份清单都没拿到，说出来就是猜。
+   */
+  'skin.state': EventBase & { skins: SkinBrief[] }
+  'skin.set.result': EventBase & SkinSetResult
+
+  // ── agents 插件（P5，只增不改）──
+  /**
+   * 角色目录（`userData/plugin/agents/characters.json`）—— **重播整份**。
+   *
+   * 与 `skin.state` / `models.prefs.state` 同一套「owner 重播整份」机制：
+   * composer 的角色下拉、widget.agents 编辑器都订阅它，不需要 diff。
+   */
+  'agent.state': EventBase & { characters: CharacterBrief[] }
+  /**
+   * 角色解析结果（`agent.resolve` 的响应）—— **两跳**（总线不提供返回值）。
+   * `recipe` 是纯数据配方；`error` 时（角色不存在等）由调用方回落裸会话。
+   */
+  'agent.resolve.result': EventBase & { requestId: string; recipe?: AgentRecipe; error?: EventError }
+
+  // ── prompt 片段（P5，只增不改）──
+  /**
+   * 一段要拼进 system 的提示词片段。**角色那份也走这条**（id = `role:<characterId>`），
+   * 与 reliability 插件发的那条一模一样 —— 所以 loop 侧零新增机制。
+   *
+   * 装配器按 `(priority, id)` 排；`role:*` 片段只在当前 run 选了对应角色时才纳入。
+   */
+  'prompt.fragment.registered': EventBase & { pluginId: string; id: string; priority: number; text: string }
+  'prompt.fragment.unregistered': EventBase & { pluginId: string; id: string }
+
+  // ── skills 插件（P6，只增不改）──
+  /**
+   * 一个技能被登记（带技能的插件服务读完自己的 SKILL.md 后 publish）。
+   * `source:'custom'` 的是用户自建（owner = {@link CUSTOM_OWNER_ID}）。
+   */
+  'skill.registered': EventBase & {
+    ownerPluginId: string
+    name: string
+    description: string
+    source: SkillSource
+    enabled: boolean
+  }
+  'skill.unregistered': EventBase & { ownerPluginId: string; name: string }
+  /** 全系统唯一的技能索引（**重播整份**）—— 界面与统计的数据源 */
+  'skills.state': EventBase & { skills: SkillIndexEntry[] }
+  /** `skills.list` 的响应（两跳）：按角色过滤后的索引 = 本机可用 ∩ 角色绑定 */
+  'skills.list.result': EventBase & { requestId: string; skills: SkillIndexEntry[]; error?: EventError }
+
+  // ── 工作区（P7 M0，只增不改）──
+  /** 列目录结果（盘符 + 快捷入口 + 目录项）。**workspace 服务从不 readFile** */
+  'workspace.list.result': EventBase & {
+    requestId: string
+    entries: DirEntry[]
+    currentPath: string
+    parentPath: string | null
+    roots: DirRoot[]
+  }
+  /** 解析一个路径是否存在（用于选择器校验） */
+  'workspace.resolve.result': EventBase & { requestId: string; path: string | null }
+
+  // ── 工具（P7 M1/M2，只增不改）──
+  /** 一个执行者登记它提供的工具（含 risk）。**同名后者拒绝注册**（不覆盖，界面标 ⚠） */
+  'tool.registered': EventBase & {
+    serviceId: string
+    tools: (ToolSpec & { risk: ToolRisk; managedBy?: 'user' | 'auto'; constraintFields?: ConstraintField[] })[]
+  }
+  'tool.unregistered': EventBase & { serviceId: string }
+  /**
+   * 一次工具执行的结果。**越界**时 `ok:false` + `escape`（由 loop 转成工作区审批并重派）；
+   * 被拒 / 超时 / 禁用 / 未知，四种都产结果（不静默丢弃）。
+   */
+  'tool.execute.result': EventBase & {
+    requestId: string
+    ok: boolean
+    content: string
+    summary: string
+    escape?: ToolEscape
+  }
+  /**
+   * 审批请求。`kind:'exec'`（缺省）由**闸门**应答；`kind:'workspace'`（越界授权）由 **loop** 应答
+   * （闸门不认识工作区）。老节点不传 `kind` → 按普通 exec 处理。
+   */
+  'tool.approval.requested': EventBase & {
+    requestId: string
+    sessionId: string
+    toolName: string
+    risk: ToolRisk
+    arguments: string
+    kind?: 'exec' | 'workspace'
+    requestedPath?: string
+    permissionRoot?: string
+    rationale?: string
+    expiresAt?: number
+  }
+  /** 工具目录 + 策略 + 约束 + MCP（重播整份，widget.tools 数据源） */
+  'tools.state': EventBase & {
+    tools: ToolRecord[]
+    policies: Record<string, ApprovalPolicy>
+    constraints: ConstraintValues
+    mcpServers?: MCPServerConfig[]
+  }
+  /** 试调（`tools.invoke`）的结果 */
+  'tools.invoke.result': EventBase & {
+    requestId: string
+    ok: boolean
+    content: string
+    summary: string
+    elapsedMs: number
   }
 }
 
@@ -281,8 +474,28 @@ export interface CommandMap {
   }
   /** 主位 → provider：取消在途请求（provider `signal.abort()` → 上游断开 → `finish{ stop }`） */
   'llm.provider.cancel': { requestId: string }
-  /** provider → credentials：解析凭证引用（ref 如 `env:DEEPSEEK_API_KEY`；P4 支持 `core:<id>`） */
-  'credentials.resolve': { requestId: string; ref: string }
+  // ── models 插件的用户数据命令（owner = 对应 provider 服务）──
+  /**
+   * 「把接入清单重播一遍」（空载荷）。
+   *
+   * 与 `llm.provider.reannounce` 同一个理由：订阅方可能晚于 owner 启动，
+   * 那批变更事件早就发完了。**重播整份**而不是发增量，订阅方因此不需要 diff。
+   */
+  'models.prefs.get': Record<string, never>
+  /** 合并式改接入清单（`patch` 里没给的键保持不变）—— 避免两个视图互相覆盖 */
+  'models.prefs.set': { patch: Partial<ModelsPrefs> }
+  /** 「把凭证掩码列表重播一遍」（空载荷） */
+  'models.credentials.list': Record<string, never>
+  /**
+   * 新建 / 覆盖一条密钥。
+   *
+   * ⚠️ `value` 是**明文**，但它只走「前端 → Core `/api/command` → 总线 → owner」这一条路，
+   * 不会进 SSE / 事件 / 日志（owner 回的是掩码列表）。这条通道与 Core 时代的
+   * `PUT /api/credentials` 同一性质，只是终点从 Core 的文件换成了插件的文件。
+   */
+  'models.credentials.put': { id?: string; name: string; provider: string; value: string }
+  /** 删一条密钥 */
+  'models.credentials.delete': { id: string }
   /**
    * 模型目录命令（P4 WS-3）—— 前端/主位发，**对应 provider 服务**订阅并回复 `llm.models.list.result`。
    * （能力位设计：模型列表属于 provider 自身知识，主位不查上游）
@@ -301,10 +514,20 @@ export interface CommandMap {
   // ── session 命令（P3 §3.3，只增不改；响应走 <cmd>.result 事件）──
   'session.list': { requestId: string }
   'session.get': { requestId: string; sessionId: string }
-  'session.create': { requestId: string; title?: string }
+  /**
+   * 新建会话（P3；P4b P2-3 加可选 `parentId`，只增不改）。
+   * `parentId` 给子代理发起的子会话用 —— 前端按它归组，不学天枢的 N+1。
+   */
+  'session.create': { requestId: string; title?: string; parentId?: string }
   'session.rename': { requestId: string; sessionId: string; title: string }
   'session.delete': { requestId: string; sessionId: string }
   'session.clear': { requestId: string }
+  /** 置顶（P4b P2-1）。**不得改 `updatedAt`** —— 见 §9 决策与 shared SessionMeta 注释 */
+  'session.pin': { requestId: string; sessionId: string; pinned: boolean }
+  /** 归档（P4b P2-2）。与 `session.pin` 同一条纪律：不改 `updatedAt` */
+  'session.archive': { requestId: string; sessionId: string; archived: boolean }
+  /** 导出会话（P4b P2-5）。结果走 `session.export.result`（Markdown 文本，前端下载） */
+  'session.export': { requestId: string; sessionId: string }
   'message.append': { requestId: string; sessionId: string; message: { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; id?: string; toolCallId?: string; toolName?: string; toolCalls?: ToolCall[] } }
   // ── loop 命令（P3 §3.4；requestId = A，对外可见）──
   /**
@@ -318,9 +541,109 @@ export interface CommandMap {
     provider?: string
     model?: string
     thinking?: ThinkingEffort
+    /** P5：本次 run 选的角色 id（缺省 = 裸会话）。装配器据此纳入 `role:<id>` 片段 */
+    characterId?: string
   }
   /** 取消在途 run（fire-and-forget，无 <cmd>.result；结果由 loop.run.cancelled / loop.run.failed 体现） */
   'loop.cancel': { requestId: string }
+  // ── skins 插件（**只有一条命令**：收集方上线时问一次）──
+  /**
+   * 「把皮肤清单重播一遍」（空载荷）。
+   *
+   * 与 `models.prefs.get` / `llm.provider.reannounce` 同一个理由：订阅方可能晚于
+   * owner 启动，那批变更事件早就发完了。**重播整份**而不是发增量。
+   *
+   * ## 走用户数据之后，写操作从这里长出来
+   *
+   * 资产在 `userData/plugin/skins/`，服务**独占读写**（握手的 `dataDir` 指向那里），
+   * 所以上传 / 裁剪 / 删除 / 改元数据都有落点，`skin.state` 之后会重播整份。
+   *
+   * 注意本插件**仍然不写 `characters.json`** —— 角色的 `skinId` 由 agent 服务持有。
+   * `skin.set` 存在的唯一理由是「删除一套皮肤前要核对有没有角色在用」。
+   */
+  'skin.list': Record<string, never>
+  /**
+   * 改一个角色绑的皮肤 —— **这是写 `characters.json` 之外唯一的写操作**。
+   *
+   * ## 写的是谁的数据
+   *
+   * `skinId` 字段本身在 `agents` 的 `characters.json` 里，owner 是 agent 服务；
+   * **本插件不写那个文件**。这条命令存在的理由是另一件事：删除一套皮肤时，
+   * 要知道「有没有角色正在用它」才能决定**能不能删**。
+   *
+   * ## 合并式
+   *
+   * `patch` 里没给的键保持不变。删除走 `removed` 而不是把字段设成 `null` ——
+   * 因为「没绑」与「绑了个空」在协议上是同一件事，不值得两种表示。
+   *
+   * ## 结果带 `affectedRoles`
+   *
+   * 删除/停用被引用中的皮肤时，服务**拒绝并列出引用者**（不静默删）。
+   * 那份清单是从 `agent.state` 读的（owner 重播整份），所以它可能不完整 ——
+   * 因此这里的 `affectedRoles` 是**尽力而为的提示**，界面上要照原文说，
+   * 不能反过来当「没被引用」的保证。
+   */
+  'skin.set': { requestId: string; patch: SkinSetPatch }
+
+  // ── agents 插件命令（P5，只增不改）──
+  /**
+   * 合并式改角色目录（没给的键不变）。结果走 `agent.state` 重播，**不另发 result** ——
+   * 与 `skin.set` 不同：这里没有「被拒」的失败模式，patch 要么合进去要么条目不存在。
+   */
+  'agent.state.set': { requestId: string; patch: AgentStatePatch }
+  /** 问「这个角色装配成什么」—— 两跳，回 `agent.resolve.result` */
+  'agent.resolve': { requestId: string; characterId: string }
+  /** 请各插件重播自己的 `prompt.fragment.registered`（空载荷）。晚启动的装配器上线时问一次 */
+  'prompt.fragments.list': Record<string, never>
+
+  // ── skills 插件命令（P6，只增不改）──
+  /**
+   * 要技能清单。`characterId` 可选 —— 给了就返回**本机可用 ∩ 该角色绑定**（AND 服务端成立），
+   * 不给返回全部本机可用。loop 在角色轮里用它拼 p10 索引片段。
+   */
+  'skills.list': { requestId: string; characterId?: string }
+  /**
+   * 机器级「本机可用」开关。**不影响角色绑定**（关掉不删绑定，重开即恢复）。
+   * 粒度：机器级一份（`skills.json`）。
+   */
+  'skill.enabled.set': { requestId: string; name: string; enabled: boolean; ownerPluginId: string }
+  /**
+   * 写用户自建技能（`userData/plugin/skills/custom/<name>/SKILL.md`）—— **skills 服务是唯一写者**。
+   * 改正文 / 新建走 `content`；删除走 `removed`（不可逆，界面只提供停用，见技能设计稿 §2）。
+   */
+  'skill.package.write': { requestId: string; name: string; content?: string; removed?: boolean }
+
+  // ── 工作区命令（P7 M0，只增不改）──
+  /** 列目录（不读文件）。`path` 缺省 = 盘符/快捷入口根 */
+  'workspace.list': { requestId: string; path?: string }
+  /** 解析一个路径是否存在 */
+  'workspace.resolve': { requestId: string; path: string }
+  /** 用系统文件管理器打开一个目录 */
+  'workspace.open': { requestId: string; path: string }
+  /**
+   * 合并式写会话的工作区（唯一写者 = session 服务）：
+   * `workspace` 设项目根；`addRoot` / `removeRoot` 增删授权根。
+   */
+  'session.set.workspace': { requestId: string; sessionId: string; workspace?: string; addRoot?: string; removeRoot?: string }
+
+  // ── 工具命令（P7 M1/M2，只增不改）──
+  /** 请求重播工具目录（`tools.state`） */
+  'tools.list': Record<string, never>
+  /**
+   * 派发一次工具执行给执行者（loop → 执行者）。`workspaces` 是沙箱根（**workspace 排第一**）；
+   * 缺省 = 无工作区（任何路径都越界 → 触发一次工作区审批）。
+   */
+  'tool.execute': { requestId: string; sessionId: string; name: string; arguments: string; workspaces?: string[] }
+  /** 审批应答（用户 → 闸门 / loop） */
+  'tool.approval.resolved': { requestId: string; approved: boolean; reason?: string; remember?: boolean }
+  /** 合并式改策略 / 约束（widget.tools） */
+  'tools.set': { requestId?: string; policies?: Record<string, ApprovalPolicy>; constraints?: ConstraintValues }
+  /** 试调一个工具（widget.tools 的「试调」Tab） */
+  'tools.invoke': { requestId: string; name: string; arguments: string }
+  /** 改 MCP 服务器清单 */
+  'tools.mcp.set': { requestId?: string; servers: MCPServerConfig[] }
+  /** 测一个 MCP 服务器连通性 */
+  'tools.mcp.test': { requestId?: string; server: string }
 }
 
 /** 事件 topic：keyof EventMap */
@@ -357,17 +680,19 @@ export const EVENT_TOPICS = [
   'llm.provider.registered',
   'llm.provider.unregistered',
   'llm.provider.chunk',
-  'credentials.resolved',
   'llm.metrics.usage',
   'llm.models.list.result',
-  'credential.saved',
-  'credential.deleted',
+  'models.prefs.state',
+  'models.credentials.state',
   'session.list.result',
   'session.get.result',
   'session.create.result',
   'session.rename.result',
   'session.delete.result',
   'session.clear.result',
+  'session.pin.result',
+  'session.archive.result',
+  'session.export.result',
   'message.append.result',
   'session.created',
   'session.updated',
@@ -378,6 +703,24 @@ export const EVENT_TOPICS = [
   'loop.run.cancelled',
   'loop.token.streamed',
   'loop.tool.executed',
+  'skin.state',
+  'skin.set.result',
+  'agent.state',
+  'agent.resolve.result',
+  'prompt.fragment.registered',
+  'prompt.fragment.unregistered',
+  'skill.registered',
+  'skill.unregistered',
+  'skills.state',
+  'skills.list.result',
+  'workspace.list.result',
+  'workspace.resolve.result',
+  'tool.registered',
+  'tool.unregistered',
+  'tool.execute.result',
+  'tool.approval.requested',
+  'tools.state',
+  'tools.invoke.result',
 ] as const satisfies readonly EventKey[]
 
 /** 运行时命令 topic 清单 —— 与 {@link CommandMap} 同步；服务 manifest 的 subscribes 可引用命令 */
@@ -390,18 +733,44 @@ export const COMMAND_TOPICS = [
   'llm.cancel',
   'llm.provider.request',
   'llm.provider.cancel',
-  'credentials.resolve',
   'llm.models.list',
   'llm.provider.reannounce',
+  'models.prefs.get',
+  'models.prefs.set',
+  'models.credentials.list',
+  'models.credentials.put',
+  'models.credentials.delete',
   'session.list',
   'session.get',
   'session.create',
   'session.rename',
   'session.delete',
   'session.clear',
+  'session.pin',
+  'session.archive',
+  'session.export',
   'message.append',
   'loop.run',
   'loop.cancel',
+  'skin.list',
+  'skin.set',
+  'agent.state.set',
+  'agent.resolve',
+  'prompt.fragments.list',
+  'skills.list',
+  'skill.enabled.set',
+  'skill.package.write',
+  'workspace.list',
+  'workspace.resolve',
+  'workspace.open',
+  'session.set.workspace',
+  'tools.list',
+  'tool.execute',
+  'tool.approval.resolved',
+  'tools.set',
+  'tools.invoke',
+  'tools.mcp.set',
+  'tools.mcp.test',
   'plugin.start',
   'plugin.stop',
 ] as const satisfies readonly CommandKey[]

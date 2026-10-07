@@ -51,6 +51,56 @@ export interface ToolSpec {
   parameters: Record<string, unknown>
 }
 
+// ── 工具能力位（P7）────────────────────────────────────────────
+/** 工具风险档：决定硬超时分档与默认审批策略 */
+export type ToolRisk = 'read' | 'write' | 'net' | 'proc'
+/** 审批策略：ask 弹窗 / auto 放行 / deny 直接拒 */
+export type ApprovalPolicy = 'ask' | 'auto' | 'deny'
+
+/**
+ * 目录里的一条工具（`tools.state` 载荷）。
+ * `managedBy:'auto'` = 由已安装技能包 / MCP 决定，界面**不给启用开关**（只只读展示）。
+ */
+export interface ToolRecord extends ToolSpec {
+  serviceId: string
+  risk: ToolRisk
+  enabled: boolean
+  managedBy?: 'user' | 'auto'
+  /** 同名冲突：被拒的那个不覆盖生效的那个，界面标 ⚠ */
+  conflict?: boolean
+  /** 该工具声明了哪些约束键（界面据此渲染约束编辑器） */
+  constraintKeys?: string[]
+  /** 约束字段声明（界面据此渲染编辑器） */
+  constraintFields?: import('../tools/constraints').ConstraintField[]
+}
+
+/** 工作区目录项（`workspace.list.result.entries`） */
+export interface DirEntry {
+  name: string
+  path: string
+  isDir: boolean
+}
+/** 工作区入口（盘符 / 快捷入口） */
+export interface DirRoot {
+  name: string
+  path: string
+  kind: 'drive' | 'quick'
+}
+/** MCP 服务器配置（`mcp-servers.json`） */
+export interface MCPServerConfig {
+  id: string
+  transport: 'stdio' | 'sse' | 'http'
+  command?: string
+  args?: string[]
+  url?: string
+  enabled?: boolean
+}
+/** 越界信息（`tool.execute.result.escape`）—— 由 loop 转发成一次工作区审批 */
+export interface ToolEscape {
+  requestedPath: string
+  permissionRoot: string
+}
+
 /** 对话消息（llm.request 与 llm.provider.request 共用） */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'

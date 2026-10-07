@@ -66,6 +66,10 @@ function writePlugin(
     mkdirSync(path.join(uiDir, 'assets'), { recursive: true })
     writeFileSync(path.join(uiDir, 'index.html'), `<!doctype html><title>${id}</title>`)
     writeFileSync(path.join(uiDir, 'assets', 'index-a1b2c3.js'), `console.log('${id}')`)
+    // Vite 的内容哈希走 base64url，**会含 `-` 与 `_`**（真实产物里就有 `index-C3j-Xspt.js`）。
+    // 这两个名字不是假想的边角：字母表窄一格，约每五次构建就撞上一次。
+    writeFileSync(path.join(uiDir, 'assets', 'index-C3j-Xspt.js'), `console.log('${id}-dash')`)
+    writeFileSync(path.join(uiDir, 'assets', 'index-B5j8S7ft.js'), `console.log('${id}-plain')`)
   }
 }
 
@@ -141,6 +145,16 @@ describe('GET /plugins/<id>/ui/* · 取得到', () => {
     expect(res.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     expect(await res.text()).toContain('chat')
+  })
+
+  test('哈希里的 `-` / `_` 不影响长缓存（Vite 用 base64url，不是纯字母数字）', async () => {
+    // 回归：判定「带哈希」的字母表窄一格时，assets 会静悄悄退回 no-cache ——
+    // 功能没坏，但每次都重下，而且只有某次构建才会显形，随机性让断言看起来像 flaky。
+    for (const name of ['index-C3j-Xspt.js', 'index-B5j8S7ft.js']) {
+      const res = await fetch(`${baseUrl}/plugins/chat/ui/assets/${name}`)
+      expect(res.status, name).toBe(200)
+      expect(res.headers.get('cache-control'), name).toBe('public, max-age=31536000, immutable')
+    }
   })
 
   test('index.html 走 no-cache：插件升级后不能被旧壳指着已删除的 chunk', async () => {

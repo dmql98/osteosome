@@ -52,6 +52,47 @@ function str(payload: Record<string, unknown>, key: string): string {
   return typeof payload[key] === 'string' ? (payload[key] as string) : ''
 }
 
+/** 角色 → 导出用的中文小标题 */
+function roleLabel(role: MessageRole): string {
+  return role === 'user' ? '用户' : role === 'assistant' ? '助手' : role === 'system' ? '系统' : '工具'
+}
+
+/**
+ * 导出为 Markdown（P2-5）。纯函数 —— 只读 `SessionFile`，不碰 store。
+ *
+ * 思维链以引用块附在对应消息下（它是「这条回答为什么这么想」的一部分，导出时不该丢），
+ * 工具调用列成列表。**不导出** finishReason / usage 这类内部元数据 —— 导出的是给人读的文本。
+ */
+export function toMarkdown(file: SessionFile): string {
+  const lines: string[] = []
+  lines.push(`# ${file.meta.title || '会话'}`)
+  lines.push('')
+  lines.push(`- id: ${file.meta.id}`)
+  lines.push(`- created: ${file.meta.createdAt}`)
+  lines.push(`- updated: ${file.meta.updatedAt}`)
+  lines.push('')
+  for (const m of file.messages) {
+    lines.push(`## ${roleLabel(m.role)}`)
+    if (m.reasoning) {
+      lines.push('')
+      lines.push('> 思考过程：')
+      for (const rl of m.reasoning.split('\n')) lines.push(`> ${rl}`)
+    }
+    lines.push('')
+    lines.push(m.content)
+    if (m.toolCalls && m.toolCalls.length > 0) {
+      lines.push('')
+      for (const tc of m.toolCalls) lines.push(`- 调用工具 \`${tc.name}\`：\`${tc.arguments}\``)
+    }
+    if (m.toolName) {
+      lines.push('')
+      lines.push(`（工具结果：${m.toolName}）`)
+    }
+    lines.push('')
+  }
+  return lines.join('\n')
+}
+
 /** 派发一条 session 命令 → 结果（不含发布动作，发布在 index.ts） */
 export function dispatch(store: SessionStore, topic: string, payload: Record<string, unknown>): CommandResult {
   const requestId = str(payload, 'requestId')
@@ -70,7 +111,9 @@ export function dispatch(store: SessionStore, topic: string, payload: Record<str
 
     case 'session.create': {
       const title = str(payload, 'title')
-      const meta = store.create(title)
+      // P2-3：可选 parentId（子代理子会话）。只认字符串；其余忽略（当顶层会话）
+      const parentId = str(payload, 'parentId')
+      const meta = store.create(title, parentId || undefined)
       return { requestId, sessionId: meta.id, title: meta.title }
     }
 
@@ -88,6 +131,51 @@ export function dispatch(store: SessionStore, topic: string, payload: Record<str
       if (!sessionId) return err(requestId, CODE_INVALID, 'session.delete: sessionId is required')
       if (!store.remove(sessionId)) return err(requestId, CODE_NOT_FOUND, `session.delete: no session '${sessionId}'`)
       return { requestId, sessionId }
+    }
+
+    case 'session.pin': {
+      const sessionId = str(payload, 'sessionId')
+      if (!sessionId) return err(requestId, CODE_INVALID, 'session.pin: sessionId is required')
+      if (typeof payload.pinned !== 'boolean') return err(requestId, CODE_INVALID, 'session.pin: pinned (boolean) is required')
+      const meta = store.setPinned(sessionId, payload.pinned)
+      if (!meta) return err(requestId, CODE_NOT_FOUND, `session.pin: no session '${sessionId}'`)
+      return { requestId, sessionId, pinned: meta.pinned === true }
+    }
+
+    case 'session.archive': {
+      const sessionId = str(payload, 'sessionId')
+      if (!sessionId) return err(requestId, CODE_INVALID, 'session.archive: sessionId is required')
+      if (typeof payload.archived !== 'boolean') {
+        return err(requestId, CODE_INVALID, 'session.archive: archived (boolean) is required')
+      }
+      const meta = store.setArchived(sessionId, payload.archived)
+      if (!meta) return err(requestId, CODE_NOT_FOUND, `session.archive: no session '${sessionId}'`)
+      return { requestId, sessionId, archived: meta.archived === true }
+    }
+
+    case 'session.set.workspace': {
+      const sessionId = str(payload, 'sessionId')
+      if (!sessionId) return err(requestId, CODE_INVALID, 'session.set.workspace: sessionId is required')
+      const meta = store.setWorkspace(sessionId, {
+        workspace: typeof payload.workspace === 'string' ? payload.workspace : undefined,
+        addRoot: typeof payload.addRoot === 'string' ? payload.addRoot : undefined,
+        removeRoot: typeof payload.removeRoot === 'string' ? payload.removeRoot : undefined,
+      })
+      if (!meta) return err(requestId, CODE_NOT_FOUND, `session.set.workspace: no session '${sessionId}'`)
+      return { requestId, sessionId, workspace: meta.workspace ?? null, workspaces: meta.workspaces ?? [] }
+    }
+
+    case 'session.export': {
+      const sessionId = str(payload, 'sessionId')
+      if (!sessionId) return err(requestId, CODE_INVALID, 'session.export: sessionId is required')
+      const file = store.get(sessionId)
+      if (!file) return err(requestId, CODE_NOT_FOUND, `session.export: no session '${sessionId}'`)
+      return {
+        requestId,
+        sessionId,
+        filename: `${sessionId}.md`,
+        content: toMarkdown(file),
+      }
     }
 
     case 'session.clear': {

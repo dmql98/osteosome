@@ -47,7 +47,8 @@ describe('服务产物可分发（P2）', () => {
   const services = builtServices()
 
   it('构建跑过：每个插件的服务都有 dist 产物（没跑 build 时这条先红）', () => {
-    expect(services.length).toBeGreaterThanOrEqual(6)
+    // 凭证能力位退休后服务数 6 -> 5（models 的 provider 自己解析密钥，不再有中转服务）
+    expect(services.length).toBeGreaterThanOrEqual(5)
     for (const s of services) {
       expect(existsSync(path.join(s.dir, 'index.js')), `${s.plugin}/${s.service} 缺 index.js`).toBe(true)
       expect(existsSync(path.join(s.dir, 'service.json')), `${s.plugin}/${s.service} 缺 service.json`).toBe(true)

@@ -246,14 +246,16 @@ describe('真实 plugins/（S7-5 落的那份划分，P1 起服务在插件里�
     return out
   }
 
-  test('扫得出 5 个插件，且零问题零环', () => {
+  test('扫得出 7 个插件，且零问题零环', () => {
     const scan = scanPlugins(REAL_PLUGINS, realServiceIds())
     expect(scan.status).toBe('ok')
     expect(scan.ids.sort()).toEqual([
+      'agents',
       'chat-workbench',
-      'credentials',
       'models',
       'reliability',
+      'skills',
+      'tools',
       'workbench',
     ])
     expect(scan.problems).toEqual([])
@@ -270,9 +272,10 @@ describe('真实 plugins/（S7-5 落的那份划分，P1 起服务在插件里�
     expect(claimed.size).toBe(realServiceIds().size)
   })
 
-  test('安装顺序满足依赖：credentials -> models -> chat-workbench -> reliability', () => {
+  test('安装顺序满足依赖：models -> chat-workbench -> reliability', () => {
+    // 凭证能力位退休后依赖图浅了一层：models 不再依赖 credentials 插件
+    // （密钥与接入清单都归它自己，见 docs/插件化架构优化.html §4）。
     const order = scanPlugins(REAL_PLUGINS, realServiceIds()).installOrder
-    expect(order.indexOf('credentials')).toBeLessThan(order.indexOf('models'))
     expect(order.indexOf('models')).toBeLessThan(order.indexOf('chat-workbench'))
     expect(order.indexOf('chat-workbench')).toBeLessThan(order.indexOf('reliability'))
   })
@@ -286,7 +289,7 @@ describe('真实 plugins/（S7-5 落的那份划分，P1 起服务在插件里�
     expect(wb.manifest.dependencies).toEqual([])
   })
 
-  test('全部服务 ready 时，5 个插件全 ready', () => {
+  test('全部服务 ready 时，7 个插件全 ready', () => {
     const states = new Map<string, ServiceStatus>(
       [...realServiceIds()].map((id) => [id, 'ready' as ServiceStatus]),
     )
@@ -296,10 +299,12 @@ describe('真实 plugins/（S7-5 落的那份划分，P1 起服务在插件里�
     expect(snapshots.map((p) => [p.manifest.id, p.state])).toEqual(
       expect.arrayContaining([
         ['workbench', 'ready'],
-        ['credentials', 'ready'],
         ['models', 'ready'],
         ['chat-workbench', 'ready'],
         ['reliability', 'ready'],
+        ['agents', 'ready'],
+        ['skills', 'ready'],
+        ['tools', 'ready'],
       ]),
     )
   })
@@ -315,7 +320,9 @@ describe('真实 plugins/（S7-5 落的那份划分，P1 起服务在插件里�
       uninstalledIds: new Set(['models']),
     })
     const byId = new Map(snapshots.map((p) => [p.manifest.id, p]))
-    expect(byId.get('credentials')!.state).toBe('ready')
+    // 被卸的插件自己是 stopped（它的服务也不会被 spawn），不是 degraded ——
+    // degraded 是「还装着但缺东西」，那说的是下面 chat-workbench 那种情况
+    expect(byId.get('models')!.state).toBe('stopped')
     // 依赖它的 chat-workbench degraded —— 这正是 B 语义要展示的「你少装了东西」
     expect(byId.get('chat-workbench')!.state).toBe('degraded')
     expect(byId.get('chat-workbench')!.missingDependencies).toEqual(['models'])

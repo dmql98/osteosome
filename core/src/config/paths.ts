@@ -8,16 +8,16 @@
  * ├── core/                     ← Core 运行时
  * ├── plugins/                  ← 插件（开发时源码也在此处）
  * └── userData/                 ← dataDir：**全部用户数据，跟着人走**
- *     ├── core/                 ←   Core 自己的：preferences.json / credentials.json / 日志
+ *     ├── core/                 ←   Core 自己的：preferences.json（布局 / 主题 / 插件启停）/ 日志
  *     └── plugin/<pluginId>/    ←   插件的用户数据；里面有什么由插件自己定
  * ```
  *
  * 目录约定的单一真相源（`pluginDataDir` / `coreDataDir`）在 `shared/src/paths.ts`，
  * 服务与 Core 共用；本文件只管「根从哪来」。
  */
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { coreDataDir, pluginDataDir } from '@osteosome/shared'
 
 export { pluginDataDir, coreDataDir }
@@ -101,6 +101,50 @@ export function installRoot(
 ): string | undefined {
   const exeDir = dirname(execPath)
   return exists(join(exeDir, DIST_MARKER)) ? join(exeDir, 'osteosome') : undefined
+}
+
+/**
+ * 引导配置文件名 —— **放在应用根，与数据目录无关**。
+ *
+ * 为什么必须在数据目录之外：文件里的 `dataDir` 决定数据目录在哪，
+ * 而偏好（`preferences.json`）住在数据目录里 —— 把「数据目录」这个设置
+ * 存进偏好就成了鸡生蛋：下次启动不知道去哪读它。
+ */
+export const BOOT_CONFIG_NAME = 'ost.config.json'
+
+/**
+ * 应用根（开发跑）：入口 `.../core/dist/main.js` 反推两级。
+ *
+ * 用入口而不是 `process.cwd()` 判定，是因为 cwd 由启动方式决定
+ * （`start-client.cmd` 用 `/D "%~dp0"` 把它钉在仓库根，但 `node <任意路径>/main.js` 不会）——
+ * 数据根这类「用户数据最终去哪」的答案不能跟着 cwd 漂。
+ *
+ * 判据与 {@link coreVersion} 同一个：入口的上一级必须是 `@osteosome/core` 的 package.json，
+ * 否则说明这份 Core 不在预期布局里（比如测试注入了别的入口）→ 返回 undefined，
+ * 让调用方退回 cwd。
+ *
+ * @param entry 入口脚本路径（`.../core/dist/main.js`）；测试可注入
+ */
+export function appRoot(
+  entry: string = process.argv[1] ?? '',
+  exists: (p: string) => boolean = existsSync,
+): string | undefined {
+  if (!entry) return undefined
+  try {
+    const distDir = dirname(entry)
+    const pkg = join(distDir, '..', 'package.json')
+    if (!exists(pkg)) return undefined
+    const raw = JSON.parse(readFileSync(pkg, 'utf8')) as { name?: unknown }
+    if (raw.name !== '@osteosome/core') return undefined
+    return resolve(join(distDir, '..', '..'))
+  } catch {
+    return undefined
+  }
+}
+
+/** `<应用根>/ost.config.json` —— 引导配置（见 {@link BOOT_CONFIG_NAME}） */
+export function bootConfigFile(root: string): string {
+  return join(root, BOOT_CONFIG_NAME)
 }
 
 /**
@@ -227,4 +271,78 @@ export function migrateLegacyDataDir(dataDir: string, cwd: string, isDefault: bo
     moved.push(toRel.split('\\').join('/'))
   }
   return moved
+}
+
+/**
+ * 插件用户数据归位：Core 代管的插件数据 → 各插件自己的目录。
+ *
+ * ## 搬什么
+ *
+ * | 从 | 到 | 为什么 |
+ * |---|---|---|
+ * | `<dataDir>/core/credentials.json` | `<dataDir>/plugin/models/credentials.json` | 密钥归**使用方**插件（§4：密钥该在它的服务与 UI 都读得到的地方） |
+ * | `<dataDir>/core/preferences.json` 的 `llm` 段 | `<dataDir>/plugin/models/preferences.json`（**去掉 `llm` 这层壳**） | 接入清单是 models 插件的用户配置，不是 Core 的偏好 |
+ *
+ * ## 三条纪律
+ *
+ * 1. **只在目标不存在时搬**（`plugin/models/*.json` 已经在 = 迁过了，或用户本来就这么放的）。
+ *    绝不覆盖已有数据 —— 那可能是用户后来自己改过的一份。
+ * 2. **密钥是「复制 → 校验 → 才删源」**，与 {@link migrateLegacyDataDir} 的纯复制不同：
+ *    那一步最坏情况是留一份没人读的副本，而这里留副本意味着**明文密钥继续躺在 Core 侧**，
+ *    恰好是这次要拆掉的那件事。校验通过才删源，两头都不会出现「密钥消失」。
+ * 3. **`llm` 段只在写入成功后才从 Core 偏好里摘掉**：写失败就保持原样，
+ *    下次启动再试一次 —— 宁可 Core 偏好里多一个没人读的键，也不要丢接入清单。
+ *
+ * 幂等：每一步都以「目标已存在」为出口，所以重复启动不会重复搬、也不会来回搬。
+ *
+ * @returns 做了什么（给人看的日志行）；没动手时返回空数组
+ */
+export function migratePluginOwnedData(dataDir: string): string[] {
+  const done: string[] = []
+  const modelsDir = pluginDataDir(dataDir, 'models')
+  const modelsPrefs = join(modelsDir, 'preferences.json')
+  const modelsCreds = join(modelsDir, 'credentials.json')
+  const corePrefs = join(coreDataDir(dataDir), 'preferences.json')
+  const coreCreds = join(coreDataDir(dataDir), 'credentials.json')
+
+  // ── 密钥：复制 → 能读回来 → 删源 ──
+  if (!existsSync(modelsCreds) && existsSync(coreCreds)) {
+    mkdirSync(modelsDir, { recursive: true })
+    try {
+      copyFileSync(coreCreds, modelsCreds)
+      JSON.parse(readFileSync(modelsCreds, 'utf8'))
+      rmSync(coreCreds, { force: true })
+      done.push('core/credentials.json -> plugin/models/credentials.json')
+    } catch (err) {
+      rmSync(modelsCreds, { force: true })
+      // 不删源、不静默：这份明文还得有人管，下一次启动再试
+      done.push(`WARN: credentials migration failed (${String(err)}) — source kept`)
+    }
+  }
+
+  // ── 接入清单：从 Core 偏好里摘出 llm 段，写成插件自己的文件 ──
+  if (!existsSync(modelsPrefs) && existsSync(corePrefs)) {
+    try {
+      const parsed = JSON.parse(readFileSync(corePrefs, 'utf8')) as Record<string, unknown>
+      const llm = parsed?.llm
+      if (llm && typeof llm === 'object' && !Array.isArray(llm)) {
+        const src = llm as Record<string, unknown>
+        const next = {
+          connectedVendors: Array.isArray(src.connectedVendors) ? src.connectedVendors : [],
+          vendorOverrides: Array.isArray(src.vendorOverrides) ? src.vendorOverrides : [],
+          enabledModels: Array.isArray(src.enabledModels) ? src.enabledModels : [],
+        }
+        mkdirSync(modelsDir, { recursive: true })
+        writeFileSync(modelsPrefs, JSON.stringify(next, null, 2), 'utf8')
+        // 写成功了才摘掉 Core 那份（写失败就保持原样，下次再试）
+        delete parsed.llm
+        writeFileSync(corePrefs, JSON.stringify(parsed, null, 2), 'utf8')
+        done.push('core/preferences.json#llm -> plugin/models/preferences.json')
+      }
+    } catch (err) {
+      done.push(`WARN: llm prefs migration failed (${String(err)}) — source kept`)
+    }
+  }
+
+  return done
 }

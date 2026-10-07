@@ -38,6 +38,9 @@ export {
   __resetSessionSyncForTest,
 } from './session-sync'
 export { useSessionState, type SessionState } from './session'
+export { useCharacters, type CharacterList } from './agents'
+export { useSessionMotion, type SessionMotion } from './motion'
+export { useListPrefs, LIST_PREFS_KEY, type ListPrefsApi } from './list-prefs'
 export {
   cancelRun,
   useComposerRun,

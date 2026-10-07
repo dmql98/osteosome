@@ -183,23 +183,44 @@ Remove-Item -Recurse -Force .\src-tauri\target
 Core 的用户数据放在一个 `userData/` 目录里，分两层：
 
 - **发行版**：`<安装目录>\osteosome\userData\`（exe 旁边 —— 判据是 exe 同级有 `.osteosome-dist` 标记文件）。整份发行物自包含，**拷走即换机器**。
-- **开发跑**（无标记）：`%LOCALAPPDATA%\osteosome`（其它平台 `$XDG_DATA_HOME/osteosome` 或 `~/.local/share/osteosome`）。
+- **开发跑**：**仓库根的 `userData\`** —— 这就是**缺省值**，不再靠启动器传 `--data`：`loadConfig()` 由入口 `core\dist\main.js` 反推应用根（`core/src/config/paths.ts` 的 `appRoot()`），缺省数据根 = `<应用根>\userData`。文件树里那个 `userData/` 就是它。
+
+数据目录**可以改**，见下面 §7.1。
 
 里面长这样：
 
 ```
 userData/
-├── core/       ← Core 自己的：preferences.json（布局 / 主题 / 插件状态 / 模型开关）、credentials.json（API Key 明文）、日志
+├── core/       ← Core 自己的：preferences.json（布局 / 主题 / 插件启停）、日志
 └── plugin/
     ├── chat-workbench/  ← 这个插件的数据 = 对话（sessions/）
-    └── models/          ← 这个插件的数据 = 密钥 + 接入清单 + 模型开关
+    └── models/          ← 这个插件的数据 = 接入清单 + 模型开关（preferences.json）、API Key 明文（credentials.json）
 ```
 
-数据**不跟着仓库走**，所以 `git clone` 不会带上你的密钥。删掉即回到全新状态。
+**密钥与模型接入清单归 `plugin/models/`**，不放在 `core/` 下：它们是 models 插件的用户数据，
+由它自己的服务（`llm-provider-openai`）读写，Core 不经手。从旧版本升级过来时会在启动时自动搬家
+（`core/credentials.json` → `plugin/models/credentials.json`，`core/preferences.json` 里的 `llm` 段 →
+`plugin/models/preferences.json`），日志里会打一行 `migrate` 提示。
 
-两次自动迁移（都在日志里说明，源文件都保留）：
+数据**不跟着 git 走**：`userData/` 已写进 `.gitignore`，`git clone` 不会带上你的密钥。删掉即回到全新状态。
 
-- 仓库里还留着老版本的 `.data/`（早期把数据放在工作副本内）→ 复制到新位置，按三层布局归位。
+### 7.1 改数据目录
+
+设置 → 高级 → 「数据目录」可以直接改，写进**仓库根的 `ost.config.json`**：
+
+```json
+{ "dataDir": "D:\\mydata" }
+```
+
+- **为什么单独一个文件**：偏好住在 `<dataDir>\core\preferences.json` 里，而这个设置决定的正是 `dataDir` 在哪 —— 存进偏好就是鸡生蛋，下次启动不知道去哪读它。
+- **优先级**：`--data` > `OST_DATA` > `ost.config.json` > 缺省。启动器**故意不传** `--data` —— 一旦传了，命令行会永远盖过这份配置，设置等于白改。
+- **改完要重启 Core**（关掉 “Osteosome Core” 窗口重跑 `start-client.cmd`）：`dataDir` 在启动时定死，服务子进程、凭证库、偏好句柄都拿着启动时那份，运行中换根等于让这些句柄指向两个地方。
+- `ost.config.json` 已写进 `.gitignore`，不随仓库走。
+- 路径打错了在**保存时**就会报（Core 会当场试着建一次目录），不会等下次启动才发现。
+
+数据搬迁（源文件都保留）：
+
+- 老版本的 `.data/`（早期把数据放在工作副本内）→ 已复制到 `userData/`；确认新位置读写正常后，`.data/` 可自行删除。
 - 用户目录里是 P0 时代的**扁平**布局（`preferences.json` 直接在根下）→ 搬进 `core/`。
 
 ## 8. 环境自检清单

@@ -5,9 +5,12 @@
  * - `GET  /events`            → SSE（Origin 白名单 + `?topics=` 过滤）
  * - `POST /api/command`       → 202 + bus.publish（Origin 白名单）
  * - `GET/PUT /api/preferences`→ dataDir JSON（Origin 白名单）
+ * - `GET/PUT /api/config`      → 引导配置 `<应用根>/ost.config.json`（改数据目录的唯一入口）
+ * - `GET  /api/info`           → `{ dataDir, dataDirSource, defaultDataDir, configFilePath }`
  * - `GET  /health`            → `{ ok, uptime, services: list() }`（不查 Origin）
- * - `GET  /plugins/<id>/ui/*` → 插件 WebUI 产物（P3；停用/未构建即 404）
- * - `GET  /*`                 → 静态资源 / 占位 index.html
+ *  - `GET  /plugins/<id>/ui/*` → 插件 WebUI 产物（P3；停用/未构建即 404）
+ *  - `GET  /plugins/<id>/data/*` → 插件用户数据（只读；停用/卸载即 404，无 SPA fallback）
+ *  - `GET  /*`                 → 静态资源 / 占位 index.html
  *
  * Origin 白名单（`/events` + 全部 `/api/*`）：
  * - 无 Origin 头（curl / Node fetch / msw）→ 放行
@@ -19,12 +22,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { ServiceInfo } from '@osteosome/shared'
 import type { Bus } from '../bus/bus'
 import type { CoreConfig } from '../config'
-import type { CredentialApi } from '../credentials/api'
 import type { PluginRegistry } from '../service-manager/plugin-registry-runtime'
 import { logger } from '../logger'
 import { handleCommand } from './command'
-import { handleCredentials } from './credentials'
+import { handleConfig } from './config'
 import { handlePlugins } from './plugins'
+import { handlePluginData } from './plugin-data'
 import { handlePluginUi } from './plugin-ui'
 import { handlePreferences } from './preferences'
 import { handleStatic } from './static'
@@ -51,9 +54,7 @@ export interface SseBridgeOptions {
   /** 心跳间隔 ms（默认 30000；测试注入小值） */
   heartbeatMs?: number
   /** 僵尸断开阈值 ms（默认 90000；测试注入小值） */
-  zombieMs?: number
-  /** 凭证能力（P4 WS-1）：提供则挂载 /api/credentials（掩码通道） */
-  credentials?: CredentialApi
+zombieMs?: number
   /** 插件层（S7-2a）：提供 `GET /api/plugins`。未装配则该路由回 404 */
   plugins?: PluginRegistry
 }
@@ -164,17 +165,12 @@ export class SseBridge {
         await handlePreferences(req, res, this.options.config.dataDir)
         return
       }
-      if (path === '/api/credentials') {
-        const api = this.options.credentials
-        if (!api) {
-          sendJson(res, 404, { error: 'credentials not enabled' })
+      if (path === '/api/config') {
+        if (req.method !== 'GET' && req.method !== 'PUT') {
+          methodNotAllowed(res, 'GET, PUT')
           return
         }
-        if (req.method !== 'GET' && req.method !== 'PUT' && req.method !== 'DELETE') {
-          methodNotAllowed(res, 'GET, PUT, DELETE')
-          return
-        }
-        await handleCredentials(req, res, url, api)
+        await handleConfig(req, res, this.options.config.configFilePath)
         return
       }
       if (path === '/api/plugins') {
@@ -186,13 +182,21 @@ export class SseBridge {
           return
         }
         if (path === '/api/info') {
-        if (req.method !== 'GET') {
-          methodNotAllowed(res, 'GET')
+          if (req.method !== 'GET') {
+            methodNotAllowed(res, 'GET')
+            return
+          }
+          // 设置页用这几项渲染「数据目录」那一格：当前值 / 它是不是缺省 /
+          // 「恢复默认」会落到哪 / 这个设置本身存在哪
+          const cfg = this.options.config
+          sendJson(res, 200, {
+            dataDir: cfg.dataDir,
+            dataDirSource: cfg.dataDirSource ?? (cfg.dataDirIsDefault ? 'default' : 'cli'),
+            ...(cfg.defaultDataDir !== undefined ? { defaultDataDir: cfg.defaultDataDir } : {}),
+            ...(cfg.configFilePath !== undefined ? { configFilePath: cfg.configFilePath } : {}),
+          })
           return
         }
-        sendJson(res, 200, { dataDir: this.options.config.dataDir })
-        return
-      }
       sendJson(res, 404, { error: 'not found' })
       return
     }
@@ -206,6 +210,13 @@ export class SseBridge {
       // 去读插件界面（那个读到了也是一坨没有 CORS 头的 HTML，但没必要让人试）。
       if (!this.originAllowed(req)) {
         sendJson(res, 403, { error: 'origin not allowed' })
+        return
+      }
+      // 插件用户数据（只读）。**必须在 handlePluginUi 之前**：
+      // /plugins/<id>/data/* 与 /plugins/<id>/ui/* 同前缀，
+      // 顺序反了，data 路由会被 ui 的 SPA fallback 接走。
+      if (/^\/plugins\/[^/]+\/data(\/|$)/.test(path)) {
+        handlePluginData(req, res, this.options.plugins, path)
         return
       }
       handlePluginUi(req, res, this.options.plugins, path)

@@ -1,0 +1,21 @@
+{
+  "name": "@osteosome/agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "agent 能力位（P5 WS-1）：角色目录（characters.json）+ 装配配方（agent.resolve）+ 提示词片段",
+  "buildOutput": "../../dist/server/agent/index.js",
+  "scripts": {
+    "build": "node ../../../../scripts/build-service.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@osteosome/shared": "workspace:*",
+    "@osteosome/service-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.1.1"
+  }
+}

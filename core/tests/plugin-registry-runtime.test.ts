@@ -199,25 +199,33 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
   }
 
   test('全装 -> 认领全部服务，一个都不少', () => {
-    // 真实 5 个插件认领了全部 6 个服务，所以 B 语义下**不该少任何一个**。
+    // 真实 7 个插件认领了全部 15 个服务（含 P5/P6/P7 新增的 agent/skills/8 个工具服务），B 语义下**不该少任何一个**。
     // 这条是 S7-2b 最容易出的错：过滤逻辑写错一个字符就会少启一个服务，
     // 而少启的服务表现为「界面某块空白」，不报错。
     const allowed = real({}).registry.allowedServiceIds()
     expect(allowed).toBeDefined()
     expect([...(allowed as Set<string>)].sort()).toEqual([
-      'credentials',
+      'agent',
+      'fs-tools',
       'llm',
       'llm-provider-openai',
       'llm-retry',
       'loop',
+      'mcp-tools',
+      'misc-tools',
       'session',
+      'shell-tools',
+      'skills',
+      'skills-tools',
+      'tools',
+      'web-tools',
+      'workspace',
     ])
   })
 
   test('uninstalled 的插件 -> 其服务不被允许（uninstalled 不只是 UI 标志）', () => {
     const allowed = real({ uninstalled: ['models'] }).registry.allowedServiceIds() as Set<string>
     expect(allowed.has('llm-provider-openai')).toBe(false)
-    expect(allowed.has('credentials')).toBe(true)
     expect(allowed.has('session')).toBe(true)
     expect(allowed.has('loop')).toBe(true)
     expect(allowed.has('llm')).toBe(true)
@@ -242,7 +250,7 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
     // 已在 allowedServiceIds() 的注释里写明。
     const allowed = real({ uninstalled: ['reliability'] }).registry.allowedServiceIds() as Set<string>
     expect(allowed.has('llm-retry')).toBe(false)
-    expect(allowed.size).toBe(5)
+    expect(allowed.size).toBe(14)
   })
 
   test('环内插件的服务不被允许（夹具 cyc-a 带 svc-cyc）', () => {
@@ -257,9 +265,8 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
     // 两处不共享同一份判定，就会出现「运行期生效、重启失效」。
     const allowed = real({ disabled: ['models'] }).registry.allowedServiceIds() as Set<string>
     expect(allowed.has('llm-provider-openai')).toBe(false)
-    expect(allowed.has('credentials')).toBe(true)
     expect(allowed.has('session')).toBe(true)
-    expect(allowed.size).toBe(5)
+    expect(allowed.size).toBe(14)
   })
 
   test('停用与卸载是**两个独立**的判定（界面要区别对待，所以不能合成一个集合）', () => {
@@ -277,7 +284,7 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
       uninstalled: ['models'],
     }).registry.allowedServiceIds() as Set<string>
     expect(allowed.has('llm-provider-openai')).toBe(false)
-    expect(allowed.size).toBe(5)
+    expect(allowed.size).toBe(14)
   })
 
   /**
@@ -287,9 +294,9 @@ describe('PluginRegistry · allowedServiceIds（B 语义唯一决策点，S7-2b�
    * 那种要求一旦落地，没填的插件会在用户机器上集体不启动。
    */
   test('现有插件都不声明 coreCompatibility → 无论 Core 版本都全放行', () => {
-    expect((real({ coreVersion: '0.1.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(6)
-    expect((real({ coreVersion: '99.0.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(6)
-    expect((real({ coreVersion: '0.0.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(6)
+    expect((real({ coreVersion: '0.1.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(15)
+    expect((real({ coreVersion: '99.0.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(15)
+    expect((real({ coreVersion: '0.0.0' }).registry.allowedServiceIds() as Set<string>).size).toBe(15)
   })
 
   /**

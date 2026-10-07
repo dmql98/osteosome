@@ -1,10 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { reactive } from 'vue'
+import { MovableBox, MovableGroup, type MovableBoxRect } from 'vue-movable-box'
 import PanelContainer from '../../src/panes/PanelContainer.vue'
 import PluginWidgetHost from '../../src/widgets/PluginWidgetHost.vue'
 import { usePluginStore } from '../../src/stores/plugin.store'
 import type { PluginListResponse, PluginSnapshot } from '../../src/plugins/registry'
+import type { RectUnit } from '../../src/panes/rect'
 
 /**
  * P4：面板容器按解析结果画三种东西 —— 本地组件 / 插件 iframe / 已移除占位。
@@ -177,5 +180,310 @@ describe('PanelContainer · 三种形态', () => {
     await settle()
     expect(wrapper.findComponent(PluginWidgetHost).exists()).toBe(false)
     expect(wrapper.text()).toContain('空面板')
+  })
+})
+
+describe('PanelContainer：几何相对化', () => {
+  /**
+   * 老布局是**绝对像素**：工作台一缩放，盒子还钉在原来的像素位置上。
+   * rebuild 必须把存量 rect 就地换算成百分比、把 `rectUnit` 写回 `%`，
+   * 之后拖拽落盘的也都是百分比 —— 盒子才会跟着工作台按比例变。
+   */
+  it('存量像素布局就地迁成百分比，且只迁一次', async () => {
+    applyCatalog([
+      snapshot({
+        id: 'models',
+        manifest: {
+          id: 'models',
+          name: '模型接入',
+          version: '1.0.0',
+          services: [],
+          components: [],
+          ui: { views: [{ id: 'widget.llm-settings', title: '模型配置', entry: 'index.html' }] },
+        },
+      }),
+    ])
+
+    const params = reactive({
+      params: {
+        widgets: ['widget.llm-settings'],
+        layout: {
+          'widget.llm-settings': { left: 100, top: 50, width: 400, height: 300, zIndex: 2 },
+        },
+        rectUnit: 'px' as RectUnit,
+      },
+      api: { updateParameters: (_patch: object) => {} },
+    })
+    const updateParameters = vi.fn((patch: object) => {
+      Object.assign(params.params, patch)
+    })
+    params.api.updateParameters = updateParameters
+
+    const wrapper = mount(PanelContainer, {
+      props: { params },
+      global: { plugins: [pinia], stubs: { MovableBox: false, MovableGroup: false } },
+    })
+    mounted.push(wrapper)
+    await settle()
+
+    expect(updateParameters).toHaveBeenCalledTimes(1)
+    const payload = updateParameters.mock.calls[0]?.[0] as {
+      rectUnit: RectUnit
+      layout: Record<string, { left: number; top: number; width: number; height: number; zIndex?: number }>
+    }
+    expect(payload.rectUnit).toBe('%')
+
+    // jsdom 量不到画布（clientWidth = 0）→ 走 rect.ts 的兜底 1600×900
+    const migrated = payload.layout['widget.llm-settings']
+    expect(migrated.left).toBeCloseTo((100 / 1600) * 100, 3)
+    expect(migrated.top).toBeCloseTo((50 / 900) * 100, 3)
+    expect(migrated.width).toBeCloseTo((400 / 1600) * 100, 3)
+    expect(migrated.height).toBeCloseTo((300 / 900) * 100, 3)
+    expect(migrated.zIndex).toBe(2)
+  })
+
+  it('渲染侧统一按百分比交给 MovableBox（unit-type="%"）', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.never-heard-of-it'])
+    await settle()
+    const box = wrapper.findComponent(MovableBox)
+    expect(box.exists()).toBe(true)
+    expect(box.props('unitType')).toBe('%')
+    // 百分比要留小数，否则 1% 取整在窄面板上一步就跳十几像素
+    expect(box.props('isKeepDecimals')).toBe(true)
+  })
+})
+
+describe('PanelContainer：顶栏（全屏 / 层级）', () => {
+  it('层级输入框直接跳层：读数和整叠 zIndex 一起变', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a', 'widget.b'])
+    await settle()
+    const boxes = wrapper.findAllComponents(MovableBox)
+    const rectOf = (index: number): MovableBoxRect => boxes.at(index)!.props('modelValue') as MovableBoxRect
+    expect(boxes).toHaveLength(2)
+    // 顶栏只在选中时出现 —— 没选中就不该露出输入框
+    expect(wrapper.find('.panel-boxes__layer-input').exists()).toBe(false)
+
+    await boxes.at(0)!.trigger('pointerdown')
+    await flushPromises()
+    const input = wrapper.find<HTMLInputElement>('.panel-boxes__layer-input')
+    expect(input.exists()).toBe(true)
+    // 通用网格给的初始层：a = 1、b = 2
+    expect(input.element.value).toBe('1')
+
+    await input.setValue('2')
+    await input.trigger('change')
+    await flushPromises()
+    expect(rectOf(0).zIndex).toBe(2)
+    expect(rectOf(1).zIndex).toBe(1)
+    // 显示的是「从底往上数第几层」，不是刚才敲进去的原始字符串
+    expect(wrapper.find<HTMLInputElement>('.panel-boxes__layer-input').element.value).toBe('2')
+
+    // 越界钳到 [1, 层数]：99 与 2 同为顶层，等于没动
+    await input.setValue('99')
+    await input.trigger('change')
+    await flushPromises()
+    expect(rectOf(0).zIndex).toBe(2)
+    expect(rectOf(1).zIndex).toBe(1)
+
+    // 空值不动布局（parseInt 给 NaN 时直接返回）
+    await input.setValue('')
+    await input.trigger('change')
+    await flushPromises()
+    expect(rectOf(0).zIndex).toBe(2)
+    expect(rectOf(1).zIndex).toBe(1)
+  })
+
+  it('全屏撑满所在工作台，再点一次还原到原样', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a', 'widget.b'])
+    await settle()
+    const boxes = wrapper.findAllComponents(MovableBox)
+    const rectOf = (index: number): MovableBoxRect => boxes.at(index)!.props('modelValue') as MovableBoxRect
+    const before = { ...rectOf(0) }
+
+    await boxes.at(0)!.trigger('pointerdown')
+    await flushPromises()
+    await wrapper.find('.panel-boxes__fullscreen').trigger('click')
+    await flushPromises()
+
+    const full = rectOf(0)
+    // 四个值都是百分比：0/0/100/100 就是画布铺满，工作台怎么缩放都满
+    expect([full.left, full.top, full.width, full.height]).toEqual([0, 0, 100, 100])
+    // 顺手提到最上层：被别的盒子压住的话撑满等于白撑
+    expect(full.zIndex).toBe(3)
+    expect(wrapper.find<HTMLInputElement>('.panel-boxes__layer-input').element.value).toBe('2')
+    expect(wrapper.find('.panel-boxes__fullscreen').text()).toBe('⤡')
+
+    await wrapper.find('.panel-boxes__fullscreen').trigger('click')
+    await flushPromises()
+    // 还原连 zIndex 一起还回去
+    expect(rectOf(0)).toEqual(before)
+    expect(wrapper.find('.panel-boxes__fullscreen').text()).toBe('⤢')
+  })
+})
+
+describe('PanelContainer：选中范围', () => {
+  it('点盒子内容区也能选中，点画布空白才取消', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a'])
+    await settle()
+    expect(wrapper.find('.panel-boxes__header').exists()).toBe(false)
+
+    // 内容区（本地组件的 DOM 一路冒泡到盒子根）→ 选中，顶栏和层级输入框跟着出现
+    await wrapper.find('.panel-boxes__body').trigger('pointerdown')
+    await flushPromises()
+    expect(wrapper.find('.panel-boxes__header').exists()).toBe(true)
+    expect(wrapper.find('.panel-boxes__item--selected').exists()).toBe(true)
+
+    // 点画布空白处取消选中 —— 盒子那一下必须先 `stopPropagation`，
+    // 否则会先选中再被画布这一下抹掉（表现成「点了没反应」）
+    await wrapper.find('.panel-boxes__canvas').trigger('pointerdown')
+    await flushPromises()
+    expect(wrapper.find('.panel-boxes__header').exists()).toBe(false)
+  })
+
+  it('库把选中集收窄成「按下的那个」并 emit 时，多选不被冲掉', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a', 'widget.b'])
+    await settle()
+    const boxes = wrapper.findAllComponents(MovableBox)
+
+    await boxes.at(0)!.trigger('pointerdown')
+    await flushPromises()
+    expect(wrapper.findAll('.panel-boxes__item--selected').length).toBe(1)
+
+    // 真浏览器里库会在 pointerdown 时 emit update:selected=["widget.b"]
+    // （「按下的那个即选中集」），Ctrl+多选必须活下来 —— 模板上是 `:selected` 单向绑定，
+    // 这个 emit 没有接收方。VTU 里库自己不会发（MouseEvent 没有 isPrimary），
+    // 所以这里手动模拟浏览器那次 emit。
+    boxes.at(1)!.element.dispatchEvent(
+      new MouseEvent('pointerdown', { bubbles: true, cancelable: true, ctrlKey: true }),
+    )
+    await flushPromises()
+    wrapper.findComponent(MovableGroup).vm.$emit('update:selected', ['widget.b'])
+    await flushPromises()
+
+    expect(wrapper.findAll('.panel-boxes__item--selected').length).toBe(2)
+  })
+})
+
+describe('PanelContainer：工作台网格', () => {
+  /**
+   * 网格刻度（参照尺寸 1600×900，格子 20×20px）：
+   * 横 80 格 = 1.25%、竖 45 格 = 2.222222%，粗线每 5 格 = 6.25% / 11.111111%（都是 100px）。
+   */
+  it('网格刻度以百分比注入画布，库自带的 snapToGrid 关掉', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a'])
+    await settle()
+
+    const box = wrapper.findComponent(MovableBox)
+    // 库的 snapToGrid 横竖共用一个步长，吸出来是长方形格子 —— 所以吸附改在松手时自己做
+    expect(box.props('snapToGrid')).toBe(false)
+
+    const style = wrapper.find('.panel-boxes__canvas').attributes('style') ?? ''
+    expect(style).toContain('--panel-grid-x: 1.25%')
+    expect(style).toContain('--panel-grid-y: 2.222222%')
+    expect(style).toContain('--panel-grid-major-x: 6.25%')
+    expect(style).toContain('--panel-grid-major-y: 11.111111%')
+  })
+
+  it('拖动松手收进网格（拖动过程中不吸，松手这一下才收口）', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a'])
+    await settle()
+
+    const box = wrapper.findComponent(MovableBox)
+    box.vm.$emit('update:modelValue', { left: 5.5, top: 3.4, width: 20.7, height: 30.9, zIndex: 1 })
+    await flushPromises()
+    box.vm.$emit('drag-stop')
+    await flushPromises()
+
+    const rect = box.props('modelValue') as MovableBoxRect
+    expect(rect.left).toBe(5) // 5.5 ÷ 1.25 = 4.4 → 第 4 格
+    expect(rect.top).toBe(4.4444) // 3.4 ÷ 2.2222 = 1.53 → 第 2 格
+    expect(rect.width).toBe(21.25)
+    expect(rect.height).toBe(31.1111)
+  })
+
+  it('缩放松手把四条边一起收进网格，并且落盘', async () => {
+    applyCatalog([])
+    const params = reactive({
+      params: {
+        widgets: ['widget.a'],
+        layout: {
+          'widget.a': { left: 11.4337, top: 7.2, width: 33.3, height: 40.1, zIndex: 1 },
+        } as Record<string, MovableBoxRect>,
+        rectUnit: '%' as RectUnit,
+      },
+      api: { updateParameters: (_patch: object) => {} },
+    })
+    const updateParameters = vi.fn((patch: object) => {
+      Object.assign(params.params, patch)
+    })
+    params.api.updateParameters = updateParameters
+
+    const wrapper = mount(PanelContainer, {
+      props: { params },
+      global: { plugins: [pinia], stubs: { MovableBox: false, MovableGroup: false } },
+    })
+    mounted.push(wrapper)
+    await settle()
+    expect(updateParameters).not.toHaveBeenCalled()
+
+    const box = wrapper.findComponent(MovableBox)
+    // 库的缩放**不吸网格**（它只管拖动），所以这里手工把 rect 拨到跑偏的位置再「松手」
+    box.vm.$emit('update:modelValue', { left: 11.4337, top: 7.2, width: 33.3, height: 40.1, zIndex: 1 })
+    await flushPromises()
+    box.vm.$emit('resize-stop')
+    await flushPromises()
+
+    const rect = box.props('modelValue') as MovableBoxRect
+    expect(rect.left).toBe(11.25)
+    expect(rect.top).toBe(6.6667)
+    expect(rect.width).toBe(33.75)
+    expect(rect.height).toBe(40)
+    // 收完口就落盘，否则下次打开又跑回网格外
+    expect(updateParameters).toHaveBeenCalledTimes(1)
+    const payload = updateParameters.mock.calls[0]?.[0] as { rectUnit: RectUnit }
+    expect(payload.rectUnit).toBe('%')
+  })
+
+  it('多选整组移动：被拖的和跟着走的盒子都收进网格', async () => {
+    applyCatalog([])
+    const wrapper = mountPanel(['widget.a', 'widget.b'])
+    await settle()
+
+    const boxes = wrapper.findAllComponents(MovableBox)
+    expect(boxes.length).toBe(2)
+    // 选中两个：单击选第一个，Ctrl+点加选第二个
+    // （VTU 的 trigger 改不了 MouseEvent.ctrlKey —— 它是只读 getter，只能自己造事件）
+    await boxes.at(0)!.trigger('pointerdown')
+    await flushPromises()
+    boxes.at(1)!.element.dispatchEvent(
+      new MouseEvent('pointerdown', { bubbles: true, cancelable: true, ctrlKey: true }),
+    )
+    await flushPromises()
+    expect(wrapper.findAll('.panel-boxes__item--selected').length).toBe(2)
+
+    boxes.at(0)!.vm.$emit('update:modelValue', { left: 8.1, top: 5.5, width: 25.5, height: 20.3, zIndex: 1 })
+    boxes.at(1)!.vm.$emit('update:modelValue', { left: 40.1, top: 20.5, width: 30.2, height: 25.5, zIndex: 2 })
+    await flushPromises()
+    wrapper.findComponent(MovableGroup).vm.$emit('move-stop', { leaderId: 'widget.a' })
+    await flushPromises()
+
+    const first = boxes.at(0)!.props('modelValue') as MovableBoxRect
+    expect(first.left).toBe(7.5)
+    expect(first.top).toBe(4.4444)
+    expect(first.width).toBe(25)
+    expect(first.height).toBe(20)
+
+    const second = boxes.at(1)!.props('modelValue') as MovableBoxRect
+    expect(second.left).toBe(40)
+    expect(second.top).toBe(20)
+    expect(second.width).toBe(30)
+    expect(second.height).toBe(24.4444)
   })
 })

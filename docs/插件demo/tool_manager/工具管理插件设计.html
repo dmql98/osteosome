@@ -1,0 +1,2551 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>工具管理插件 · 设计稿（tools / fs-tools · P7） · OST</title>
+<style>
+  /* 沿用 docs/插件标准.html 与 docs/AgentLoop对照教程.html 的同一套皮肤，
+     变量名与 sdk/ui/src/tokens.css 同源（--color-* 是组件库真值，--* 是文档壳） */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    /* Demo 区直接借用 tokens.css 的真名，让 demo 与组件库同源 */
+    --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-warning:#9a6700;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-warning:#d29922;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width:1240px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:20; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  /* 顶部锚点导航 */
+  nav.toc { position:sticky; top:41px; z-index:19; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s1); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px; border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  h4 { font-size:var(--sm); margin:var(--s4) 0 var(--s2); font-weight:700; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background:var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  td.nowrap { white-space:nowrap; }
+
+  pre { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3); font-size:12.5px; line-height:1.65; overflow-x:auto; margin:0 0 var(--s4); }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .note.bus { border-left-color:var(--bus); background:var(--bus-soft); }
+  .note.ext { border-left-color:var(--ext); background:var(--ext-soft); }
+  .note.proc { border-left-color:var(--proc); background:var(--proc-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); white-space:nowrap; vertical-align:middle; }
+  .tag.have { background:var(--success); }
+  .tag.todo { background:var(--danger); }
+  .tag.part { background:var(--warning); }
+  .tag.spec { background:var(--primary); }
+  .tag.bus { background:var(--bus); }
+  .tag.ext { background:var(--ext); }
+  .tag.proc { background:var(--proc); }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.8;
+    margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .std { color:var(--primary); font-weight:600; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .free { color:var(--warning); }
+  .tree .dim { color:var(--muted); }
+  .tree .new { color:var(--danger); font-weight:600; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); }
+  .three { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s3); }
+  @media (max-width:980px){ .two,.three{grid-template-columns:1fr} }
+
+  .board { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s3); box-shadow:var(--shadow-sm); }
+  svg { display:block; width:100%; height:auto; }
+  @keyframes dashflow { to { stroke-dashoffset:-48; } }
+  .edge { fill:none; stroke:var(--border-strong); stroke-width:2; }
+  .edge.busline { stroke:var(--bus); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.httpline { stroke:var(--success); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.fileline { stroke:var(--warning); stroke-dasharray:4 5; animation:dashflow 1.8s linear infinite; }
+  .edge.procline { stroke:var(--proc); stroke-dasharray:4 5; }
+  .edge.extline { stroke:var(--ext); stroke-dasharray:4 5; }
+  .node { opacity:.6; transition:opacity .25s; }
+  .node .r { fill:var(--surface); stroke:var(--border-strong); stroke-width:1.6; }
+  .node.svc .r { fill:var(--bus-soft); stroke:var(--bus); }
+  .node.ui  .r { fill:var(--success-soft); stroke:var(--success); }
+  .node.host .r { fill:var(--warning-soft); stroke:var(--warning); }
+  .node.ext .r { fill:var(--ext-soft); stroke:var(--ext); }
+  .node.on { opacity:1; }
+  .node.on .r { stroke-width:2.6; }
+  @media (prefers-reduced-motion: reduce){ .edge{ animation:none !important; } }
+
+  .legend { display:flex; flex-wrap:wrap; gap:var(--s3); font-size:var(--xs); color:var(--muted); margin:var(--s2) 0 var(--s4); }
+  .legend i { display:inline-block; width:26px; height:0; border-top:2px dashed var(--bus);
+    vertical-align:middle; margin-right:5px; }
+  .legend i.http { border-color:var(--success); }
+  .legend i.file { border-color:var(--warning); }
+  .legend i.ext { border-color:var(--ext); }
+  .legend i.proc { border-color:var(--proc); }
+
+  .kv { display:grid; grid-template-columns:150px 1fr; gap:var(--s1) var(--s3); font-size:var(--sm); margin:0 0 var(--s4); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  /* ══ Demo 区（模拟 sdk/ui 组件 + 插件视图的最终形态） ══ */
+  .demo { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    box-shadow:var(--shadow-sm); margin:0 0 var(--s5); overflow:hidden; }
+  .demo > header { display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3);
+    background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--xs); color:var(--muted); }
+  .demo > header b { color:var(--text); font-size:var(--sm); }
+  .demo > header .sp { flex:1; }
+  .demo .demo-body { padding:var(--s4); background:var(--color-surface); }
+  .demo .demo-body.tight { padding:0; }
+
+  /* 模拟卡片 / 表格 / 徽章 */
+  .d-card { background:var(--color-surface); border:1px solid var(--color-border);
+    border-radius:var(--radius-md); }
+  .d-table { width:100%; border-collapse:collapse; font-size:var(--text-sm); }
+  .d-table th, .d-table td { padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--color-border);
+    text-align:left; vertical-align:middle; }
+  .d-table th { color:var(--color-text-muted); font-weight:500; background:var(--color-surface-2); font-size:var(--text-xs); }
+  .d-table tr:last-child td { border-bottom:0; }
+  .d-table tbody tr:hover { background:var(--color-surface-2); }
+  .d-table tbody tr.row-off td { opacity:.45; }
+  .d-table tbody tr.row-sel td { background:var(--color-primary-soft); }
+
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600;
+    border-radius:var(--radius-full); padding:1px 8px; white-space:nowrap; }
+  .pill.read { background:var(--success-soft); color:var(--success); }
+  .pill.write { background:var(--warning-soft); color:var(--warning); }
+  .pill.net   { background:var(--ext-soft); color:var(--ext); }
+  .pill.proc  { background:var(--proc-soft); color:var(--proc); }
+  .pill.src   { background:var(--color-surface-2); color:var(--color-text-muted); font-family:var(--mono); }
+  .pill.approve{ background:var(--color-primary-soft); color:var(--color-primary); }
+  .pill.danger { background:var(--color-danger-soft); color:var(--color-danger); }
+  .pill.dup    { background:var(--color-danger-soft); color:var(--color-danger); }
+  .pill.dangling { background:var(--color-danger-soft); color:var(--color-danger); border:1px dashed currentColor; }
+  .pill.managed { background:var(--surface-2); color:var(--color-text-muted); border:1px dashed var(--border-strong); }
+  .pill.noconstraint { background:var(--warning-soft); color:var(--color-warning); }
+  .seg button[data-warn="1"]::after { content:" ⚠"; }
+
+  .d-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid transparent;
+    border-radius:var(--radius-md); padding:5px 11px; font:inherit; font-size:var(--text-sm); cursor:pointer;
+    background:var(--color-primary); color:#fff; }
+  .d-btn:hover { filter:brightness(1.06); }
+  .d-btn.sm { padding:3px 9px; font-size:var(--text-xs); }
+  .d-btn.ghost { background:var(--color-surface); color:var(--color-text); border-color:var(--color-border); }
+  .d-btn.danger { background:var(--color-danger); }
+  .d-btn.approve { background:var(--color-success); }
+  .d-btn:disabled { opacity:.45; cursor:not-allowed; filter:none; }
+
+  .d-switch { display:inline-flex; align-items:center; gap:var(--space-2); cursor:pointer; }
+  .d-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .d-switch .track { width:32px; height:18px; border-radius:var(--radius-full); background:var(--color-surface-3);
+    position:relative; transition:background .18s; flex:none; }
+  .d-switch .thumb { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.3); transition:transform .18s; }
+  .d-switch input:checked + .track { background:var(--color-primary); }
+  .d-switch input:checked + .track .thumb { transform:translateX(14px); }
+  .d-switch input:disabled + .track { opacity:.45; }
+
+  .d-input, .d-select, .d-textarea { background:var(--color-surface); color:var(--color-text);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:6px 9px;
+    font:inherit; font-size:var(--text-sm); width:100%; }
+  .d-textarea { font-family:var(--mono); font-size:12px; min-height:84px; resize:vertical; }
+  .d-input:focus, .d-textarea:focus, .d-select:focus { outline:2px solid var(--color-primary-soft); border-color:var(--color-primary); }
+
+  .d-tabs { display:flex; gap:var(--space-1); border-bottom:1px solid var(--color-border); }
+  .d-tabs button { padding:var(--space-2) var(--space-3); border:0; border-bottom:2px solid transparent;
+    background:transparent; color:var(--color-text-muted); cursor:pointer; font:inherit; font-size:var(--text-sm); }
+  .d-tabs button[aria-selected="true"] { border-bottom-color:var(--color-primary); color:var(--color-primary); font-weight:600; }
+
+  .d-empty { padding:var(--space-5); text-align:center; color:var(--color-text-muted); font-size:var(--text-sm); }
+  .d-empty b { display:block; color:var(--color-text); margin-bottom:4px; }
+
+  /* 风险等级分段控件（审批策略） */
+  .seg { display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius-md); overflow:hidden; }
+  .seg button { border:0; background:var(--color-surface); color:var(--color-text-muted); cursor:pointer;
+    font:inherit; font-size:var(--text-xs); padding:4px 10px; border-right:1px solid var(--color-border); }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--color-primary); color:#fff; font-weight:600; }
+
+  /* 参数 schema 表 */
+  .schema { font-family:var(--mono); font-size:12px; border-collapse:collapse; width:100%; }
+  .schema td { padding:3px 6px; border-bottom:1px dashed var(--color-border); }
+  .schema td:first-child { color:var(--color-primary); white-space:nowrap; }
+  .schema td:nth-child(2) { color:var(--muted); }
+
+  /* 审批卡片（对话面板内） */
+  .approval { border:1px solid var(--color-border); border-left:3px solid var(--color-warning);
+    border-radius:var(--radius-md); background:var(--color-surface); overflow:hidden; font-size:var(--text-sm); }
+  .approval .ah { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3);
+    background:var(--color-surface-2); border-bottom:1px solid var(--color-border); }
+  .approval .ah b { flex:1; }
+  .approval .ab { padding:var(--space-3); }
+  .approval pre { margin:0 0 var(--space-2); background:var(--color-surface-2); border:1px solid var(--color-border);
+    border-radius:var(--radius-sm); padding:6px 8px; font-size:12px; max-height:130px; overflow:auto; }
+  .approval .af { display:flex; gap:var(--space-2); padding:var(--space-2) var(--space-3);
+    border-top:1px solid var(--color-border); background:var(--color-surface-2); }
+  .approval .af .sp { flex:1; }
+  .approval .timer { font-family:var(--mono); font-size:var(--text-xs); color:var(--color-text-muted); align-self:center; }
+  .approval.state-wait .ah { background:var(--warning-soft); }
+  .approval.state-ok { border-left-color:var(--color-success); }
+  .approval.state-no { border-left-color:var(--color-danger); }
+  .approval .done-note { font-size:var(--text-xs); color:var(--color-text-muted); }
+
+  /* 事件流小面板 */
+  .evlog { font-family:var(--mono); font-size:11.5px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--space-2); max-height:210px; overflow:auto; }
+  .evlog div { padding:2px 4px; border-bottom:1px dashed var(--color-border); display:flex; gap:var(--space-2); }
+  .evlog div:last-child { border-bottom:0; }
+  .evlog .t { color:var(--muted); flex:none; }
+  .evlog .tp { color:var(--bus); flex:none; }
+  .evlog .pl { color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* 试调输出 */
+  .outbox { font-family:var(--mono); font-size:12px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:var(--space-2);
+    white-space:pre-wrap; max-height:150px; overflow:auto; }
+  .outbox .ok { color:var(--color-success); }
+  .outbox .bad { color:var(--color-danger); }
+
+  .rail { display:flex; gap:4px; margin:var(--s2) 0 0; flex-wrap:wrap; }
+  .rail i { width:22px; height:5px; border-radius:var(--radius-full); background:var(--surface-3); display:block; }
+  .rail i.on { background:var(--primary); }
+  .rail i.done { background:var(--success); }
+
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  @media print { nav.toc { display:none; } header.bar { position:static; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>工具管理插件 · 设计稿</h1>
+    <span class="sp"></span>
+    <span class="sub">plugins/tools（tools 服务 + fs-tools 服务 + widget.tools）· P7 · 依据 AgentLoop 对照教程的 ⑩⑬⑭⑮ 四格</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s1">1 定位</a>
+    <a href="#s2">2 拓扑</a>
+    <a href="#s3">3 协议</a>
+    <a href="#s4">4 tools 服务</a>
+    <a href="#s5">5 fs-tools 服务</a>
+    <a href="#s6">6 loop 侧改动</a>
+    <a href="#s7">7 三条新纪律</a>
+    <a href="#s8">8 界面与组件</a>
+    <a href="#s9">9 组件 Demo</a>
+    <a href="#s10">10 用户数据</a>
+    <a href="#s11">11 不变式</a>
+    <a href="#s12">12 测试</a>
+    <a href="#s13">13 工作分解</a>
+    <a href="#s14">14 待决</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>一句话：把「工具」从 loop 进程里的一个 152 行的常量文件，拆成一个能力位。</b>
+  <code>plugins/chat-workbench/services/loop/src/tools.ts</code> 里的 <code>read_file</code> / <code>list_dir</code>
+  会原样搬到新插件 <code>plugins/tools/services/fs-tools</code>；loop 侧只剩<b>目录聚合 + 派发 + 落库</b>三件事。
+  <br>
+  <b>谁提供什么</b>：<code>fs-tools</code>（进程内执行，读文件类）· <code>tools</code>（审批闸门 + 手工试调 + 目录汇总视图）·
+  <code>chat-workbench/loop</code>（装配与发牌）。
+  <br>
+  <b>为什么现在做</b>：AgentLoop 教程第 ⑩ 步写死了「<code>tool.execute</code> 转发给注册了这个 name 的那个服务」——
+  那条路由依据是<b>一张注册并集的表</b>，而这张表今天还不存在（今天只有 loop 进程内的一个数组）。
+  审批（第 ⑬⑭ 格）与 MCP 都压在同一个缺口上，拆一次补齐三处。
+  <br>
+  <b>Core 一行不改。</b>新增的 13 个 topic（6 事件 + 7 命令）全部先进 <code>shared/src/events.ts</code> 的 EventMap / CommandMap，
+  Core 的校验逻辑就是查表，表变宽它自动覆盖。
+</div>
+
+<!-- ══════════════════ 1 定位 ══════════════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>定位：这个插件管什么，不管什么</h2>
+
+  <div class="two">
+    <div>
+      <h3>它管（4 件）</h3>
+      <ul>
+        <li><b>审批闸门</b>：写 / 网络 / 进程类工具逐次问用户；策略落 <code>userData/plugin/tools/approvals.json</code>。</li>
+        <li><b>目录的可视化与试调</b>：<code>widget.tools</code> 列出运行期成形的工具目录，带来源服务、风险等级、参数 schema，并支持手工试调。</li>
+        <li><b>策略默认值</b>：用户在这里把某个工具标成 <code>auto</code>，就等于替角色省掉一类弹窗。</li>
+        <li><b>一份对照清单</b>：模型的目录 = 注册并集 ∩ 角色绑定；这个视图是那件事唯一能被人看懂的地方。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>它不管（4 件）</h3>
+      <ul>
+        <li><b>不持有工具实现</b>：目录来自各服务 publish 的 <code>tool.registered</code>，这个插件只是订阅方之一。</li>
+        <li><b>不做路由</b>：<code>tool.execute</code> 是 loop 按注册并集直接发给执行者的，tools 服务不在数据通路上。</li>
+        <li><b>不存会话</b>：审批请求与结果都带 <code>requestId</code>（= toolCallId），一次性，不落盘。</li>
+        <li><b>不改 Core</b>：Core 不该知道有哪些工具、也不该知道审批过没有。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note info">
+    <b>为什么审批闸门是「一个服务」而不是「一个 listener」</b>：
+    审批弹窗要送到界面 → 界面回一条命令 → 执行者才知道能不能跑。这条回路天然跨进程，
+    而工具执行者又不一定都在本插件里（未来的 MCP 在别的插件）。所以闸门必须是一个<b>独立进程</b>，
+    并且它<b>不认识工具</b>——它只按 <code>risk</code> 与策略文件判断，把执行请求原样转交。
+    它是「不知道工具清单也能工作」的：所以卸载某个工具插件，闸门照常工作。
+  </div>
+
+  <h3>与既有插件的分工（照抄 AgentLoop 教程 §2 那句归属判断）</h3>
+  <table>
+    <thead><tr><th>能力</th><th>生产方（谁注册）</th><th>聚合 / 消费方</th><th>本插件的角色</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">tool.registered</td><td>fs-tools、skills、未来的 mcp</td><td>loop（聚合进目录）· tools（可视化）</td><td><span class="tag spec">订阅 + 呈现</span></td></tr>
+      <tr><td class="mono">tool.execute</td><td>loop（按 name 派发）</td><td>执行者（fs-tools / mcp）</td><td><span class="tag no">不参与</span></td></tr>
+      <tr><td class="mono">tool.approval.requested</td><td><b>执行者</b>（fs-tools / mcp…）</td><td>tools 服务（闸门）· widget.chat-timeline · widget.tools</td><td><span class="tag have">闸门 owner</span></td></tr>
+      <tr><td class="mono">loop.tool.executed</td><td>loop（消息只能它 append）</td><td>三个对话视图</td><td><span class="tag no">不参与</span></td></tr>
+      <tr><td class="mono">tools.state</td><td>tools 服务（owner 每次变更重播整份）</td><td>widget.tools</td><td><span class="tag have">owner</span></td></tr>
+      <tr><td class="mono">tools.set</td><td>widget.tools</td><td>tools 服务（写 approvals.json）</td><td><span class="tag have">owner</span></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>不新增一条插件交互方式。</b>这一列全部是「一个重播事件 + 一个 <code>*.list</code> 命令」的同构复刻，
+    与 <code>llm.provider.reannounce</code> / <code>models.prefs.state</code> 同一套机制。
+  </div>
+</section>
+
+<!-- ══════════════════ 2 拓扑 ══════════════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>拓扑：谁在哪个进程，一条工具调用经过谁</h2>
+
+  <p>
+    下面是本插件落地后的<b>全部四个进程</b>与一条完整的工具调用。
+    与 AgentLoop 教程那张全景图相比，变化只有一处：<b>第 ⑩ 步「loop → tools · fs-tools」从一个进程内的直接函数调用，
+    变成了总线上的 <code>tool.execute</code> 派发</b>。颜色与图例沿用教程的约定。
+  </p>
+
+  <div class="board">
+  <svg viewBox="0 0 1160 470" role="img" aria-label="工具插件拓扑图">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
+      </marker>
+    </defs>
+
+    <!-- client 壳 -->
+    <g class="node host" transform="translate(20,26)">
+      <rect class="r" width="150" height="86" rx="10" />
+      <text x="14" y="26" font-size="13" font-weight="700" fill="currentColor">client 壳</text>
+      <text x="14" y="46" font-size="11.5" fill="currentColor" opacity=".75">dockview + iframe</text>
+      <text x="14" y="64" font-size="11.5" fill="currentColor" opacity=".75">只摆位 / 不理解工具</text>
+    </g>
+
+    <!-- 三个对话视图 -->
+    <g class="node ui on" transform="translate(200,20)">
+      <rect class="r" width="196" height="66" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">chat-workbench</text>
+      <text x="14" y="42" font-size="11.5" fill="currentColor" opacity=".8">widget.chat-timeline</text>
+      <text x="14" y="58" font-size="11.5" fill="currentColor" opacity=".8">渲染工具块 + 审批卡片</text>
+    </g>
+    <g class="node ui" transform="translate(200,96)">
+      <rect class="r" width="196" height="52" rx="10" />
+      <text x="14" y="22" font-size="12.5" font-weight="700" fill="currentColor">widget.session-list</text>
+      <text x="14" y="40" font-size="11.5" fill="currentColor" opacity=".8">widget.chat-composer</text>
+    </g>
+
+    <!-- tools 插件：widget.tools -->
+    <g class="node ui on" transform="translate(200,168)">
+      <rect class="r" width="196" height="86" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">tools · widget.tools</text>
+      <text x="14" y="42" font-size="11.5" fill="currentColor" opacity=".8">目录表 · 详情抽屉 · 试调</text>
+      <text x="14" y="60" font-size="11.5" fill="currentColor" opacity=".8">订阅 tools.state</text>
+      <text x="14" y="76" font-size="11.5" fill="currentColor" opacity=".8">试调发 tools.invoke</text>
+    </g>
+
+    <!-- Core -->
+    <g class="node host on" transform="translate(468,196)">
+      <rect class="r" width="196" height="120" rx="10" />
+      <text x="14" y="26" font-size="13" font-weight="700" fill="currentColor">Core（零改动）</text>
+      <text x="14" y="46" font-size="11.5" fill="currentColor" opacity=".8">POST /api/command</text>
+      <text x="14" y="63" font-size="11.5" fill="currentColor" opacity=".8">GET /events?topics=…</text>
+      <text x="14" y="80" font-size="11.5" fill="currentColor" opacity=".8">查白名单 · 搬字节</text>
+      <text x="14" y="97" font-size="11.5" fill="currentColor" opacity=".8">service.* 生命周期</text>
+      <text x="14" y="112" font-size="11.5" fill="currentColor" opacity=".55">不解析工具内容</text>
+    </g>
+
+    <!-- tools 服务 -->
+    <g class="node svc on" transform="translate(742,150)">
+      <rect class="r" width="204" height="112" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">tools · tools 服务</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">审批闸门 · 策略 owner</text>
+      <text x="14" y="61" font-size="11.5" fill="currentColor" opacity=".8">只答「这一次允许吗」</text>
+      <text x="14" y="78" font-size="11.5" fill="currentColor" opacity=".8">不认识工具 · 不转发执行</text>
+      <text x="14" y="95" font-size="11.5" fill="currentColor" opacity=".8">approvals.json</text>
+    </g>
+
+    <!-- fs-tools -->
+    <g class="node svc on" transform="translate(742,300)">
+      <rect class="r" width="204" height="104" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">tools · fs-tools</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">read · glob · grep</text>
+      <text x="14" y="61" font-size="11.5" fill="currentColor" opacity=".8">执行前自审（非 read 向上问）</text>
+      <text x="14" y="78" font-size="11.5" fill="currentColor" opacity=".8">沙箱根 = 自己的 dataDir</text>
+      <text x="14" y="95" font-size="11.5" fill="currentColor" opacity=".8">tools.json（目录）</text>
+    </g>
+
+    <!-- loop -->
+    <g class="node svc on" transform="translate(468,356)">
+      <rect class="r" width="204" height="96" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">chat-workbench · loop</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">装配目录（并集∩绑定）</text>
+      <text x="14" y="61" font-size="11.5" fill="currentColor" opacity=".8">按 name 派发 tool.execute</text>
+      <text x="14" y="78" font-size="11.5" fill="currentColor" opacity=".8">仍独占 loop.tool.executed</text>
+      <text x="14" y="93" font-size="11.5" fill="currentColor" opacity=".8">MAX_TOOL_ROUNDS 留在这里</text>
+    </g>
+
+    <!-- llm -->
+    <g class="node svc" transform="translate(20,356)">
+      <rect class="r" width="150" height="66" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">llm 主位</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">+ models / provider</text>
+    </g>
+
+    <!-- 用户机器 / 外部 -->
+    <g class="node ext" transform="translate(986,300)">
+      <rect class="r" width="150" height="104" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">userData / 外部</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">plugin/tools/</text>
+      <text x="14" y="60" font-size="11.5" fill="currentColor" opacity=".8">├ approvals.json</text>
+      <text x="14" y="76" font-size="11.5" fill="currentColor" opacity=".8">└ fs-tools/</text>
+      <text x="14" y="92" font-size="11.5" fill="currentColor" opacity=".8">　 └ tool-root/</text>
+    </g>
+
+    <!-- 连线：一次工具调用 7 跳（实线=命令下发，虚线=事件上行） -->
+    <!-- ① 界面 → Core -->
+    <path class="edge httpline" marker-end="url(#ah)" d="M170 53 L198 53" />
+    <path class="edge httpline" marker-end="url(#ah)" d="M396 54 L466 220" />
+    <path class="edge httpline" marker-end="url(#ah)" d="M396 200 L466 266" />
+    <!-- ② Core → 闸门（SSE 事件 / 命令转发） -->
+    <path class="edge busline" marker-end="url(#ah)" d="M664 210 L740 186" />
+    <!-- ③ 闸门 → widget.tools（经 Core 的 SSE；Core 只负责送到） -->
+    <path class="edge httpline" marker-end="url(#ah)" d="M742 240 L640 240 L640 118 L398 186" />
+    <!-- ④ 执行者 → 闸门（tool.approval.requested） -->
+    <path class="edge busline" marker-end="url(#ah)" d="M800 300 L800 264" />
+    <!-- ⑤ loop → 执行者（tool.execute） / 执行者 → loop（result） -->
+    <path class="edge busline" marker-end="url(#ah)" d="M672 394 L740 356" />
+    <path class="edge busline" marker-end="url(#ah)" d="M740 400 L674 428" />
+    <!-- ⑥ loop → Core（llm 面，本图不展开） -->
+    <path class="edge busline" marker-end="url(#ah)" d="M572 356 L572 318" />
+    <!-- ⑦ 执行者 → 自己的 tool-root（进程内，不经 Core） -->
+    <path class="edge procline" marker-end="url(#ah)" d="M846 376 L900 356" />
+    <path class="edge extline" marker-end="url(#ah)" d="M946 352 L984 352" />
+    <path class="edge busline" marker-end="url(#ah)" d="M170 380 L466 396" />
+  </svg>
+  </div>
+
+  <div class="legend">
+    <span><i class="http"></i>HTTP（过 Core）：伺服 UI / 收命令 / 发事件</span>
+    <span><i></i>总线（过 Core）：命令与事件都走这条</span>
+    <span><i class="file"></i>文件（进程内，不过 Core）</span>
+    <span><i class="ext"></i>外部（不过 Core）</span>
+    <span><i class="proc"></i>进程内调用（不过 Core）</span>
+  </div>
+
+  <h3>一次工具调用的 7 跳</h3>
+  <table>
+    <thead><tr><th>#</th><th>从 → 到</th><th>topic / 动作</th><th>过 Core</th><th>Core 在这一步做什么</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>loop → 执行者</td><td class="mono">tool.execute{requestId=T, name, arguments}</td><td><span class="tag bus">总线</span></td><td>归一化 ts/source、JSON 可序列化校验、按订阅分发</td></tr>
+      <tr><td>2</td><td>执行者 → 闸门</td><td class="mono">tool.approval.requested{T, name, risk, arguments}</td><td><span class="tag bus">总线 + SSE</span></td><td>同一份 payload 投给服务订阅者<b>和</b>匹配 topics 的 SSE 会话</td></tr>
+      <tr><td>3</td><td>执行者 <b>停下来</b></td><td>等 <code>tool.approval.resolved{T}</code></td><td>—</td><td>什么都不做（bytes 还没产生）</td></tr>
+      <tr><td>4</td><td>闸门自答（<code>auto</code>/<code>deny</code>）<b>或</b>用户点「允许」</td><td class="mono">tool.approval.resolved{T, approved}</td><td><span class="tag spec">C1 或总线</span></td><td>查白名单 → publish → 202（用户点按钮走的是 C1 那条）</td></tr>
+      <tr><td>5</td><td>执行者 → 执行</td><td>进程内真正动手</td><td><span class="tag proc">进程内</span></td><td>不在数据通路上（只收到健康检查 ping）</td></tr>
+      <tr><td>6</td><td>执行者 → loop</td><td class="mono">tool.execute.result{T, ok, content, summary}</td><td><span class="tag bus">总线</span></td><td>按订阅分发（失败走同一个 topic，无分支）</td></tr>
+      <tr><td>7</td><td>loop → 三个视图</td><td class="mono">loop.tool.executed{A} + message.append</td><td><span class="tag spec">C2+C3</span></td><td>不认识哪三个 iframe；是每个 iframe 自己按 curId 过滤的</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>第 2 跳是本设计与「闸门转发」方案的分水岭：审批是执行者<b>向上问</b>，不是 loop 向下绕。</b><br>
+    如果让闸门做转发（<code>loop → 闸门 → 执行者</code>），总线上会同时存在两个
+    <code>tool.execute</code> 的订阅者，而转发意味着<b>发第二条</b> ——
+    执行者收到两次、跑两次；要避免它，loop 就必须知道「这个 name 该绕还是直达」，
+    <b>那条知识只存在于用户的策略文件里</b>，于是 loop 手里多了一条会长的规则。
+    <br>
+    倒过来（执行者自己问、总线按 topic 投递）之后：<b>loop 一行审批代码都没有</b>，
+    闸门<b>不认识任何工具、也不转发</b>，只回答「这一次允许吗」，
+    手工试调与模型调用<b>走同一条链路</b>。零新增 topic，零路由分支。
+  </div>
+
+  <div class="note info">
+    <b>多个闸门怎么办。</b>谁订阅 <code>tool.approval.requested</code> 谁就答；
+    多答的那几条由<b>幂等</b>兜住 —— 第一个 <code>tool.approval.resolved{T}</code> 生效，之后的按
+    「pending 里查不到就丢弃」这条既有纪律处理（<a href="#s7">§7</a>）。这与「同一 name 两个服务都注册工具」的处理是同一条纪律。
+  </div>
+</section>
+
+<!-- ══════════════════ 3 协议 ══════════════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>协议：13 个新 topic 与它们的唯一真相源</h2>
+
+  <p>
+    全部进 <code>shared/src/events.ts</code> 的 <code>EventMap</code> / <code>CommandMap</code> + 两张运行时清单，
+    并同步 <code>COMMAND_TOPICS</code>（<b>命令必须先进白名单</b>，否则 <code>POST /api/command</code> 直接 400）。
+  </p>
+
+<pre><span class="mono">// ── shared/src/events.ts · EventMap 新增（P7 工具能力位，只增不改）────────
+'tool.registered': EventBase &amp; {          <span class="free">// 重播整份，不发增量</span>
+  serviceId: string
+  /** mcp-tools 发这份时 tools[] 是运行时生成的；其余五个读自己的 tools.json */
+  tools: Array&lt;ToolSpec &amp; { risk: ToolRisk; managedBy?: 'user'|'auto' }&gt;
+}
+'tool.unregistered': EventBase &amp; { serviceId: string }
+'tool.execute.result': EventBase &amp; {     <span class="free">// 执行者 → loop；失败与成功同 topic</span>
+  requestId: string                       <span class="free">// = toolCallId(T)</span>
+  ok: boolean
+  content: string                         <span class="free">// 回填给模型的正文（role:'tool'）</span>
+  summary: string                         <span class="free">// UI 短摘要</span>
+}
+'tool.approval.requested': EventBase &amp; {
+  requestId: string; sessionId: string; toolName: string
+  risk: ToolRisk; arguments: string; <span class="free">// 弹窗要给人看的那份原文</span>
+  /** 执行者进程的解释（为什么需要这个权限），可空 */
+  rationale?: string
+  /** 等待硬超时的毫秒数；到期按 denied 处理 */
+  expiresAt?: number
+}
+'tools.state': EventBase &amp; {             <span class="free">// owner 每次变更重播整份（widget.tools 的唯一数据源）</span>
+  tools: Array&lt;ToolSpec &amp; {
+    serviceId: string
+    risk: ToolRisk
+    /** 'user' = 有启用开关；'auto' = 由运行期门控决定，界面<b>不给开关</b>（§5.4） */
+    managedBy?: 'user' | 'auto'
+    /** 与内置工具撞名 → 界面标 ⚠，不覆盖 */
+    conflict?: boolean
+    /** 该工具声明了哪些 constraintFields 的 key（界面据此渲染约束编辑器） */
+    constraintKeys?: string[]
+  }&gt;
+  policies: Record&lt;string, ApprovalPolicy&gt;
+  /** MCP server 连通态（MCP Tab；断一个只改这一条） */
+  mcpServers?: Array&lt;{ name: string; transport: 'stdio'|'sse'|'http'; up: boolean; toolCount: number }&gt;
+}
+'tools.invoke.result': EventBase &amp; { requestId: string; ok: boolean; content: string; summary: string; elapsedMs: number }
+
+// ── CommandMap 新增 ───────────────────────────────────────────────────
+'tools.list':   Record&lt;string, never&gt;   <span class="free">// 收集方上线时问一次（reannounce 同款）</span>
+'tool.execute': { requestId: string; sessionId: string; name: string; arguments: string }
+'tool.approval.resolved': { requestId: string; approved: boolean; reason?: string; remember?: boolean }
+'tools.set':    { policies: Record&lt;string, ApprovalPolicy&gt; }   <span class="free">// 合并式 patch</span>
+'tools.invoke': { requestId: string; name: string; arguments: string }   <span class="free">// 手工试调</span>
+'tools.mcp.set':    { servers: MCPServerConfig[] }                  <span class="free">// 增删改 MCP server（§5.5）</span>
+'tools.mcp.test':   { server: string }                              <span class="free">// 试连一个 server</span>
+
+// ── 新增两个类型（放 shared/src/llm/types.ts，ToolSpec 旁边）───────────
+<span class="mono">export type ToolRisk = 'read' | 'write' | 'net' | 'proc'</span>
+<span class="mono">export type ApprovalPolicy = 'ask' | 'auto' | 'deny'</span></pre>
+
+  <div class="note info">
+    <b><code>tool.execute</code> 放在 CommandMap 而不是只有 EventMap。</b>
+    与 <code>llm.request</code> / <code>session.get</code> 同款：它需要「发方等待 <code>.result</code>」这个语义，
+    而 Core 对两者一视同仁（都走 <code>POST /api/command</code> → 白名单 → publish）。
+    执行者也可以自己 publish 命令到总线（无需经 HTTP）—— 服务间调用<b>不经过</b> C1 那条 HTTP 面。
+  </div>
+
+  <h3>每个 topic 的归属与「过不过 Core」</h3>
+  <table>
+    <thead><tr><th>topic</th><th>发布方</th><th>订阅方</th><th>过 Core</th><th>缺了会怎样</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">tool.registered</td><td>各执行者（fs / shell / web / misc / skills / <b>mcp</b>）</td><td class="mono">loop · tools</td><td><span class="tag bus">C2</span></td><td>模型看不到这个工具（缺一条 = 少一点能力）</td></tr>
+      <tr><td class="mono">tool.unregistered</td><td>同上</td><td class="mono">loop · tools</td><td><span class="tag bus">C2</span></td><td>目录留残骸 → 模型调一个已不存在的工具</td></tr>
+      <tr><td class="mono">tools.list</td><td class="mono">loop / tools 服务</td><td>各执行者服务</td><td><span class="tag spec">C1 或总线</span></td><td><b>晚启动的收集方永远看不到目录</b>（provider 那个坑，第三次不得踩）</td></tr>
+      <tr><td class="mono">tool.execute</td><td class="mono">loop</td><td>执行者</td><td><span class="tag bus">C2</span></td><td>模型一直转圈</td></tr>
+      <tr><td class="mono">tool.execute.result</td><td>执行者</td><td class="mono">loop</td><td><span class="tag bus">C2</span></td><td>同上（超时兜底负责兜住）</td></tr>
+      <tr><td class="mono">tool.approval.requested</td><td class="mono">执行者</td><td class="mono">tools 服务 · widget.chat-timeline · widget.tools</td><td><span class="tag bus">C2 + C3</span></td><td>写类工具永远等不到人点「允许」</td></tr>
+      <tr><td class="mono">tool.approval.resolved</td><td class="mono">闸门自答 或 widget.chat-timeline / widget.tools</td><td class="mono">执行者</td><td><span class="tag spec">C1 或总线</span></td><td>同上</td></tr>
+      <tr><td class="mono">tools.state</td><td class="mono">tools 服务</td><td class="mono">widget.tools</td><td><span class="tag bus">C2 + C3</span></td><td>管理视图打开是空的（页面总是晚于进程启动）</td></tr>
+      <tr><td class="mono">tools.set / tools.invoke / tools.invoke.result</td><td class="mono">widget.tools</td><td class="mono">tools 服务</td><td><span class="tag spec">C1</span></td><td>没有策略 / 试调入口</td></tr>
+      <tr><td class="mono">tools.mcp.set / tools.mcp.test</td><td class="mono">widget.tools</td><td class="mono">mcp-tools</td><td><span class="tag spec">C1 或总线</span></td><td>MCP server 配不了 / 连不上时无法排障</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>注意 <code>tools.mcp.*</code> 是<b>闸门不参与</b>的一对。</b>
+    审批管的是「这次调用允许吗」，而增删 server 是<b>配置</b> —— 用户在界面上点一下就生效，
+    不该弹审批。<code>tools.mcp.set</code> 直接到 <code>mcp-tools</code>，由它写自己的
+    <code>mcp-servers.json</code>，然后<b>触发一次重连</b>。
+    <br>
+    这也说明<b>闸门不认识工具，也不该认识配置</b>：它只答一个问题。
+  </div>
+
+  <h3>三条必须一起满足的契约纪律</h3>
+  <ol>
+    <li><b>重播整份而不是发增量。</b>订阅方可能晚于发布方启动（管理视图永远晚）。同 <code>llm.provider.reannounce</code>。</li>
+    <li><b>缺失是合法的。</b>不带工具的插件完全正常；订阅失败要<b>忽略</b>，不能让装饰性内容打死主链路。</li>
+    <li><b>顺序必须确定。</b>目录排序键 = <code>serviceId</code> → <code>name</code>。抖动会让 prompt 缓存全失效，
+        症状是「同样的对话 token 费用翻了十倍」且零报错。</li>
+  </ol>
+
+  <div class="note bad">
+    <b>严禁把 <code>source</code> 用作业务字段。</b>
+    <code>EventBase.source</code> 是总线级保留字：ServiceManager 会把每条服务消息<b>权威盖章</b>成 <code>serviceId</code>。
+    需要表达「工具属于哪个服务」时用 <code>serviceId</code> 字段（同 <code>llm.models.list.result</code> 用 <code>catalog</code> 的教训）。
+  </div>
+</section>
+
+<!-- ══════════════════ 4 tools 服务 ══════════════════ -->
+<section id="s4">
+  <h2><span class="n">4</span>tools 服务：审批闸门 + 策略 owner + 试调</h2>
+
+  <div class="tree">plugins/tools/
+├── <span class="std">plugin.json</span>                 <span class="dim"># 一个插件，2 服务 + 1 视图</span>
+├── services/
+│   ├── tools/
+│   │   ├── <span class="std">service.json</span>              <span class="std"># 审批闸门（owner）</span>
+│   │   ├── package.json  tsconfig.json
+│   │   └── src/
+│   │       ├── index.ts              <span class="dim"># 订阅 / 转发 / 审批状态机</span>
+│   │       ├── policy.ts             <span class="dim"># 策略判定（纯函数，好测）</span>
+│   │       └── approvals.ts          <span class="dim"># approvals.json 读写（原子写）</span>
+│   └── fs-tools/
+│       ├── <span class="std">service.json</span>
+│       ├── <span class="std">tools.json</span>              <span class="std"># 自带工具目录（照 catalog.json 套路）</span>
+│       ├── package.json  tsconfig.json
+│       └── src/
+│           ├── index.ts              <span class="dim"># 注册 + 执行 + 沙箱守卫</span>
+│           ├── guards.ts             <span class="dim"># resolveInside：路径锁在自己 tool-root 内</span>
+│           └── specs.ts              <span class="dim"># 读 tools.json（plugins.readFile）</span>
+├── ui/
+│   ├── <span class="std">plugin.json views → index.html#catalog</span>
+│   └── src/views/ ToolCatalogView.vue  ToolDetailDrawer.vue  ApprovalPolicyEditor.vue  ToolRunner.vue
+├── <span class="own">userData/plugin/tools/</span>          <span class="own"># 运行期数据，插件自己拥有</span>
+│   ├── approvals.json                <span class="dim"># 审批策略（owner 独占写）</span>
+│   └── fs-tools/tool-root/           <span class="dim"># 模型能读的文件边界（默认空）</span>
+└── dist/{server/{tools,fs-tools},ui}  <span class="dim"># Core 只认 dist/</span></div>
+
+  <h3>4.1 service.json：两个服务，两个角色</h3>
+<pre><span class="mono">// plugins/tools/services/tools/service.json —— 审批闸门</span>
+{ "id": "tools", "version": "1.0.0", "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [ "tool.approval.resolved", "tools.state", "tool.execute", "tools.invoke.result" ],
+  "subscribes": [ "tool.approval.requested", "tool.registered", "tool.unregistered",
+                  "tool.approval.resolved", "tools.list", "tools.set", "tools.invoke" ] }
+
+<span class="mono">// mcp-tools 多了两条：server 配置是**它自己**的事，闸门不参与（§3 末尾那条注）</span>
+{ "id": "mcp-tools", "version": "1.0.0", "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [ "tool.registered", "tool.unregistered", "tool.execute.result", "tool.approval.requested" ],
+  "subscribes": [ "tool.execute", "tool.approval.resolved", "tools.list",
+                  "tools.mcp.set", "tools.mcp.test" ] }
+
+<span class="mono">// 其余五个静态执行者：service.json 逐字节相同，只有 tools.json 与 src/ 不同</span>
+{ "id": "&lt;sid&gt;", "version": "1.0.0", "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [ "tool.registered", "tool.unregistered", "tool.execute.result", "tool.approval.requested" ],
+  "subscribes": [ "tool.execute", "tool.approval.resolved", "tools.list" ] }
+<span class="mono">//   fs-tools · shell-tools · web-tools · misc-tools · skills-tools —— 五份一字不差</span>
+
+<span class="mono">// mcp-tools：工具协议逐字节相同（多出的两条只管 server 配置，与工具执行无关）</span></pre>
+
+  <div class="note ok">
+    <b>六个执行者的<b>工具协议</b>逐字节相同</b>，只有 <code>tools.json</code> 与 <code>src/</code> 不同
+    （<code>mcp-tools</code> 没有 <code>tools.json</code>，多两条配置命令）。
+    这就是「能力做成能力位」的形状：<b>协议部分一次写对，复制六份</b>。
+    <br>
+    <b>所以「MCP 是动态的」这件事在协议层<b>看不出来</b> —— 这正是关键。</b>
+    loop、闸门、界面对 MCP 与对 <code>read</code> <b>一视同仁</b>：都只是一条
+    <code>tool.execute</code> 与一条 <code>tool.registered</code>。
+    差异被完全关在 <code>mcp-tools/src/</code> 里。§5.5 那三条要求是这个插件里<b>唯一</b>因为某类工具特殊而多出来的规矩。
+  </div>
+
+  <div class="note">
+    <b>两条容易看成「写错」的地方，它们是刻意的：</b>
+    <ul style="margin:6px 0 0">
+      <li><b>tools 服务 publish <code>tool.execute</code></b>：它<b>不拥有</b>任何工具，
+        publish 只是为了<b>手工试调</b>能用同一张目录表派发（§4.2-④）。发布一个 topic 不等于拥有它。</li>
+      <li><b>fs-tools publish <code>tool.approval.requested</code></b>：审批是<b>执行者向上问</b>，
+        不是别人替它问。这让 loop 完全不必知道「这个工具要不要审批」——
+        那条知识在用户的策略文件里，而<b>用户的数据不该变成 loop 的代码</b>。</li>
+    </ul>
+  </div>
+
+  <h3>4.2 tools 服务：四段职责</h3>
+  <table>
+    <thead><tr><th>段</th><th>做什么</th><th>关键决定</th></tr></thead>
+    <tbody>
+      <tr><td><b>① 目录镜像</b></td><td>订阅 <code>tool.registered</code> / <code>tool.unregistered</code>，维护内存里的 <code>ToolRecord[]</code>，任何变更后 <b>publish <code>tools.state</code> 整份</b>。</td>
+        <td><code>ToolRecord</code> = <code>spec + serviceId + risk + enabled + policy</code>。<code>enabled</code> 是<b>本地开关</b>，默认 true。<br>
+            它维护这份目录只是为了<b>界面</b>与<b>试调派发</b>；<b>权威副本在 loop 那边</b>，两份各用各的（总线事件的性质，见教程 §2 推论三）。</td></tr>
+      <tr><td><b>② 审批闸门</b></td><td>订阅 <code>tool.approval.requested</code> → 查策略 → <b>答</b> <code>tool.approval.resolved{approved}</code>。<code>ask</code> 时先把请求留给界面。</td>
+        <td><b>按 risk 兜底</b>：策略里没有这个 name 时，<code>read → auto</code>、<code>write/net/proc → ask</code>。<br>
+            <b>它不认识工具、也不转发执行</b>——只回答「这一次允许吗」。</td></tr>
+      <tr><td><b>③ 策略 owner</b></td><td><code>tools.set</code> 合并式写 <code>approvals.json</code>；写完 publish <code>tools.state</code>。接受 <code>remember</code>（勾「以后都允许」）。</td>
+        <td>JSON 原子写（临时文件 + rename）。<b>合并不覆盖</b>——两个视图各改一条不会互相清空。</td></tr>
+      <tr><td><b>④ 手工试调</b></td><td><code>tools.invoke{name, arguments}</code> → 查<b>自己的</b>目录副本 → 发 <code>tool.execute{requestId=T合成}</code> → 等 <code>tool.execute.result{T}</code> → 回 <code>tools.invoke.result</code>。</td>
+        <td><b>试调走的是和模型完全相同的链路</b>：所以它<b>也会被审批</b>——一个 proc 类工具在这里点一下，
+        等于真的执行了它。这不是缺陷，是「只有一条路径」的直接后果（见 <a href="#s14">§14</a> 待决 4）。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 审批状态机（tools 服务内，挂在 T 上）</h3>
+<pre><span class="mono">// pending: Map&lt;toolCallId, { name, risk, arguments, sessionId, timer }&gt;</span>
+
+<span class="mono">// ── 入口：执行者问「这一次允许吗」 ──────────────────────────────</span>
+tool.approval.requested{T,name,risk,arguments}
+  ├─ policy=auto → answer(T, true)                 <span class="free">// 立刻回，不进 pending</span>
+  ├─ policy=deny → answer(T, false, '用户已禁用该工具')
+  └─ policy=ask  → pending.set(T, …)                <span class="free">// 挂起，等人；定时器同时起</span>
+                    └ 定时器到期 → answer(T, false, '审批超时（未响应）')
+                                                    <span class="free">// 超时按拒绝，不是按允许</span>
+
+<span class="mono">// ── 出口：一条 topic，执行者与界面都能发 ──────────────────────</span>
+tool.approval.resolved{T, approved, reason?, remember?}
+  ├─ 找不到 pending[T] → 静默丢弃 + logger.info      <span class="free">// 幂等 & 孤儿（§7）</span>
+  ├─ approved → remember ? patchPolicy(name,'auto') : 无
+  └─ denied   → 无（reason 已在 payload 里，执行者把它写进结果）
+
+<span class="mono">// 执行者收到 resolved{T,approved} 后才真正动手；approved=false 时
+// 它产 tool.execute.result{ok:false, content:'用户拒绝了这次工具调用'}
+// ——与「执行失败」同一条通路，让模型自我纠正。</span></pre>
+
+  <div class="note ok">
+    <b>「失败也要产结果」是这一层的硬纪律。</b>
+    被拒绝、超时、禁用三种情况<b>都</b>最终落到 <code>tool.execute.result{ok:false}</code>，
+    因为 loop 只认这一个 topic —— 它不区分「执行失败」与「不许执行」。
+    静默丢弃的等价物就是「模型一直转圈」。
+  </div>
+
+  <h3>4.4 审批策略文件</h3>
+<pre><span class="mono">// userData/plugin/tools/approvals.json</span>
+{
+  "version": 1,
+  <span class="free">"// key = toolCall 的 name（不含 serviceId：同名冲突由注册端 fail fast 挡住）"</span>
+  "policies": {
+    "read_file":  { "policy": "auto", "updatedAt": "2026-10-06T10:12:00.000Z", "decidedBy": "user" },
+    "run_tests":  { "policy": "ask"  }
+  },
+  <span class="free">"// 不写 = 按 risk 默认；写 ask = 强制问；写 auto = 只读类才允许升到 auto"</span>
+  "perToolTimeoutMs": 120000
+}</pre>
+
+  <table>
+    <thead><tr><th>risk</th><th>默认</th><th>可升到 auto？</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill read">read</span></td><td><code>auto</code></td><td><span class="tag have">是</span></td><td>路径锁在自己 <code>tool-root</code> 内，只读，不出网</td></tr>
+      <tr><td><span class="pill write">write</span></td><td><code>ask</code></td><td><span class="tag part">是，但新装工具第一次仍问</span></td><td>会改用户文件；「装上就等于有写权限」不该由插件单方面决定</td></tr>
+      <tr><td><span class="pill net">net</span></td><td><code>ask</code></td><td><span class="tag part">是，但新装第一次仍问</span></td><td>出网 = 把本机数据发出去，Core 审不了（插件直接出网）</td></tr>
+      <tr><td><span class="pill proc">proc</span></td><td><code>ask</code></td><td><span class="tag part">是，需二次确认</span></td><td>等于任意代码执行；MCP 子进程也走这一档</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note warn" style="border-left-color:var(--warning);background:var(--warning-soft)">
+    <b>「新装工具第一次仍然要问」是一条产品决定，不是实现细节。</b>
+    一个插件可以声明 <code>risk:'read'</code> 然后偷偷做别的事 —— 所以 <code>policy:auto</code> 只能由<b>用户</b>在界面上点出来，
+    且该 name 第一次出现时不继承任何全局默认。这是「授权来自用户的动作」这条原则在插件层的落地。
+  </div>
+</section>
+
+<!-- ══════════════════ 5 fs-tools 服务 ══════════════════ -->
+<div class="lead">
+  <b>⚠ 已修正：沙箱根不是本插件自己的空 <code class="inl">tool-root</code>，而是<b>会话工作区</b>（用户选定的项目目录 ∪ 授权根）。</b>
+  本稿早先写成「<code class="inl">fs-tools</code> 的沙箱根 = 它自己的 <code class="inl">tool-root</code>」——
+  那是一个<b>空目录</b>，模型读不到用户任何项目文件。修正后：
+  <ul style="margin:6px 0 0">
+    <li><b>工作区是会话属性</b>（<code class="inl">session.workspace</code> + <code class="inl">session.workspaces[]</code>），由 <code class="inl">session</code> 插件持有，用户用 <code class="inl">widget.session-workspace</code> 选。</li>
+    <li><b>目录浏览是新服务 <code class="inl">workspace</code></b>（第 8 个执行者）：<code class="inl">workspace.list|resolve|open</code> 经总线，<b>只列目录、永不 readFile</b>，且不进 <code class="inl">tool.registered</code>（模型够不到）。</li>
+    <li><b>loop 透传 <code class="inl">workspaces</code></b> 给执行者；执行者用 <code class="inl">shared/tools/paths.ts</code> 的 <code class="inl">assertPathSafe</code> 自己判定 —— 「沙箱边界随执行者走」这条不变，只是<b>根来自用户</b>而不是空目录。</li>
+    <li><b>越界 → 工作区审批</b>：<code class="inl">tool.approval.requested</code> 加 <code class="inl">kind:'workspace'</code> + <code class="inl">permissionRoot</code>；批准后 loop 把该目录加进授权根并<b>重派</b>那次调用。</li>
+  </ul>
+  完整设计、契约与排期见 <code class="inl">../../开发进度/P7-工具管理-详细计划.html</code>（M0 工作区能力位）。
+  本稿下方凡出现「沙箱根 = 自己的 <code class="inl">tool-root</code>」处，均按本框修正理解。
+</div>
+
+<section id="s5">
+  <h2><span class="n">5</span>执行者：7 个服务 · 12 个工具 + MCP 动态族（清单取自天枢 dev）</h2>
+
+  <p>
+    工具清单以 <code>C:\Users\dmql\Desktop\tianshu\TianShu\dev\web\server\src\tools/</code> 为准
+    （<code>tool.json</code> 逐个读过，<code>tools/definitions.ts</code> 的门控规则也读了）。
+    天枢把这些工具<b>放在一个进程里</b>（<code>registry.ts</code> 扫目录 + 动态 <code>import</code>），
+    所以它不需要路由；但它也带来三个后果 OST 不会要：<b>一个进程崩了全部工具归零</b>、
+    <b>审批与执行被绑成同一段代码</b>、<b>沙箱根只有一个</b>。
+    <br>
+    拆成 6 个执行者之后，<code>bash</code> 的子进程崩溃<b>不会</b>带走 <code>read</code>，某个 MCP server 崩了也<b>不会</b>让 <code>read</code> 跟着消失。
+  </p>
+
+  <h3>5.1 全量工具清单与 risk 映射</h3>
+  <table>
+    <thead><tr><th style="width:15%">服务</th><th style="width:14%">工具</th><th style="width:9%">risk</th><th style="width:13%">天枢<br><code>dangerous</code></th><th>天枢的硬上限（照抄）</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="5"><b>fs-tools</b><br><span class="pill src">沙箱 = tool-root</span></td>
+        <td class="mono">read</td><td><span class="pill read">read</span></td><td><code>false</code></td><td>1 MB / 页 2000 行 / 单页 51200 字节；找不到时给 3 条模糊建议</td></tr>
+      <tr><td class="mono">glob</td><td><span class="pill read">read</span></td><td><code>false</code></td><td>≤100 项</td></tr>
+      <tr><td class="mono">grep</td><td><span class="pill read">read</span></td><td><code>false</code></td><td>≤200 条；走 ripgrep 子进程，30s 硬超时 + <code>SIGKILL</code></td></tr>
+      <tr><td class="mono">write</td><td><span class="pill write">write</span></td><td><code>true</code></td><td>≤200 MB；自动建父目录、保留 UTF-8 BOM、回结构化 metadata</td></tr>
+      <tr><td class="mono">edit</td><td><span class="pill write">write</span></td><td><code>true</code></td><td>精确串替换 + 原子 rename + <code>diffLines</code>；保留 BOM</td></tr>
+
+      <tr><td rowspan="2"><b>shell-tools</b><br><span class="pill src">沙箱 = 约束清单</span></td>
+        <td class="mono">bash</td><td><span class="pill proc">proc</span></td><td><code>true</code></td><td>60s 超时（env 可调）/ 输出 1 MB；Windows 探测 <code>chcp</code> 后用 iconv 解码；日志落 bash-logs/</td></tr>
+      <tr><td class="mono">pwsh</td><td><span class="pill proc">proc</span></td><td><code>true</code></td><td>同上，另带 <code>timeout_seconds</code> 形参；<code>windowsHide</code></td></tr>
+
+      <tr><td rowspan="2"><b>web-tools</b><br><span class="pill src">沙箱 = 出网</span></td>
+        <td class="mono">webfetch</td><td><span class="pill net">net</span></td><td><span class="tag part">false</span></td><td>响应 ≤5 MB；超时默认 30s、上限 120s；<code>format</code> text/markdown/html；<code>readable</code> 抽正文</td></tr>
+      <tr><td class="mono">websearch</td><td><span class="pill net">net</span></td><td><span class="tag part">false</span></td><td>≤8 条；10s 超时</td></tr>
+
+      <tr><td rowspan="2"><b>misc-tools</b></td>
+        <td class="mono">get_time</td><td><span class="pill read">read</span></td><td><code>false</code></td><td>无参数；返回日期/时间/时区</td></tr>
+      <tr><td class="mono">debug_sessions</td><td><span class="pill read">read</span></td><td><code>false</code></td><td>读 <code>data/debug/</code>；按 <code>session_id</code> 过滤</td></tr>
+
+      <tr><td><b>skills-tools</b><br><span class="pill src">激活别人的能力</span></td>
+        <td class="mono">skill_manager</td><td><span class="pill read">read</span></td><td><code>false</code></td>
+        <td>发现技能包 + 懒激活子技能；<b>技能列表为空时不注册</b>（没有技能包可管）</td></tr>
+
+      <tr style="background:var(--surface-2)"><td colspan="5"><b>mcp-tools</b> —— 目录<b>不是文件，是运行时生成</b>；下面两行是它的<b>前缀约定</b>而非两个工具</td></tr>
+      <tr><td rowspan="2"><b>mcp-tools</b><br><span class="pill src">沙箱 = 子进程</span></td>
+        <td class="mono">mcp__&lt;server&gt;__&lt;tool&gt;</td><td><span class="pill proc">proc</span></td><td><span class="pill src">mcp</span></td>
+        <td>平铺进<b>同一个键空间</b>（与内置工具并列，模型只看到一个目录）；
+        <code>tools/list</code> 拿到的每个工具逐个转成 <code>ToolSpec</code> 并 <code class="mono">risk:'proc'</code></td></tr>
+      <tr><td class="mono">（子进程管控）</td><td><span class="pill proc">proc</span></td><td>—</td>
+        <td>stdio / sse / streamable-http 三种 transport；连接超时默认 30s；
+        <b>目录随连接增删</b>（server 断了 → 它那一批工具立刻注销）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>共 12 个静态工具 + 1 个动态族。</b>
+    <code>skill_manager</code> 与 MCP 留在本插件内，理由和 fs/shell/web 一样 ——
+    <b>「工具管理」这件事的边界就是工具本身</b>：审批、约束、试调、目录视图全在这里，
+    把 skill_manager 拆出去会让「技能包的激活」绕过审批闸门（它决定模型能用什么），
+    把 MCP 拆出去则要为子进程单独再写一套审批 —— 而<b>它恰恰是最需要逐次审批的一族</b>（<code>risk:'proc'</code>）。
+    <br>
+    唯一与其它执行者不同的地方：<code>mcp-tools</code> <b>不读自己的 <code>tools.json</code></b>，目录是运行时生成的（§5.5）。
+  </div>
+
+  <div class="note ok">
+    <b>工具名沿用天枢</b>（<code>read</code>/<code>grep</code>/<code>bash</code>/…），不另起一套。
+    代价是 OST 现有的 <code>read_file</code>/<code>list_dir</code> 要改名并去掉 <code>_dir</code> 后缀类推。
+    <br>
+    <b>改名会动历史</b>：已落库的 <code>role:'tool'</code> 消息里记着旧 tool name。所以这一步排在 P7 收尾、
+    正式发版之前；之后<b>永不再改名</b> —— 模型在 prompt 缓存里见过这个名字，改名的症状是
+    「工具时灵时不灵，重启一次就好了」。
+  </div>
+
+  <h3>5.2 为什么是 6 个执行者，而不是 1 个</h3>
+  <table>
+    <thead><tr><th>切分依据</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><b>沙箱根不同</b></td><td>fs-tools 的根是它自己的 <code>tool-root</code>；shell-tools 的「根」是<b>约束清单</b>（允许命令 / 禁止模式）；web-tools 没有根，只有出网与否；mcp-tools 的边界是<b>子进程</b>。<b>四者的沙箱不是同一个概念</b>，硬塞进一个进程就得让 loop 或闸门学会区分。</td></tr>
+      <tr><td><b>故障域不同</b></td><td><code>bash</code> 会起子进程（超时、杀进程、非零退出码、Windows 编码探测）；MCP 会拉起<b>外部 server</b>（它自己崩/它自己挂）；<code>read</code> 都不会。放一起意味着<b>一次 <code>bash</code> 卡死或某个 MCP server 崩了会带走在跑的读取</b>。</td></tr>
+      <tr><td><b>目录生命周期不同</b></td><td>五个静态执行者的目录在启动时一次成型；<code>mcp-tools</code> 的目录<b>随连接增删</b>（§5.5）。合并成一个进程就得分两套注册逻辑，而它们<b>只是「什么时候重发一份注册」</b>的区别 —— 不值得合并。</td></tr>
+      <tr><td><b>审批节奏不同</b></td><td>shell/web/mcp 是「每次问」；fs 的读是「不问」，写是「每次问」；skills/misc 是「不问」。闸门按 risk 决定，而 risk 在这一层已经知道了。</td></tr>
+      <tr><td><b>不切开的代价</b></td><td>一个进程崩 → 13 个静态工具同时消失 → loop 的目录塌大半 → 模型症状是「有的工具能调有的不能」，而进程状态只显示 degraded。<b>更糟的是 MCP</b>：server 连不上不该让 <code>read</code> 也跟着没了。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tree">plugins/tools/
+├── <span class="std">plugin.json</span>                <span class="dim"># 1 插件 · 7 服务 · 1 视图</span>
+├── services/
+│   ├── tools/                <span class="std"># 闸门（owner：approvals.json）· 无沙箱</span>
+│   │   └── src/{index,policy,approvals}.ts
+│   ├── fs-tools/            <span class="std"># read / glob / grep / write / edit</span>
+│   │   ├── <span class="std">tools.json</span>          <span class="std"># 目录 + risk + constraintFields</span>
+│   │   └── src/{index,guards,paths,truncate}.ts
+│   ├── shell-tools/         <span class="std"># bash / pwsh · 约束清单就是沙箱</span>
+│   │   ├── <span class="std">tools.json</span>
+│   │   └── src/{index,constraints,encoding}.ts    <span class="dim"># Windows chcp + iconv</span>
+│   ├── web-tools/           <span class="std"># webfetch / websearch</span>
+│   │   ├── <span class="std">tools.json</span>
+│   │   └── src/{index,fetch,search}.ts
+│   ├── misc-tools/          <span class="std"># get_time / debug_sessions</span>
+│   │   ├── <span class="std">tools.json</span>
+│   │   └── src/index.ts
+│   ├── skills-tools/        <span class="std"># skill_manager · 空技能列表则不注册</span>
+│   │   ├── <span class="std">tools.json</span>
+│   │   └── src/{index,catalog}.ts            <span class="dim"># 读自己插件的技能目录</span>
+│   └── mcp-tools/           <span class="std"># MCP：目录运行时生成 · 恒 risk:'proc'</span>
+│       ├── service.json                     <span class="std"># ← 没有 tools.json</span>
+│       └── src/{index,client,discovery}.ts  <span class="dim"># stdio/sse/http · tools/list</span>
+├── ui/src/views/            <span class="dim"># ToolCatalogView · ToolDetailDrawer · McpServerPanel</span>
+├── <span class="own">userData/plugin/tools/</span>       <span class="own"># 运行期数据，插件独占</span>
+│   ├── approvals.json                      <span class="dim"># 审批策略</span>
+│   ├── constraints.json                    <span class="dim"># 机器级约束（§5.3）</span>
+│   ├── mcp-servers.json                    <span class="dim"># MCP server 配置（§5.5-①）</span>
+│   ├── tool-output/                        <span class="dim"># 内容寻址截断落盘（§5.7）</span>
+│   ├── bash-logs/                          <span class="dim"># shell 流水</span>
+│   └── {fs,shell,web,misc}-tools/<span class="own">&lt;sid&gt;/tool-root/</span>
+└── dist/{server/×7,ui}      <span class="dim"># Core 只认 dist/</span></div>
+
+  <h3>5.3 tools.json 形态：目录 + risk + <span style="color:var(--danger)">constraintFields</span></h3>
+
+  <p>
+    天枢的 <code>tool.json</code> 里有一条我原稿没有、但<b>正是我那个「靠自律」缺口的答案</b>：
+    <code>constraintFields</code> —— <b>工具自己声明「哪些参数、按哪条规则、受什么约束」</b>，
+    值由角色的绑定提供。这把「每个执行者各写一遍路径检查」变成<b>一份声明 + 一个共享规则引擎</b>。
+  </p>
+
+<pre><span class="mono">// plugins/tools/services/fs-tools/tools.json（照天枢的 tool.json 形状，只加 risk）</span>
+{
+  "tools": [
+    { "name": "read",  "risk": "read",  "tags": ["filesystem"], "handler": "read",
+      "description": "Read file contents from the workspace. Paginated: 2000 lines / 51200 bytes per page.",
+      "parameters": { "type": "object",
+        "properties": { "path":     { "type": "string",  "description": "Path relative to workspace" },
+                        "offset":   { "type": "integer", "description": "First line (default 1)" },
+                        "limit":    { "type": "integer", "description": "Max lines (default 2000)" },
+                        "include":  { "type": "string",  "description": "Glob filter, e.g. *.ts" } },
+        "required": ["path"] },
+      <span class="free">// ↓ 这段是天枢 constraintFields 的直译：声明，不是实现</span>
+      "constraintFields": [
+        { "key": "allowed_paths", "label": "允许路径", "type": "string-list",
+          "placeholder": "例: src/**", "validateArg": "path", "validateRule": "glob-allow" },
+        { "key": "denied_paths",  "label": "禁止路径", "type": "string-list",
+          "placeholder": "例: node_modules/**", "validateArg": "path", "validateRule": "glob-deny" } ] },
+
+    { "name": "write", "risk": "write", "tags": ["filesystem"], "handler": "write",
+      "description": "Write content to a file. Auto-creates parents, preserves BOM, reports metadata.",
+      "parameters": { "type": "object",
+        "properties": { "path":    { "type": "string", "description": "Path relative to workspace" },
+                        "content": { "type": "string", "description": "File content" } },
+        "required": ["path", "content"] },
+      "constraintFields": [
+        { "key": "allowed_paths",  …, "validateArg": "path",    "validateRule": "glob-allow" },
+        { "key": "denied_paths",   …, "validateArg": "path",    "validateRule": "glob-deny" },
+        { "key": "max_file_size",  "label": "单文件大小", "type": "string",
+          "placeholder": "例: 1MB, 512KB", "validateArg": "content", "validateRule": "bytes-max" } ] },
+
+    { "name": "grep",  "risk": "read", … }   <span class="free">// 同形，另加 max_rows → max-number</span>
+  ]
+}
+
+<span class="mono">// plugins/tools/services/shell-tools/tools.json</span>
+{ "name": "bash", "risk": "proc", "tags": ["system"], "description": "Execute a shell command in the workspace directory",
+  "parameters": { "type":"object", "properties": { "command": {"type":"string"}, "timeout_seconds": {"type":"number"} }, "required": ["command"] },
+  "constraintFields": [
+    { "key": "allowed_commands", "label": "允许命令", "type": "string-list",
+      "placeholder": "例: npm, node, git, npx", "validateArg": "command", "validateRule": "exact-allow" },
+    { "key": "denied_patterns",  "label": "禁止模式", "type": "string-list",
+      "placeholder": "例: rm -rf, sudo, del",  "validateArg": "command", "validateRule": "substring-deny" } ] }</pre>
+
+  <h4>两条边界要分清：约束 ≠ 审批</h4>
+  <table>
+    <thead><tr><th></th><th>约束（constraint）</th><th>审批（approval）</th></tr></thead>
+    <tbody>
+      <tr><td>回答的问题</td><td>「这个参数<b>允许</b>吗」</td><td>「要不要让这条通路<b>真的被用掉</b>」</td></tr>
+      <tr><td>由谁设</td><td>角色绑定（<code>characters.json</code>）· 机器默认值（<code>constraints.json</code>）</td><td>用户（<code>approvals.json</code>）· 按 risk 默认</td></tr>
+      <tr><td>违反时</td><td><b>直接失败</b>，不问人（<code>ok:false</code>）</td><td><b>要人点头</b>，点头后才动手</td></tr>
+      <tr><td>粒度</td><td>按 <b>name + 角色</b></td><td>按 <b>name</b>（本机）</td></tr>
+      <tr><td>谁执行</td><td>执行者（<code>shared/</code> 的规则引擎）</td><td>闸门（不认识工具）</td></tr>
+      <tr><td>天枢里</td><td>同一个进程里混着</td><td>同一个进程里混着</td></tr>
+    </tbody>
+  </table>
+  <div class="note ok">
+    <b>把两者分开，就是本设计对我自己原稿那个「靠自律」的修法。</b>
+    原稿说「<code>risk:'read'</code> 是承诺，承诺错了就绕过闸门」。现在这条承诺<b>不再只靠自觉</b>：
+    <code>constraintFields</code> 是<b>声明</b>（要照抄进 <code>shared/</code>，不能自己改），
+    规则引擎在 <code>shared/</code> 里<b>只有一份</b>，四个执行者共用；
+    而<b>「这个工具只做只读」这件事本身</b>由闸门按 <code>risk</code> 复核，
+    执行者谎报 <code>risk:'read'</code> 去执行写操作，闸门看不到 —— 但
+    <code>write</code> 工具<b>自己</b>就会触发 <code>constraintFields</code> 里的 <code>bytes-max</code> 与审批，
+    而 <code>constraints.json</code> 里没有它的任何条目时按<b>空清单 = 全禁</b>处理。
+    <br>
+    一句话：<b>沙箱收缩由约束强制，副作用放行由审批把关</b>，两条独立的机制，不互相指望。
+  </div>
+
+  <h4>规则引擎放 shared，七条规则一份实现</h4>
+<pre><span class="mono">// shared/src/tools/constraints.ts —— 纯函数，四个执行者 + 测试共用一份</span>
+export type ConstraintRule =
+  | 'glob-allow' | 'glob-deny'      <span class="free">// 路径白/黑名单（前缀 glob）</span>
+  | 'bytes-max'                      <span class="free">// "1MB" / "512KB" / 裸字节数</span>
+  | 'exact-allow' | 'substring-deny' <span class="free">// 命令：首 token 精确 / 子串拒绝</span>
+  | 'readonly-query' | 'max-number'</pre>
+
+export function validateConstraints(
+  fields: ConstraintField[],      <span class="mono">// 工具声明的（来自 tools.json）</span>
+  values: Record&lt;string, unknown&gt;,  <span class="mono">// 角色/机器给的</span>
+  args: Record&lt;string, unknown&gt;,    <span class="mono">// 模型这次传的</span>
+): string | null   <span class="mono">// null = 通过；否则是人话原因，直接当 ok:false 回填</span></pre>
+
+  <div class="note">
+    <b>为什么放 <code>shared</code> 而不是闸门。</b>约束校验必须发生在<b>动手之前</b>，也就是执行者进程里；
+    放进闸门就变成「先执行再检查」，那是顺序颠倒。而四个执行者各写一份的实现必然漂移
+    ——「<code>edit</code> 的路径检查比 <code>read</code> 宽」这种差异零报错，只在某天越界时才显形。
+    <br>
+    <b>工具不能自己改规则表</b>：一个插件声明 <code>validateRule:'glob-allow'</code> 却给出
+    <code>allowed_paths: ['**']</code>，等于自己解除限制。所以<b>引擎侧</b>要有一条硬规则：
+    <code>**</code> 与 <code>*</code> 单独出现时视为<b>无效声明</b>并 fail fast，
+    且「全放行」只能由用户在界面上显式打勾 —— 跟「<code>risk:'read'</code> 不能由插件自称」是同一条纪律。
+  </div>
+
+  <h3>5.4 skill_manager：注入与否由「技能列表」决定，不给它开关</h3>
+
+  <p>
+    天枢的 <code>getCharacterToolDefinitions()</code> 有一行判断：
+    <code>if (name === 'skill_manager' && !hasSkills) continue</code> ——
+    <b>技能为空就不注入</b>，因为没有技能包可管。而它同时被 <code>isAutoManagedTool()</code>
+    排除在工具管理列表之外。
+  </p>
+
+  <div class="note">
+    <b>「不给开关」的理由要写进设计，否则实现时会顺手加一个。</b>
+    界面上给一个开关而背后由别的东西决定，用户点它只会得到「我改了但不生效」——
+    这比没有开关更糟，因为它同时教会了用户「这个界面不可信」。
+    <br>
+    所以 <code>ToolRecord</code> 带一个字段 <code class="mono">managedBy: 'user' | 'auto'</code>：
+    <code>auto</code> 的行<b>不渲染启用开关</b>，只作只读展示并注明「由已安装技能包决定」。
+  </div>
+
+  <table>
+    <thead><tr><th>状态</th><th><code>skill_manager</code></th><th><code>widget.tools</code> 的呈现</th></tr></thead>
+    <tbody>
+      <tr><td>技能列表为空（P6 未落地）</td><td><b>不注册</b>，目录里没有它</td><td>目录里不出现这一行</td></tr>
+      <tr><td>有技能包</td><td>注册，<code class="mono">risk:'read'</code></td><td>出现，但启用开关<b>禁用</b> + 灰字「由已安装技能包决定」</td></tr>
+      <tr><td>技能包全被卸载</td><td>进程内注销 → 发 <code>tool.unregistered</code></td><td>该行消失</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.5 MCP：目录是运行时生成的，所以它有三个别处没有的要求</h3>
+
+  <p>
+    <code>mcp-tools</code> 是本插件里唯一<b>不读 <code>tools.json</code></b> 的执行者。
+    它的目录来自 MCP 协议的 <code>tools/list</code>，于是「注册」变成了一个<b>连接态</b>问题。
+  </p>
+
+  <h4>① 目录随连接增删，不是启动时一次</h4>
+  <table>
+    <thead><tr><th>连接事件</th><th>动作</th></tr></thead>
+    <tbody>
+      <tr><td>某个 server 连上</td><td><code>tools/list</code> → 逐个转 <code>ToolSpec</code>（<code class="mono">risk:'proc'</code>）→ <b>整份</b> publish <code>tool.registered</code></td></tr>
+      <tr><td>某个 server 断开 / 超时</td><td><code>tool.unregistered{serviceId:'mcp-tools'}</code> <b>整份重发</b>（含剩下的 server）</td></tr>
+      <tr><td>连接重试成功</td><td>再整份发一次 —— 所以<b>必须幂等</b>，否则目录里出现重影</td></tr>
+      <tr><td>整个 <code>mcp-tools</code> 被 kill -9</td><td>Core 发 <code>service.failed</code> → loop 与闸门按 serviceId 清目录（§7-③）</td></tr>
+    </tbody>
+  </table>
+
+  <h4>② 命名：平铺 + 服务端自带前缀可能冲突</h4>
+<pre><span class="mono">// mcp__&lt;server&gt;__&lt;tool&gt; —— 与内置工具同一个键空间（照天枢 executor.ts）</span>
+mcp__github__create_issue        <span class="free">// 本插件可路由</span>
+mcp__notion__search             <span class="free">// 本插件可路由</span>
+<span class="mono">// 两个 server 都叫「search」时 → mcp__a__search / mcp__b__search 不撞</span>
+<span class="mono">// 但如果某个 server 返回的工具名里带 __ ，解析要用「首个 __」切分而不是 split()</span></pre>
+  <div class="note bad">
+    <b>平铺的两个代价，都要显式处理：</b>
+    <br>① <b>模型看到的是一个混在一起的目录</b> —— 这是<b>优点</b>（天枢这么做是对的：
+    模型不必知道「MCP 工具」这个概念），但界面上必须按来源分组，否则用户以为那是内置工具。
+    <br>② <b>一个 server 返回 <code>create_issue</code>，与内置工具同名</b> →
+    本设计的 fail-fast 规则会<b>拒绝注册</b>并在界面标 ⚠。这正是期望行为：
+    宁可少一个工具，也不要让「模型调的到底是哪个」变成猜谜。
+    <br>③ <b><code>__</code> 的切分</b>：天枢用 <code>name.match(/^mcp__(.+?)__(.+)$/)</code>（非贪婪），
+    本设计照抄并<b>加一条测试</b>：server 名含 <code>__</code> 时必须仍能路由到正确 server。
+  </div>
+
+  <h4>③ 审批：MCP 是最需要逐次确认的一族，而它恒为 <code>proc</code></h4>
+  <div class="note ok">
+    <b><code>risk:'proc'</code> 不是默认值，是这一族的性质。</b>
+    MCP server 是用户机器上的子进程，「它要干什么」由那个程序决定，不由我们的 schema 决定 ——
+    而<b>我们连它会干什么都不知道</b>（<code>tools/list</code> 只给 name/description/inputSchema）。
+    所以：
+    <ul style="margin:6px 0 0">
+      <li><b>不做静态放行</b>：MCP 工具<b>永远</b>逐次审批，不允许「按 server 批量信任」。</li>
+      <li><b>描述进弹窗</b>：审批卡片把 server 的 description 原文与全部入参显示出来 ——
+        用户能判断的只有这些，所以<b>必须给他</b>（天枢的 UI 没做这一层，它只显示命令与入参）。</li>
+      <li><b>「以后都允许」要二次确认</b>：见 §4.4 的表 —— <code>proc</code> 档升到 <code>auto</code> 不是一次点击。</li>
+    </ul>
+  </div>
+
+  <h3>5.6 三处天枢的做法，本设计要改</h3>
+  <table>
+    <thead><tr><th>天枢</th><th>问题</th><th>本设计</th></tr></thead>
+    <tbody>
+      <tr><td><code>dangerous: boolean</code> 两值</td>
+        <td><code>webfetch</code>/<code>websearch</code> 这两个<b>真正出网</b>的工具<b>全标 <code>false</code></b>。而 Core 不代理网络、插件直接出网 —— 出网恰恰是最需要逐次确认的一类。</td>
+        <td>四值 <code>risk: read|write|net|proc</code>，且<b>只有用户能升到 <code>auto</code></b>。出网与进程恒为 <code>ask</code> 起步。</td></tr>
+      <tr><td>审批挂在 <code>(sessionId, toolCallId)</code> 的进程内 Map</td>
+        <td>刷新页面/断线重连后<b>回调已死</b>，在途审批悬空。天枢的注释自己写了「不靠 stream 闭包」是对的方向，但 Map 仍在<b>这个进程</b>里。</td>
+        <td>Map 搬进<b>闸门服务</b>（所以它不是 agent 的一部分）；键仍是 <code>requestId(=toolCallId)</code>，且 <b>不回退到任何前端状态</b>。重连后界面重订 <code>tool.approval.*</code> 即可看到在途请求 —— 因为 pending 状态<b>经总线重播</b>，不在内存里。</td></tr>
+      <tr><td>审批选项 <code>'once'|'always'|'reject'</code></td>
+        <td><b>方向对</b>（三值，而不是简单的是/否），但 <code>'always'</code> 的作用域是天枢内部单进程，写在哪没人说得清。</td>
+        <td>同样三值，落盘到 <code>approvals.json</code> 并<b>注明作用域 = 本机 + 该 name</b>；<code>'always'</code> 对 <code>proc</code> 档要求二次确认。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.7 截断要内容寻址（天枢 truncate.ts 的那条）</h3>
+<pre><span class="mono">// 超过 64000 字符（env 可调）→ 落盘 + 只把头塞回上下文</span>
+<span class="mono">// 关键点：文件名 = sha256(全文).slice(0,16)</span>
+<span class="mono">//   → 同一段输出<b>永远落同一个文件</b>，回填给模型的正文逐字节稳定</span>
+<span class="mono">//   → provider 的前缀缓存不会因为「这次多了一句随机文件名」而整片失效</span>
+userData/plugin/tools/tool-output/tool_<span class="mono">9f2c…（sha16）</span>.log
+<span class="mono">回填正文末尾固定一句：「完整输出已保存至 &lt;path&gt;，可用 read/grep 回溯」</span></pre>
+  <div class="note ok">
+    <b>这条与「工具目录排序必须确定」是同一个病根：prompt 缓存。</b>
+    症状都是「token 费用翻了十倍」且<b>零报错</b>。所以两处都必须<b>先测字节稳定性</b>再合：
+    <code>两次同输入 → tool.execute.result.content 字节级一致</code>。
+  </div>
+
+  <h3>5.8 六个服务与各自的边界</h3>
+  <table>
+    <thead><tr><th>服务</th><th>目录来源</th><th>自审</th><th>沙箱</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">tools</td><td>—（不拥有工具）</td><td>—</td><td>无。只有 approvals.json</td></tr>
+      <tr><td class="mono">fs-tools</td><td><code>tools.json</code>：read / glob / grep / write / edit</td><td>读不问；写必须问</td><td><code>&lt;dataDir&gt;/tools/fs-tools/tool-root</code> + constraints</td></tr>
+      <tr><td class="mono">shell-tools</td><td><code>tools.json</code>：bash / pwsh</td><td>每次必问（<code>proc</code>）</td><td>constraints 的 <code>allowed_commands</code>/<code>denied_patterns</code>；<b>空清单 = 全禁</b></td></tr>
+      <tr><td class="mono">web-tools</td><td><code>tools.json</code>：webfetch / websearch</td><td>每次必问（<code>net</code>）</td><td>URL 协议白名单（http/https）+ 出网本身要批</td></tr>
+      <tr><td class="mono">misc-tools</td><td><code>tools.json</code>：get_time / debug_sessions</td><td>不问（<code>read</code>）</td><td><code>debug_sessions</code> 只读自己的 <code>data/debug/</code> 命名空间</td></tr>
+      <tr><td class="mono">skills-tools</td><td><code>tools.json</code>：skill_manager</td><td>不问（<code>read</code>）</td><td>只读自己的技能目录；<b>技能列表为空则不注册</b>（§5.4）</td></tr>
+      <tr><td class="mono">mcp-tools</td><td><b>运行时</b>：MCP <code>tools/list</code> → <code>risk:'proc'</code></td><td>每次必问（<code>proc</code>），<b>永不静态放行</b></td>
+        <td>子进程（stdio/sse/http）；连接超时 30s；<b>不静默 spawn</b>，server 配置在 <code>userData/plugin/tools/mcp-servers.json</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b><code>tools</code> 服务与 6 个执行者<b>都在一个插件里</b>，但审批闸门是<b>独立进程</b>。</b>
+    这不是冗余：闸门必须在<b>所有执行者都不认识它的前提下</b>工作（否则约束与审批会耦合进某个工具），
+    而它又是「所有执行者都要向上问」的那一个端点。放进同一插件只是为了
+    <b>共用一份 <code>approvals.json</code> 与一个 <code>widget.tools</code></b> ——
+    「这个工具要不要问」本来就是一个跨执行者的用户决定（§14-8）。
+  </div>
+
+  <h3>5.9 目录结构与迁移对照</h3>
+
+  <p>
+    <b>这不是重写，是有取舍的迁移。</b>
+    天枢 <code>fs-tools</code> 的来源（<code>web/server/src/tools/{read,write,edit,grep,glob}/</code>）
+    里有五样东西 OST 现在<b>没有</b>，而且每一样都能直接消掉一类用户投诉：
+    分页读（<code>read</code> 1MB/2000 行/51200 字节一页）、
+    找不到文件时的<b>模糊建议</b>（避免模型在 <code>tool_ropts.ts</code> / <code>tools.ts</code> 之间瞎猜）、
+    <code>edit</code> 的<b>原子写 + BOM 保留 + diff</b>、<code>grep</code> 走 ripgrep（而不是手写正则扫描）。
+    <br>
+    反过来 OST 保留两点：天枢没有的<b>字节窗口截断</b>与<b>页码</b>（<code>read</code> 的 <code>offset</code>/<code>limit</code>），
+    以及 <code>write</code> 那句「自动建父目录、保留 UTF-8 BOM、回结构化 metadata」。
+    改动只有五处，每处都对应一个明确的原因。
+  </p>
+
+  <table>
+    <thead><tr><th>#</th><th>今天（loop 内）</th><th>改后（fs-tools 内）</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="mono">root = &lt;dataDir&gt;/chat-workbench/tool-root</td><td class="mono">root = &lt;dataDir&gt;/tools/fs-tools/tool-root</td>
+        <td><b>沙箱边界随执行者走。</b>loop 不再有路径，工具分散到多个插件后它也不该再有。</td></tr>
+      <tr><td>2</td><td class="mono">toolSpecs(root) 硬编码两个 ToolDefinition</td><td class="mono">tools.json（插件自带数据）经 <code>plugins.readFile</code> 读</td>
+        <td>目录变成<b>数据</b>而不是代码；照 <code>catalog.json</code> 同一套路，界面上有的服务一定认得。</td></tr>
+      <tr><td>3</td><td>模块级 <code>TOOL_SPECS</code> 一次算完</td><td>启动时 publish <code>tool.registered</code>（整份），运行期不变</td>
+        <td>注册是<b>动作</b>（要进总线、要有注销），不是静态数组。</td></tr>
+      <tr><td>4</td><td><code>executeTool()</code> 直接调</td>
+        <td>订阅 <code>tool.execute</code> → <b>先自审</b>（见下）→ 执行 → publish <code>tool.execute.result</code></td>
+        <td>跨进程是本设计唯一真正新增的协议段。</td></tr>
+      <tr><td>5</td><td>失败用「返回以「错误：」开头的字符串」判定</td><td>显式 <code>ok:boolean</code> + <code>summary</code></td>
+        <td>跨进程后 <code>.result</code> 是事件，必须有确定字段；前缀约定不能当协议用。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>tools.json（插件自带目录，与 catalog.json 同款）</h3>
+<pre><span class="mono">// plugins/tools/services/shell-tools/tools.json —— 完整一份见 §5.3</span>
+<span class="mono">// 读法：readPluginFile(service, 'services/shell-tools/tools.json')</span>
+<span class="mono">// 路径相对**插件根目录**（Core 的 plugins.readFile 基准是 pluginDir，不是 dist/），</span>
+<span class="mono">// 所以 build-service.mjs 不必复制它 —— 它只复制 service.json 并改写 entry。</span>
+
+<span class="mono">// tools.json 的四个字段，跨插件契约只有前两个：</span>
+{ "name": "read",          <span class="free">// ← 契约</span>
+  "description": "…",      <span class="free">// ← 契约</span>
+  "parameters": { … },     <span class="free">// ← 契约（中性 JSON Schema）</span>
+  "risk": "read",          <span class="free">// ← 契约：闸门据此决定要不要问</span>
+  "handler": "read",       <span class="free">// ← 本插件私有：tools.json 不跨插件</span>
+  "tags": ["filesystem"],  <span class="free">// ← 本插件私有</span>
+  "constraintFields": [ … ]<span class="free">// ← 契约（声明式），但**引擎在 shared**</span> }</pre>
+
+  <div class="note">
+    <b>为什么 <code>tools.json</code> 放在 <code>services/&lt;sid&gt;/</code> 而不是插件根。</b>
+    <code>plugins.readFile</code> 只读<b>自己插件目录</b>（≤2 MiB、禁 <code>node_modules</code>），
+    服务目录在插件目录内，所以两者都合法。放在服务目录旁的好处是<b>声明与实现同处一室</b> ——
+    加一个工具只改两个文件，且「服务认不认得这个 handler」在同一次阅读里就能验证。
+    <br>
+    <b>四个服务各有一份 <code>tools.json</code></b>，不是一份合并的。
+    因为目录必须<b>按 serviceId 独立发布</b> —— 进程被 kill 时它只该带走自己那一份（§7-③）。
+    合并成一份会让「fs-tools 崩了但 web-tools 还在」这件事无法表达。
+  </div>
+
+  <h3>执行前的自审：为什么是执行者问，不是别人替它问</h3>
+<pre><span class="mono">// fs-tools 收到 tool.execute{T,name,arguments}</span>
+const spec = catalog[name]
+if (!spec) return produce(T, { ok:false, content:'该服务不提供这个工具' })   <span class="free">// 失败，不是抛</span>
+
+<span class="mono">// risk:'read' 是本地就能判定的（路径锁在自己 tool-root 内、不出网、不写）
+// —— 所以只读走快路径，不必打扰闸门。其余一律向上问：</span>
+if (spec.risk !== 'read') {
+  const ok = await askGate(T, spec.name, spec.risk, arguments)   <span class="free">// 见 §2 第 2-4 跳</span>
+  if (!ok) return produce(T, { ok:false, content:'用户拒绝了这次工具调用' })
+}
+return produce(T, run(spec, arguments))</pre>
+
+<div class="note info">
+    <b>关于「每个执行者各写一遍 <code>risk:'read'</code> 判定」这条自律要求，§5.3 给了它一个机制化的落点。</b>
+    原文写的顾虑仍然成立（执行者自称 <code>read</code> 就绕过了闸门），但现在多了两道独立的闸：
+    <b>①</b> 约束由 <code>constraintFields</code> 声明 + <code>shared</code> 里唯一一份引擎强制，
+    工具改不了规则表；<b>②</b> <code>shell-tools</code>/<code>web-tools</code> 干脆<b>不提供任何 <code>read</code> 工具</b> ——
+    它们的<b>全部</b>工具都是 <code>proc</code>/<code>net</code>，没有「只读快路径」这个分支可走。
+    所以真正需要自审判定的只剩 <code>fs-tools</code> 与 <code>misc-tools</code> 两个服务。
+    <br>
+    <b>剩下的残余风险明写在这里</b>：一个插件若谎报 <code>risk:'read'</code> 且不声明任何
+    <code>constraintFields</code>，闸门无从发现。唯一的兜底是
+    <b><code>widget.tools</code> 把 risk 与 constraintFields 一并展示给用户</b> ——
+    让「这个工具说自己只读但没写任何约束」在界面上<b>看起来可疑</b>，而不是靠机制保证。
+    这是本设计里唯一保留的「靠可见性而非靠强制」的地方。
+  </div>
+
+  <h3>执行与失败处置（以 fs-tools 为例，其余三个同构）</h3>
+  <table>
+    <thead><tr><th>情况</th><th>fs-tools 做什么</th><th>回给模型</th></tr></thead>
+    <tbody>
+      <tr><td>路径越界 / 绝对路径 / <code>..</code> 逃逸 / 符号链接外指</td><td>不执行</td><td><code>ok:false</code> + 「路径非法或超出工作目录」</td></tr>
+      <tr><td><b>约束不满足</b>（<code>denied_paths</code> 命中 / <code>allowed_paths</code> 不含）</td><td>不执行，<b>且不问人</b></td>
+        <td><code>ok:false</code> + 具体哪条规则（模型据此改路径）</td></tr>
+      <tr><td>文件不存在</td><td>不执行</td><td><code>ok:false</code> + <b>3 条模糊建议</b>（照抄天枢 <code>read</code> 的相似度打分）</td></tr>
+      <tr><td>文件过大 / 不是文件</td><td>不执行</td><td><code>ok:false</code> + 人话原因（含建议改用 <code>grep</code>）</td></tr>
+      <tr><td>未知 tool name 路由到这里</td><td>不执行</td><td><code>ok:false</code> + 「该服务不提供这个工具」</td></tr>
+      <tr><td>正常（<code>risk:'read'</code>）</td><td>直接执行</td><td><code>ok:true</code> + <code>content</code>（超 64K 则内容寻址落盘）+ <code>summary</code> 120 字</td></tr>
+      <tr><td>正常（其余 risk）· 已获批</td><td>执行</td><td>同上</td></tr>
+      <tr><td>正常（其余 risk）· 被拒 / 审批超时</td><td><b>不执行</b></td><td><code>ok:false</code> + 「用户拒绝了这次工具调用」</td></tr>
+      <tr><td>进程崩溃 / 卡死</td><td>—</td><td><b>loop 侧硬超时</b>兜底（<a href="#s7">§7</a>）。执行者自己不需要知道这件事。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>同名工具：fail fast，不覆盖。</b>
+    两个服务注册同一个 <code>name</code> 时，后到的那个<b>拒绝注册</b>并 publish
+    <code>tool.unregistered</code> 之外的一条 <code>logger.warn</code>，同时在 <code>tools.state</code> 里
+    标 <code>conflict: true</code> 让界面显示 ⚠。
+    <br>
+    <b>为什么不是「后者覆盖前者」</b>：症状会是「我改了工具却不生效」，而原因在另一个服务里 ——
+    与「同一 name 两个技能都有」是同一条纪律。
+    <br>
+    <b>这条规则对 MCP 尤其要紧</b>：天枢用 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 平铺进同一个键空间
+    （<code>executor.ts</code> 按前缀分流）。平铺的好处是模型看到的是一个统一目录，
+    代价是<b>两个 MCP server 可能撞名</b>。本设计沿用平铺命名（模型体验更好），
+    但把冲突检查做成<b>启动时 + 每次 <code>tools.list</code> 重算</b>，撞了就标 ⚠ 而不是静默选一个。
+  </div>
+</section>
+
+<!-- ══════════════════ 6 loop 侧改动 ══════════════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>loop 侧改动：五处，UI 零改动</h2>
+
+  <div class="lead">
+    <b>最重要的一条先说：<code>loop.tool.executed</code> 的发布权留在 loop。</b>
+    assistant 消息与 <code>role:'tool'</code> 消息<b>只能由 loop append</b>（会话唯一写者不变），
+    所以三个对话视图（会话列表 / 对话 / 输入框）<b>一行都不用改</b>。
+    变的只是「谁真正执行」。
+  </div>
+
+  <table>
+    <thead><tr><th>#</th><th>位置</th><th>今天</th><th>改后</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="mono">loop/src/tools.ts（152 行）</td><td>目录 + 执行都在这里</td><td><b>整体迁出</b>，loop 只留一个「按 name 找 serviceId」的路由表</td></tr>
+      <tr><td>2</td><td class="mono">TOOL_SPECS（index.ts:69,381）</td><td>握手后 <code>toolSpecs(TOOL_ROOT)</code> 一次</td><td>握手后订阅 <code>tool.registered</code> / <code>tool.unregistered</code> + 发一次 <code>tools.list</code>，维护 <code>Map&lt;name, serviceId&gt;</code></td></tr>
+      <tr><td>3</td><td class="mono">runToolRound（index.ts:250）</td><td><code>await executeTool(TOOL_ROOT, …)</code></td>
+        <td><code>publish('tool.execute', {requestId: call.id, sessionId, name, arguments})</code> + 等 <code>tool.execute.result</code>（带超时）</td></tr>
+      <tr><td>4</td><td class="mono">sendLlmRequest</td><td><code>tools: TOOL_SPECS</code></td>
+        <td>目录 = <b>注册并集 ∩ 角色绑定</b>（<code>*</code> = 全部）；排序键 <code>serviceId → name</code></td></tr>
+      <tr><td>5</td><td class="mono">启动 / 停机</td><td>—</td><td>新增订阅 <code>service.failed</code> / <code>service.stopped</code>：按 <code>serviceId</code> 清目录残留（§7-③）</td></tr>
+      <tr><td><b>6</b></td><td class="mono">—</td><td>—</td><td><b>审批：零代码。</b>loop 不订阅审批、不判策略、不设审批定时器。它连「这个工具要不要问人」都不知道 ——<b>这正是 §2 那个设计的回报</b>。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>目录 = 注册并集 ∩ 角色绑定（装配器，全在 loop 进程内）</h3>
+  <table>
+    <thead><tr><th>规则</th><th>做法</th><th>不这么做的症状</th></tr></thead>
+    <tbody>
+      <tr><td>并集来自 <code>tool.registered</code></td><td>所有服务 publish 的目录合并，按 <code>name</code> 唯一</td><td>—</td></tr>
+      <tr><td>交集来自角色绑定</td><td><code>characters.json</code> 里该角色的 <code>tools[]</code>；<code>"*"</code> = 全部已注册</td><td>—</td></tr>
+      <tr><td>空集不是错误</td><td>角色没绑工具就是没绑，下发 <code>tools</code> 省略</td><td>把「没绑」当故障 → 对话里莫名报错</td></tr>
+      <tr><td>模型返回目录外的工具名 = <b>失败结果</b></td><td><code>ok:false</code>「不在本轮目录内」回填</td><td>静默忽略 → 模型<b>永远不知道自己调错了</b></td></tr>
+      <tr><td>绑定指向未注册工具</td><td>忽略 + 标一条<b>悬空引用</b>，不报错</td><td>报错 → 用户卸了个插件后对话直接不可用</td></tr>
+      <tr><td>进 API <code>tools</code> 参数，不进 system 文本</td><td>前缀缓存友好</td><td>塞进 prompt → 缓存失效，token 费用翻倍</td></tr>
+    </tbody>
+  </table>
+
+  <h3>派发的一段代码（伪码，对应第 3 处改动）</h3>
+<pre><span class="mono">// loop 进程内：等一个 toolCallId 的结果，带硬超时</span>
+const pendingTools = new Map&lt;string, { a: string; timer: NodeJS.Timeout }&gt;()
+
+function dispatchTool(a: string, sessionId: string, call: ToolCall): void {
+  const serviceId = registry.get(call.name)      <span class="free">// 查表，不是规则</span>
+  if (!serviceId) {
+    if (pendingTools.has(call.id)) return        <span class="free">// 同一 T 不重复派发</span>
+    finishTool(a, sessionId, call, { ok:false, content:'不在本轮目录内的工具：'+call.name,
+      summary:'未注册 '+call.name })            <span class="free">// ← 必须是失败，不是静默</span>
+    return
+  }
+  service.publish('tool.execute', { requestId: call.id, sessionId, name: call.name, arguments: call.arguments })
+  pendingTools.set(call.id, { a, timer: setTimeout(() =&gt; {
+      finishTool(a, sessionId, call, { ok:false, content:`工具 ${call.name} 超时（${TIMEOUT_MS}ms 无响应）`,
+        summary:`${call.name} 超时` })
+  }, TIMEOUT_MS) })
+}
+
+service.subscribe('tool.execute.result', (p) =&gt; {
+  const hit = pendingTools.get(String(p.requestId))
+  if (!hit) return                               <span class="free">// 孤儿结果：静默丢弃，不补发</span>
+  clearTimeout(hit.timer); pendingTools.delete(String(p.requestId))
+  finishTool(hit.a, …, call, { ok: p.ok, content: p.content, summary: p.summary })
+})</pre>
+
+  <div class="note info">
+    <b>为什么按 <code>toolCallId</code> 一对一配对是「免费」的。</b>
+    模型返回的工具调用块 id 天然就是一次执行请求的 id，所以不需要任何额外关联表 ——
+    这就是教程 §7 那句「T₁ T₂ 同时用作 tool.execute 的 requestId」。
+    所以审批弹窗天然知道自己等的是哪一次，而 Core 不需要参与这个关联。
+  </div>
+</section>
+
+<!-- ══════════════════ 7 三条新纪律 ══════════════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>三个必须一起解决的新问题</h2>
+
+  <p>第 ⑩ 步引入了本轮<b>唯一真正的新协议</b>（跨进程执行 + 审批），它带来的三个问题必须在同一批解决，否则只是把问题挪到了别处。</p>
+
+  <table>
+    <thead><tr><th>问题</th><th>触发</th><th>不处理会看到什么</th><th>处置</th><th>落在哪</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① 超时</b></td><td>执行者崩溃 / 卡死；<b>或在审批上挂住</b>（闸门或界面没回）</td>
+        <td>用户看到「模型一直转圈」，无错误、无提示</td>
+        <td>硬超时 → <b>产生一次失败结果</b>（<code>ok:false</code> + 人话原因）回填给模型</td>
+        <td>loop（执行超时）· 执行者（审批超时）· 闸门（无人应答超时）—— <b>三处各管自己那一段</b></td>
+      </tr>
+      <tr>
+        <td><b>② 孤儿结果</b></td><td>审批期间用户按了停止；或这轮已结束而结果才到；<b>或多个闸门都答了</b></td>
+        <td>界面上出现一个「幽灵工具块」，挂在已结束的轮次下面；或工具莫名跑了两遍</td>
+        <td><b>静默丢弃，不许补发。</b>判据：结果到达时 <code>A</code> 已释放 / 轮次不匹配 / <code>pending</code> 里查不到</td>
+        <td>loop（<code>pendingTools</code>）· 执行者（<code>pendingApprovals</code>）· 闸门（<code>pending</code>）—— <b>同一个判据，三处各判一次</b></td>
+      </tr>
+      <tr>
+        <td><b>③ 残留注册</b></td><td>执行者被 <b>强杀</b>（崩溃 / 插件被替换），来不及发注销事件</td>
+        <td>「工具偶尔失灵，重启一次就好了」——间歇性、无报错、没人想到去查注册表</td>
+        <td>订阅 Core 已发布的 <code>service.failed</code> / <code>service.stopped</code>，<b>按 <code>serviceId</code> 清目录</b></td>
+        <td>loop + tools（两边都要清）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>第 ② 条在新结构下多了一层含义。</b>
+    「多个闸门都答了同一 T」如果不幂等，就是工具执行两次 —— 而对 <code>proc</code> 类那等于跑了两遍命令。
+    所以 <code>pending</code> 的 <b>delete 必须发生在 answer 之前</b>，而 answer 本身还要再查一次。
+    这一条比「孤儿丢弃」更严：它防的不是显示错乱，是<b>副作用重复</b>。
+  </div>
+
+  <div class="note bad">
+    <b>第 ③ 条最容易被漏，因为本地测试走的永远是优雅停机。</b>
+    必须有 <code>kill -9</code> 集成测试：起 fs-tools → 记下目录里有 <code>read_file</code> → <code>kill -9</code> 它 →
+    断言 N 秒内 <code>tools.state</code> 不再含这个 serviceId 的条目、且 loop 下发给模型的目录少了这一项。
+    <br>
+    这条与 provider 那次崩溃事故同源：Core 早已发布 <code>service.failed</code>，只是没人订阅。
+  </div>
+
+  <div class="note">
+    <b>顺带说明：这是 Core 少数「主动产出语义」的地方</b>（它知道进程死了），
+    但它仍然<b>不判断「这意味着哪个工具没了」</b> —— 那是订阅方的事。
+    Core 依然只做「查白名单 · 搬字节 · 记生命周期」。
+  </div>
+
+  <h3>为什么「沙箱边界随执行者走」是这三件事的自然解法</h3>
+  <p>
+    今天 loop 用<b>自己插件的</b> dataDir 算只读沙箱根，理由是它同时也是文件工具的宿主。
+    一旦工具分散到多个插件，loop 若还要裁定边界，就得知道<b>每种工具的边界规则</b> ——
+    那是一条必然会长歪的耦合：某个执行者改了规则，loop 不知道，于是它给出的判定是过时的。
+  </p>
+  <p>
+    正确形态是<b>「谁执行谁负责」</b>：执行者有 <code>dataDir</code> 和 <code>plugins.readFile</code>，自己算自己的根；
+    loop 只需要知道「这个 toolCall 该发给谁」，而那是<b>从注册并集里查出来的一份数据，不是一条规则</b>。
+  </p>
+</section>
+
+<!-- ══════════════════ 8 界面与组件 ══════════════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>界面：widget.tools 的四个视图与组件映射</h2>
+
+  <p>
+    「加一个新视图成本 ≈ 0」：同一个 HTTP 接口 + 同一条 topic 流，差别只在 <code>?topics=</code> 过滤。
+    本插件声明<b>一个</b> view，四个形态由内部 Tab 切换（不是四个 iframe —— 它们共享同一份目录状态，拆开只会让状态分裂）。
+  </p>
+
+  <table>
+    <thead><tr><th>Tab</th><th>回答什么问题</th><th>消费</th><th>主要组件（复用 <code>@osteosome/ui</code>）</th></tr></thead>
+    <tbody>
+      <tr><td><b>目录</b></td><td>模型现在能看到哪些工具？谁提供的？风险多大？开了吗？</td><td class="mono">tools.state</td>
+        <td><code>Table</code> · <code>Input</code>(过滤) · <code>Select</code>(按来源/风险筛) · <code>Switch</code>(启用) · <code>Drawer</code>(详情)</td></tr>
+      <tr><td><b>审批</b></td><td>哪些工具我放过？以后还问吗？能不能一键收权？</td><td class="mono">tools.state</td>
+        <td><code>Table</code> · 分段控件 · <code>Switch</code> · <code>Button</code>(恢复询问)</td></tr>
+      <tr><td><b>试调</b></td><td>这个工具在当前机器上真的能用吗？参数长什么样？</td><td class="mono">tools.state</code> + 发 <code>tools.invoke</code>；<br>审批卡片就地渲染（筛 <code>sessionId==='tools-console'</code>）</td>
+        <td><code>Textarea</code>(JSON 参数) · <code>Button</code>(执行) · 结果面板</td></tr>
+      <tr><td><b>MCP</b></td><td>接了哪些外部 server？连上了吗？各带哪些工具？</td>
+        <td class="mono">tools.state</code>（<code>mcp-tools</code> 那几行）+ <code>tools.mcp.set</code></td>
+        <td><code>Table</code>（server · transport · 连通 · 工具数）· <code>Button</code>（连接测试）· <code>Select</code>（transport）</td></tr>
+      <tr><td><b>事件</b></td><td>这个插件到底在总线上说了什么？（排障口）</td><td class="mono">tools.* / tool.*</td>
+        <td>纯日志面板（与 workbench 的 EventStream 同款形态）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>零新增 UI 组件。</b>目录表、抽屉、开关、分段全部是 <code>sdk/ui</code> 里已有的
+    （<code>Table</code> / <code>Drawer</code> / <code>Switch</code> / <code>Select</code> / <code>Input</code> /
+    <code>Textarea</code> / <code>Button</code> / <code>Tabs</code> / <code>EmptyState</code>。
+    <b>唯一一处例外</b>：风险 / 策略 / 来源那几枚小徽章 —— <code>sdk/ui</code> 里<b>没有</b> Badge 组件
+    （现有 18 个：Button / Card / Checkbox / Dropdown / Drawer / EmptyState / IconButton / Input / List /
+    Modal / Select / Spinner / Switch / Tab / Table / Tabs / Textarea / Toast / Tooltip）。
+    本稿 Demo 里那几枚是<b>视图内联样式</b>，不打算先抽成组件 ——
+    一个只在本插件用、且语义只有这里的徽章，抽进公共库只会让 <code>sdk/ui</code> 长出一个第二个真源。
+    只有三个业务组件是新的：<code>ToolDetailDrawer.vue</code>、<code>ToolRunner.vue</code> 与
+    <code>McpServerPanel.vue</code>，而它们也只是<b>组合</b>已有组件 + 一块参数表单。
+    <br>
+    这就是 <code>sdk/ui</code> 那条「纯展示、props 进事件出」边界的回报：
+    一个会自己去 <code>/api/command</code> 的组件，在别人的 iframe 里跑就会产生意料之外的副作用。
+  </div>
+
+  <h3>三个界面对同一份数据的分工（不要搞混）</h3>
+  <table>
+    <thead><tr><th>view</th><th>看的是</th><th>回答</th><th>写不写</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">widget.tools</td><td>注册并集（12 个静态 + MCP 动态族）</td><td>「这台机器上有什么能力」</td><td>写 <code>tools.set</code>（策略）· <code>tools.mcp.set</code>（server）</td></tr>
+      <tr><td class="mono">widget.chat-composer</td><td>角色绑定 ∩ 目录</td><td>「这个角色会用什么」</td><td>写角色绑定（agents 插件的事）</td></tr>
+      <tr><td class="mono">widget.chat-timeline</td><td>本轮实际发生的（<code>sessionId === curId</code>）</td><td>「刚才做了什么、成没成、谁批准的」</td><td>写 <code>tool.approval.resolved</code></td></tr>
+      <tr><td class="mono">widget.tools</td><td>试调产生的（<code>sessionId === 'tools-console'</code>）</td><td>「我刚试的那个工具要授权」</td><td>写 <code>tool.approval.resolved</code></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <b>为什么两个视图不能合并。</b>角色绑定是<b>按角色</b>的策略，工具策略是<b>按机器</b>的策略；
+    一个角色可以在两台权限不同的机器上用同一个名字的配置文件。
+    合并的结果就是「改了角色，工具权限也变了」—— 那是两件事。
+  </div>
+
+  <h3>view 声明</h3>
+<pre><span class="mono">// plugins/tools/plugin.json</span>
+{
+  "id": "tools", "name": "工具管理", "version": "1.0.0", "icon": "🔧",
+  "description": "工具能力位：1 插件 7 服务 —— tools（审批闸门，approvals.json 独占）+ 六个执行者：fs-tools（read·glob·grep·write·edit）/ shell-tools（bash·pwsh）/ web-tools（webfetch·websearch）/ misc-tools（get_time·debug_sessions）/ skills-tools（skill_manager）/ mcp-tools（MCP 目录运行时生成、恒 risk:'proc'）。每个执行者各自一份 tools.json（mcp-tools 除外）与各自的沙箱根 —— 谁执行谁负责。widget.tools 管目录、约束、审批策略、MCP server 与手工试调",
+  "services": ["tools", "fs-tools", "shell-tools", "web-tools", "misc-tools", "skills-tools", "mcp-tools"],
+  "components": ["widget.tools"],
+  "ui": { "views": [ { "id": "widget.tools", "title": "工具", "entry": "index.html#catalog" } ] },
+  "capabilities": [
+    { "name": "tool.registered",  "detail": "注册工具目录（重播整份）" },
+    { "name": "tool.execute",     "detail": "执行一个已注册工具" },
+    { "name": "tool.approval.requested", "detail": "审批闸门：答「这一次允许吗」（不认识工具、不转发执行）" },
+    { "name": "tools.state",      "detail": "目录 + 策略重播（widget.tools 的唯一数据源）" },
+    { "name": "tools.set",        "detail": "改审批策略（合并式）" },
+    { "name": "tools.invoke",     "detail": "手工试调一个工具" }
+  ],
+  "dependencies": [], "autoStart": true
+}</pre>
+  <div class="note">
+    <b><code>dependencies: []</code> 是刻意的。</b>
+    loop 需要工具目录，但 loop 声明的是「<b>依赖 models</b>」——
+    工具插件不该反向成为 chat-workbench 的硬依赖：
+    没装 tools 插件时，对话照样工作，只是模型没有文件工具（<b>缺失是合法的</b>）。
+  </div>
+</section>
+
+<!-- ══════════════════ 9 Demo ══════════════════ -->
+<section id="s9">
+  <h2><span class="n">9</span>组件 Demo（可点）</h2>
+
+  <p>
+    下面是 <code>widget.tools</code> 的四个 Tab 与对话侧审批卡片的最终形态。
+    <b>样式全部取自 <code>sdk/ui/src/tokens.css</code> 的真名</b>（<code>--color-*</code> / <code>--space-*</code>），
+    所以这份 demo 与真正组件库同源；交互是手写的，用来说明行为，不是产物代码。
+    切换深色可验证两套主题都成立。
+  </p>
+
+  <div class="demo">
+    <header>
+      <b>widget.tools</b>
+      <span class="mono">index.html#catalog</span>
+      <span class="sp"></span>
+      <span>订阅 <code class="inl">tools.state</code> · 发 <code class="inl">tools.set</code> / <code class="inl">tools.invoke</code></span>
+    </header>
+    <div class="demo-body tight">
+
+      <div style="padding:var(--s3) var(--s4) 0">
+        <div class="d-tabs" id="ttabs">
+          <button role="tab" aria-selected="true" data-t="catalog">目录</button>
+          <button role="tab" aria-selected="false" data-t="approval">审批</button>
+          <button role="tab" aria-selected="false" data-t="runner">试调</button>
+          <button role="tab" aria-selected="false" data-t="mcp">MCP</button>
+          <button role="tab" aria-selected="false" data-t="events">事件</button>
+        </div>
+      </div>
+
+      <!-- ── Tab 目录 ── -->
+      <div id="tab-catalog" style="padding:var(--s3) var(--s4) var(--s4)">
+        <div style="display:grid;grid-template-columns:1fr 150px 150px;gap:var(--s2);margin-bottom:var(--s3)">
+          <input class="d-input" id="q" placeholder="按名称 / 描述 / 来源过滤…" />
+          <select class="d-select" id="fsrc">
+            <option value="">全部来源</option>
+            <option value="fs-tools">fs-tools</option>
+            <option value="shell-tools">shell-tools</option>
+            <option value="web-tools">web-tools</option>
+            <option value="misc-tools">misc-tools</option>
+            <option value="skills-tools">skills-tools</option>
+            <option value="mcp-tools">mcp-tools</option>
+          </select>
+          <select class="d-select" id="frisk">
+            <option value="">全部风险</option>
+            <option value="read">read</option>
+            <option value="write">write</option>
+            <option value="net">net</option>
+            <option value="proc">proc</option>
+          </select>
+        </div>
+
+        <table class="d-table" id="tbl">
+          <thead>
+            <tr>
+              <th style="width:34%">工具</th>
+              <th style="width:15%">来源</th>
+              <th style="width:10%">风险</th>
+              <th style="width:13%">策略</th>
+              <th style="width:9%">启用</th>
+              <th style="width:14%"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="empty" class="d-empty" hidden><b>没有匹配的工具</b>没有装的工具插件，或过滤条件太窄。</div>
+
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s3) 0 0">
+          表格只显示<b>注册并集</b>。模型真正能用的是「并集 ∩ 角色绑定」——
+          当前角色 <code class="inl">助手</code> 绑定了 <code class="inl">["*"]</code>，所以这两列一致。
+          点「详情」看参数 schema、悬空引用与试调入口。
+        </p>
+      </div>
+
+      <!-- ── Tab 审批 ── -->
+      <div id="tab-approval" style="padding:var(--s3) var(--s4) var(--s4)" hidden>
+        <div class="d-card" style="padding:var(--s3);margin-bottom:var(--s3);background:var(--color-surface-2)">
+          <b style="font-size:var(--text-sm)">逐次审批的三档</b>
+          <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:4px 0 0">
+            <b>ask</b> 每次执行都弹窗 · <b>auto</b> 放行（写/网/进程类只有用户能升） · <b>deny</b> 直接产失败结果，模型自我纠正。
+            策略落 <code class="inl">userData/plugin/tools/approvals.json</code>，<b>不放 Core</b>。
+          </p>
+        </div>
+        <table class="d-table">
+          <thead><tr><th>工具</th><th style="width:12%">风险</th><th style="width:22%">策略</th><th style="width:22%">变更</th><th style="width:14%"></th></tr></thead>
+          <tbody id="poltbody"></tbody>
+        </table>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s3) 0 0">
+          默认按 risk 兜底：<code class="inl">read → auto</code>，其余 <code class="inl">ask</code>。
+          表里没出现的行 = 走默认；写一条就是显式覆盖。恢复询问 = 删掉那条。
+        </p>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s3) 0 0">
+          <b>⚠ 标「无约束声明」的行</b> = 该工具在 <code class="inl">tools.json</code> 里没写
+          <code class="inl">constraintFields</code>，于是<b>没有第二条闸</b>可依赖 ——
+          审批是唯一一道。对 <code class="inl">proc</code>/<code class="inl">net</code> 的工具这很显眼，
+          因为那正是最该有约束（允许命令 / 禁止模式）的地方。
+          这是<b>靠可见性提醒</b>，不是机制保证（§5.5）。
+        </p>
+      </div>
+
+      <!-- ── Tab 试调 ── -->
+      <div id="tab-runner" style="padding:var(--s3) var(--s4) var(--s4)" hidden>
+        <div style="display:grid;grid-template-columns:190px 1fr;gap:var(--s3)">
+          <div>
+            <label style="font-size:var(--text-xs);color:var(--color-text-muted)">工具</label>
+            <select class="d-select" id="rsel" style="margin-top:4px"></select>
+            <div id="rparams" style="margin-top:var(--s3);font-size:var(--text-xs)"></div>
+          </div>
+          <div>
+            <label style="font-size:var(--text-xs);color:var(--color-text-muted)">参数（JSON）</label>
+            <textarea class="d-textarea" id="rargs" style="margin-top:4px"></textarea>
+            <div style="display:flex;gap:var(--s2);align-items:center;margin-top:var(--s2)">
+              <button class="d-btn" id="rgo">试调</button>
+              <span id="rpolicy" class="pill approve">ask · 会弹审批</span>
+              <span style="flex:1"></span>
+              <span id="rtime" class="mono" style="font-size:var(--text-xs);color:var(--color-text-muted)"></span>
+            </div>
+            <div class="outbox" id="rout" style="margin-top:var(--s3)">（尚未执行）</div>
+            <div id="rinline"></div>
+          </div>
+        </div>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s3) 0 0">
+          <b>试调走的是和模型完全相同的一条路径</b>：拼一条合成 toolCallId → 同一套策略判定 → 同一个 <code class="inl">tool.execute</code>。
+          所以它<b>也要过审批</b> —— 一个 proc 类工具在这里点一下，等于真的执行了它。
+          这是特性不是缺陷：管理界面必须与运行时同一条纪律，否则它就是个后门。
+        </p>
+      </div>
+
+      <!-- ── Tab MCP ── -->
+      <div id="tab-mcp" style="padding:var(--s3) var(--s4) var(--s4)" hidden>
+        <table class="d-table">
+          <thead><tr><th>server</th><th style="width:16%">transport</th><th style="width:14%">连通</th><th style="width:12%">工具数</th><th style="width:14%">risk</th><th style="width:16%"></th></tr></thead>
+          <tbody id="mcptbody"></tbody>
+        </table>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s3) 0 0">
+          <b>MCP 的工具恒为 <code class="inl">risk:'proc'</code>，且永远逐次审批</b> ——
+          <code class="inl">tools/list</code> 只给 name/description/inputSchema，
+          <b>我们不知道那个 server 会做什么</b>，所以「按 server 批量信任」这个配置根本不存在（§5.5-③）。
+        </p>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s2) 0 0">
+          断一个 server 只注销它那一批；整个进程被 kill 则由 Core 的 <code class="inl">service.failed</code>
+          触发整份清空 —— 这两条都<b>不需要用户干预</b>。
+        </p>
+      </div>
+
+      <!-- ── Tab 事件 ── -->
+      <div id="tab-events" style="padding:var(--s3) var(--s4) var(--s4)" hidden>
+        <div class="evlog" id="evlog"></div>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--s3) 0 0">
+          这个 Tab 的存在理由：能力目录是<b>运行期才成形</b>的（晚启动的 loop 可能少收、进程被杀会残留）。
+          没有这个窗口，用户只能靠翻日志排障 —— 与当初做服务状态视图是同一个理由。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 详情抽屉 ── -->
+  <div class="demo">
+    <header><b>ToolDetailDrawer.vue</b><span class="sp"></span><span><code class="inl">ui/Drawer</code> · 右侧滑出</span></header>
+    <div class="demo-body" style="background:var(--color-surface-2)">
+      <button class="d-btn ghost" id="openDrawer">打开「read」详情抽屉</button>
+      <div id="drawerHost"></div>
+    </div>
+  </div>
+
+  <!-- ── 审批卡片 ── -->
+  <div class="demo">
+    <header><b>ApprovalCard</b><span class="sp"></span><span>chat-workbench · <code class="inl">widget.chat-timeline</code> 内</span></header>
+    <div class="demo-body">
+      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:0">
+        这张卡片<b>不属于本插件</b>，但它的数据全部来自本插件发布的
+        <code class="inl">tool.approval.requested</code>。放在这里是因为审批是一次跨三个视图的协作 ——
+        弹窗在对话里出现，策略在管理视图里改，手工试调也会触发同一条卡片。
+      </p>
+      <div style="display:flex;gap:var(--s2);margin-bottom:var(--s3)">
+        <button class="d-btn sm" id="reqAsk">模拟 write 类请求</button>
+        <button class="d-btn sm ghost" id="reqProc">模拟 proc 类请求</button>
+        <button class="d-btn sm ghost" id="reqClear">清空</button>
+      </div>
+      <div id="apprHost"></div>
+    </div>
+  </div>
+
+  <!-- ── 悬空引用 / 冲突 / 空态 ── -->
+  <div class="demo">
+    <header><b>三种「不健康」的呈现</b><span class="sp"></span><span>静默忽略是错的，但报错也是错的</span></header>
+    <div class="demo-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3)">
+      <div class="d-card" style="padding:var(--s3)">
+        <span class="pill dangling">悬空引用</span>
+        <p style="font-size:var(--text-sm);margin:var(--s2) 0 0"><code class="inl">pdf_extract</code></p>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:4px 0 0">
+          角色绑了它，但 <code class="inl">skills</code> 插件没装。<b>不报错</b> —— 只是少一点能力。
+          界面上要看得见，否则用户会以为是自己配错了。
+        </p>
+      </div>
+      <div class="d-card" style="padding:var(--s3)">
+        <span class="pill dup">同名冲突</span>
+        <p style="font-size:var(--text-sm);margin:var(--s2) 0 0"><code class="inl">grep</code></p>
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:4px 0 0">
+          <code class="inl">fs-tools</code> 与 <code class="inl">mcp</code> 都注册了它。
+          <b>后者拒绝注册</b>，不覆盖。症状若是「我改了工具却不生效」就没法排查。
+        </p>
+      </div>
+      <div class="d-card" style="padding:var(--s3);display:flex;flex-direction:column;justify-content:center">
+        <div class="d-empty" style="padding:var(--s3) 0">
+          <b>还没有任何工具</b>
+          装一个带工具的服务（fs-tools / skills / mcp），下一轮它就会出现在这里。
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ 10 用户数据 ══════════════════ -->
+<section id="s10">
+  <h2><span class="n">10</span>用户数据与卸载语义</h2>
+
+  <div class="tree"><span class="own">userData/plugin/tools/</span>            <span class="dim">← 本插件独占，别人读不到</span>
+├── approvals.json              <span class="std">owner: tools 服务</span>        <span class="dim">审批策略（用户决定）</span>
+├── constraints.json            <span class="std">owner: tools 服务</span>        <span class="dim">机器级约束默认值（§5.3）</span>
+├── mcp-servers.json            <span class="std">owner: mcp-tools 服务</span>    <span class="dim">MCP server 配置（§5.5）</span>
+├── tool-output/                <span class="std">owner: 各自执行者</span>         <span class="dim">内容寻址截断落盘（§5.7）</span>
+├── bash-logs/                  <span class="std">owner: shell-tools</span>      <span class="dim">shell 执行流水</span>
+├── fs-tools/tool-root/         <span class="std">owner: fs-tools 服务</span>     <span class="dim">模型能读的文件边界（默认空）</span>
+├── shell-tools/                <span class="std">owner: shell-tools</span>      <span class="dim">cwd 基线；实际范围由 constraints 决定</span>
+├── web-tools/  misc-tools/     <span class="std">owner: 各自</span>               <span class="dim">缓存 / 配额</span>
+└── skills-tools/               <span class="std">owner: skills-tools</span>     <span class="dim">技能目录；空则不注册</span></div>
+
+  <table>
+    <thead><tr><th>动作</th><th>approvals.json</th><th>mcp-servers.json</th><th>tool-root/</th><th>会话历史</th></tr></thead>
+    <tbody>
+      <tr><td>卸载插件 / 停用服务</td><td><b>保留</b>（用户决定，重装即恢复）</td><td><b>保留</b>（配置贵，重启慢）</td><td><b>保留</b></td><td><b>保留</b>（append-only）</td></tr>
+      <tr><td>某个 server 从列表删掉</td><td>不受影响</td><td>删该条；<b>该 server 的工具立刻从目录消失</b></td><td>不受影响</td><td>不受影响</td></tr>
+      <tr><td>进程被 kill -9</td><td>不受影响</td><td>不受影响（下次启动重连）</td><td>不受影响</td><td>不受影响；目录残骸由 <code>service.failed</code> 清</td></tr>
+      <tr><td>用户清空会话</td><td>不受影响</td><td>不受影响</td><td>不受影响</td><td>删</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b><code>mcp-servers.json</code> 刻意与 <code>approvals.json</code> 不同命</b>：
+    前者是<b>机器的配置</b>（含 command / args / env，属于「怎么连」），后者是<b>用户的授权</b>（属于「允不允许」）。
+    混在一个文件里，就会有「我把审批全 deny 了，server 还是照连」这种半截状态 ——
+    而<b>没用的连接本身就是暴露面</b>（它会让子进程被拉起来）。
+    <br>
+    <b>删一个 server 要立刻生效</b>：不只从目录消失，还要<b>终止它的子进程</b>。
+    否则「删了」只是 UI 上的删除，那个进程还在跑。
+  </div>
+
+  <div class="note">
+    <b>照「数据保留、只是不再可用」的处置。</b>
+    历史里那条 <code>role:'tool'</code> 消息引用的是当时的工具实现，卸载后它仍然是一段可读文本；
+    级联删会让用户的会话凭空少内容。<b>重装即恢复原位</b> 是插件化承诺的一部分。
+  </div>
+
+  <div class="note bad">
+    <b>顺带建议：从 <code>chat-workbench/plugin.json</code> 删掉 <code>dataReadableBy</code>。</b>
+    那条授权声明<b>至今没有生效点</b>（<code>core/src/sse-bridge/server.ts</code> 里只有 <code>/api/plugins</code> 与
+    <code>/plugins/*</code> 两条路由）。留着一条不生效的授权声明比没有更糟 ——
+    它让读代码的人以为边界存在。<b>本插件不需要它</b>：它作为审批 owner 直接拥有 <code>approvals.json</code>，
+    widget.tools 与它同属一个插件、同一个 iframe，不需要跨命名空间读。
+  </div>
+</section>
+
+<!-- ══════════════════ 11 不变式 ══════════════════ -->
+<section id="s11">
+  <h2><span class="n">11</span>不变式与红线（本设计不得破坏）</h2>
+
+  <div class="no-list-wrap">
+  <div class="note bad" style="border-left-width:3px">
+    <b>不新增进程间协议</b>：stdio JSON-RPC + <code>shared</code> 的 EventMap/CommandMap 仍是唯一入口。
+    本设计的 13 个新 topic 全部是<b>这张表上的新行</b>，不是新机制。
+  </div>
+  </div>
+
+  <table>
+    <thead><tr><th>不变式</th><th>本设计如何满足</th></tr></thead>
+    <tbody>
+      <tr><td><b>Core 不解析插件内容</b></td><td>工具 schema、审批策略全文全是<b>内容</b>，一律经总线与 <code>plugins.readFile</code>。Core 一行不碰。</td></tr>
+      <tr><td><b>能力存在性必须有重播通路</b></td><td><code>tools.list</code>（收集方上线时问一次）+ <code>tools.state</code>（owner 重播整份）。</td></tr>
+      <tr><td><b>缺失是合法的</b></td><td>没装 tools 插件 / 没有执行者 / 没有角色绑定，三者都不是错误，只是「少一点能力」。</td></tr>
+      <tr><td><b>顺序必须确定</b></td><td>目录排序 <code>serviceId → name</code>；策略 map 按 key 渲染，不依赖对象插入序。</td></tr>
+      <tr><td><b>失败也要产结果</b></td><td>被拒绝 / 超时 / 禁用 / 未知工具，四种都发 <code>ok:false</code>，让模型自我纠正。<b>不自动重试有副作用的工具</b>。</td></tr>
+      <tr><td><b>写只限自己</b></td><td><code>approvals.json</code> 与 <code>tool-root/</code> 都在本插件命名空间内，Core 不持有。</td></tr>
+      <tr><td><b>编排权留在 loop</b></td><td><code>MAX_TOOL_ROUNDS</code> 留在 loop —— 它是编排决策，谁都不该绕过。</td></tr>
+      <tr><td><b>消息唯一写者</b></td><td>assistant 与 <code>role:'tool'</code> 仍只能由 loop append，三个对话视图零改动。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bus">
+    <b>Core 的全部职责，本设计之后仍然是两句话。</b>
+    查白名单、搬字节（外加记生命周期：<code>service.*</code> / <code>plugin.state.changed</code>）· 伺服静态产物。
+    <br>
+    Core 不做的事：不解析工具内容 · 不参与编排 · 不管插件 UI 内部路由 · <b>不代理外部网络</b>
+    （所以 MCP 接进来时要新增的不是 Core 的功能，而是一个服务去管子进程 —— 那就是另一个插件的故事了）。
+  </div>
+</section>
+
+<!-- ══════════════════ 12 测试 ══════════════════ -->
+<section id="s12">
+  <h2><span class="n">12</span>测试矩阵</h2>
+
+  <p>照既有做法：<b>测试跟着被测物走</b> —— loop 的装配留在 loop 包，本插件的协议落在本插件包里（照 <code>service-distribution.test.ts</code> 与 <code>plugin-ui-e2e.test.ts</code>：真构建 → 真 Core → 真请求）。</p>
+
+  <table>
+    <thead><tr><th>层</th><th>用例</th><th>断言</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="3"><b>skills-tools</b></td><td>技能列表为空</td><td><b>不注册</b> → <code>tool.registered</code> 里没有 <code>skill_manager</code></td></tr>
+      <tr><td>技能包存在</td><td>注册 + <code>tools.state</code> 里 <code class="mono">managedBy:'auto'</code>（界面开关禁用）</td></tr>
+      <tr><td>技能包被卸载</td><td>注销 → 目录里那一行消失</td></tr>
+
+      <tr><td rowspan="4"><b>mcp-tools</b></td><td><b>断一个 server</b></td><td>只注销<b>它那一批</b>；<code>tools/list</code> 剩下的照常在目录里</td></tr>
+      <tr><td>重连幂等</td><td>整份重发两次 → 目录里<b>不出现重影</b>（同 name 不重复）</td></tr>
+      <tr><td>server 名含 <code>__</code></td><td>按<b>首个</b> <code>__</code> 切分，仍路由到正确 server（照抄天枢的非贪婪正则）</td></tr>
+      <tr><td>MCP 工具的审批</td><td><b>永远</b>逐次审批；<b>没有任何配置能让它自动放行</b>（含「按 server 批量信任」）</td></tr>
+
+<tr><td rowspan="5"><b>shared</b></td><td>新 topic 进 EventMap / CommandMap / 两张清单</td>
+        <td><code>COMMAND_TOPICS</code> 含 7 个新命令；<code>satisfies readonly CommandKey[]</code> 不报错</td></tr>
+      <tr><td>七份 <code>service.json</code> 与共享表一致</td><td>全部 publishes/subscribes 在共享表里（Core 启动前校验）</td></tr>
+      <tr><td><code>ToolRisk</code> / <code>ApprovalPolicy</code> 导出</td><td>类型与 <code>ToolSpec</code> 同处一个文件，不新增 import 面</td></tr>
+      <tr><td><code>source</code> 保留字</td><td>没有新 payload 字段叫 <code>source</code></td></tr>
+      <tr><td><b><code>constraints.ts</code> 七条规则</b></td>
+        <td>逐条：<code>glob-allow</code>/<code>glob-deny</code> 命中与不命中 · <code>bytes-max</code> 边界值 ·
+        <code>exact-allow</code> 只看首 token · <code>substring-deny</code> 子串 ·
+        <code>max-number</code> · <code>readonly-query</code> 只拦 INSERT/UPDATE/DELETE/DROP ·
+        <br><b>以及 <code>**</code>/<code>*</code> 单独出现 → fail fast</b>（工具不能自己解除限制）</td></tr>
+
+      <tr><td rowspan="9"><b>fs-tools</b>（执行者）</td><td>读 <code>tools.json</code> → publish 整份注册</td><td><b>5 个</b>工具（read/glob/grep/write/edit），<code>risk</code> 正确透出</td></tr>
+      <tr><td>路径守卫（迁自 <code>resolveInside</code>，吸收天枢 <code>assertPathSafe</code>）</td>
+        <td>绝对路径 / <code>../</code> / 符号链接外指 全部拒绝；<b>Windows <code>/c/…</code> 与 <code>C:\…</code> 归一化</b>后同样判定</td></tr>
+      <tr><td>边界参数</td><td><code>read</code> 1MB/2000行/51200B 一页 · <code>glob</code> ≤100 · <code>grep</code> ≤200 且 30s 硬超时</td></tr>
+      <tr><td>分页与字节稳定性</td><td><code>read</code> 同一 <code>offset/limit</code> 两次调用输出<b>字节级一致</b>（页码不可漂）</td></tr>
+      <tr><td>模糊建议</td><td>文件不存在时给 ≤3 条相似度建议（天枢 <code>read</code> 的行为，照抄）</td></tr>
+      <tr><td><code>read</code> 快路径</td><td><b>不</b> publish <code>tool.approval.requested</code>，直接执行</td></tr>
+      <tr><td>非 read · 获批 / 被拒</td><td>先 asked 再动手；<code>resolved{approved:false}</code> → <code>ok:false</code></td></tr>
+      <tr><td>审批挂住</td><td>执行者侧超时 → <code>ok:false</code>「审批超时」（不无限等）</td></tr>
+      <tr><td>收到不属于自己的 name</td><td><code>ok:false</code>「该服务不提供这个工具」</td></tr>
+
+      <tr><td rowspan="5"><b>shell-tools</b></td><td><b>空 <code>allowed_commands</code> = 全禁</b></td><td><code>bash</code> 在默认配置下<b>永远失败</b>，而不是「没配置就放行」</td></tr>
+      <tr><td><code>exact-allow</code> 只看首 token</td><td><code>git status</code> 通过；<code>git push</code>（若只 allow 了 status）拒绝</td></tr>
+      <tr><td><code>denied_patterns</code> 优先于 allow</td><td><code>rm -rf</code> 即使首 token 在白名单里也拒</td></tr>
+      <tr><td>Windows 编码</td><td><code>chcp 936</code> 时输出经 iconv 解码为 UTF-8；<code>windowsHide</code> 已设</td></tr>
+      <tr><td>超时与 SIGKILL</td><td>60s 到点 <code>SIGKILL</code> 整个进程组；<b>不能留孤儿</b></td></tr>
+
+      <tr><td rowspan="3"><b>web-tools</b></td><td>协议白名单</td><td><code>file:</code>/<code>ftp:</code> 拒绝；<code>http(s)</code> 才放行</td></tr>
+      <tr><td>超时上限</td><td><code>timeout</code> 传入值被 <code>min(入参, 120)</code> 夹住</td></tr>
+      <tr><td>响应上限</td><td>超 5MB 截断并标注，<b>不</b>整份读进内存</td></tr>
+
+      <tr><td rowspan="2"><b>misc-tools</b></td><td><code>debug_sessions</code> 只读自己的 <code>data/debug/</code></td><td>够不到本插件目录之外</td></tr>
+      <tr><td><code>get_time</code> 无参数</td><td>不触发审批（<code>read</code> 快路径）</td></tr>
+
+      <tr><td rowspan="6"><b>tools 闸门</b></td><td><code>auto</code> 立即答</td><td>publish <code>tool.approval.resolved{approved:true}</code>，<b>不进</b> pending</td></tr>
+      <tr><td><code>deny</code></td><td>答 <code>approved:false</code> + <code>reason</code></td></tr>
+      <tr><td><code>ask</code></td><td>进 pending，事件经 SSE 到达界面；用户点按钮后答</td></tr>
+      <tr><td>审批超时</td><td>定时器按<b>拒绝</b>处理（不是按允许）</td></tr>
+      <tr><td><b>幂等</b>：同一个 T 收到两条 resolved</td><td>只有第一条生效，第二条丢弃（防副作用跑两遍）</td></tr>
+      <tr><td><code>tools.set</code> 合并式</td><td>改一条不影响另一条；原子写；随后 publish <code>tools.state</code> 整份</td></tr>
+
+      <tr><td rowspan="5"><b>loop</b></td><td>目录 = 并集 ∩ 绑定</td><td><code>"*"</code> 全给；指定列表只给交集；空集不下发 <code>tools</code></td></tr>
+      <tr><td>模型返回目录外工具名</td><td>失败结果回填，<b>不静默</b></td></tr>
+      <tr><td>派发路由</td><td><code>name → serviceId</code> 从注册并集查；查不到即失败</td></tr>
+      <tr><td>硬超时兜底</td><td>不发 result 时，N 秒后产 <code>ok:false</code> 并继续下一轮</td></tr>
+      <tr><td>顺序稳定</td><td>两次启动的 <code>tools</code> 数组字节级一致</td></tr>
+
+      <tr><td rowspan="3"><b>集成</b></td><td><b>kill -9 fs-tools</b></td><td><code>service.failed</code> → 目录被清；模型下一轮不再看到 <code>read_file</code></td></tr>
+      <tr><td>真 Core + 真 SSE</td><td>审批卡片出现在 <code>widget.chat-timeline</code>，点「允许」走完到 result；<b>同时</b>断言 <code>widget.tools</code> 不显示（sessionId 不同）</td></tr>
+      <tr><td>晚启动的 loop / tools</td><td>发 <code>tools.list</code> 拿到全量，不靠「恰好赶上注册事件」</td></tr>
+      <tr><td>审批中途 <code>loop.cancel</code></td><td>不产生任何 <code>tool.execute.result</code>（没有幽灵工具块）；执行者侧的 pending 被清</td></tr>
+      <tr><td>两个闸门同时在线</td><td>工具<b>只执行一次</b>（幂等）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>必须有 kill -9 集成测试。</b>
+    本地测试走的永远是优雅停机，所以「残留注册」这条问题<b>永远看不到它</b>。
+    症状是「工具偶尔失灵，重启一次就好了」—— 间歇性、无报错、没人想到去查注册表。
+    <br>
+    <b>六个执行者各测一次</b>（不是只测 fs-tools）：崩一个只能带走自己那几个工具
+    （5/2/2/2/1/<b>整族</b>），<b>其余五个必须照常在目录里</b>。这条断言正是「为什么拆 6 个」的<b>唯一可验证形式</b> ——
+    不拆的话它无从测起。
+  </div>
+
+  <h3>可以直接搬的测试</h3>
+  <p>
+    天枢那批 <code>*.test.ts</code> 就在旁边（<code>tools/bash/{abort,bash-exit,close-settle}.test.ts</code>、
+    <code>tools/pwsh/*.test.ts</code>、<code>tools/edit/{matchers,edit.integration}.test.ts</code>、
+    <code>tools/read/read.test.ts</code>、<code>tools/write/write.test.ts</code>、
+    <code>tools/{definitions,utils,mcp_discovery}.test.ts</code>、
+    <code>agent/runtime/approval-registry.test.ts</code>）。
+    它们测的是<b>纯函数</b>（matchers、路径判定、审批 Map），所以<b>跨进程拆分后一条都不用改</b> ——
+    只有 <code>edit.integration</code> 与 <code>read/write</code> 那几组要从「直接调 <code>execute()</code>」
+    改成「发命令、等事件」。<b>先把纯函数那批搬过来</b>，它们零成本且覆盖面最大。
+  </p>
+</section>
+
+<!-- ══════════════════ 13 工作分解 ══════════════════ -->
+<section id="s13">
+  <h2><span class="n">13</span>工作分解与落地顺序</h2>
+
+  <p>每一步都能<b>独立验收、独立 revert</b>，符合仓库一贯的 strangler 纪律：小步执行、每步全绿、每层可单独回退。</p>
+
+  <table>
+    <thead><tr><th>步</th><th>工作</th><th>涉及文件</th><th>完成判据（可验证）</th></tr></thead>
+    <tbody>
+      <tr><td><b>WS-1</b></td><td>契约先行：shared 加 13 个 topic + 2 个类型 + <b>约束规则引擎</b></td>
+        <td><code>shared/src/events.ts</code> · <code>shared/src/llm/types.ts</code> · <b>新建 <code>shared/src/tools/constraints.ts</code></b></td>
+        <td><code>pnpm -r typecheck</code> 绿；Core 启动前 manifest 校验不报缺表；<b>规则引擎七条规则逐条有测试</b></td></tr>
+      <tr><td><b>WS-2</b></td><td>插件骨架：plugin.json + <b>五份</b> service.json + 构建配置</td>
+        <td><code>plugins/tools/**</code> · <code>scripts/build-service.mjs</code> 接 5 个新包</td>
+        <td><code>pnpm build</code> 后 <code>dist/server/{tools,fs-tools,shell-tools,web-tools,misc-tools}</code> 全部就位</td></tr>
+      <tr><td><b>WS-3</b></td><td><b>fs-tools 迁移（先不动 loop）</b> —— 从天枢搬 5 个工具 + 那批纯函数测试</td>
+        <td><code>services/fs-tools/src/{index,guards,paths,truncate}.ts</code> · <code>tools.json</code></td>
+        <td>注册上 5 个工具；<b>天枢 <code>utils/read/write/edit/matchers</code> 的测试原样通过</b></td></tr>
+      <tr><td><b>WS-4</b></td><td>tools 闸门：策略判定 + 审批状态机（<b>只答不转发</b>）</td>
+        <td><code>services/tools/src/{index,policy,approvals}.ts</code></td>
+        <td><code>auto</code>/<code>ask</code>/<code>deny</code>/超时/孤儿/幂等 六条用例全绿；<b>天枢 <code>approval-registry.test.ts</code> 可直接改造复用</b></td></tr>
+      <tr><td><b>WS-5</b></td><td>loop 侧切过去（<b>这一步才动主线</b>）</td>
+        <td><code>loop/src/tools.ts</code> 瘦身 · <code>index.ts</code> 五处改动</td>
+        <td>P7 现有集成冒烟全绿；工具名 <code>read_file/list_dir → read/glob</code> 后<b>老会话里的 tool 消息仍可读</b>（旧名只作为历史文本存在）</td></tr>
+      <tr><td><b>WS-6</b></td><td>三条新纪律（超时 / 孤儿 / 残留注册）</td>
+        <td><code>loop/src/index.ts</code> · <code>services/tools/src/index.ts</code></td>
+        <td><b>kill -9 四个执行者各测一次</b>；超时分档（§14-2）生效</td></tr>
+      <tr><td><b>WS-7</b></td><td><b>shell-tools</b>（bash/pwsh）</td>
+        <td><code>services/shell-tools/src/{index,constraints,encoding}.ts</code></td>
+        <td><b>空 <code>allowed_commands</code> → 必然失败</b>；Windows 编码探测；60s 超时杀干净进程组；天枢那 5 个 bash/pwsh 测试迁移通过</td></tr>
+      <tr><td><b>WS-8</b></td><td><b>web-tools</b>（webfetch/websearch）</td>
+        <td><code>services/web-tools/src/{index,fetch,search}.ts</code></td>
+        <td>协议白名单拒 <code>file:</code>；超时夹到 120s；响应 5MB 截断</td></tr>
+      <tr><td><b>WS-9</b></td><td><b>misc-tools</b>（get_time/debug_sessions）</td>
+        <td><code>services/misc-tools/src/index.ts</code></td>
+        <td>两个工具；<code>debug_sessions</code> 够不到插件目录之外</td></tr>
+      <tr><td><b>WS-10</b></td><td><b>skills-tools</b>（skill_manager）</td>
+        <td><code>services/skills-tools/src/{index,catalog}.ts</code> · <code>tools.json</code></td>
+        <td>技能列表为空 → <b>目录里没有这一行</b>；有技能包 → 出现且开关禁用（<code>managedBy:'auto'</code>）</td></tr>
+      <tr><td><b>WS-11</b></td><td><b>mcp-tools</b>（MCP 全套）</td>
+        <td><code>services/mcp-tools/src/{index,client,discovery}.ts</code> · <code>userData/…/mcp-servers.json</code></td>
+        <td>三个 transport 各测一遍；<b>断一个 server 只注销它那一批</b>；
+        重连后整份重发<b>幂等无重影</b>；server 名含 <code>__</code> 仍能正确路由</td></tr>
+      <tr><td><b>WS-12</b></td><td>widget.tools 四个 Tab（含<b>约束编辑器</b>与 <b>MCP server 面板</b>）</td>
+        <td><code>plugins/tools/ui/src/**</code></td>
+        <td>真 Core + 真 SSE 下目录表有数据；改策略立刻在 <code>tools.state</code> 回来；
+        <b>「无约束声明」警示可见</b>；MCP 行按来源分组显示</td></tr>
+      <tr><td><b>WS-13</b></td><td>对话侧审批卡片（MCP 要显示 server description）</td>
+        <td><code>chat-workbench/ui/src/views/ChatTimelineView.vue</code></td>
+        <td>点「允许 / 拒绝 / 记住」→ <code>tool.approval.resolved</code> → 工具块从「等待审批」变成结果；
+        <b><code>proc</code> 档的「记住」要二次确认</b></td></tr>
+      <tr><td><b>WS-14</b></td><td>清理：删 <code>loop/src/tools.ts</code> 执行部分 · 删 <code>dataReadableBy</code></td>
+        <td><code>loop/**</code> · <code>chat-workbench/plugin.json</code></td>
+        <td>全量测试绿；<code>chat-workbench</code> 不再有路径常量</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>为什么 WS-3/WS-4 在 WS-5 之前。</b>
+    先让新服务各自能工作（它们可以先什么都不连），再切 loop ——
+    切的那一刻主线是绿的，出问题能立刻判定是「派发」而不是「执行者本身」。
+    反过来（先切 loop 再写服务）会让主线在一个不可用的中间态上停留整个开发周期。
+  </div>
+
+  <div class="note">
+    <b>为什么 WS-7~11（另外五个执行者）在 WS-5 之后。</b>
+    它们不需要等 —— 但它们<b>要</b>在主线切通之后再上，理由是<b>可观测性</b>：
+    主线通了之后，每加一个执行者，都能立刻在 <code>widget.tools</code> 与
+    <code>loop.tool.executed</code> 里看到它真的被调起来了。
+    先上五个再切主线的话，故障点是「派发 × 5」还是「执行 × 5」无法分离。
+    <br>
+    <b>每一步都能独立验收、独立 revert</b>：WS-7 挂了，revert 掉 <code>shell-tools</code> 这一个目录，
+    主线与另外五个执行者照常 —— 因为它们之间<b>没有任何一个知道对方存在</b>。
+    <br>
+    <b>WS-11（MCP）单独一步的理由</b>：它是唯一一个<b>目录在运行期变化</b>的执行者，
+    也是唯一一个会<b>拉起外部进程</b>的。它单独一步意味着「动态目录」这件事被<b>单独验证</b>，
+    不会和「静态目录」的问题混在一起排查。
+  </div>
+
+  <div class="note">
+    <b>与后续里程碑的接口（本设计只负责留好，不实现）：</b>
+    <ul style="margin:6px 0 0">
+      <li><b>skills（P6）</b>：<code>skill_read</code> 就是本插件形态的一个普通执行者（<code>risk:'read'</code>）。零新协议。</li>
+      <li><b>agents（P5）</b>：角色绑定 ∩ 目录 的交集侧在这里，界面侧在 <code>widget.agents</code>。两份视图，同一份数据。</li>
+      <li><b>MCP</b>：<code>mcp</code> 服务的目录是<b>运行时从 MCP 协议生成</b>而不是从 <code>tools.json</code> 读 ——
+          但走的仍是 <code>tool.registered</code>，<b>loop 侧零改动</b>。它的 <code>risk</code> 恒为 <code>proc</code>。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════════ 14 待决 ══════════════════ -->
+<section id="s14">
+  <h2><span class="n">14</span>待决问题</h2>
+
+  <table>
+    <thead><tr><th>#</th><th>问题</th><th>选项</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>审批待决期间用户按了「停止」，是否自动视为拒绝？</td>
+        <td>① 自动 deny ② 挂起直到超时 ③ 立即取消 pending 但不产结果</td>
+        <td><b>①</b>。必须<b>产结果</b>（<code>ok:false</code>）——否则 loop 侧那条超时兜底会先触发，
+        用户看到的是「工具超时」而不是「你取消了这一轮」。语义要准。</td></tr>
+      <tr><td>2</td><td>硬超时定多少？</td><td>① 30s ② 60s ③ 按 risk 分档</td>
+        <td><b>③</b>：<code>read 15s · write 60s · net 60s · proc 120s</code>。
+        慢工具误杀比慢一点更伤 —— 而超时只影响这一次，不会累积。</td></tr>
+      <tr><td>3</td><td>同名工具冲突时谁是权威？</td><td>① 后者拒绝（本文默认）② 按插件加载序取先到 ③ 界面上让用户选</td>
+        <td><b>①</b>。③ 更友好但要引入「运行期可改路由」，那会让 <code>name → serviceId</code>
+        从一份数据变成一份可变状态 —— 现在还没有任何用例需要它。</td></tr>
+      <tr><td>4</td><td><code>tools.invoke</code> 要不要收权限？</td><td>① 不收，走同一套审批 ② 仅在管理视图打开时可用</td>
+        <td><b>①</b>。它已经过审批策略，而审批弹窗本身就是授权。
+        再加一层「谁开着面板」是伪安全（面板可被任何插件的 iframe 打开）。</td></tr>
+      <tr><td>5</td><td><code>audit.log</code> 做不做？</td><td>① 做 ② 先不做，需要时再加</td>
+        <td><b>②</b>。会话里的 <code>role:'tool'</code> 消息 + <code>loop.tool.executed</code>
+        已经是一份可导出的流水。再存一份会变成第二个真源。</td></tr>
+      <tr><td>6</td><td>未安装 tools 插件时，写类工具怎么办？</td>
+        <td>① 没有写类工具（对）② 需要装 tools 插件</td>
+        <td>答案是<b>①</b>：今天根本没有跨进程执行者，所以也没人会发 <code>tool.execute</code>。
+        闸门与执行者同属一个插件是有意的——<b>没有主人就等于不存在</b>，
+        与「凭证插件退休」「数据目录必须有主人」是同一条教训。</td></tr>
+      <tr><td>7</td><td><b>工具名沿用天枢</b>（<code>read</code>/<code>bash</code>/…）还是自起一套？</td>
+        <td>① 沿用 ② 自起（<code>read_file</code>/<code>run_shell</code>…）</td>
+        <td><b>①</b>。天枢那套名字是<b>用过</b>的名字，参数形态（<code>read</code> 的 <code>offset/limit</code>、
+        <code>edit</code> 的 <code>oldString/newString</code>）也是被模型调过的。
+        <b>改名有一次性代价</b>（§5.1 注），<b>不改名的长期代价</b>是「同一个产品两种叫法」。</td></tr>
+      <tr><td>8</td><td><b>四个执行者一个插件，还是四个插件？</b></td>
+        <td>① 一个插件 5 服务 ② 四个插件各 1 服务</td>
+        <td><b>①</b>。它们共用 <code>approvals.json</code> 与 <code>widget.tools</code> ——
+        拆成四份就要<b>四份策略</b>四套界面，而「这个工具要不要问」本来就是一个跨执行者的用户决定。
+        沙箱仍然各自独立（§5.7），所以拆插件并不会带来安全收益，只带来管理成本。</td></tr>
+      <tr><td>9</td><td><b><code>bash</code> 的 <code>allowed_commands</code> 默认为空时</b></td>
+        <td>① 全禁 ② 放行并只提示 ③ 弹一次窗问「要不要建白名单」</td>
+        <td><b>① 全禁</b>。这条是刻意的「拒绝优于追问」：默认放行等于让插件单方面获得任意代码执行，
+        而用户还没配置过。<b>界面上给一个「添加常用命令」的按钮</b>，让恢复成本低，而不是让默认值宽松。</td></tr>
+      <tr><td>10</td><td><b>自动门控工具</b>（记忆/知识库/skill_manager）要不要进目录</b></td>
+        <td>① 进，但只读展示（无启用开关）② 完全不进 ③ 进且可开关</td>
+        <td><b>①</b>，照抄天枢 <code>isAutoManagedTool()</code> 的判断：它们确实在目录里，
+        藏着不说会让用户以为「这个工具不存在」。
+        但<b>不能给开关</b> —— 开关点了不生效，比没有更糟。代价是 §5.4 末尾那条
+        <b><code>gate</code> 跨插件契约请求</b>，要提给 P5/P6。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>如果只记四句</h3>
+  <div class="note info">
+    <b>① 能力住在服务里，不住在插件清单里。</b>装一个 tools 插件就是多起 6 个进程，它们 publish 自己的那份，
+    下一轮 loop 的装配器就多认得它一点；卸掉就是模型不再假装拥有那些能力。这个效果<b>不来自任何目录规则</b>。<br>
+    <b>② loop 手里只剩一张表。</b>「这个 toolCall 该发给谁」是查出来的数据，不是一条规则；
+    于是沙箱边界随执行者走，loop 不再持有任何路径常量。<br>
+    <b>③ 审批是逐次的，因为出网能力属于插件而不属于 Core。</b>
+    弹窗问的是「现在要不要让这条通路真的被用掉」，不是在问 Core 能不能代理 —— 它根本没这个能力。
+    MCP 是这一条的极端情形：<b>我们不知道那个 server 会做什么</b>（<code>tools/list</code> 只给 name/description/schema），
+    所以它<b>永远</b>逐次审批，连「按 server 批量信任」都不提供。<br>
+    <b>④ 试调必须过审批。</b>管理界面与运行时同一条纪律，否则 <code>widget.tools</code> 就是审批系统的一个后门。<br>
+<b>⑤ 约束与审批是两道闸，不是一道。</b>约束（角色/机器给的允许清单）直接失败不问人；
+    审批（用户的一次点头）才放行副作用。工具谎报 <code>risk</code> 绕过后者，前者仍在 ——
+    这条是从天枢「<code>dangerous</code> 两值 + <code>constraintFields</code> 声明」里拆出来的。
+  </div>
+</section>
+
+<div class="foot">
+  Osteosome · 工具管理插件设计稿 · 2026-10 ·
+  现状依据：<code>shared/src/{events,plugin-manifest}.ts</code> ·
+  <code>plugins/chat-workbench/services/loop/src/{tools,index}.ts</code> ·
+  <code>plugins/{chat-workbench,models}/plugin.json</code> · <code>sdk/ui/src/{tokens.css,components/*}</code> ·
+  <code>core/src/sse-bridge/command.ts</code>（COMMAND_TOPICS 白名单）·
+  配套：<code>docs/AgentLoop对照教程.html</code> · <code>docs/插件协作与AI能力装配.html</code> ·
+  <code>docs/插件标准.html</code> · <code>docs/开发进度/阶段追踪.md</code>（P7）<br>
+  <b>工具清单来源</b>：<code>C:\Users\dmql\Desktop\tianshu\TianShu\dev\web\server\src\tools/</code>
+  —— 20 个内置工具的清单（<code>read/write/edit/glob/grep/bash/pwsh/webfetch/websearch/
+  get_time/debug_sessions/skill_manager</code> 12 个进本插件，
+  <code>memory_*</code>/<code>knowledge_*</code> 另有主人故不在此稿范围；
+  <code>mcp-client.ts</code> 的 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 平铺命名保留）··
+  <code>tools/{types,tool-meta,registry,executor,definitions,validate,utils,truncate}.ts</code> ·
+  <code>tools/mcp-client.ts</code>（<code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 平铺命名）·
+  <code>agent/runtime/approval-registry.ts</code>（<code>once|always|reject</code> 三值 + 60s 超时）
+</div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ══ 主题 ══ */
+  var root = document.documentElement;
+  var themeBtn = document.getElementById('theme');
+  themeBtn.addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ══ 锚点高亮 ══ */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var sections = tocLinks.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncToc() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < sections.length; i++) { if (sections[i] && sections[i].offsetTop <= y) idx = i; }
+    tocLinks.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', syncToc, { passive: true });
+  syncToc();
+
+  /* ══ 假数据：一份运行期成形的工具目录 ══ */
+  /* 13 行 = 12 个静态工具 + 1 个 MCP 动态族示例（清单见 §5.1）。
+     constrained:false = 该工具没声明 constraintFields → 界面上打「无约束声明」警示 */
+  var TOOLS = [
+    { name: 'read', svc: 'fs-tools', risk: 'read', policy: 'auto', constrained: true,
+      desc: 'Read file contents from the workspace. Paginated: 2000 lines / 51200 bytes per page.',
+      params: [['path', 'string', true, '相对路径'], ['offset', 'integer', false, '起始行（默认 1）'], ['limit', 'integer', false, '最多行数（默认 2000）']],
+      args: '{"path":"notes/today.md","limit":200}', output: '今天的三件事：\n1. 工具插件拆成 1 闸门 + 4 执行者\n2. 审批闸门不认识工具清单\n3. 沙箱根随执行者走', ms: 12 },
+    { name: 'glob', svc: 'fs-tools', risk: 'read', policy: '', constrained: true,
+      desc: 'Find files matching a glob pattern（≤100 项）。',
+      params: [['pattern', 'string', true, '相对工作目录的 glob']],
+      args: '{"pattern":"src/**/*.ts"}', output: 'src/layout/store.ts\nsrc/panes/PaneHost.vue\nsrc/plugins/registry.ts\n（4 more）', ms: 6 },
+    { name: 'grep', svc: 'fs-tools', risk: 'read', policy: '', constrained: true,
+      desc: 'Search file contents with a regex. ≤200 matches; ripgrep 30s 硬超时。',
+      params: [['pattern', 'string', true, '正则'], ['path', 'string', false, '搜索目录'], ['include', 'string', false, '如 *.ts']],
+      args: '{"pattern":"COMMAND_TOPICS","include":"*.ts"}', output: 'shared/src/events.ts:408\ncore/src/sse-bridge/command.ts:46\n（2 matches）', ms: 240 },
+    { name: 'write', svc: 'fs-tools', risk: 'write', policy: 'ask', constrained: true,
+      desc: 'Write content to a file. Auto-creates parents, preserves BOM, reports metadata.',
+      params: [['path', 'string', true, '相对路径'], ['content', 'string', true, '文件内容']],
+      args: '{"path":"notes/today.md","content":"…"}', output: '已写入 notes/today.md（38 字节）· { status:"created" }', ms: 9 },
+    { name: 'edit', svc: 'fs-tools', risk: 'write', policy: 'ask', constrained: true,
+      desc: 'Exact-string replacement, atomic rename, BOM-preserving, returns a diff.',
+      params: [['path', 'string', true, '相对路径'], ['oldString', 'string', true, '精确待替换串'], ['newString', 'string', true, '替换为'], ['replaceAll', 'boolean', false, '替换全部（默认 false）']],
+      args: '{"path":"a.ts","oldString":"let x = 1","newString":"let x = 2"}', output: '1 处替换 · 3 行增删 · 原子 rename 完成', ms: 15 },
+    { name: 'bash', svc: 'shell-tools', risk: 'proc', policy: 'ask',
+      desc: 'Execute a shell command in the workspace directory. 60s 超时 / 输出 1MB。',
+      params: [['command', 'string', true, 'shell 命令'], ['timeout_seconds', 'number', false, '默认 60']],
+      args: '{"command":"pnpm test"}', output: '（示例）Test Files 13 passed\nTests  294 passed', ms: 7420 },
+    { name: 'pwsh', svc: 'shell-tools', risk: 'proc', policy: 'ask',
+      desc: 'Execute a PowerShell command（windowsHide）。',
+      params: [['command', 'string', true, 'PowerShell 命令'], ['timeout_seconds', 'number', false, '默认 60']],
+      args: '{"command":"Get-ChildItem src"}', output: '（示例）6 个文件/目录', ms: 890 },
+    { name: 'webfetch', svc: 'web-tools', risk: 'net', policy: 'ask',
+      desc: 'Fetch a URL as text/markdown/html. 响应 ≤5MB；超时 30s，上限 120s。',
+      params: [['url', 'string', true, 'http/https URL'], ['format', 'string', false, 'text|markdown|html'], ['readable', 'boolean', false, '抽正文'], ['timeout', 'number', false, '秒，上限 120']],
+      args: '{"url":"https://example.com","format":"markdown"}', output: '（示例）HTTP 200 · 12,043 字节 · markdown', ms: 1840 },
+    { name: 'websearch', svc: 'web-tools', risk: 'net', policy: 'ask',
+      desc: 'Search the web. ≤8 条；10s 超时。',
+      params: [['query', 'string', true, '搜索词']],
+      args: '{"query":"osteosome plugin"}', output: '（示例）8 条结果 · 10s', ms: 4200 },
+    { name: 'get_time', svc: 'misc-tools', risk: 'read', policy: '', constrained: false,
+      desc: '当前日期、时间与时区。模型需要知道「现在」时调它。',
+      params: [],
+      args: '{}', output: '2026-10-06T18:42:11+08:00 (Asia/Shanghai)', ms: 1 },
+    { name: 'debug_sessions', svc: 'misc-tools', risk: 'read', policy: '', constrained: true,
+      desc: '读 debug 会话记录（data/debug/），可按 session_id 过滤。',
+      params: [['session_id', 'string', false, '按会话过滤']],
+      args: '{}', output: '（示例）3 个会话 · 对话内容已合并', ms: 30 },
+    { name: 'skill_manager', svc: 'skills-tools', risk: 'read', policy: '', constrained: true, auto: true,
+      desc: '发现技能包并懒激活子技能。managedBy:auto —— 技能列表为空时它根本不注册。',
+      params: [['action', 'string', true, 'discover | activate | deactivate']],
+      args: '{"action":"discover"}', output: '（示例）3 个技能包 · 已激活 1 个', ms: 70 },
+    { name: 'mcp__github__create_issue', svc: 'mcp-tools', risk: 'proc', policy: 'ask',
+      desc: 'Create an issue in a repository.（目录来自 MCP tools/list，不来自 tools.json）',
+      params: [['title', 'string', true, '标题'], ['body', 'string', false, '正文']],
+      args: '{"title":"P7 工具插件"}', output: '（示例）MCP CallToolResult · issues/42', ms: 3100 },
+    { name: 'pdf_extract', svc: '—', risk: 'read', policy: '',
+      desc: '（角色绑了它，但没有任何执行者注册这个 name → 悬空引用）',
+      params: [['file', 'string', true, 'PDF 路径']], dangling: true,
+      args: '{}', output: '不会发生：没有执行者注册这个 name', ms: 0 }
+  ];
+
+  var RISK_TXT = { read: 'read', write: 'write', net: 'net', proc: 'proc' };
+  var POLICY_TXT = { ask: 'ask', auto: 'auto', deny: 'deny' };
+  /** 没写策略时的默认值：只读自动，其余逐次问 */
+  function effPolicy(t) { return t.policy || (t.risk === 'read' ? 'auto' : 'ask'); }
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function byId(id) { return document.getElementById(id); }
+
+  /* ══ Tab 目录 ══ */
+  var tbody = byId('tbody'), emptyBox = byId('empty');
+  function renderCatalog() {
+    var q = (byId('q').value || '').toLowerCase();
+    var src = byId('fsrc').value, risk = byId('frisk').value;
+    var rows = TOOLS.filter(function (t) {
+      if (src && t.svc !== src) return false;
+      if (risk && t.risk !== risk) return false;
+      if (!q) return true;
+      return (t.name + ' ' + t.desc + ' ' + t.svc).toLowerCase().indexOf(q) >= 0;
+    });
+    tbody.innerHTML = rows.map(function (t) {
+      var pol = effPolicy(t);
+      return '<tr class="' + (t.dangling ? 'row-off' : '') + '" data-name="' + esc(t.name) + '">' +
+        '<td><div style="font-family:var(--font-mono);font-size:12.5px">' + esc(t.name) + '</div>' +
+          '<div style="color:var(--color-text-muted);font-size:11.5px">' + esc(t.desc) + '</div>' +
+          (t.dangling ? ' <span class="pill dangling">悬空引用</span>' : '') +
+          (t.auto ? ' <span class="pill managed">自动门控</span>' : '') + '</td>' +
+        '<td><span class="pill src">' + esc(t.svc) + '</span></td>' +
+        '<td><span class="pill ' + esc(t.risk) + '">' + RISK_TXT[t.risk] + '</span></td>' +
+        '<td><span class="pill ' + (pol === 'auto' ? 'approve' : pol === 'deny' ? 'danger' : 'src') + '">' + POLICY_TXT[pol] + '</span>' +
+          (t.policy ? '' : ' <span class="pill src">默认</span>') + '</td>' +
+        '<td><label class="d-switch"' + (t.auto ? ' title="由已安装技能包决定，不能手动开关"' : '') +
+          '><input type="checkbox" checked ' + (t.dangling || t.auto ? 'disabled' : '') +
+          ' aria-label="启用 ' + esc(t.name) + '"><span class="track"><span class="thumb"></span></span></label>' +
+          (t.auto ? '<div style="font-size:10.5px;color:var(--color-text-muted);margin-top:2px">自动</div>' : '') + '</td>' +
+        '<td><button class="d-btn sm ghost" data-detail="' + esc(t.name) + '">详情</button></td>' +
+      '</tr>';
+    }).join('');
+    emptyBox.hidden = rows.length > 0;
+    byId('tbl').hidden = rows.length === 0;
+  }
+  ['q', 'fsrc', 'frisk'].forEach(function (id) {
+    var el = byId(id);
+    el.addEventListener('input', renderCatalog);
+    el.addEventListener('change', renderCatalog);
+  });
+  tbody.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-detail]');
+    if (b) openDrawer(b.getAttribute('data-detail'));
+  });
+
+  /* ══ Tab 审批 ══ */
+  var poltbody = byId('poltbody');
+  function renderPolicies() {
+    var rows = TOOLS.filter(function (t) { return !t.dangling && (t.policy || t.risk !== 'read'); });
+    poltbody.innerHTML = rows.map(function (t) {
+      var cur = effPolicy(t);
+      return '<tr data-pol="' + esc(t.name) + '"><td><span class="mono" style="font-size:12.5px">' + esc(t.name) + '</span>' +
+        (t.constrained === false ? ' <span class="pill noconstraint">无约束声明</span>' : '') + '</td>' +
+        '<td><span class="pill ' + esc(t.risk) + '">' + RISK_TXT[t.risk] + '</span></td>' +
+        '<td><div class="seg" role="group">' +
+          ['ask', 'auto', 'deny'].map(function (p) {
+            var dis = p === 'auto' && t.risk === 'proc' ? ' data-warn="1"' : '';
+            return '<button data-set="' + p + '" aria-pressed="' + (cur === p) + '">' + p + '</button>';
+          }).join('') + '</div></td>' +
+        '<td><span class="pill ' + (t.policy ? 'approve' : 'src') + '">' + (t.policy ? '已覆盖' : '按 risk 默认') + '</span></td>' +
+        '<td>' + (t.policy ? '<button class="d-btn sm ghost" data-reset="1">恢复询问</button>' : '<span style="color:var(--color-text-muted);font-size:11.5px">—</span>') + '</td></tr>';
+    }).join('');
+  }
+  poltbody.addEventListener('click', function (e) {
+    var row = e.target.closest('[data-pol]');
+    if (!row) return;
+    var t = TOOLS.filter(function (x) { return x.name === row.getAttribute('data-pol'); })[0];
+    if (!t) return;
+    if (e.target.closest('[data-reset]')) {
+      t.policy = '';
+      pushEvent('tools.set', { policies: { reset: t.name } });
+    } else {
+      var b = e.target.closest('[data-set]');
+      if (!b) return;
+      t.policy = b.getAttribute('data-set');
+      pushEvent('tools.set', { policies: (function () { var o = {}; o[t.name] = t.policy; return o; })() });
+    }
+    renderPolicies(); renderCatalog(); syncRunnerPolicy();
+  });
+
+  /* ══ Tab 试调 ══ */
+  var rsel = byId('rsel');
+  function renderRunner() {
+    var usable = TOOLS.filter(function (t) { return !t.dangling; });
+    rsel.innerHTML = usable.map(function (t) {
+      return '<option value="' + esc(t.name) + '">' + esc(t.name) + '</option>';
+    }).join('');
+    onRunnerChange();
+  }
+  function onRunnerChange() {
+    var t = TOOLS.filter(function (x) { return x.name === rsel.value; })[0];
+    if (!t) return;
+    byId('rargs').value = t.args;
+    byId('rparams').innerHTML =
+      '<table class="schema"><tbody>' + t.params.map(function (p) {
+        return '<tr><td>' + esc(p[0]) + (p[2] ? ' *' : '') + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[3]) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    syncRunnerPolicy();
+  }
+  function syncRunnerPolicy() {
+    var t = TOOLS.filter(function (x) { return x.name === rsel.value; })[0];
+    if (!t) return;
+    var p = effPolicy(t), el = byId('rpolicy');
+    el.className = 'pill ' + (p === 'auto' ? 'approve' : p === 'deny' ? 'danger' : 'src');
+    el.textContent = p + (p === 'ask' ? ' · 会弹审批' : p === 'deny' ? ' · 必定失败' : ' · 直接执行');
+  }
+  rsel.addEventListener('change', onRunnerChange);
+  byId('rgo').addEventListener('click', function () {
+    var t = TOOLS.filter(function (x) { return x.name === rsel.value; })[0];
+    if (!t) return;
+    var T = 'ui-' + Math.random().toString(16).slice(2, 10);
+    var out = byId('rout');
+    var p = effPolicy(t);
+    byId('rtime').textContent = 'toolCallId ' + T;
+    if (p === 'deny') {
+      pushEvent('tools.invoke', { name: t.name, arguments: byId('rargs').value, denied: true });
+      out.innerHTML = '<span class="bad">ok:false · 用户已禁用该工具</span>\nsummary: 禁用 ' + esc(t.name);
+      return;
+    }
+    if (p === 'ask') {
+      out.innerHTML = '<span class="bad">等待审批…</span>（审批卡片见下）';
+      inlineApproval(t, T);
+      return;
+    }
+    pushEvent('tool.execute', { requestId: T, name: t.name, arguments: byId('rargs').value });
+    runToResult(T, t);
+  });
+
+  /** 试调 Tab 内的就地审批卡片（sessionId === 'tools-console'，所以 timeline 那边不显示） */
+  function inlineApproval(t, T) {
+    var host = byId('rinline');
+    host.innerHTML =
+      '<div class="approval state-wait" style="margin-top:var(--s3)">' +
+        '<div class="ah"><span class="pill write">需要审批</span><b>' + esc(t.name) + '</b>' +
+          '<span class="pill src">tools-console</span></div>' +
+        '<div class="ab"><pre>' + esc(t.args) + '</pre>' +
+          '<div style="font-size:var(--text-xs);color:var(--color-text-muted)">' +
+          '同一条 <code class="inl">tool.approval.requested</code>，两个视图都订它；' +
+          '差别只在本地按 <code class="inl">sessionId</code> 过滤。</div></div>' +
+        '<div class="af"><span class="sp"></span>' +
+          '<button class="d-btn sm danger" data-rno="1">拒绝</button>' +
+          '<button class="d-btn sm approve" data-yes2="1">允许</button></div>' +
+      '</div>';
+    host.querySelector('[data-yes2]').addEventListener('click', function () {
+      host.innerHTML = '';
+      pushEvent('tool.approval.resolved', { requestId: T, approved: true });
+      pushEvent('tool.execute', { requestId: T, name: t.name, arguments: t.args });
+      runToResult(T, t);
+    });
+    host.querySelector('[data-rno]').addEventListener('click', function () {
+      host.innerHTML = '';
+      pushEvent('tool.approval.resolved', { requestId: T, approved: false });
+      byId('rout').innerHTML = '<span class="bad">ok:false · 用户拒绝</span>\nsummary: 被拒绝 ' + esc(t.name);
+    });
+  }
+
+  /* ══ 事件流面板 ══ */
+  var evlog = byId('evlog');
+  function pushEvent(topic, payload) {
+    var d = document.createElement('div');
+    var t = new Date();
+    var hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0');
+    var ss = String(t.getSeconds()).padStart(2, '0');
+    var brief = JSON.stringify(payload || {});
+    if (brief.length > 96) brief = brief.slice(0, 96) + '…';
+    d.innerHTML = '<span class="t">' + hh + ':' + mm + ':' + ss + '</span>' +
+      '<span class="tp">' + esc(topic) + '</span><span class="pl">' + esc(brief) + '</span>';
+    evlog.insertBefore(d, evlog.firstChild);
+    while (evlog.children.length > 40) evlog.removeChild(evlog.lastChild);
+  }
+
+  /* ══ 详情抽屉（模拟 ui/Drawer 右侧滑出） ══ */
+  var drawerHost = byId('drawerHost');
+  function openDrawer(name) {
+    var t = TOOLS.filter(function (x) { return x.name === name; })[0];
+    if (!t) return;
+    var pol = effPolicy(t);
+    var overrides = ['ask', 'auto', 'deny'];
+    drawerHost.innerHTML =
+      '<div style="position:absolute;inset:0;background:rgba(0,0,0,.28);border-radius:var(--radius-lg);"></div>' +
+      '<div style="position:relative;margin-left:26%;height:340px;background:var(--color-surface);' +
+      'border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;display:flex;' +
+      'flex-direction:column;box-shadow:var(--shadow-lg)">' +
+        '<header style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);' +
+        'border-bottom:1px solid var(--color-border);background:var(--color-surface-2)">' +
+          '<b class="mono" style="font-size:var(--text-md)">' + esc(t.name) + '</b>' +
+          '<span class="pill src">' + esc(t.svc) + '</span>' +
+          '<span class="pill ' + esc(t.risk) + '">' + RISK_TXT[t.risk] + '</span>' +
+          '<span style="flex:1"></span>' +
+          '<button class="d-btn sm ghost" id="closeDrawer">关闭</button>' +
+        '</header>' +
+        '<div style="flex:1;overflow:auto;padding:var(--space-4)">' +
+          '<p style="font-size:var(--text-sm);margin:0 0 var(--space-3)">' + esc(t.desc) + '</p>' +
+          (t.dangling
+            ? '<div class="d-card" style="padding:var(--space-3);border-left:3px solid var(--color-danger)">' +
+                '<b style="font-size:var(--text-sm)">悬空引用</b>' +
+                '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:4px 0 0">' +
+                '角色绑了它，但没有任何服务注册这个 name（' + esc(t.svc) + ' 未安装）。' +
+                '<b>不报错</b> —— 只是这一轮不下发它。</p></div>'
+            : '') +
+          '<h4 style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-4) 0 var(--space-2)">参数</h4>' +
+          '<table class="schema"><tbody>' + t.params.map(function (p) {
+            return '<tr><td>' + esc(p[0]) + (p[2] ? ' *' : '') + '</td><td>' + esc(p[1]) + '</td><td>' + esc(p[3]) + '</td></tr>';
+          }).join('') + '</tbody></table>' +
+          '<h4 style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-4) 0 var(--space-2)">审批策略</h4>' +
+          '<div class="seg">' + overrides.map(function (p) {
+            return '<button data-dpol="' + p + '" aria-pressed="' + (pol === p) + '">' + p + '</button>';
+          }).join('') + '</div>' +
+          '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-2) 0 0">' +
+            '当前生效 <code class="inl">' + pol + '</code>' + (t.policy ? '' : '（按 risk 默认）') +
+            ' · 落 userData/plugin/tools/approvals.json</p>' +
+        '</div>' +
+        '<footer style="padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border);' +
+        'background:var(--color-surface-2);display:flex;gap:var(--space-2)">' +
+          '<button class="d-btn sm" data-run="' + esc(t.name) + '">在此试调</button>' +
+          '<span style="flex:1"></span>' +
+          '<span style="font-size:var(--text-xs);color:var(--color-text-muted);align-self:center">' +
+            (t.dangling ? '无执行者，无法试调' : '试调也要过审批') + '</span>' +
+        '</footer>' +
+      '</div>';
+    drawerHost.style.position = 'relative';
+
+    byId('closeDrawer').addEventListener('click', function () { drawerHost.innerHTML = ''; drawerHost.style.position = ''; });
+    var runBtn = drawerHost.querySelector('[data-run]');
+    if (runBtn) runBtn.addEventListener('click', function () {
+      var nm = runBtn.getAttribute('data-run');
+      document.querySelector('nav.toc a[href="#s9"]').click();
+      rsel.value = nm; onRunnerChange(); byId('rgo').click();
+    });
+    drawerHost.querySelectorAll('[data-dpol]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        t.policy = b.getAttribute('data-dpol');
+        pushEvent('tools.set', { policies: (function () { var o = {}; o[t.name] = t.policy; return o; })() });
+        openDrawer(t.name);
+        renderPolicies(); renderCatalog(); syncRunnerPolicy();
+      });
+    });
+  }
+  byId('openDrawer').addEventListener('click', function () { openDrawer('read'); });
+
+  /* ══ 审批卡片（对话侧） ══ */
+  var apprHost = byId('apprHost');
+  function showApproval(t, T, sessionId) {
+    var rationale = t.risk === 'proc'
+      ? '执行 <code class="inl">' + esc(t.args) + '</code> 会真的拉起一个子进程。这是任意代码执行的边界。'
+      : t.risk === 'net'
+        ? '这次会出网。凭证明文类数据可能随请求体离开本机。'
+        : '这次会写入 tool-root 内的文件：<code class="inl">' + esc(t.args) + '</code>';
+    apprHost.innerHTML =
+      '<div class="approval state-wait" data-t="' + esc(T) + '">' +
+        '<div class="ah"><span class="pill write">需要审批</span>' +
+          '<b>' + esc(t.name) + '</b>' +
+          '<span class="pill src">' + esc(sessionId) + '</span>' +
+          '<span class="timer">T=' + esc(T) + '</span></div>' +
+        '<div class="ab">' +
+          '<div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:4px">参数</div>' +
+          '<pre>' + esc(t.args) + '</pre>' +
+          '<div style="font-size:var(--text-sm)">' + rationale + '</div>' +
+          '<label style="display:flex;gap:6px;align-items:center;margin-top:var(--space-3);' +
+          'font-size:var(--text-xs);color:var(--color-text-muted)">' +
+          '<input type="checkbox" id="remember"> 以后都允许这个工具（写进 approvals.json）</label>' +
+        '</div>' +
+        '<div class="af">' +
+          '<span class="timer">超时按拒绝处理 · 等待 T 与 requestId 一一配对</span>' +
+          '<span class="sp"></span>' +
+          '<button class="d-btn sm danger" data-no="1">拒绝</button>' +
+          '<button class="d-btn sm approve" data-yes="1">允许</button>' +
+        '</div>' +
+      '</div>';
+
+    pushEvent('tool.approval.requested', { requestId: T, toolName: t.name, risk: t.risk, sessionId: sessionId });
+    var card = apprHost.querySelector('.approval');
+    apprHost.querySelector('[data-yes]').addEventListener('click', function () {
+      var remember = byId('remember').checked;
+      card.classList.remove('state-wait'); card.classList.add('state-ok');
+      card.querySelector('.af').innerHTML = '<span class="sp"></span><span class="done-note">已允许' +
+        (remember ? '（已记住）' : '') + '</span>';
+      pushEvent('tool.approval.resolved', { requestId: T, approved: true, remember: remember });
+      if (remember) { t.policy = 'auto'; renderPolicies(); renderCatalog(); }
+      runToResult(T, t);
+    });
+    apprHost.querySelector('[data-no]').addEventListener('click', function () {
+      card.classList.remove('state-wait'); card.classList.add('state-no');
+      card.querySelector('.af').innerHTML = '<span class="sp"></span><span class="done-note">已拒绝</span>';
+      pushEvent('tool.approval.resolved', { requestId: T, approved: false });
+      pushEvent('tool.execute.result', { requestId: T, ok: false, content: '用户拒绝了这次工具调用。', summary: '被拒绝' });
+    });
+  }
+
+  /** 模拟执行者在 TIMEOUT 内回来 */
+  function runToResult(T, t) {
+    var out = byId('rout');
+    out.innerHTML = '<span style="color:var(--color-text-muted)">执行中…（' + esc(t.name) + '）</span>';
+    setTimeout(function () {
+      pushEvent('tool.execute.result', { requestId: T, ok: true, summary: t.output.slice(0, 24) + '…' });
+      out.innerHTML = '<span class="ok">ok:true</span> · ' + t.ms + 'ms\n\n' + esc(t.output) +
+        '\n\n<span style="color:var(--color-text-muted)">— summary（回填给模型前截 120 字）—</span>';
+      byId('rtime').textContent = 'T=' + T + ' · ok:true · ' + t.ms + 'ms';
+    }, 520);
+  }
+
+  byId('reqAsk').addEventListener('click', function () {
+    var t = TOOLS.filter(function (x) { return x.name === 'write'; })[0];
+    showApproval(t, 'call_' + Math.random().toString(16).slice(2, 8), 'session-a1');
+  });
+  byId('reqProc').addEventListener('click', function () {
+    var t = TOOLS.filter(function (x) { return x.name === 'bash'; })[0];
+    showApproval(t, 'call_' + Math.random().toString(16).slice(2, 8), 'session-a1');
+  });
+  byId('reqClear').addEventListener('click', function () { apprHost.innerHTML = ''; });
+
+  /* ══ Tab MCP ══ */
+  var MCPS = [
+    { name: 'github',  transport: 'stdio',  up: true,  tools: 4, cwd: '~/dev' },
+    { name: 'notion',  transport: 'http',   up: true,  tools: 7, cwd: null },
+    { name: 'fetch',   transport: 'stdio',  up: false, tools: 0, cwd: '~' }
+  ];
+  function renderMcp() {
+    byId('mcptbody').innerHTML = MCPS.map(function (s) {
+      return '<tr' + (s.up ? '' : ' class="row-off"') + '>' +
+        '<td><span class="mono" style="font-size:12.5px">' + esc(s.name) + '</span>' +
+          (s.cwd ? '<div style="font-size:11px;color:var(--color-text-muted)">cwd ' + esc(s.cwd) + '</div>' : '') + '</td>' +
+        '<td><span class="pill src">' + esc(s.transport) + '</span></td>' +
+        '<td>' + (s.up ? '<span class="pill read">已连接</span>' : '<span class="pill src">未连接</span>') + '</td>' +
+        '<td>' + s.tools + '</td>' +
+        '<td>' + (s.tools ? '<span class="pill proc">proc</span>' : '<span class="pill src">—</span>') + '</td>' +
+        '<td><button class="d-btn sm ghost" data-test="' + esc(s.name) + '">测试</button></td>' +
+      '</tr>';
+    }).join('');
+  }
+  byId('mcptbody').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-test]');
+    if (!b) return;
+    var nm = b.getAttribute('data-test');
+    pushEvent('tools.mcp.test', { server: nm });
+    b.textContent = '测试中…';
+    setTimeout(function () {
+      pushEvent('tools.state', { server: nm, status: 'ok' });
+      b.textContent = '测试';
+    }, 600);
+  });
+
+  /* ══ Tab 切换 ══ */
+  var tabs = byId('ttabs');
+  tabs.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-t]');
+    if (!b) return;
+    tabs.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+    ['catalog', 'approval', 'runner', 'mcp', 'events'].forEach(function (k) { byId('tab-' + k).hidden = (k !== b.getAttribute('data-t')); });
+  });
+
+  /* ══ 初始化 ══ */
+  renderCatalog();
+  renderPolicies();
+  renderRunner();
+  renderMcp();
+  pushEvent('tools.state', { tools: TOOLS.length, policies: '2 已覆盖', managedBy: 'auto ×1' });
+  pushEvent('service.ready', { serviceId: 'fs-tools' });
+  pushEvent('tool.registered', { serviceId: 'fs-tools', tools: ['read', 'glob', 'grep', 'write', 'edit'] });
+  pushEvent('tool.registered', { serviceId: 'shell-tools', tools: ['bash', 'pwsh'] });
+  pushEvent('tool.registered', { serviceId: 'web-tools', tools: ['webfetch', 'websearch'] });
+  pushEvent('tool.registered', { serviceId: 'misc-tools', tools: ['get_time', 'debug_sessions'] });
+  pushEvent('tool.registered', { serviceId: 'skills-tools', tools: ['skill_manager'] });
+  pushEvent('tool.registered', { serviceId: 'mcp-tools', tools: ['mcp__github__create_issue'] });
+  pushEvent('tool.registered', { serviceId: 'skills', tools: ['skill_read'] });
+  pushEvent('tools.list', {});
+})();
+</script>
+
+</body>
+</html>

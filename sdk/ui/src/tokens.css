@@ -52,6 +52,24 @@
   --color-warning: #9a6700;
   --color-focus-ring: #2f6feb;
 
+  /*
+   * 运行态 motion 色（P4b 会话列表重设计 §4）。
+   *
+   * 唯一的用途是「一行会话正在干什么」：一个 7px 圆点的颜色 + 脉动频率。
+   * 六个色必须色相互不相邻，且深浅两套各自取值 —— 硬编码十六进制在深色下会糊，
+   * 这正是 core/tests/tokens-parity.test.ts 要防的老问题。
+   *
+   * 注意与皮肤 motion 令牌（`--skin-motion-*`）**分属两个前缀、两处定义**：
+   * 这一组是会话列表状态色（进 tokens.css），皮肤那组留在 skins 插件内。
+   */
+  --motion-idle: #8a95a1;
+  --motion-thinking: #d29922;
+  --motion-listening: #0f8a8a;
+  --motion-working: #2f6feb;
+  --motion-speaking: #7c4dff;
+  --motion-success: #1a7f37;
+  --motion-error: #cf222e;
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -122,6 +140,14 @@
   --color-success: #3fb950;
   --color-warning: #d29922;
   --color-focus-ring: #4f8cff;
+
+  --motion-idle: #6b7280;
+  --motion-thinking: #e3b341;
+  --motion-listening: #2fc4c4;
+  --motion-working: #4f8cff;
+  --motion-speaking: #a683ff;
+  --motion-success: #3fb950;
+  --motion-error: #f85149;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);

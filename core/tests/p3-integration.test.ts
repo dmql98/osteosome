@@ -2,11 +2,11 @@
  * P3 集成冒烟（WS-6）—— 起真实 Core + session + loop + llm 四服务，跑通会话编排链路。
  *
  * 链路：POST `loop.run` → loop 先落 user 消息(session.message.append) → llm.request(B) →
- *   llm-provider-openai（凭证经 credentials 能力位）→ 本地假上游 SSE → `loop.token.streamed`(A)
+ *   llm-provider-openai（凭证由它自己解析）→ 本地假上游 SSE → `loop.token.streamed`(A)
  *   → assistant 消息落库 → `loop.state.changed`(idle)。取消经 `loop.cancel` 传播到 llm.cancel。
  *
  * 假上游：`llm-provider-openai` 的 `OPENAI_BASE_URL` 经 env 可配（WS-6 设计），这里指向
- * 本测试起的本地 SSE server——因此不需要真实 API key / 外网，且凭证仍走真实 credentials 服务。
+ * 本测试起的本地 SSE server——因此不需要真实 API key / 外网；凭证由 provider 进程解析（env: 注入即可）。
  */
 import { createServer, type Server } from 'node:http'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -140,7 +140,7 @@ describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
   const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'LLM_PROVIDER']
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
-  const serviceIds = ['llm', 'session', 'loop', 'credentials', 'llm-provider-openai', 'llm-retry']
+  const serviceIds = ['llm', 'session', 'loop', 'llm-provider-openai', 'llm-retry']
 
   beforeAll(async () => {
     upstream = await startFakeUpstream()
@@ -173,7 +173,7 @@ describe('P3 集成冒烟 · session + loop + llm 四服务', () => {
   }, 30_000)
 
   it(
-    '八个服务全部 ready（session + loop + 5×llm）',
+    '七个服务全部 ready（session + loop + provider + llm-retry + llm）',
     async () => {
       await waitFor(async () => {
         const res = await fetch(`${base()}/health`)

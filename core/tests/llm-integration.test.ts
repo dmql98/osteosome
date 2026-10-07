@@ -2,12 +2,12 @@
  * P2 集成冒烟（WS-9）—— 起真实 Core + 全部 LLM 服务，跑通整条中立流链路。
  *
  * 链路：POST /api/command `llm.request` → llm 主位查 provider 路由 → `llm.provider.request`
- *   → llm-provider-openai（凭证经 credentials 能力位解析）→ 本地假上游 SSE
+ *   → llm-provider-openai（凭证由它自己解析）→ 本地假上游 SSE
  *   → `llm.provider.chunk` → 主位翻译 `llm.token.streamed` / `llm.request.finished`
  *   → llm-retry 记账发 `llm.metrics.usage` → 前端 SSE。
  *
  * 假上游：`llm-provider-openai` 的 `OPENAI_BASE_URL` 经 env 可配（WS-6 设计），这里指向
- * 本测试起的本地 SSE server——因此不需要真实 API key / 外网，且凭证仍走真实 credentials 服务。
+ * 本测试起的本地 SSE server——因此不需要真实 API key / 外网；凭证由 provider 进程解析（env: 注入即可）。
  */
 import { spawnSync } from 'node:child_process'
 import { createServer, type Server } from 'node:http'
@@ -113,11 +113,11 @@ describe('P2 集成冒烟 · 四服务中立流链路', () => {
   const envKeys = ['OPENAI_BASE_URL', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY']
 
   const base = (): string => `http://127.0.0.1:${core!.port}`
-  const serviceIds = ['llm', 'credentials', 'llm-provider-openai', 'llm-retry']
+  const serviceIds = ['llm', 'llm-provider-openai', 'llm-retry']
 
   beforeAll(async () => {
     upstream = await startFakeUpstream()
-    // 凭证走真实 credentials 服务（env: v1）——用假 key 即可，无需外网
+    // 凭证由 provider 进程自己解析（env: 注入）——用假 key 即可，无需外网
     process.env.OPENAI_BASE_URL = upstream.baseUrl
     process.env.OPENAI_API_KEY = 'test-openai-key'
     process.env.DEEPSEEK_API_KEY = 'test-deepseek-key'
@@ -146,7 +146,7 @@ describe('P2 集成冒烟 · 四服务中立流链路', () => {
   }, 30_000)
 
   it(
-    '六个服务全部 ready（llm + 3 provider + credentials + llm-retry）',
+    '五个服务全部 ready（llm + provider + llm-retry；凭证位已退休）',
     async () => {
       await waitFor(async () => {
         const res = await fetch(`${base()}/health`)
@@ -161,7 +161,7 @@ describe('P2 集成冒烟 · 四服务中立流链路', () => {
   it(
     '发 llm.request(openai) → SSE 逐步 token → finished → llm.metrics.usage 记账',
     async () => {
-      const sse = await openSse(base(), '?topics=llm.**,credentials.**')
+      const sse = await openSse(base(), '?topics=llm.**')
       try {
         const requestId = `p2-smoke-${Date.now()}`
         const res = await fetch(`${base()}/api/command`, {

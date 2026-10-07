@@ -1,0 +1,15 @@
+{
+  "id": "workspace",
+  "version": "1.0.0",
+  "protocolVersion": "1.0.0",
+  "entry": "node dist/index.js",
+  "publishes": [
+    "workspace.list.result",
+    "workspace.resolve.result"
+  ],
+  "subscribes": [
+    "workspace.list",
+    "workspace.resolve",
+    "workspace.open"
+  ]
+}

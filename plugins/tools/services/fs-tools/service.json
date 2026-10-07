@@ -1,0 +1,18 @@
+{
+    "id":  "fs-tools",
+    "version":  "1.0.0",
+    "protocolVersion":  "1.0.0",
+    "entry":  "node dist/index.js",
+    "publishes":  [
+                      "tool.registered",
+                      "tool.unregistered",
+                      "tool.execute.result",
+                      "tool.approval.requested"
+                  ],
+    "subscribes":  [
+                       "tool.execute",
+                       "tools.list",
+                       "tools.state",
+                       "tool.approval.resolved"
+                   ]
+}

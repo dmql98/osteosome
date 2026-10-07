@@ -1,5 +1,5 @@
 <template>
-  <Card title="输入" class="chat-composer">
+  <div class="chat-composer">
     <div v-if="!providerOptions.length" class="chat-composer__no-provider">
       <EmptyState
         icon="🔌"
@@ -9,8 +9,16 @@
     </div>
 
     <template v-else>
-      <!-- 请求参数：provider / 模型 / 思考强度（与消息区无关，只写本地） -->
+      <!-- 请求参数：角色 / provider / 模型 / 思考强度（与消息区无关，只写本地） -->
       <div class="chat-composer__params">
+        <Select
+          v-if="characters.length"
+          :model-value="characterId"
+          :options="characterOptions"
+          aria-label="选择角色"
+          data-testid="composer-character"
+          @update:model-value="onSelectCharacter(String($event))"
+        />
         <Select
           :model-value="provider"
           :options="providerOptions"
@@ -60,7 +68,7 @@
 
       <p v-if="failed" class="chat-composer__failed" data-testid="composer-failed">{{ failed }}</p>
     </template>
-  </Card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -87,16 +95,16 @@
  * 所以它们留在本组件的 setup 里（这里才是合法的调用上下文）。
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Button, Card, EmptyState, Select, Textarea } from '@osteosome/ui'
-import { useLlmProviders, useModelCatalog, usePreferences } from '@osteosome/core-client'
+import { Button, EmptyState, Select, Textarea } from '@osteosome/ui'
+import { useLlmProviders, useModelCatalog, useModelsPrefs } from '@osteosome/core-client'
 import type { ThinkingEffort } from '@osteosome/shared'
-import { cancelRun, currentSessionId, useComposerRun, useRunState, useSessionState } from '../state'
+import { cancelRun, currentSessionId, useCharacters, useComposerRun, useRunState, useSessionState } from '../state'
 
 const sessions = useSessionState()
 const curId = currentSessionId()
-const preferences = usePreferences()
 const { list } = useLlmProviders()
 const { models, catalog, load } = useModelCatalog()
+const { characters, bind: bindCharacters, dispose: disposeCharacters } = useCharacters()
 
 const run = useRunState({
   curId: () => curId.value,
@@ -113,30 +121,61 @@ const model = ref('')
 const thinking = ref<ThinkingEffort>('off')
 const failed = ref('')
 
+// P5：本次选的角色（空串 = 裸会话）
+const characterId = ref('')
+
+/** 角色下拉：首项恒为「裸会话」；没装 agents → 列表空 → 下拉整条不出现（见模板 v-if） */
+const characterOptions = computed(() => [
+  { label: '（裸会话）', value: '' },
+  ...characters.value.map((c) => ({ label: c.emoji ? `${c.emoji} ${c.name}` : c.name, value: c.id })),
+])
+
+/**
+ * 选角色 → 把角色的模型偏好**预填**进请求参数行。
+ *
+ * 这是「回落链」的第一段：用户看得见、可随时改（改了就以后者为准，因为 loop.run
+ * 里的 provider/model/thinking 覆盖角色偏好）。提示词那份走 `role:<id>` 片段，
+ * 在 loop 侧装配 —— 不在这里传。
+ */
+async function onSelectCharacter(value: string): Promise<void> {
+  characterId.value = value
+  const c = characters.value.find((x) => x.id === value)
+  if (!c) return
+  if (c.provider && list.value.some((p) => p.provider === c.provider)) {
+    await onSelectProvider(c.provider)
+  }
+  if (c.model) setModel(c.model)
+  if (c.thinking) thinking.value = c.thinking
+}
+
 const sending = computed(() => run.sending.value)
 const canSend = computed(() => Boolean(draft.value.trim()) && !sending.value)
 const catalogKind = computed(() => catalog.value ?? '')
 
 /**
- * 设置页「逐模型开关」写进 `preferences.llm.enabledModels`，这里是它的**消费方**。
+ * 设置页「逐模型开关」写进 models 插件的接入清单（`userData/plugin/models/preferences.json`），
+ * 这里是它的**消费方**。
  *
  * 没有这一层过滤，设置页的开关就是个假开关：关掉了、下拉里还选得到 ——
  * 用户会以为功能坏了。格式同设置页：`${provider}::${model}`，空数组 = 全启用。
+ *
+ * ⚠️ 这是**跨插件读**：chat-workbench 读 models 的数据。写是结构上做不到的（各写各的目录），
+ * 读目前只有总线这一条路（`models.prefs.state` 由 owner 重播）。`dataReadableBy` 那条
+ * 不生效的授权声明已在 P7 M6 删除 —— 一条不会真正执行的授权字段比没有更糟。
+ * 见 `docs/插件化架构优化.html` §4。
+ *
+ * owner 每次变更都重播整份，所以这里订阅即可，不需要拉取 + 手动刷新。
  */
 const disabledModels = ref<string[]>([])
+const { prefs: modelsPrefs } = useModelsPrefs()
 
-function refreshDisabledModels(): void {
-  void preferences
-    .get()
-    .then((prefs) => {
-      const raw = (prefs as { llm?: { enabledModels?: unknown } }).llm?.enabledModels
-      disabledModels.value = Array.isArray(raw) ? (raw as string[]) : []
-    })
-    .catch(() => {
-      // 读不到就当全启用 —— 偏好坏了不该让输入框变成空下拉
-      disabledModels.value = []
-    })
-}
+watch(
+  () => modelsPrefs.value.enabledModels,
+  (list) => {
+    disabledModels.value = list
+  },
+  { immediate: true },
+)
 
 /** 当前 provider 下没被关掉的模型 */
 const visibleModels = computed(() =>
@@ -192,6 +231,7 @@ const composer = useComposerRun({
   provider: () => provider.value,
   model: () => model.value,
   thinking: () => thinking.value,
+  characterId: () => characterId.value,
   onError: (message) => {
     failed.value = message
   },
@@ -220,9 +260,8 @@ watch(
   { immediate: true },
 )
 
-// 目录到达 → 顺手重读一次开关，并把当前模型校正到「还在的 / 还开着的」
+// 目录到达 → 把当前模型校正到「还在的 / 还开着的」
 watch(models, (items) => {
-  refreshDisabledModels()
   if (items.length === 0) return
   const enabled = visibleModels.value
   if (enabled.includes(model.value)) return
@@ -237,28 +276,40 @@ onMounted(() => {
   // （用户还没建过会话）。跨 iframe 拿 ① 的列表是我们要避免的形态，理由见
   // `state/index.ts` 的纪律与 ChatTimelineView 里的同款注释。
   void sessions.bootstrap()
-  refreshDisabledModels()
   run.bindEvents()
+  bindCharacters()
 })
 
 onBeforeUnmount(() => {
   run.dispose()
   sessions.dispose()
+  disposeCharacters()
 })
 </script>
 
 <style scoped>
-.chat-composer { display: flex; flex-direction: column; gap: var(--space-3); }
-.chat-composer__params { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+/* P4b §9：请求参数行在上、输入 + 发送在下，整块铺满宿主盒子（无 Card 外壳） */
+.chat-composer {
+  display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  background: var(--color-surface); overflow: auto;
+}
+.chat-composer__params {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  padding-bottom: var(--space-2);
+}
 .chat-composer__badge {
   font-size: var(--text-xs); color: var(--color-warning); border: 1px solid var(--color-warning);
-  border-radius: var(--radius-sm); padding: 1px var(--space-2); white-space: nowrap;
+  border-radius: var(--radius-full); padding: 1px var(--space-2); white-space: nowrap;
 }
-.chat-composer__form { display: grid; gap: var(--space-2); }
-.chat-composer__actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
-.chat-composer__no-provider { color: var(--color-text-muted); }
+.chat-composer__form { display: flex; align-items: flex-end; gap: var(--space-2); }
+.chat-composer__form :deep(.ui-textarea) { flex: 1; min-height: 40px; max-height: 120px; }
+.chat-composer__actions { display: flex; flex: none; gap: var(--space-2); }
+.chat-composer__no-provider { flex: 1; display: grid; align-content: center; color: var(--color-text-muted); }
 .chat-composer__failed {
+  margin-top: var(--space-2); display: flex; gap: var(--space-2);
   padding: var(--space-2) var(--space-3); border: 1px solid var(--color-danger);
-  border-radius: var(--radius-sm); color: var(--color-danger); font-size: var(--text-xs);
+  border-radius: var(--radius-md); background: var(--color-danger-soft);
+  color: var(--color-danger); font-size: var(--text-xs);
 }
 </style>

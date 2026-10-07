@@ -8,6 +8,7 @@ import {
   loadConfig,
   migrateFlatLayout,
   migrateLegacyDataDir,
+  migratePluginOwnedData,
   type CoreConfig,
 } from './config'
 import { logger } from './logger'
@@ -15,8 +16,6 @@ import { readPreferences } from './preferences'
 import { ServiceManager, type ServiceManagerOptions } from './service-manager'
 import { PluginRegistry } from './service-manager/plugin-registry-runtime'
 import { SseBridge, type SseBridgeOptions } from './sse-bridge'
-import { CredentialApi } from './credentials/api'
-import { CredentialStore } from './credentials/store'
 
 /** `ServiceManager.list()`（ServiceInfo[]）→ 状态映射 */
 function serviceStateMap(list: { id: string; status: ServiceStatus }[]): Map<string, ServiceStatus> {
@@ -75,8 +74,6 @@ export interface Core {
   bridge: SseBridge
   /** 插件层（S7-2a，只读） */
   plugins: PluginRegistry
-  /** 凭证能力（P4 WS-1） */
-  credentials: CredentialApi
   port: number
   stop: () => Promise<void>
 }
@@ -120,11 +117,12 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
       'core: cannot read own version from package.json — coreCompatibility checks will treat every plugin as incompatible',
     )
   }
-  // 凭证能力（P4 WS-1）：Core 自己的数据，落在 userData/core/credentials.json
-  const credentialStore = new CredentialStore(config.dataDir)
-  const credentials = new CredentialApi(credentialStore, bus)
-  if (credentialStore.isCorrupted()) {
-    logger.warn('core: credentials.json corrupted — credential ops report error state (Core stays up)')
+  // 插件用户数据归位：密钥与模型接入清单从 `userData/core/` 搬到 `userData/plugin/models/`。
+  // 必须**在起服务之前**搬 —— provider 进程一起来就会读那两个文件，而它是它们的唯一写者。
+  const rehomed = migratePluginOwnedData(config.dataDir)
+  for (const line of rehomed) {
+    if (line.startsWith('WARN:')) logger.warn(`core: ${line}`)
+    else logger.warn(`core: ${line} —— 这些数据现在归使用它们的插件自己管。`)
   }
   let managerRef: ServiceManager
   // 插件层必须**先于** ServiceManager 构造（B 语义要由它算出「允许启动集合」，
@@ -174,7 +172,6 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     coreVersion: coreVer,
     sessionId: randomUUID(),
     bus,
-    credentials,
     // B 语义（S7-2b）：三态降级后的「允许启动集合」。undefined = 不限制 = 照旧全启。
     // 这是插件层影响启动行为的**唯一**入口 —— 见 allowedServiceIds() 的说明。
     allowedServiceIds: pluginRegistry.allowedServiceIds(),
@@ -187,7 +184,6 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
   const bridge = new SseBridge({
     bus,
     config,
-    credentials,
     plugins: pluginRegistry,
     controlPlugin: (command, pluginId) => pluginRegistry.control(command, pluginId),
     listServices: () => manager.list(),
@@ -245,7 +241,7 @@ export async function startCore(options: StartCoreOptions = {}): Promise<Core> {
     `core: started port=${port} services=${serviceDirs.length ? serviceDirs.join(',') : '(none)'} ` +
       `data=${config.dataDir}`,
   )
-  return { config, bus, manager, bridge, credentials, plugins: pluginRegistry, port, stop }
+  return { config, bus, manager, bridge, plugins: pluginRegistry, port, stop }
 }
 
 function isCliEntry(): boolean {

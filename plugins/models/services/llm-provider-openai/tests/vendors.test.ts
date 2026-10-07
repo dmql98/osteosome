@@ -251,16 +251,16 @@ describe('本进程只服务自己的 wire（不注册兑现不了的 provider�
   })
 })
 
-describe('凭证来源：env 优先，Core 凭证库兜底（S3）', () => {
+describe('凭证来源：env 优先，本插件凭证文件兜底（S3）', () => {
   const deepseek = mustFindVendor('deepseek')
 
-  it('只有 Core 凭证库里有 → 注册，credentialRef 用 core:<id>', () => {
+  it('只有本插件凭证文件里有 → 注册，credentialRef 用 file:<id>', () => {
     const instances = buildVendorInstances({ byProvider: new Map([['deepseek', 'cred-7']]) }, VENDOR_PRESETS)
     const ds = instances.find((i) => i.id === 'deepseek')
-    expect(ds).toMatchObject({ credentialRef: 'core:cred-7' })
+    expect(ds).toMatchObject({ credentialRef: 'file:cred-7' })
   })
 
-  it('env 与凭证库都有 → env 优先（部署者的显式注入胜过用户填的）', () => {
+  it('env 与凭证文件都有 → env 优先（部署者的显式注入胜过用户填的）', () => {
     const instances = buildVendorInstances({
       env: { DEEPSEEK_API_KEY: 'from-env' },
       byProvider: new Map([['deepseek', 'cred-7']]),
@@ -281,7 +281,7 @@ describe('凭证来源：env 优先，Core 凭证库兜底（S3）', () => {
 
   it('resolveCredentialRef 是这条规则的单点真源', () => {
     expect(resolveCredentialRef(deepseek, { env: {} })).toBeNull()
-    expect(resolveCredentialRef(deepseek, { env: {}, byProvider: new Map([['deepseek', 'c1']]) })).toBe('core:c1')
+    expect(resolveCredentialRef(deepseek, { env: {}, byProvider: new Map([['deepseek', 'c1']]) })).toBe('file:c1')
     expect(resolveCredentialRef(deepseek, { env: { DEEPSEEK_API_KEY: 'k' }, byProvider: new Map([['deepseek', 'c1']]) })).toBe(
       'env:DEEPSEEK_API_KEY',
     )
@@ -307,13 +307,13 @@ describe('自填端点：来源优先级与凭证解析（S3）', () => {
     expect(instances.find((i) => i.id === 'my-proxy')).toBeDefined()
   })
 
-  it('自填端点也能用 Core 凭证库里的密钥（用户在设置窗为它存的那条）', () => {
+  it('自填端点也能用本插件凭证文件里的密钥（用户在设置窗为它存的那条）', () => {
     const instances = buildVendorInstances({
       env: {},
       byProvider: new Map([['my-proxy', 'cred-3']]),
       preferences: { vendorOverrides: [{ id: 'my-proxy', baseUrl: 'http://127.0.0.1:8080/v1' }] },
     }, VENDOR_PRESETS)
-    expect(instances.find((i) => i.id === 'my-proxy')).toMatchObject({ credentialRef: 'core:cred-3' })
+    expect(instances.find((i) => i.id === 'my-proxy')).toMatchObject({ credentialRef: 'file:cred-3' })
   })
 
   it('自填端点既没 env 也没库里密钥 → 不注册', () => {

@@ -1,0 +1,2537 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>皮肤管理插件设计稿（skins · skin 服务 + widget.skins）· OST</title>
+<style>
+  /* 沿用 docs/插件demo/tool_manager/工具管理插件设计.html 同一套皮肤，
+     变量名与 sdk/ui/src/tokens.css 同源（--color-* 是组件库真值，--* 是文档壳） */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    /* Demo 区直接借用 tokens.css 的真名，让 demo 与组件库同源 */
+    --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-success-soft:#e7f6ec;
+    --color-warning:#9a6700; --color-warning-soft:#fdf6e3;
+    --color-proc:#c2410c; --color-proc-soft:#fdeee2;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px; --text-xl:20px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+    /* Demo 局部：皮肤的 motion 令牌一律 --skin-motion-* 前缀，与
+       chat-workbench/对话工作台-会话列表重设计.html 的 --motion-*（会话行状态色）区分 */
+    --skin-stage:linear-gradient(180deg,#eef1f6,#e2e6ee);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-success-soft:#16301f;
+    --color-warning:#d29922; --color-warning-soft:#33280f;
+    --color-proc:#fb923c; --color-proc-soft:#3a2314;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+    --skin-stage:linear-gradient(180deg,#1b1f26,#14171c);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono, .topic { font-family: var(--mono); }
+  .wrap { max-width:1240px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:20; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:19; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s1); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px; border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  h4 { font-size:var(--sm); margin:var(--s4) 0 var(--s2); font-weight:700; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background:var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  td.nowrap { white-space:nowrap; }
+
+  pre { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3); font-size:12.5px; line-height:1.65; overflow-x:auto; margin:0 0 var(--s4); }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .note.bus { border-left-color:var(--bus); background:var(--bus-soft); }
+  .note.ext { border-left-color:var(--ext); background:var(--ext-soft); }
+  .note.proc { border-left-color:var(--proc); background:var(--proc-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); white-space:nowrap; vertical-align:middle; }
+  .tag.have { background:var(--success); }
+  .tag.todo { background:var(--danger); }
+  .tag.part { background:var(--warning); }
+  .tag.spec { background:var(--primary); }
+  .tag.bus { background:var(--bus); }
+  .tag.ext { background:var(--ext); }
+  .tag.proc { background:var(--proc); }
+
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s4); font-family:var(--mono); font-size:12.5px; line-height:1.8;
+    margin:0 0 var(--s4); white-space:pre; overflow-x:auto; }
+  .tree .std { color:var(--primary); font-weight:600; }
+  .tree .own { color:var(--success); font-weight:600; }
+  .tree .free { color:var(--warning); }
+  .tree .dim { color:var(--muted); }
+  .tree .new { color:var(--danger); font-weight:600; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); }
+  .three { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s3); }
+  @media (max-width:980px){ .two,.three{grid-template-columns:1fr} }
+
+  .board { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s3); box-shadow:var(--shadow-sm); }
+  svg { display:block; width:100%; height:auto; }
+  @keyframes dashflow { to { stroke-dashoffset:-48; } }
+  .edge { fill:none; stroke:var(--border-strong); stroke-width:2; }
+  .edge.busline { stroke:var(--bus); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.httpline { stroke:var(--success); stroke-dasharray:7 6; animation:dashflow 1.4s linear infinite; }
+  .edge.fileline { stroke:var(--warning); stroke-dasharray:4 5; animation:dashflow 1.8s linear infinite; }
+  .edge.procline { stroke:var(--proc); stroke-dasharray:4 5; }
+  .edge.extline { stroke:var(--ext); stroke-dasharray:4 5; }
+  .node { opacity:.6; transition:opacity .25s; }
+  .node .r { fill:var(--surface); stroke:var(--border-strong); stroke-width:1.6; }
+  .node.svc .r { fill:var(--bus-soft); stroke:var(--bus); }
+  .node.ui  .r { fill:var(--success-soft); stroke:var(--success); }
+  .node.host .r { fill:var(--warning-soft); stroke:var(--warning); }
+  .node.ext .r { fill:var(--ext-soft); stroke:var(--ext); }
+  .node.on { opacity:1; }
+  .node.on .r { stroke-width:2.6; }
+  @media (prefers-reduced-motion: reduce){ .edge{ animation:none !important; } }
+
+  .legend { display:flex; flex-wrap:wrap; gap:var(--s3); font-size:var(--xs); color:var(--muted); margin:var(--s2) 0 var(--s4); }
+  .legend i { display:inline-block; width:26px; height:0; border-top:2px dashed var(--bus);
+    vertical-align:middle; margin-right:5px; }
+  .legend i.http { border-color:var(--success); }
+  .legend i.file { border-color:var(--warning); }
+  .legend i.ext { border-color:var(--ext); }
+  .legend i.proc { border-color:var(--proc); }
+
+  .kv { display:grid; grid-template-columns:150px 1fr; gap:var(--s1) var(--s3); font-size:var(--sm); margin:0 0 var(--s4); }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; }
+
+  /* ══ Demo 区（模拟 sdk/ui 组件 + 插件视图的最终形态） ══ */
+  .demo { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    box-shadow:var(--shadow-sm); margin:0 0 var(--s5); overflow:hidden; }
+  .demo > header { display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3);
+    background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--xs); color:var(--muted); flex-wrap:wrap; }
+  .demo > header b { color:var(--text); font-size:var(--sm); }
+  .demo > header .sp { flex:1; }
+  .demo .demo-body { padding:var(--s4); background:var(--color-surface); }
+  .demo .demo-body.tight { padding:0; }
+
+  .d-card { background:var(--color-surface); border:1px solid var(--color-border);
+    border-radius:var(--radius-md); }
+  .d-table { width:100%; border-collapse:collapse; font-size:var(--text-sm); }
+  .d-table th, .d-table td { padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--color-border);
+    text-align:left; vertical-align:middle; }
+  .d-table th { color:var(--color-text-muted); font-weight:500; background:var(--color-surface-2); font-size:var(--text-xs); }
+  .d-table tr:last-child td { border-bottom:0; }
+  .d-table tbody tr:hover { background:var(--color-surface-2); }
+  .d-table tbody tr.row-off td { opacity:.45; }
+  .d-table tbody tr.row-sel td { background:var(--color-primary-soft); }
+  .d-table tbody tr.row-dang td { background:var(--color-danger-soft); }
+
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600;
+    border-radius:var(--radius-full); padding:1px 8px; white-space:nowrap; }
+  .pill.read  { background:var(--success-soft); color:var(--success); }
+  .pill.write { background:var(--warning-soft); color:var(--warning); }
+  .pill.proc  { background:var(--proc-soft); color:var(--proc); }
+  .pill.src   { background:var(--color-surface-2); color:var(--color-text-muted); font-family:var(--font-mono); }
+  .pill.approve{ background:var(--color-primary-soft); color:var(--color-primary); }
+  .pill.danger { background:var(--color-danger-soft); color:var(--color-danger); }
+  .pill.dangling { background:var(--color-danger-soft); color:var(--color-danger); border:1px dashed currentColor; }
+  .pill.builtin  { background:var(--color-primary-soft); color:var(--color-primary); }
+  .pill.off   { background:var(--color-surface-2); color:var(--color-text-muted); border:1px solid var(--color-border); }
+  .pill.community { background:var(--ext-soft); color:var(--ext); }
+
+  .d-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid transparent;
+    border-radius:var(--radius-md); padding:5px 11px; font:inherit; font-size:var(--text-sm); cursor:pointer;
+    background:var(--color-primary); color:#fff; }
+  .d-btn:hover { filter:brightness(1.06); }
+  .d-btn.sm { padding:3px 9px; font-size:var(--text-xs); }
+  .d-btn.ghost { background:var(--color-surface); color:var(--color-text); border-color:var(--color-border); }
+  .d-btn.ghost:hover { background:var(--color-surface-2); filter:none; }
+  .d-btn.danger { background:var(--color-danger); }
+  .d-btn.approve { background:var(--color-success); }
+  .d-btn:disabled { opacity:.45; cursor:not-allowed; filter:none; }
+
+  .d-switch { display:inline-flex; align-items:center; gap:var(--space-2); cursor:pointer; }
+  .d-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .d-switch .track { width:32px; height:18px; border-radius:var(--radius-full); background:var(--color-surface-3);
+    position:relative; transition:background .18s; flex:none; }
+  .d-switch .thumb { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.3); transition:transform .18s; }
+  .d-switch input:checked + .track { background:var(--color-primary); }
+  .d-switch input:checked + .track .thumb { transform:translateX(14px); }
+  .d-switch input:disabled + .track { opacity:.45; }
+
+  .d-input, .d-select, .d-textarea { background:var(--color-surface); color:var(--color-text);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:6px 9px;
+    font:inherit; font-size:var(--text-sm); width:100%; }
+  .d-input:focus, .d-textarea:focus, .d-select:focus { outline:2px solid var(--color-primary-soft); border-color:var(--color-primary); }
+
+  .d-tabs { display:flex; gap:var(--space-1); border-bottom:1px solid var(--color-border); }
+  .d-tabs button { padding:var(--space-2) var(--space-3); border:0; border-bottom:2px solid transparent;
+    background:transparent; color:var(--color-text-muted); cursor:pointer; font:inherit; font-size:var(--text-sm); }
+  .d-tabs button[aria-selected="true"] { border-bottom-color:var(--color-primary); color:var(--color-primary); font-weight:600; }
+  .d-tabs button[aria-selected="true"] .pill { background:var(--color-primary-soft); color:var(--color-primary); }
+
+  .d-empty { padding:var(--space-5); text-align:center; color:var(--color-text-muted); font-size:var(--text-sm); }
+  .d-empty b { display:block; color:var(--color-text); margin-bottom:4px; }
+
+  .seg { display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius-md); overflow:hidden; }
+  .seg button { border:0; background:var(--color-surface); color:var(--color-text-muted); cursor:pointer;
+    font:inherit; font-size:var(--text-xs); padding:4px 10px; border-right:1px solid var(--color-border); }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--color-primary); color:#fff; font-weight:600; }
+
+  .evlog { font-family:var(--font-mono); font-size:11.5px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--space-2); max-height:210px; overflow:auto; }
+  .evlog div { padding:2px 4px; border-bottom:1px dashed var(--color-border); display:flex; gap:var(--space-2); }
+  .evlog div:last-child { border-bottom:0; }
+  .evlog .t { color:var(--color-text-muted); flex:none; }
+  .evlog .tp { color:var(--bus); flex:none; }
+  .evlog .pl { color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ══ SkinRenderer 的三个 mode ══ */
+  .sk-face { display:grid; place-items:center; position:relative; overflow:hidden; }
+  .sk-face.mode-portrait { width:100%; aspect-ratio:3/4; border-radius:var(--radius-md); background:var(--skin-stage); }
+  .sk-face.mode-avatar { width:34px; height:34px; border-radius:var(--radius-md); background:var(--skin-stage);
+    box-shadow:inset 0 0 0 1px var(--color-border); flex:none; }
+  .sk-face.mode-avatar .sk-glyph { font-size:16px; }
+  .sk-face.mode-stage { width:100%; height:230px; border-radius:var(--radius-md); background:var(--skin-stage); }
+  .sk-glyph { font-size:44px; opacity:.9; }
+  .sk-mode-badge { position:absolute; left:6px; top:6px; font-size:10px; font-family:var(--font-mono);
+    background:rgba(0,0,0,.45); color:#fff; border-radius:var(--radius-sm); padding:1px 5px; }
+  .sk-fail { position:absolute; inset:0; display:grid; place-items:center; text-align:center;
+    font-size:11px; color:var(--color-danger); padding:8px; background:var(--color-danger-soft); }
+  .sk-loading { position:absolute; inset:0; display:grid; place-items:center; font-size:11px;
+    color:var(--color-text-muted); }
+
+  .sk-card { display:flex; gap:var(--space-3); padding:var(--space-3); border:1px solid var(--color-border);
+    border-radius:var(--radius-md); background:var(--color-surface); align-items:flex-start; width:100%;
+    font:inherit; color:inherit; text-align:left; cursor:pointer; }
+  .sk-card:hover { border-color:var(--color-border-strong); background:var(--color-surface-2); }
+  .sk-card[aria-current="true"] { border-color:var(--color-primary); background:var(--color-primary-soft); }
+  .sk-card.dead { border-style:dashed; border-color:var(--color-danger); opacity:.85; }
+  .sk-card-main { flex:1; min-width:0; }
+  .sk-card-name { font-size:var(--text-sm); font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .sk-card-sub { font-size:11px; color:var(--color-text-muted); margin-top:2px; }
+
+  .sk-motions { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-2); }
+  .sk-mbox { border:1px solid var(--color-border); border-radius:var(--radius-md); overflow:hidden; background:var(--color-surface); }
+  .sk-mbox-hd { padding:4px 8px; font-size:10.5px; font-family:var(--font-mono); color:var(--color-text-muted);
+    background:var(--color-surface-2); border-bottom:1px solid var(--color-border);
+    display:flex; align-items:center; gap:5px; }
+  .sk-mbox-hd .st { margin-left:auto; width:6px; height:6px; border-radius:50%; background:var(--color-success); }
+  .sk-mbox-hd .st.bad { background:var(--color-danger); }
+  .sk-mbox-hd .st.miss { background:var(--color-border-strong); }
+  .sk-mbox-bd { height:82px; display:grid; place-items:center; background:var(--skin-stage); font-size:10px;
+    color:var(--color-text-muted); }
+
+.sk-readonly { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--color-text-muted);
+    background:var(--color-surface-2); border:1px dashed var(--color-border); border-radius:var(--radius-md);
+    padding:6px 10px; }
+
+  /* 停用徽章：灰得像「不参与」，但仍能读出名字 */
+  .pill.off { background:var(--color-surface-2); color:var(--color-text-muted);
+    border-color:var(--color-border-strong); }
+
+  /* skin.set 的事件面板：让写操作有可见的往返，而不是只在内存里变 */
+  .sk-ev { margin-top:var(--s3); border:1px solid var(--color-border); border-radius:var(--radius-md);
+    overflow:hidden; }
+  .sk-ev > header { display:flex; align-items:center; gap:8px; padding:6px 10px;
+    background:var(--color-surface-2); border-bottom:1px solid var(--color-border);
+    font-size:11px; color:var(--color-text-muted); }
+  .sk-ev-list { max-height:132px; overflow:auto; font-family:var(--font-mono); font-size:10.5px; }
+  .sk-ev-row { display:flex; gap:8px; padding:3px 10px; border-bottom:1px solid var(--color-border); }
+  .sk-ev-row:last-child { border-bottom:0; }
+  .sk-ev-row .t { color:var(--color-text-muted); flex:0 0 auto; }
+  .sk-ev-row .topic { flex:0 0 auto; font-weight:700; }
+  .sk-ev-row.out .topic { color:var(--ext); }
+  .sk-ev-row.err .topic { color:var(--color-danger); }
+  .sk-ev-row .pl { flex:1; color:var(--color-text); word-break:break-all; }
+
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  @media print { nav.toc { display:none; } header.bar { position:static; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>皮肤管理插件 · 设计稿</h1>
+    <span class="sp"></span>
+    <span class="sub">plugins/skins（skin 服务 + widget.skins）· <b>可写</b>能力位 · 资产是<b>用户数据</b>，卸载保留 · Core 加一条只读路由</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s1">1 定位</a>
+    <a href="#s2">2 一句话说清最关键的那个决定</a>
+    <a href="#s3">3 拓扑</a>
+    <a href="#s4">4 协议</a>
+    <a href="#s5">5 skin 服务</a>
+    <a href="#s6">6 资产通路：Core 只加一条路由</a>
+    <a href="#s7">7 SkinRenderer：三个 mode 与回退链</a>
+    <a href="#s8">8 四条新纪律</a>
+    <a href="#s9">9 界面：widget.skins 与组件映射</a>
+    <a href="#s10">10 组件 Demo（可点）</a>
+    <a href="#s11">11 用户数据</a>
+    <a href="#s12">12 不变式与红线</a>
+    <a href="#s13">13 测试矩阵</a>
+    <a href="#s14">14 工作分解</a>
+    <a href="#s15">15 待决问题</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>一句话：给「角色长什么样」这件事一个主人 —— 而那个主人是<b>用户</b>。</b>
+  <br>
+  <b>资产进 <code class="inl">userData/plugin/skins/</code></b>，由 <code class="inl">skin</code> 服务独占读写。
+  「我想让这个角色长什么样」是<b>用户的选择</b>，与
+  <code class="inl">tools/approvals.json</code>（用户的授权决定）、
+  <code class="inl">models/preferences.json</code>（用户的接入决定）同一类。
+  所以界面<b>可写</b>：上传 / 裁剪 / 停用 / 删除都有落点。
+  <br>
+  <b>代价是明摆着的，全部写在这里</b>（判据始终是同一句：<b>这是用户的决定还是产品的一部分？</b>）：
+  <br>
+  ① <b>Core 要加一条路由。</b>今天 <code class="inl">GET /plugins/&lt;id&gt;/ui/*</code> 只伺服
+  <code class="inl">dist/ui</code>，而 <code class="inl">plugins.readFile</code> 是 utf8 / 2 MiB /
+  只限自己插件目录 —— <b>送不了二进制</b>。需要新增
+  <code class="inl">GET /plugins/&lt;id&gt;/data/*</code>（<a href="#s6">§6</a> 逐条核对）。
+  它仍然只是<b>一条路由</b>：Core 继续只做「穿越检查 + MIME + 缓存头 + 搬字节」，
+  <b>不解析内容</b>。
+  <br>
+  ② <b>要回答两个真源的冲突。</b><code class="inl">skins.json</code> 是持久文件，
+  而内置皮随插件升级而增删改 —— 不做合并的话，新内置皮<b>永远不会出现</b>、
+  下线的内置皮会<b>永远赖着</b>。合并规则是 <code class="inl">shared/src/skin.ts</code> 的
+  <code class="inl">mergeCatalog</code>，三条规则见 <a href="#s6">§6</a>。
+  <br>
+  ③ <b>卸载不删数据</b>，照 <code class="inl">approvals.json</code> 的先例：数据保留、
+  只是不再可用，重装即恢复。代价是界面要能回答「这些旧资产占着多少磁盘」。
+  <br>
+  ④ <b>路径校验变成运行期的事。</b>资产路径不再由构建保证，必须<b>每次写都验</b>（第一道闸），
+  外加 Core 路由侧的穿越检查（第二道闸）。两道不是重复，理由见 <code class="inl">skin.ts</code> 头部。
+  <br>
+  <b>角色侧仍然只多一个字段</b>：<code class="inl">characters.json</code> 里加
+  <code class="inl">skinId?: string</code>，与 <code class="inl">tools:["read_file"]</code> 同级。
+  <b>本插件一个字都不写那个文件</b> —— owner 是 <code class="inl">agents</code> 服务，
+  界面由 <code class="inl">widget.agents</code> 写。
+  <br>
+  <b>配套</b>：角色界面的落点见 <code class="inl">../character_manager/智能体角色-组件Demo.html</code> §10。
+</div>
+
+<!-- ══════════════════ 1 定位 ══════════════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>定位：这个插件管什么，不管什么</h2>
+
+  <div class="two">
+    <div>
+      <h3>它管（3 件）</h3>
+      <ul>
+        <li><b>皮肤目录的唯一真相源</b>：<code class="inl">skins.json</code> 经
+          <code class="inl">skin.list</code> 收集、经 <code class="inl">skin.state</code> 重播整份。</li>
+        <li><b>一个可复用的渲染组件</b>：<code class="inl">SkinRenderer</code>（三个 mode + 四级回退链），
+          谁要用谁 import —— 它随 <code class="inl">dist/ui/</code> 一起伺服，别的插件视图
+          <b>用 <code class="inl">&lt;img src&gt;</code> 直接引</b>，不需要它跑起来。</li>
+        <li><b>一份可预览、可编辑的清单</b>：<code class="inl">widget.skins</code> 列出有哪些皮肤、
+          各自带几个动作、被哪些角色引用，并<b>提供新建 / 上传 / 改名 / 停用 / 删除</b>。
+          <br>它<b>拥有</b> <code class="inil">userData/plugin/skins/</code> ——
+          卸载插件<b>不清</b>这里，重装即恢复。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>它不管（5 件）</h3>
+      <ul>
+        <li><b>不管角色</b>：<code class="inl">skinId</code> 写在 <code class="inl">agents</code> 的
+          <code class="inl">characters.json</code> 里，owner 是 <code class="inl">agent</code> 服务。
+          本插件<b>一个字都不写</b>那个文件。</li>
+        <li><b>不管会话与消息</b>：皮肤不进 <code class="inl">loop.run</code> 的任何字段，
+          不进 prompt、不进 <code class="inl">tools</code> 参数。<b>一个字节也不发给模型。</b></li>
+        <li><b>不管装配</b>：它不参与第 ④ 步的四层提示词合成。装配摘要里那行
+          「外观：不影响本轮装配」是<b>诚实</b>而不是遗漏。</li>
+        <li><b>不管审批</b>：皮肤没有任何执行体，不产生副作用，不需要闸门。</li>
+        <li><b>不拥有用户数据</b>：<code class="inl">userData/plugin/skins/</code> <b>不存在</b>（<a href="#s11">§11</a>）。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note info">
+    <b>为什么「不管角色」这条要写在最前面。</b>
+    因为最容易被想到的形态是「在角色管理里加个『上传立绘』按钮」——
+    天枢<b>改造前</b>就是那样的（<code class="inl">CharacterVisualEditor.tsx</code>），而那份文件现在
+    <b>没有任何地方 import 它</b>，是死代码。改造记录在
+    <code class="inl">天枢 dev/docs/skin-decouple-plan.md</code>，§一原话：
+    「把角色主观定义与『视觉/动画』解耦：角色绑定皮肤，皮肤是一组<b>可复用的</b>视觉组合」。
+    <br>
+    本设计沿着它继续往下走了一步：<b>连 skinId 之外的一切都不进角色档案</b>。
+  </div>
+
+  <h3>与既有插件的分工（照 AgentLoop 教程 §2 那句归属判断）</h3>
+  <table>
+    <thead><tr><th>能力</th><th>生产方（谁注册）</th><th>聚合 / 消费方</th><th>本插件的角色</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">skinId</td><td>用户（经 <code class="inl">widget.agents</code>）</td>
+        <td><code class="inl">agents</code> 服务持久化</td><td><span class="tag todo">不参与</span></td></tr>
+      <tr><td class="mono">skin.list</td><td>本插件（<code class="inl">skin</code> 服务收集方上线时问一次）</td>
+        <td><code class="inl">skin</code> 服务</td><td><span class="tag have">owner</span></td></tr>
+      <tr><td class="mono">skin.state</td><td>本插件（owner 每次变更重播整份）</td>
+        <td><code class="inl">widget.skins</code> · <code class="inl">widget.agents</code> ·
+          <code class="inl">widget.chat-timeline</code></td><td><span class="tag have">owner</span></td></tr>
+      <tr><td class="mono">prompt.fragment.registered</td><td><code class="inl">agents</code> 服务</td>
+        <td><code class="inl">loop</code> 装配器</td><td><span class="tag todo">不参与</span>（皮肤没有提示词）</td></tr>
+      <tr><td class="mono">loop.run</td><td><code class="inl">widget.chat-composer</code></td>
+        <td><code class="inl">loop</code></td><td><span class="tag todo">不参与</span>（字段里没有皮肤）</td></tr>
+      <tr><td class="mono">GET /plugins/skins/ui/assets/*</td><td>Core 伺服本插件<b>产物</b></td>
+        <td>任何插件视图的 <code class="inl">&lt;img&gt;</code></td><td><span class="tag spec">产物归属</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>不新增一条插件交互方式。</b>这一列全部是「一个收集命令 + 一个重播事件」的同构复刻，
+    与 <code class="inl">llm.provider.reannounce</code> / <code class="inl">models.prefs.state</code> /
+    <code class="inl">tools.state</code> <b>同一套机制</b>。整个插件<b>只有 1 个事件 + 1 个命令</b>
+    —— 是已写进 <code class="inl">shared/src/events.ts</code> 的 EventMap / CommandMap 上新增两行。
+  </div>
+
+  <div class="note bad">
+    <b>整篇最容易搞错的一处：<code class="inl">--motion-*</code> 令牌已经被别人占了。</b>
+    <code class="inl">../chat-workbench/对话工作台-会话列表重设计.html</code> 定义了
+    <code class="inl">--motion-idle / --motion-thinking / --motion-listening / --motion-working</code>，
+    那是一<b>行会话正在干什么</b>的状态色。本设计的动作也叫
+    <code class="inl">idle / thinking / working / speaking / success / error</code>，
+    两套语义会在同一份 CSS 里撞名，而 <code class="inl">idle</code> 在两处都出现。
+    <br>
+    <b>处置</b>：皮肤侧一律 <code class="inl">--skin-motion-*</code>，并且<b>不放进
+    <code class="inl">sdk/ui/src/tokens.css</code></b> —— 它是某个具体视图的状态色，不是组件库真值。
+  </div>
+</section>
+
+<!-- ══════════════════ 2 一句话 ══════════════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>地基决定：资产是用户数据，Core 加一条路由</h2>
+
+  <p>这一节单独拎出来，因为<b>其余所有设计都由它派生</b>。三条路线对照，标出本文采用的那条：</p>
+
+  <div class="three">
+    <div class="board" style="border-color:var(--primary);box-shadow:0 0 0 2px var(--color-primary-soft)">
+      <h4 style="margin:0 0 var(--s2)">A · 资产进 userData <span class="tag spec">本文采用</span></h4>
+      <div class="tree" style="font-size:11px;padding:var(--s3);margin:0 0 var(--s2)">userData/plugin/skins/
+├── skins.json     <span class="own">owner: skin 服务</span>
+└── miku/
+    ├── portrait.png
+    └── idle.webp …</div>
+      <ul style="font-size:var(--text-xs);padding-left:1.1em">
+        <li>用户可上传 / 裁剪 / 停用 / 删除</li>
+        <li><b class="tag part">需要 Core 加一条路由</b>（§6）</li>
+        <li><b class="tag spec">卸载保留数据，重装即恢复</b></li>
+      </ul>
+    </div>
+    <div class="board">
+      <h4 style="margin:0 0 var(--s2)">B · 资产进 dist/ui</h4>
+      <div class="tree" style="font-size:11px;padding:var(--s3);margin:0 0 var(--s2)">plugins/skins/
+├── catalog.json  <span class="dim">→ 构建复制</span>
+└── assets/…      <span class="dim">→ 构建复制</span>
+    <span class="dim">落</span> dist/ui/</div>
+      <ul style="font-size:var(--text-xs);padding-left:1.1em">
+        <li>照 <code class="inl">models/catalog.json</code> 的先例</li>
+        <li><b class="tag have">Core 零改动</b> —— 而这<b>就是它唯一的优点</b></li>
+        <li><b class="tag todo">界面只能只读</b>：用户传不进自己的图</li>
+        <li><b class="tag todo">改一张脸 = 等我们发一次版</b></li>
+      </ul>
+    </div>
+    <div class="board">
+      <h4 style="margin:0 0 var(--s2)">C · 资产走总线 base64</h4>
+      <div class="tree" style="font-size:11px;padding:var(--s3);margin:0 0 var(--s2)">skin.asset.get{ id }
+  → base64 + 33% 膨胀
+  → 撞 2 MiB / 帧大小</div>
+      <ul style="font-size:var(--text-xs);padding-left:1.1em">
+        <li>技术上能写出来</li>
+        <li><b class="tag todo">一段 8 MB 立绘走不通</b></li>
+        <li><b class="tag todo">违背「工具目录进 API 参数而非文本」</b></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note info">
+    <b>选 A 的理由：它是「用户的数据」，不是「产品的内容」。</b>
+    判据只有一句，与 <code class="inl">tools/approvals.json</code>、
+    <code class="inil">models/preferences.json</code> 完全同一条：
+    <b>这是用户的决定还是产品的一部分？</b>
+    <br>
+    「我想让这个角色长什么样」显然是用户的决定。所以它进 <code class="inl">userData</code>，
+    卸载时<b>保留</b>，重装即恢复 —— 用户装插件是为了用它，不是为了每次升级都重新画一遍脸。
+    <br>
+B 形态（资产随插件走）适合的是<b>产品自带的那几张脸</b>，它有个真先例
+    （<code class="inl">models</code> 的 12 家厂商预设）。但它是<b>只读</b>的：
+    用户改不了任何一张，而<b>「改一张脸要等一次发版」正是它唯一做不到的那件事</b>。
+    <br>
+    <b>「Core 零改动」在 B 形态下是优点，在 A 形态下只是达标线。</b>
+    凡是用户能改的东西，宿主都得提供一条取它的路 —— 否则「能改」这件事无法兑现。
+    Core 欠的那一条是<b>「按目录伺服用户数据」</b>，不是「理解皮肤」，
+    而这与它已经在做的 <code class="inil">dist/ui/</code> 伺服<b>是同一件事</b>，只是目录不同（<a href="#s6">§6</a>）。
+    <br>
+    <b>所以本文取 A，并且把内置皮也放进同一份 <code class="inil">skins.json</code></b> ——
+    用 <code class="inl">builtin</code> 字段区分两类，而不是分成两个存储位置。
+    理由见 <a href="#s6">§6</a> 的合并规则：分成两处就要回答「同名怎么办」，
+    而那正是第二个真源的起点。
+  </div>
+
+  <div class="note bad">
+    <b>A 要给 Core 加的那条能力，是「搬字节」而不是「理解内容」。</b>
+    Core 现在的职责是两句话：<b>查白名单、搬字节</b>（外加记 <code class="inil">service.*</code> 生命周期）。
+    <code class="inil">GET /plugins/&lt;id&gt;/data/*</code> 听起来也是搬字节，
+    它要求 Core 知道的只是<b>「这个插件的数据目录在哪」</b> ——
+    而那个锚点<b>已经存在</b>：<code class="inil">shared/src/paths.ts</code> 的
+    <code class="inil">pluginDataDir(dataDir, pluginId)</code>，
+    握手里发给每个服务的 <code class="inil">dataDir</code> 就是它。
+    <br>
+    <b>Core 仍然不知道</b>什么是 portrait、什么是 skinId、什么是 license。
+    那些全在 <code class="inil">skins.json</code> 里，是<b>内容</b>，由服务与 UI 各自解析。
+    这就是「不解释 payload」那条纪律没有被破坏的意思。
+  </div>
+
+  <h3>A 形态的五条直接推论</h3>
+  <table>
+    <thead><tr><th>推论</th><th>为什么必然</th><th>界面上的样子</th></tr></thead>
+    <tbody>
+      <tr><td><b>有上传 / 裁剪 / 删除</b></td>
+        <td>运行期有可写的目录（<code class="inl">userData/plugin/skins/</code>），
+          服务握手里就有它的路径</td>
+        <td><code class="inil">widget.skins</code> 是<b>编辑器</b>：目录 + 上传 + 裁剪 + 动作预览。
+          与 tools 插件形态一致，区别只在<b>数据住哪</b>（<a href="#s8">§8</a>）</td></tr>
+      <tr><td><b>有「停用」开关</b></td>
+        <td><code class="inil">enabled</code> 落 <code class="inil">skins.json</code>，与「删除」分开</td>
+        <td>停用 = 渲染侧不看它，<b>资产保留、随时开回来</b>。
+          <b>不要</b>把停用做成删除的软化版 —— 按错一次丢图是比多点一次更贵的事</td></tr>
+      <tr><td><b>删除要问「有没有角色在用」</b></td>
+        <td>删了之后那些角色的 <code class="inil">skinId</code> 会变悬空</td>
+        <td><code class="inil">skin.set{ removed:true, confirmUnreferenced }</code>。
+          服务拿 <code class="inil">agent.state</code> 核对，被引用就<b>拒绝并列出引用者</b>。
+          而 <code class="inil">confirmUnreferenced</code> <b>必填</b>，因为那份数据可能没到（<a href="#s4">§4</a>）</td></tr>
+      <tr><td><b>卸载插件 = 数据保留</b></td>
+        <td>照 <code class="inil">approvals.json</code> 的先例：用户的决定不该被卸载悄悄清掉</td>
+        <td>重装即恢复用户的皮肤。代价是界面要能回答
+          「<code class="inil">userData/plugin/skins/</code> 占着多少磁盘」，<a href="#s11">§11</a></td></tr>
+      <tr><td><b>要回答内置皮与用户皮的关系</b></td>
+        <td><code class="inil">skins.json</code> 是持久文件，而内置皮随插件版本变化</td>
+        <td><code class="inil">mergeCatalog</code>：内置以代码为准、用户皮以数据为准、
+          孤儿内置皮<b>留痕并给删除按钮</b>（<a href="#s6">§6</a>）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════ 3 拓扑 ══════════════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>拓扑：谁在哪个进程，一条皮肤解析经过谁</h2>
+
+  <p>
+    下面是本插件落地后的进程图。核心观察只有一处：
+    <b>资产从 Core 到浏览器的这一跳，是一条早就存在的静态路由</b>，本插件只是把自己的文件放进它的目录。
+  </p>
+
+  <div class="board">
+  <svg viewBox="0 0 1160 440" role="img" aria-label="皮肤插件拓扑图">
+    <defs>
+      <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" fill="context-stroke" />
+      </marker>
+    </defs>
+
+    <!-- client 壳 -->
+    <g class="node host" transform="translate(20,26)">
+      <rect class="r" width="150" height="86" rx="10" />
+      <text x="14" y="26" font-size="13" font-weight="700" fill="currentColor">client 壳</text>
+      <text x="14" y="46" font-size="11.5" fill="currentColor" opacity=".75">dockview + iframe</text>
+      <text x="14" y="64" font-size="11.5" fill="currentColor" opacity=".75">只摆位 / 不理解皮肤</text>
+    </g>
+
+    <!-- 三个对话视图 -->
+    <g class="node ui on" transform="translate(200,20)">
+      <rect class="r" width="204" height="70" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">chat-workbench</text>
+      <text x="14" y="42" font-size="11.5" fill="currentColor" opacity=".8">widget.chat-timeline</text>
+      <text x="14" y="58" font-size="11.5" fill="currentColor" opacity=".8">渲染 SkinRenderer（stage / avatar）</text>
+    </g>
+    <g class="node ui" transform="translate(200,98)">
+      <rect class="r" width="204" height="52" rx="10" />
+      <text x="14" y="22" font-size="12.5" font-weight="700" fill="currentColor">widget.session-list</text>
+      <text x="14" y="40" font-size="11.5" fill="currentColor" opacity=".8">widget.chat-composer</text>
+    </g>
+
+    <!-- agents 插件 -->
+    <g class="node ui" transform="translate(200,172)">
+      <rect class="r" width="204" height="72" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">agents · widget.agents</text>
+      <text x="14" y="42" font-size="11.5" fill="currentColor" opacity=".8">绑定 Tab 底部「外观」一行</text>
+      <text x="14" y="58" font-size="11.5" fill="currentColor" opacity=".8">发 agent.state.set{patch}</text>
+    </g>
+
+    <!-- skins 视图 -->
+    <g class="node ui on" transform="translate(200,262)">
+      <rect class="r" width="204" height="82" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">skins · widget.skins</text>
+      <text x="14" y="42" font-size="11.5" fill="currentColor" opacity=".8">目录卡 + 动作预览 + 引用</text>
+      <text x="14" y="58" font-size="11.5" fill="currentColor" opacity=".8">订阅 skin.state</text>
+      <text x="14" y="74" font-size="11.5" fill="currentColor" opacity=".8"><tspan font-weight="700">可写 · 发 skin.set{patch}</tspan></text>
+    </g>
+
+    <!-- Core -->
+    <g class="node host on" transform="translate(468,180)">
+      <rect class="r" width="204" height="128" rx="10" />
+      <text x="14" y="26" font-size="13" font-weight="700" fill="currentColor">Core（加一条路由）</text>
+      <text x="14" y="46" font-size="11.5" fill="currentColor" opacity=".8">POST /api/command</text>
+      <text x="14" y="63" font-size="11.5" fill="currentColor" opacity=".8">GET /events?topics=…</text>
+      <text x="14" y="80" font-size="11.5" fill="currentColor" opacity=".8">GET /plugins/&lt;id&gt;/ui/*</text>
+      <text x="14" y="97" font-size="11.5" fill="currentColor" opacity=".55">GET /plugins/&lt;id&gt;/data/* ←新</text>
+      <text x="14" y="116" font-size="11.5" fill="currentColor" opacity=".55">仍然不解析任何皮肤内容</text>
+    </g>
+
+    <!-- skin 服务 -->
+    <g class="node svc on" transform="translate(742,110)">
+      <rect class="r" width="204" height="104" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">skins · skin 服务</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">读 skins.json（KB 级）</text>
+      <text x="14" y="61" font-size="11.5" fill="currentColor" opacity=".8">publish skin.state（整份）</text>
+      <text x="14" y="78" font-size="11.5" fill="currentColor" opacity=".8">不认识角色 · 不读 characters.json</text>
+      <text x="14" y="95" font-size="11.5" fill="currentColor" opacity=".8">写 userData（清单 + 资产）</text>
+    </g>
+
+    <!-- loop -->
+    <g class="node svc" transform="translate(742,300)">
+      <rect class="r" width="204" height="70" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">chat-workbench · loop</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">装配四层提示词 + 工具目录</text>
+      <text x="14" y="60" font-size="11.5" fill="currentColor" opacity=".55"><tspan font-weight="700">皮肤与它无关</tspan></text>
+    </g>
+
+    <!-- 插件产物 + 用户数据（资产不再是构建产物） -->
+    <g class="node ext on" transform="translate(986,110)">
+      <rect class="r" width="150" height="200" rx="10" />
+      <text x="14" y="24" font-size="12.5" font-weight="700" fill="currentColor">两处目录</text>
+      <text x="14" y="44" font-size="11.5" fill="currentColor" opacity=".8">dist/ui/（构建产物）</text>
+      <text x="14" y="60" font-size="11.5" fill="currentColor" opacity=".8">└ index.html</text>
+      <text x="14" y="80" font-size="11.5" fill="currentColor" opacity=".55">userData/plugin/skins/</text>
+      <text x="14" y="96" font-size="11.5" fill="currentColor" opacity=".55">├ skins.json ←owner</text>
+      <text x="14" y="112" font-size="11.5" fill="currentColor" opacity=".55">├ miku/（内置，随发版）</text>
+      <text x="14" y="128" font-size="11.5" fill="currentColor" opacity=".55">│ ├ portrait.png</text>
+      <text x="14" y="144" font-size="11.5" fill="currentColor" opacity=".55">│ └ idle.webp …</text>
+      <text x="14" y="160" font-size="11.5" fill="currentColor" opacity=".55">└ mine-1/（用户的）</text>
+      <text x="14" y="180" font-size="10" fill="currentColor" opacity=".6">写：服务直写 · 读：Core 搬字节</text>
+    </g>
+
+    <!-- 连线 -->
+    <!-- ① 三个视图 → Core（命令 / 事件订阅） -->
+    <path class="edge httpline" marker-end="url(#ah2)" d="M170 53 L198 53" />
+    <path class="edge httpline" marker-end="url(#ah2)" d="M404 55 L466 214" />
+    <path class="edge httpline" marker-end="url(#ah2)" d="M404 124 L466 238" />
+    <path class="edge httpline" marker-end="url(#ah2)" d="M404 208 L466 262" />
+    <path class="edge httpline" marker-end="url(#ah2)" d="M404 303 L466 286" />
+    <!-- ② Core → skin 服务（命令转发 + SSE 事件） -->
+    <path class="edge busline" marker-end="url(#ah2)" d="M672 200 L740 150" />
+    <path class="edge busline" marker-end="url(#ah2)" d="M740 190 L674 232" />
+    <!-- ③ skin 服务 ↔ 自己的数据目录（清单读写走文件，资产它只记路径） -->
+    <path class="edge fileline" marker-end="url(#ah2)" d="M846 130 L900 130" />
+    <path class="edge fileline" marker-end="url(#ah2)" d="M900 150 L848 150" />
+    <text x="852" y="126" font-size="9.5" fill="currentColor" opacity=".7" font-family="var(--mono)">写</text>
+    <!-- ④ 关键一跳：任何 iframe 直接 GET 资产（同源静态，Core 只搬字节，不经 skin 服务） -->
+    <path class="edge httpline" marker-end="url(#ah2)" d="M986 250 L700 250 L700 40 L420 40" />
+    <text x="700" y="34" font-size="9.5" fill="currentColor" opacity=".8" font-family="var(--mono)">GET /plugins/skins/data/…  （&lt;img src&gt;，不需要 skin 服务在位）</text>
+    <!-- ⑤ loop 与本插件零交互（画一条灰线说明「没有」） -->
+    <path class="edge" d="M844 335 L844 220" stroke-dasharray="2 6" />
+  </svg>
+  </div>
+
+  <div class="legend">
+    <span><i class="http"></i>HTTP（过 Core）：伺服 UI / 收命令 / 发事件 / <b>取资产</b></span>
+    <span><i></i>总线（过 Core）：命令与事件都走这条</span>
+    <span><i class="file"></i>文件（进程内，不过 Core）：服务读自己插件目录</span>
+    <span><i class="ext"></i>外部（不过 Core）</span>
+    <span><i class="proc"></i>进程内调用（不过 Core）</span>
+  </div>
+
+  <div class="note ok">
+    <b>第 ④ 跳是本设计全部的巧思所在，而且它是白捡的。</b>
+    <code class="inl">&lt;img src="/plugins/skins/ui/assets/miku/portrait.png"&gt;</code> 只是一次<b>同源静态 GET</b>。
+    而 <code class="inl">plugin-ui.ts</code> 开头那段「同源，而不是再开一个端口」的论证
+    （同源才有 <code class="inl">postMessage</code> / <code class="inl">localStorage</code> /
+    <code class="inl">BroadcastChannel</code>，多一个源就多一处 CSRF 面）
+    正好让这件事<b>不需要任何跨插件通信</b>。
+    <br>
+    于是：<code class="inl">widget.chat-timeline</code>（chat-workbench 的 iframe）能画 skins 插件的皮肤，
+    <b>而两个插件之间一条消息都没有</b>，Core 也不需要知道「谁在画谁」。
+    这与「插件 iframe 之间彼此零通信」那条纪律<b>完全一致</b> —— 它不是被绕过的，是被用上的。
+  </div>
+
+  <h3>一条皮肤从磁盘到屏幕的 6 步</h3>
+  <table>
+    <thead><tr><th>#</th><th>从 → 到</th><th>动作</th><th>过 Core</th><th>Core 在这一步做什么</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>构建期 → <code class="inl">dist/ui/</code></td>
+        <td class="mono">closeBundle(){ cp assets/ + skins.json }</td><td><span class="tag proc">构建期</span></td>
+        <td>什么都不做（还没运行）</td></tr>
+      <tr><td>2</td><td><code class="inl">skin</code> 服务 → 自己的插件目录</td>
+        <td class="mono">plugins.readFile{ path:"skins.json" }</td><td><span class="tag proc">特权 RPC</span></td>
+        <td>边界检查（<code class="inl">startsWith(pluginDir)</code>）+ 2 MiB 上限 + utf8 校验</td></tr>
+      <tr><td>3</td><td><code class="inl">skin</code> 服务 → 总线</td>
+        <td class="mono">skin.state{ skins: SkinBrief[] }</td><td><span class="tag bus">总线 + SSE</span></td>
+        <td>按订阅分发（重播整份）</td></tr>
+      <tr><td>4</td><td>视图 ← Core</td><td>拿到 <code class="inl">skin.state</code> → 算出 <code class="inl">skinId → 资产 URL</code></td>
+        <td><span class="tag bus">SSE</span></td><td>搬到 iframe，不解析</td></tr>
+      <tr><td>5</td><td>浏览器 → Core</td>
+        <td class="mono">GET /plugins/skins/ui/assets/&lt;skinId&gt;/&lt;file&gt;</td><td><span class="tag spec">既有静态路由</span></td>
+        <td>穿越检查 + MIME 表 + 缓存头 + 读文件。<b>零新增代码</b></td></tr>
+      <tr><td>6</td><td>浏览器</td><td><code class="inl">&lt;img&gt;</code> 解码 → 画</td><td><span class="tag proc">浏览器内</span></td>
+        <td>不在数据通路上</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>注意第 3 步与第 5 步是<b>两条不相干的通路</b>。</b>
+    <code class="inl">skin.state</code> 走总线、带皮肤<b>元数据</b>（名字、几个动作、来源）；
+    资产走静态 GET、带<b>字节</b>。它们唯一的耦合点是<b>一个字符串</b>（<code class="inl">skinId</code>）。
+    <br>
+    推论：<b>skin 服务挂掉不影响已经画出来的皮肤</b>（资产不经过它），
+    但<b>新开的会话拿不到清单</b>（<code class="inl">skin.state</code> 没来）→ 界面显示「无法校验」而不是报错。
+    这条降级行为在 <a href="#s8">§8</a> 第 4 条。
+  </div>
+</section>
+
+<!-- ══════════════════ 4 协议 ══════════════════ -->
+<section id="s4">
+  <h2><span class="n">4</span>协议：4 个新 topic（2 事件 + 2 命令）</h2>
+
+  <p>这是 tools 插件（13 个）与 skills（<code class="inil">skill.registered</code>）的同一个模式，
+  规模小得多 —— <b>因为皮肤没有执行体、不产生副作用、不需要审批</b>。</p>
+
+  <pre>// ── shared/src/events.ts · CommandMap 新增 2 行 ──
+'skin.list'            { }                                  <span class="dim">// 收集方上线时问一次</span>
+'skin.set'             { requestId, patch: SkinSetPatch }   <span class="dim">// 合并式改元数据 / 停用 / 删除</span>
+
+// ── shared/src/events.ts · EventMap 新增 2 行 ──
+'skin.state'           { skins: SkinBrief[] }               <span class="dim">// owner 重播整份</span>
+'skin.set.result'      SkinSetResult                        <span class="dim">// ok / blockedBy / reason</span></pre>
+
+  <div class="note">
+    <b>已落地</b>：以上四条与 <code class="inil">SkinBrief</code> / <code class="inil">SkinSetPatch</code> /
+    <code class="inil">SkinSetResult</code> 见 <code class="inil">shared/src/skin.ts</code> 与
+    <code class="inil">shared/src/events.ts</code>（M1 已完成，65 个单测）。
+  </div>
+
+  <h4><code class="inil">skin.set</code> 为什么长这样</h4>
+  <p>三种操作（改元数据 / 停用 / 删除）形状不同，因为它们的<b>失败模式完全不同</b> ——
+  混在一个 patch 里，调用方就得自己判断哪个字段组合合法：</p>
+  <table>
+    <thead><tr><th style="width:20%">操作</th><th style="width:38%">形状</th><th>典型失败</th></tr></thead>
+    <tbody>
+      <tr><td>改元数据</td><td><code class="inil">id</code> + <code class="inil">patch{name?, license?, enabled?}</code></td>
+        <td>id 不存在</td></tr>
+      <tr><td><b>停用</b></td><td><code class="inil">id</code> + <code class="inil">enabled: false</code></td>
+        <td>被角色引用中</td></tr>
+      <tr><td><b>删除</b></td><td><code class="inil">id</code> + <code class="inil">removed: true</code> +
+        <code class="inil">confirmUnreferenced: true</code></td>
+        <td>被角色引用中；<b>不可逆</b>（资产目录一起删）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「停用」与「删除」必须分开，不能合成一个 <code class="inil">enabled</code>。</b>
+    前者让渲染侧不再用它、<b>资产保留、随时开回来</b>；后者连 <code class="inil">assets/</code> 一起删、
+    <b>不可逆</b>。把两者并成一个布尔，用户按错一次就<b>永久丢图</b> ——
+    而「按错」的成本只是多点一次界面。
+    <br>
+    <b>为什么删除要用户点两次确认（<code class="inil">confirmUnreferenced</code> 必填）</b>：
+    服务会拿 <code class="inil">agent.state</code> 里活着的角色核对有没有人在用。
+    但那份数据<b>可能没到</b>（<code class="inil">agents</code> 服务刚起、或已被卸载），
+    那时候服务<b>无法确认</b>。所以「我确认没人用」这句话要由<b>更有资格的人</b>（用户）说。
+    <br>
+    <b>推论：<code class="inil">blockedBy: []</code> 有两个含义</b>（真的没人用 / 不知道有没有人用），
+    界面上不能把它当成「确认无人引用」的证明 —— <code class="inil">SkinSetResult</code> 的注释里写了这一条。
+  </div>
+
+  <h4>皮肤清单的 schema</h4>
+  <pre>// userData/plugin/skins/skins.json  —— owner: skin 服务，持久文件
+{
+  "version": 1,
+  "skins": [
+    {
+      "id": "default",              <span class="dim">// 全局唯一；会变成一个目录名，所以不许含分隔符</span>
+      "name": "默认",
+      "builtin": true,              <span class="dim">// 内置（随插件版本走） vs 用户自建</span>
+      "enabled": true,              <span class="dim">// 停用 = 渲染侧不看它，资产保留</span>
+      "license": "MIT",
+      "assets": {
+        <span class="dim">// 存「记录」而不是路径 —— 见下面的说明</span>
+        "portrait": { "assetId": "a1b2c3d4", "bytes": 482103, "mtime": 1735689600000, "ext": "png" },
+        "avatar":   { "assetId": "e5f6a7b8", "bytes":  12044, "mtime": 1735689600000, "ext": "png" }
+      },
+      "motions": {
+        "idle":     { "assetId": "0a1b2c3d", "bytes": 88422, "mtime": 1735689600000, "ext": "webp" },
+        "thinking": { "assetId": "1b2c3d4e", "bytes": 91233, "mtime": 1735689600000, "ext": "webp" }
+        <span class="dim">// … 另外四个，或整个 motions 省略（静态皮肤也是合法皮肤）</span>
+      }
+    }
+  ]
+}</pre>
+
+  <div class="note info">
+    <b>为什么资产存「记录」而不是路径。</b>
+    写 <code class="inil">"portrait": "assets/default/portrait.png"</code>（手写相对路径）有两个问题：
+    <br>
+    ① <b>改名 = 改 JSON</b>：用户在界面上换一张图，服务得去改 <code class="inil">skins.json</code> 的字符串，
+    而那个文件正被别的逻辑读写，两处改同一个文件容易撞。
+    <br>
+    ② <b>缓存没法失效</b>：文件被替换但名字没变，浏览器继续用缓存里的旧图 —— 用户换了图却显示没变。
+    <br>
+    所以存三件事：<b>内容寻址的 <code class="inil">assetId</code></b>（换内容就换 id）、
+    <b><code class="inil">bytes</code></b>（配额与上传前预检）、<b><code class="inil">mtime</code></b>（变更检测）。
+    真实路径由服务按 <code class="inil">assets/&lt;assetId&gt;.&lt;ext&gt;</code> 拼出来
+    （<code class="inil">skinAssetFileName()</code>，<b>路径规则只有这一处知道</b>）。
+    <br>
+    ⚠️ <b><code class="inil">bytes</code> 是上传真值，不是真相。</b>真值由服务读文件时
+    <code class="inil">stat</code> 得到；这个字段只用于配额与前端展示。
+  </div>
+
+  <div class="note">
+    <b>动作名刻意收窄到 6 个</b>，照抄天枢 <code class="inl">SkinVisualEditor</code> 暴露的那 6 个
+    （<code class="inl">idle / thinking / working / speaking / success / error</code>）。
+    天枢的 motion <b>枚举</b>其实有 16 个（<code class="inl">blink / breathe / listening /
+    toolCalling / happy / touched / wave / walk / jump / sleep</code>…），但编辑器只给 6 个。
+    <br>
+    <b>本文取 6 个</b>，因为<b>渲染侧要能自己决定播哪个</b>：
+    一个只有 <code class="inl">idle</code> 与否的渲染器，遇到 <code class="inl">blink</code> 就必须回退，
+    而回退策略又是一笔界面复杂度。少而够用，比多而半吊子好。
+    <b>多出来的动作在 skins.json 里合法但不被引用</b>，界面上标「未被使用」而不是报错。
+  </div>
+
+  <h4><code class="inl">SkinBrief</code> —— 事件里到底带什么</h4>
+  <p>这是 AgentLoop 教程里<b>唯一一个没有定义过</b>的类型（§2 那张表只写了
+  <code class="inl">{ characters: CharacterBrief[] }</code>，<code class="inl">CharacterBrief</code> 全文未出现）。
+  本节顺手把它定下来，因为两个插件都要用：</p>
+  <table>
+    <thead><tr><th style="width:20%">字段</th><th style="width:16%">类型</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">id</code></td><td>string</td><td>引用它的那把钥匙。<b>缺失即悬空</b>。
+        过 <code class="inil">assertSafeSkinId</code> —— <b>它会变成一个目录名</b>（§8 第 2b 条）</td></tr>
+      <tr><td><code class="inl">name</code></td><td>string</td><td>人类可读名</td></tr>
+      <tr><td><code class="inl">builtin</code></td><td>boolean</td><td>内置 / <b>我自建的</b>。<b>界面上必须能区分</b> ——
+        它决定了<b>升级会不会覆盖它</b>（内置以 fresh 为准，用户皮以数据为准，§6）。
+        缺省视为 <code class="inil">true</code>（迁移期旧清单都没有这个字段）</td></tr>
+      <tr><td><code class="inl">enabled</code></td><td>boolean</td><td>停用开关。<b>与「删除」是两件事</b>：
+        <code class="inil">false</code> 只是渲染侧不再选它（<b>可逆</b>），资产保留。
+        缺省视为 <code class="inil">true</code>。
+        <br><b>停用不改任何角色的 <code class="inil">skinId</code></b> ——
+        角色侧会显示成「绑着但不可用」，恢复动作是「启用」而不是「解绑」</td></tr>
+      <tr><td><code class="inl">assets</code></td><td><code class="inl">{ portrait?, avatar? }</code></td>
+        <td>每条是一个 <code class="inil">SkinAsset</code>：<b>文件 id（内容寻址）+ 字节数 + mtime + 扩展名</b>，
+          <b>不带 URL</b>。真实路径由服务按 <code class="inil">assets/&lt;assetId&gt;.&lt;ext&gt;</code> 拼出，
+          浏览器经 <code class="inl">/plugins/skins/data/…</code> 取（§6）——
+          <b>路径规则只有服务一处知道</b>，不进数据文件</td></tr>
+      <tr><td><code class="inl">motions</code></td><td><code class="inl">Record&lt;Motion, SkinAsset&gt;</code></td>
+        <td>同上。<b>可以为空</b>（一套静态皮肤也是合法的皮肤）。
+          六个之外的动作名<b>合法但不被引用</b>，值仍要校验</td></tr>
+      <tr><td><code class="inl">license</code></td><td>string</td><td>第三方皮肤必须带。<b>缺失时界面要显示警示</b>
+        而不是默认当 MIT</td></tr>
+      <tr><td><code class="inl">providedBy</code> · <code class="inil">createdAt</code> · <code class="inil">updatedAt</code></td>
+        <td>string · number · number</td>
+        <td>来源插件与时间戳。<code class="inil">updatedAt</code> 只在界面上<b>显示</b>，
+          <b>不作为排序键</b> —— 换一张图就重排会让用户点着的那一行跳走（§6）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>规范化的三处承诺</b>（输入宽、输出窄，<code class="inil">SkinEntry</code> → <code class="inil">SkinBrief</code>）：
+    <code class="inil">assets</code> 省掉 → <code class="inil">{}</code> ·
+    <code class="inil">builtin</code> 省掉 → <code class="inil">true</code> ·
+    <code class="inil">enabled</code> 省掉 → <code class="inil">true</code> ·
+    <code class="inil">motions</code> 只保留六个枚举内的键。
+    把它们混成一个类型，就得在类型上放宽输出、或在类型上禁止合法的输入。
+  </div>
+
+  <div class="note bad">
+    <b>「URL 前缀不进业务数据」这条要守住。</b>
+    如果 <code class="inl">skin.state</code> 里放的是完整 URL
+    （<code class="inl">http://127.0.0.1:4317/plugins/skins/ui/assets/…</code>），
+那么<b>端口与前缀会从 Core 的路由层泄漏成一份要同步维护的数据</b>：
+    改端口要改 <code class="inl">skins.json</code>，而 <code class="inil">skins.json</code> 是
+    <b>用户数据</b> —— 用户数据被我们改坏了，是最难排查的那种坏。
+    <br>
+    <b>所以前缀由两处各自固定一次</b>：Vite 的 <code class="inil">base</code>（构建期）与
+    <code class="inil">SkinRenderer</code> 里的常量（运行期），
+    <b>清单里一个 URL 都不放</b>。清单只给 <code class="inil">skinId</code> + <code class="inil">assetId</code>，
+    由渲染器自己拼。
+    同一条纪律在 <code class="inl">models</code> 那侧已经付过学费 ——
+    <code class="inl">plugin-ui.ts</code> 里那段注释专门解释了<b>为什么插件的 Vite <code class="inl">base</code> 必须写死前缀</b>。
+    那是有意的重复，因为<b>拼错前缀的症状是「两个插件互相换脸」</b>，离原因很远。
+  </div>
+</section>
+<!-- ══════════════════ 5 skin 服务 ══════════════════ -->
+<section id="s5">
+<h2><span class="n">5</span>skin 服务：清单的唯一 owner，写它的也是它</h2>
+
+  <div class="tree"><span class="std">plugins/skins/</span>
+├── plugin.json          services: ["skin"] · dependencies: [] · ui.views: [ widget.skins ]
+├── builtin-skins.json   <span class="own">owner: 打包</span>               <span class="dim">随发版更新，用户改不了</span>
+├── builtin-assets/      <span class="own">owner: 打包</span>               <span class="dim">内置皮立绘 / 头像 / 动作</span>
+├── services/skin/
+│     service.json       publishes : skin.state · skin.set.result
+│                         subscribes: skin.list · skin.set
+│     src/index.ts       <span class="dim">只有这一个文件。约 260 行。</span>
+└── ui/  → dist/ui/      <span class="dim">widget.skins + SkinRenderer.vue</span>
+
+<span class="std">userData/plugin/skins/</span>   ← 握手时 <code class="inil">dataDir</code> 指到这里
+├── skins.json           <span class="own">owner: skin 服务</span>          <span class="dim">唯一的可写清单</span>
+├── miku/                <span class="dim">内置皮首次使用时从 dist 拷进来（此后由服务拥有）</span>
+│     ├ assets/portrait.png
+│     └ motions/idle.webp …
+└── mine-1/              <span class="own">owner: 用户</span>
+      ├ assets/a1b2c3d4.png
+      └ motions/9f8e7d6c.webp</div>
+
+  <div class="note">
+    <b>为什么清单和资产要落在同一个 <code class="inil">dataDir</code>，而不是像 B 形态那样放插件目录</b>：
+    因为<b>清单里记的就是这些文件的相对路径</b>。两者分开等于让清单跨目录指认文件，
+    而跨目录的指认要回答「服务能不能写到那儿」「升级换目录后旧路径还算不算」——
+    <b>同目录这两个问题都不存在</b>，因为写入与读取走的是同一个根。
+  </div>
+
+  <h3>它做的事，按顺序</h3>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:26%">动作</th><th>细节</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>启动即读三处</td>
+        <td><code class="inil">${dataDir}/skins.json</code>（fs 直读，<b>不是</b>
+          <code class="inil">plugins.readFile</code> —— 那个 RPC 只服务插件自带数据）
+          + 打包进来的 <code class="inil">builtin-skins.json</code> 与
+          <code class="inil">builtin-assets/</code>。三者合成一份（<a href="#s6">§6 的合并规则</a>）。
+          <br><b>读失败不崩</b>：发一份空 <code class="inil">skin.state</code> +
+          一条 <code class="inil">service.degraded</code> 语义的日志，界面显示「清单读不到」。
+          <br><b>不要给用户「重试」按钮</b> —— 重试一万次结果一样（是文件不在，不是网络抖）</td></tr>
+      <tr><td>2</td><td>校验并<b>规范化</b></td>
+        <td>用 <code class="inil">shared</code> 里的 <code class="inil">parseSkinCatalog</code>（与
+          <code class="inil">parseVendorCatalog</code> 同一套做法：<b>校验规则只有一份</b>）。
+          校验内容：<code class="inil">id</code> 唯一 · 路径不得以 <code class="inil">/</code> 开头或含
+          <code class="inil">..</code> · <code class="inil">skinId</code> 与
+          <code class="inil">assetId</code> 都要过一遍（<b>它会变成目录名</b>，见 <a href="#s8">§8</a> 第 2b 条）</td></tr>
+      <tr><td>3</td><td>publish <code class="inil">skin.state</code></td>
+        <td><b>重播整份</b>。这是 owner 的义务，也是订阅方能只写一行订阅就拿到全量的原因</td></tr>
+      <tr><td>4</td><td>收到 <code class="inil">skin.list</code> → 再 publish 一次</td>
+        <td>收集方上线时问一次。<b>服务不记账、不记「谁问过」</b> ——
+          总线不提供返回值，重播整份让这个问题自然消失</td></tr>
+      <tr><td>5</td><td><b>收到 <code class="inil">skin.set</code> → 改一处、答一次</b></td>
+        <td>三条路径：<b>元数据</b>（改 <code class="inil">skins.json</code>）·
+          <b>资产</b>（写文件 + 生成新 <code class="inil">assetId</code>）·
+          <b>删除</b>（删清单条目 + 删目录）。
+          <br>每次都回一条 <code class="inil">skin.set.result</code>（<b>带 <code class="inil">requestId</code></b>）。
+          <br><b>先落盘再重播</b>：顺序反了会出现「界面说有、文件没有」的一帧</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>它一共 260 行，其中没有一行在处理图片像素。</b>
+    这是刻意的：<b>服务只写字节与清单，显示由 Core 的静态路由送</b>（<a href="#s3">§3</a> 第 5 跳）。
+    所以这个进程<b>不占内存、不做解码</b>，而且<b>「已显示的皮肤」不依赖它在位</b>。
+    <br>
+    与 <code class="inil">tools</code> 服务对比会很直观：后者要转发执行、要管审批 pending 表、
+    要落审计 —— 因为<b>它在一条数据通路上</b>。皮肤不在。
+  </div>
+
+  <div class="note bad">
+    <b>写操作的失败路径比成功路径多，这是这一节真正要设计的东西。</b>
+    资产写入至少会遇到这五种，每一种都要<b>答得具体</b>（§8 第 1 条）：
+    <ul style="margin:var(--s2) 0 0">
+      <li><b>格式 / 大小不合法</b> → 服务再验一遍（客户端验过也要验）</li>
+      <li><b>磁盘写不了</b>（满 / 只读）→ 这是环境问题，<b>不该报成「图片有问题」</b></li>
+      <li><b>清单写成功、文件写失败</b> → <b>最坏的一种</b>：清单指向一个不存在的文件。
+        所以顺序是<b>先写文件、成功后才写清单</b>，而失败的文件要清掉（不然后面重试全是坏条目）</li>
+      <li><b>删除被引用挡住</b> → 回 <code class="inil">blockedBy</code>，<b>一个字都不改</b></li>
+      <li><b>并发 patch 撞车</b> → 两个 <code class="inil">skin.set</code> 同时改同一套皮肤。
+        <b>处置是「整份重写 + 按 requestId 排序回答」</b>，不引乐观锁 ——
+        清单是 KB 级、单机、一个人编辑，<b>引锁的成本高于它防的问题</b></li>
+    </ul>
+    <br>
+    <b>路径穿越校验仍然不能省，但理由变了。</b>
+    B 形态下 <code class="inil">skins.json</code> 可能来自第三方插件；A 形态下它<b>只由服务自己写</b>，
+    穿越风险降到很低。
+    <br>
+    <b>但它变成了「防我自己写错」</b>：<code class="inil">skinId</code> 会变成目录名，
+    用户可能起名叫 <code class="inil">"../evil"</code> 或 <code class="inil">"C:\Windows"</code>
+    ——<b>这不是攻击，是手滑</b>，而手滑造成的后果与攻击一样。
+    所以 <code class="inil">assertSafeSkinId</code> 是<b>用户接口的一部分</b>，不是安全补丁。
+  </div>
+</section>
+
+<!-- ══════════════════ 6 资产通路 ══════════════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>资产通路：Core 要加的那一条路由，以及六个边界</h2>
+
+  <p>§2 选了用户数据，于是这一节从「怎么绕过 Core 的限制」变成
+  <b>「Core 要加什么、加完之后边界在哪」</b>。<b>六条全部是仓库里核对过的事实</b>，
+  出处标在表尾。</p>
+
+  <table>
+    <thead><tr><th style="width:18%">环节</th><th style="width:38%">现状（已核对）</th><th>本设计怎么办</th></tr></thead>
+    <tbody>
+      <tr><td><b>服务写数据</b></td>
+        <td>✅ <b>已有</b>。握手的 <code class="inil">dataDir</code> 指向
+          <code class="inil">pluginDataDir(dataDir, pluginId)</code>
+          （<code class="inil">shared/src/paths.ts</code>），那是<b>可写</b>的</td>
+        <td><b>直接用。</b><code class="inil">skin</code> 服务落
+          <code class="inil">${dataDir}/skins.json</code> 与 <code class="inil">${dataDir}/&lt;skinId&gt;/assets/</code>。
+          不需要 Core 参与这一步</td></tr>
+      <tr><td><b>服务读清单</b></td>
+        <td><code class="inil">plugins.readFile</code> 只读<b>自己插件目录</b>（<code class="inil">dist/</code> 侧），
+          utf8 · 2 MiB 上限</td>
+        <td>也<b>不需要它</b>：清单在 <code class="inil">dataDir</code> 里，服务<b>直接 fs 读</b> ——
+          它本来就能写那个目录。<code class="inil">plugins.readFile</code> 那个 RPC 服务的是
+          <b>插件自带</b>数据（models 的 <code class="inil">catalog.json</code>），与这里无关</td></tr>
+      <tr><td><b>浏览器取资产</b><br><span style="font-size:11px;color:var(--muted)">← 唯一的新增</span></td>
+        <td><code class="inil">GET /plugins/&lt;id&gt;/ui/*</code> → <code class="inil">registry.uiDir(id)</code>
+          （= <code class="inil">dist/ui</code>）。<b>userData 没有任何路由伺服</b></td>
+        <td><b>新增 <code class="inil">GET /plugins/&lt;id&gt;/data/*</code></b>，根 =
+          <code class="inil">pluginDataDir(cfg.dataDir, id)</code>。
+          穿越检查沿用 <code class="inil">plugin-ui.ts</code> 那四行（<b>同构</b>，不是新写法）。
+          <b>Core 仍不解析内容</b> —— 它不知道什么是 portrait</td></tr>
+      <tr><td><b>MIME</b></td>
+        <td><code class="inil">contentTypeFor</code> 的表里有
+          <code class="inil">svg png jpg jpeg gif webp ico</code>，
+          <b><code class="inil">mp4 / webm</code> 不在表里</b> → 回落
+          <code class="inil">application/octet-stream</code></td>
+        <td><b>v1 只用 png / webp / gif</b> —— 动画 webp 与 gif 在
+          <code class="inil">&lt;img&gt;</code> 里就能播（<code class="inil">object-fit</code>、
+          尺寸控制全都一样）。mp4 作为增量列入待决（<a href="#s15">§15</a> 第 3 条）</td></tr>
+      <tr><td><b>缓存头</b></td>
+        <td><code class="inil">immutable</code> 的判据是
+          <code class="inil">/-[0-9a-zA-Z_-]{6,}\.[a-z0-9]+$</code>；否则一律 <code class="inil">no-cache</code></td>
+        <td><b>走 userData 之后这条路更顺</b>：<code class="inil">assetId</code> 就是内容寻址的
+          （<a href="#s4">§4</a>），换一张图 = 换一个 <code class="inil">assetId</code> = 新 URL，
+          缓存自动失效。<b>不需要任何版本号或查询参数</b>。
+          而它<b>匹配不上</b> immutable 判据（<code class="inil">a1b2c3d4.png</code> 没有 <code class="inil">-</code> 前缀的哈希段），
+          所以会走 <code class="inil">no-cache</code> —— 对 32px avatar 无所谓，
+          <b>立绘与动作要走 no-cache 就要考虑流量</b>（待决）</td></tr>
+      <tr><td><b>SPA fallback</b></td>
+        <td>插件 UI 路由的未知路径<b>不返回 404</b>，而是回 <code class="inil">index.html</code>（200 + HTML）</td>
+        <td><b>新路由<b>不能</b>有这个 fallback</b> —— 它伺服的是数据不是页面，
+          回 <code class="inil">index.html</code> 会让「资产不存在」变成一段 HTML。
+          <br>于是 <code class="inil">SkinRenderer</code> 仍然要靠 <code class="inil">onerror</code>：
+          拼错路径 → 404 → <code class="inil">&lt;img&gt;</code> 解码失败。
+          <b>但「拿到的不是图片」这一层消失了</b>，错误更好判（<a href="#s7">§7</a>）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>新路由必须比 <code class="inil">static.ts</code> 先判，且要过 Origin 白名单。</b>
+    <code class="inil">server.ts</code> 里 <code class="inil">/plugins/</code> 的判定已经在
+    <code class="inil">static.ts</code> 之前（注释写明「顺序反了，插件的 404 就永远说不出口了」）。
+    <b><code class="inil">/data/</code> 要挂在同一个 <code class="inil">/plugins/</code> 判定里</b>，
+    否则会被 <code class="inil">static.ts</code> 兜底成 SPA。
+    <br>
+    Origin 白名单同样要过 —— 与 <code class="inil">/plugins/*/ui/*</code> 同一套判定，
+    <b>不加就等于给 CSRF 开了个口子</b>（能读用户皮肤目录）。
+  </div>
+
+  <div class="note info">
+    <b>「一份数据，一个投递路径」——走 userData 之后这句话反而更简单了。</b>
+    服务与浏览器<b>读的是同一个文件</b>：服务 fs 读 <code class="inil">dataDir/skins.json</code>，
+    浏览器经新路由读 <code class="inil">/plugins/skins/data/skins.json</code>。
+    <b>没有副本、没有「构建时复制」那一步</b>（那是 B 形态才需要的）。
+    <br>
+    <b>校验规则仍然只有一份</b>：<code class="inil">shared/src/skin.ts</code> 的
+    <code class="inil">parseSkinCatalog</code>，服务端与 <code class="inil">widget.skins</code> 都调它。
+    漂移的症状会是「界面上有的皮肤，资产 404」—— 而那离原因很远。
+  </div>
+
+  <h3>内置皮与用户皮：<code class="inil">mergeCatalog</code></h3>
+  <p>这是走用户数据之后<b>唯一真正难的地方</b>，因为 <code class="inil">skins.json</code> 是持久文件，
+  而内置皮随插件版本变化。三条规则各自对应一个方向的问题：</p>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:30%">规则</th><th>不这么做会怎样</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>内置皮以代码为准</b>（<code class="inil">fresh</code> 覆盖 <code class="inil">persisted</code> 的同名内置条目）</td>
+        <td>用户改过内置皮的显示名，升级后<b>被静默改回</b>。
+          这是有意的：内置皮是产品的，用户对它<b>没有所有权</b>。
+          <b>想让名字保持自己的，就 fork 一份</b>（新建一条 <code class="inil">builtin:false</code>）</td></tr>
+      <tr><td>2</td><td><b>用户皮以数据为准</b>（<code class="inil">persisted</code> 里 <code class="inil">builtin:false</code> 的，
+        <code class="inil">fresh</code> 覆盖不进去）</td>
+        <td>插件某天<b>恰好</b>也内置了一个叫 <code class="inil">mine</code> 的皮 →
+        用户的皮被产品皮覆盖 → 用户做的图全丢</td></tr>
+      <tr><td>3</td><td><b>孤儿内置皮留痕</b>（从版本里消失的不静默丢，进 <code class="inil">orphanedBuiltin</code>）</td>
+        <td>上游删掉某个内置皮 → 用户的清单里<b>永远赖着</b>一份，
+          界面上还显示着、点进去发现文件没了。<b>留着 + 给删除按钮</b>，
+          界面上标「已从插件中移除（数据保留）」</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>落盘顺序也必须是确定的。</b><code class="inil">mergeCatalog</code> 输出与落盘都按
+    「内置在前、再按 <code class="inil">name</code> 的码位」排。
+    为什么要钉住：<b>顺序抖动会让 <code class="inil">changed</code> 永远为 true</b>，
+    于是每次启动都重播整份 <code class="inil">skin.state</code>，而订阅方什么也没变。
+    <br>
+    <b>按码位比意味着中文名的顺序不随直觉走</b>（<code class="inil">霓</code> U+9713 &lt;
+    <code class="inil">默</code> U+9ED8，所以「霓虹」排在「默认」<b>前</b>面）。
+    这不是 bug，是「用码位保证确定性」的必然结果。界面上要按语言习惯排的话得另给
+    <code class="inil">localeCompare</code>，那是<b>界面</b>的事，不影响落盘顺序。
+    单测里把这个结果写死了，好让「顺序偶然对」变成「顺序被钉住」。
+  </div>
+
+  <div class="note bad">
+    <b>唯一一处 Core 改动（可选，且是纯增量）。</b>
+    若采纳 mp4：<code class="inil">core/src/sse-bridge/util.ts</code> 的 <code class="inil">MIME</code> 表
+    加 <code class="inil">'.mp4': 'video/mp4'</code> 与 <code class="inil">'.webm': 'video/webm'</code> 两行。
+    <b>不动任何路由、不动穿越检查、不动 Core 的职责边界</b> —— 它只是「按扩展名给 Content-Type」
+    这个既有函数的查表项，而那份表的注释已经写着「两份 MIME 表意味着迟早有一份漏项」。
+    <br>
+    <b>建议先不做</b>：动画 webp 已经够用，而「为了一个格式去动 Core」在收益明确之前是坏交易。
+  </div>
+</section>
+
+<!-- ══════════════════ 7 SkinRenderer ══════════════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>SkinRenderer：三个 mode 与四级回退链</h2>
+
+  <p>OST 今天<b>没有任何渲染器</b> —— <code class="inl">ChatTimelineView</code> 只有
+  <code class="inl">msg--agent</code> 气泡，没有 stage / portrait 这条通路。
+  天枢的 <code class="inl">CharacterRenderer</code> 有 <code class="inl">portrait / avatar / stage</code>
+  三种 mode 加一条 <code class="inl">&lt;video&gt;</code>→<code class="inl">&lt;img&gt;</code> 回退链，
+  OST 一个都没有。所以本节的组件是<b>这个设计里唯一的新代码</b>，
+  也是「先有一个能播的组件，再谈让谁用它」那条理由。</p>
+
+  <div class="three">
+    <div class="board">
+      <h4 style="margin:0 0 var(--s2)"><code class="inl">mode="avatar"</code></h4>
+      <p style="font-size:var(--text-xs);margin:0 0 var(--s2)">34px 方形 · 列表与气泡旁。
+        <b>最常用，也最不该失败</b> —— 失败时回退到角色的首字母/emoji</p>
+      <div class="sk-face mode-avatar" style="margin:0 auto 8px"><span class="sk-glyph">♪</span><span class="sk-mode-badge">avatar</span></div>
+      <div style="font-size:11px;color:var(--color-text-muted)">失败链 4 级，最深到文字</div>
+    </div>
+    <div class="board">
+      <h4 style="margin:0 0 var(--s2)"><code class="inl">mode="portrait"</code></h4>
+      <p style="font-size:var(--text-xs);margin:0 0 var(--s2)">3:4 竖幅 · 角色详情与绑定预览。
+        允许较大尺寸，<b>所以它是唯一值得带内容哈希的</b></p>
+      <div class="sk-face mode-portrait" style="margin:0 auto 8px;width:120px"><span class="sk-glyph">♪</span><span class="sk-mode-badge">portrait</span></div>
+      <div style="font-size:11px;color:var(--color-text-muted)">失败链 3 级（不回退到文字，太丑）</div>
+    </div>
+    <div class="board">
+      <h4 style="margin:0 0 var(--s2)"><code class="inl">mode="stage"</code></h4>
+      <p style="font-size:var(--text-xs);margin:0 0 var(--s2)">会话舞台 · 跟随
+        <code class="inl">loop.state.changed</code> 切 motion。
+        <b>这是唯一按运行态切图的那个 mode</b></p>
+      <div class="sk-face mode-stage" style="margin:0 auto 8px"><span class="sk-glyph">♪</span><span class="sk-mode-badge">stage</span></div>
+      <div style="font-size:11px;color:var(--color-text-muted)">motion 映射见下表</div>
+    </div>
+  </div>
+
+  <h3>四级回退链</h3>
+  <table>
+    <thead><tr><th style="width:6%">级</th><th style="width:22%">条件</th><th>表现</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>一切正常</td><td><code class="inl">&lt;img src="&lt;assetUrl&gt;"&gt;</code>。
+        动作用 <b>动画 webp / gif</b>（浏览器原生循环）</td></tr>
+      <tr><td>1</td><td><b>动作图缺失</b>（<code class="inl">onerror</code>）</td>
+        <td>退到 <code class="inl">idle</code>；连 <code class="inl">idle</code> 也没有 → 退到
+          <code class="inl">portrait</code>；再没有 → 退到 <code class="inl">avatar</code>。
+          <b>整条链静默</b>，只在开发者控制台留一行</td></tr>
+      <tr><td>2</td><td><b>整个皮肤解析不出来</b>（<code class="inl">skinId</code> 不在清单里 /
+          <code class="inl">skin.state</code> 没来）</td>
+        <td><code class="inl">avatar</code> mode → 角色的 emoji 或首字母；
+          其他 mode → <b>什么都不画</b>（留空而不是画一个假的）。
+          <br><b>并显示一行 11px 的说明</b>，这是本组件最重要的一条输出</td></tr>
+      <tr><td>3</td><td>用户把插件卸了 / 资产文件被手工删了</td>
+        <td>同第 2 级，但说明文案换成「已绑定 <code class="inl">xx</code>，但资产加载失败」——
+          <b>与「没绑定」是两句话</b>（<a href="#s8">§8</a> 第 4 条）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>第 3 级那句区分是本节唯一真正难的地方，而且它对应 §6 那个 SPA fallback。</b>
+    因为未知路径会<b>返回 200 + index.html</b> 而不是 404，所以「资产不存在」在浏览器里
+    <b>不是</b>一个 HTTP 状态码，而是一个 <code class="inl">&lt;img&gt;</code> 的 <code class="inl">onerror</code>。
+    <br>
+    两种「拿不到」必须分开：
+    <ul style="margin:var(--s2) 0 0">
+      <li><b>清单里没有这个 id</b> → <b>已确认的悬空引用</b>。说得出提供方（§4 的
+        <code class="inl">builtin</code> 与多插件来源就是为这个），给「解绑」入口。</li>
+      <li><b>清单在，但文件取不到</b> → <b>资产加载失败</b>。说不出是谁的问题
+        （可能是文件被删、可能是 Core 的 MIME 表缺项），<b>只能给「重试」</b>。</li>
+    </ul>
+    合并成一句「外观不可用」，用户下一步动作就没了。
+  </div>
+
+  <h3><code class="inl">mode="stage"</code> 的 motion 映射</h3>
+  <p>这个映射是<b>渲染侧唯一的业务知识</b>，它必须有一份实现，不能散落在各个视图里。
+  映射表来自 <code class="inl">loop.state.changed</code> 与工具块的既有状态
+  （<code class="inl">loop.tool.executed</code>）—— <b>它读的是事件，不是去问谁</b>：</p>
+  <table>
+    <thead><tr><th style="width:30%">运行态</th><th style="width:18%">motion</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">idle</code>（默认）</td><td><code class="inl">idle</code></td>
+        <td>没有运行态消息时的静止态。<b>必须存在</b> —— 它是回退链的终点之一</td></tr>
+      <tr><td><code class="inl">running</code> + 无内容</td><td><code class="inl">thinking</code></td>
+        <td>已发出请求、还没收到第一个 token</td></tr>
+      <tr><td><code class="inl">running</code> + 流式输出中</td><td><code class="inl">speaking</code></td>
+        <td>正在出字</td></tr>
+      <tr><td>工具块 <code class="inl">running</code></td><td><code class="inl">working</code></td>
+        <td><b>优先级最高</b> —— 它比「正在出字」更值得表达</td></tr>
+      <tr><td>工具块 <code class="inl">ok</code> / <code class="inl">loop.finished</code> 无错</td>
+        <td><code class="inl">success</code></td><td>一次性，之后回 <code class="inl">idle</code></td></tr>
+      <tr><td>工具块 <code class="inl">failed</code> / <code class="inl">loop.failed</code></td>
+        <td><code class="inl">error</code></td><td>同上</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>这张表与 <code class="inl">../chat-workbench/对话工作台-会话列表重设计.html</code> 的
+    <code class="inl">--motion-*</code></b> 是同一批运行态，但<b>用途不同</b>：
+    那份用<b>颜色</b>表示（会话行左端的一小条），本设计用<b>图片</b>表示（舞台上的一帧）。
+    <br>
+    所以两者<b>必须共享同一份枚举来源</b>（建议放进 <code class="inl">shared</code>），
+    但<b>不能共享 CSS 变量名</b> —— 一个是颜色、一个是资源，撞名会让「改颜色」变成「改图片」。
+    这也是 §8 第 1 条的由来。
+  </div>
+
+  <div class="note ok">
+    <b>组件 API 就这么小：</b>
+    <div class="tree" style="margin:var(--s2) 0 0">&lt;SkinRenderer
+  skin="miku"                  <span class="dim">// skinId；空 / 未解析 → 第 2 级回退</span>
+  motion="thinking"            <span class="dim">// 6 个之一；不在皮肤里 → 第 1 级回退</span>
+  mode="avatar"                <span class="dim">// avatar | portrait | stage</span>
+  fallbackText="评"            <span class="dim">// 第 2 级回退时画什么；缺省取角色名首字</span>
+  :explain="true"              <span class="dim">// 是否显示那行 11px 说明（列表里关掉）</span>
+/&gt;</div>
+    <b>没有 <code class="inl">v-model</code>、没有事件、没有 ref 转发、没有主题注入。</b>
+    它是一个纯展示组件 —— 外观<b>不影响</b>任何数据通路，所以也不该有任何回调。
+    唯一的状态在它内部（当前实际显示的那一级），供调试用的那一行输出。
+  </div>
+</section>
+
+<!-- ══════════════════ 8 四条新纪律 ══════════════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>四条新纪律</h2>
+
+  <table>
+    <thead><tr><th style="width:8%">#</th><th style="width:26%">纪律</th><th>为什么 / 怎么守住</th></tr></thead>
+    <tbody>
+      <tr><td>0</td>
+        <td><b>删除与停用是两个动作，不是一个开关</b></td>
+        <td>停用让渲染侧不再用它、<b>资产保留、随时开回来</b>；删除连 <code class="inil">assets/</code> 一起删、
+        <b>不可逆</b>。并成一个布尔，用户按错一次就<b>永久丢图</b>，
+        而「按错」的成本只是多点一次界面。
+        <br>所以 <code class="inil">SkinSetPatch</code> 里 <code class="inil">removed</code> 与
+        <code class="inil">enabled</code> 是两个独立字段（§4）</td></tr>
+      <tr><td>1</td>
+        <td><b>皮肤的 motion 令牌与枚举<b>共享来源</b>，<b>CSS 变量名不共享</b></b></td>
+        <td>枚举（<code class="inl">idle/thinking/working/speaking/success/error</code>）放进
+          <code class="inl">shared</code>，两边都 import。
+          <b>变量名一律 <code class="inl">--skin-motion-*</code></b>，
+          <b>不许进 <code class="inl">sdk/ui/src/tokens.css</code></b>。
+          <br>理由：<code class="inl">--motion-idle</code> 已被会话列表重设计占用（那是<b>颜色</b>），
+          而本设计要的是<b>资源</b>。共享枚举是对的做法（同一批运行态），
+          共享变量名是错的（撞名会让「调个色」变成「换张图」）</td></tr>
+      <tr><td>2</td>
+        <td><b>assetId 内容寻址，一个内容一个 id</b></td>
+        <td>换一张图 = <b>生成一个新的 assetId</b>，不是覆盖同一个文件。
+          于是「浏览器还在用缓存里的旧图」这件事<b>结构上不会发生</b> ——
+          新内容 = 新 URL，不需要任何版本号、查询参数或缓存失效技巧。
+          <br>代价：旧文件不会自动消失，要靠「删除皮肤时连目录一起删」与
+          「清理未被引用的皮肤」（§11）两条出口。<b>孤儿文件无害，只是占磁盘</b></td></tr>
+      <tr><td>2b</td>
+        <td><b>路径校验两道闸，各管各的</b></td>
+        <td>① <code class="inil">shared/src/skin.ts</code> 的 <code class="inil">assertSafeAssetId</code> /
+          <code class="inil">assertSafeSkinId</code> —— <b>写入时 fail fast</b>，
+          用户当场看到「这个路径不合法」
+          <br>② Core 新路由的穿越检查 —— 读取时的最后一道
+          <br><b>不是重复</b>：① 的价值是「错误发生在用户看得见的那一步」，
+          而不是过五分钟某个 <code class="inil">&lt;img&gt;</code> 拿到 403，
+          那时候用户已经不知道刚才那一步是哪一步了。
+          这与工具侧「约束 + 审批」是同一条纪律</td></tr>
+      <tr><td>3</td>
+        <td><b>四级「拿不到」必须分开报，不能合成一句</b></td>
+        <td>① 没绑（合法回落）② 已确认悬空（清单在，但没有这个 id —— 说得出是谁的，给解绑）
+          ③ 无法校验（<code class="inil">skin.state</code> 没来 —— <b>不能说</b>是谁没提供，给重试）
+          ④ 资产加载失败（清单在、id 对，但文件取不到 —— 文件被删或磁盘出错，给重试）
+          <br>合成一句的后果很具体：用户在场景 ② 会去重装插件，而真正要做的只是删掉那条绑定；
+          在场景 ③ 他会以为「某个插件坏了」，而真相是「插件没装」。
+          <br>② 与 ③ 的分界正是 §6 那条「没收到 <code class="inil">skin.state</code>」——
+          <b>一份清单都没拿到，说出提供方就是猜</b></td></tr>
+      <tr><td>4</td>
+        <td><b>皮肤降级不影响任何能力</b></td>
+        <td>skin 服务挂、插件被卸、资产 404 —— 角色<b>仍然完全可用</b>：
+          提示词、技能、工具、模型偏好一项不少。
+          <br>因为<b>皮肤一个字节也不进模型</b>（§1、§5）。这条要在界面上<b>写出来</b>，
+          否则「界面变丑了」会被当成「Agent 坏了」——
+          而用户在皮肤失效时第一反应就是重开会话，白白丢掉上下文</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>第 4 条有一个反直觉的推论，值得单独说。</b>
+    因为外观完全不参与装配，所以<b>它没有「生效时机」问题</b> ——
+    提示词要写「下一轮生效」（因为每轮重算），而皮肤<b>改一下立刻就变</b>
+    （因为它只是换一个 <code class="inl">&lt;img src&gt;</code>，下一帧就重画）。
+    <br>
+    <b>不要给皮肤加「下一轮生效」那种提示</b>。那是照抄提示词那一条的结果，
+    而两条的时间尺度根本不同。界面文案要跟各自的机制走，
+    <b>不是跟上一版界面走</b>。
+  </div>
+</section>
+<!-- ══════════════════ 9 界面 ══════════════════ -->
+<section id="s9">
+  <h2><span class="n">9</span>界面：widget.skins 的三个 Tab 与组件映射</h2>
+
+  <div class="note bad" style="margin-top:0">
+    <b>唯一<b>没有</b>的东西是「绑定角色」，因为那是<b>归属</b>问题。</b>
+    <br>
+    <span class="tag have">✓ 上传</span>
+    <span class="tag have">✓ 裁剪 / 旋转 / 缩放</span>
+    <span class="tag have">✓ 启用 / 停用开关</span>
+    <span class="tag have">✓ 删除皮肤</span>
+    <span class="tag have">✓ 改名</span>
+    <span class="tag todo">✕ 绑定角色</span>
+    <br>
+    前五个是「数据可写」的直接结果（§2 选了用户数据）。
+    最后那个不是：<b>绑定写的是 <code class="inil">characters.json</code>，owner 是
+    <code class="inil">agents</code> 服务</b>。在 skins 插件里给一个「绑定角色」按钮，
+    等于<b>用一个插件的界面去写另一个 owner 的数据</b>。
+    <br>
+    <b>所以绑定在角色页，编辑在本页。</b>两个视图各做各的那一半，中间靠
+    <code class="inil">skin.state</code>（本插件重播）与 <code class="inil">agent.state</code>
+    （agents 重播）两条通路 —— <b>零跨视图通信</b>。
+    <br>
+    ⚠️ 但<b>删除</b>要读 <code class="inil">agent.state</code>（核对有没有角色在用，§4），
+    所以本页是<b>读</b>角色数据的 —— 与「不写」是两件事。
+  </div>
+
+  <table>
+    <thead><tr><th style="width:13%">Tab</th><th style="width:34%">回答</th><th style="width:34%">为什么在这</th><th>章节</th></tr></thead>
+    <tbody>
+      <tr><td><b>目录</b></td><td>有哪些皮肤？各自带几个动作？内置还是我自建的？被哪些角色引用？</td>
+        <td>唯一能一眼看出「我有哪些外观」的地方。<b>可新建 / 可上传</b></td><td><a href="#s10">§10</a></td></tr>
+      <tr><td><b>动作预览 · 编辑</b></td><td>这套皮肤动起来是什么样？缺哪个动作？<b>怎么补上？</b></td>
+        <td>动作是这套皮肤<b>最容易缺的部分</b>（新建的皮肤常常只有 portrait）。
+          缺哪几个必须<b>逐个可见</b>，而「可见」之后紧跟着「可补」</td><td><a href="#s10">§10</a></td></tr>
+      <tr><td><b>引用</b></td><td>哪些角色绑了它？<b>我能不能删？</b></td>
+        <td><b>删除前的影响面</b>。这是本页唯一「需要读别人的数据」的地方（<a href="#s4">§4</a>）</td><td><a href="#s10">§10</a></td></tr>
+    </tbody>
+  </table>
+
+  <h3>组件映射</h3>
+  <table>
+    <thead><tr><th style="width:32%">组件</th><th style="width:26%">用 <code class="inl">@osteosome/ui</code></th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">SkinCatalogView</code>（目录 Tab）</td>
+        <td><code class="inl">Card</code> · <code class="inl">Tabs</code> · <code class="inl">Input</code> · <code class="inl">EmptyState</code> · <code class="inl">Tooltip</code></td>
+        <td>卡片网格（不是表格）—— <b>皮肤是视觉对象，表格没法展示它</b>。
+          而工具目录适合表格，因为工具那一行只需要名字与来源</td></tr>
+      <tr><td><code class="inl">SkinCard</code></td>
+        <td><code class="inl">Card</code></td>
+        <td>缩略图（<code class="inl">SkinRenderer mode="avatar"</code>）+ 名字 +
+          <code class="inl">builtin</code>/<code class="inl">community</code> 徽章 + 动作计数 + 引用数</td></tr>
+      <tr><td><code class="inl">MotionGrid</code>（动作预览 Tab）</td><td>纯 <code class="inl">Card</code></td>
+        <td>六格，每格一个 <code class="inl">SkinRenderer</code> +
+          <b>一个状态点</b>（有 / 缺失 / 加载失败）。<b>缺失的那几格也要画出来</b>，
+          画成虚线框 —— 隐藏缺失会让用户以为这套皮肤只有这些</td></tr>
+      <tr><td><code class="inl">SkinRenderer</code></td><td>—（本插件自有）</td>
+        <td><a href="#s7">§7</a>。三个 mode + 四级回退。
+          <b>纯展示</b>，无 v-model、无事件</td></tr>
+      <tr><td><code class="inl">SkinRefsPanel</code>（引用 Tab）</td><td><code class="inl">Table</code></td>
+        <td>角色 × 是否绑定。<b>只读</b>，唯一的动作是「跳到角色页」——
+          而那是一个<b>跨 iframe 的跳转</b>，见下</td></tr>
+      <tr><td>徽章</td><td>—（<code class="inl">sdk/ui</code> 无 <code class="inl">Badge</code>）</td>
+        <td>插件内联样式，照 <code class="inl">tools</code> 面板做法</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「跳到角色页」这个按钮本设计<b>不给</b>，理由和 composer 那条一样。</b>
+    两个插件视图是<b>两个同源 iframe</b>，它们之间的通信为零（<code class="inl">plugin-ui.ts</code>
+    里的原话：Core「不认识哪几个 iframe」）。Dockview 的面板开合由<b>宿主</b>管，
+    而宿主不认识「角色页」这个概念 —— 它只认识 <code class="inl">pluginId + viewId</code>。
+    <br>
+    <b>要做成一个 Core 能力</b>（一条 <code class="inl">/api/config</code> 或 <code class="inl">postMessage</code>
+    协议让宿主开面板），那是另一个议题。<b>本页只写清「哪些角色绑了它」，
+    让用户自己去找那个角色</b> —— 这比给一个可能不灵通的按钮诚实。
+  </div>
+</section>
+
+<!-- ══════════════════ 10 组件 Demo ══════════════════ -->
+<section id="s10">
+  <h2><span class="n">10</span>组件 Demo（可点）</h2>
+  <p>下面是<b>走用户数据形态</b>的 Demo：目录里多了「新建」「停用」「删除」，删除会因为
+  <b>有角色在用</b>而拒绝；事件面板从「一个命令都不发」变成发 <code class="inil">skin.set</code>。</p>
+
+  <div class="demo">
+    <header><span class="dots"></span><b>widget.skins</b>
+      <span class="mono">index.html#catalog</span>
+      <span class="sp"></span>
+      <span>订阅 <code class="inil">skin.state</code> · 发 <code class="inil">skin.set{patch}</code></span></header>
+    <div class="demo-body tight">
+      <div style="padding:var(--s3) var(--s4) 0">
+        <div class="d-tabs" id="skTabs">
+          <button role="tab" aria-selected="true" data-t="catalog">目录</button>
+          <button role="tab" aria-selected="false" data-t="motions">动作预览</button>
+          <button role="tab" aria-selected="false" data-t="refs">引用</button>
+          <button role="tab" aria-selected="false" data-t="edge">边界</button>
+        </div>
+      </div>
+<div id="skTabCatalog" style="padding:var(--s4)"></div>
+      <div id="skTabMotions" style="padding:var(--s4)" hidden></div>
+      <div id="skTabRefs" style="padding:var(--s4)" hidden></div>
+      <div id="skTabEdge" style="padding:var(--s4)" hidden></div>
+      <div style="padding:0 var(--s4) var(--s4)">
+        <div class="sk-ev">
+          <header><span class="dots"></span><b>事件面板</b>
+            <span>发 <code class="inl">skin.set</code> · 收 <code class="inl">skin.set.result</code>
+              —— <b>每次尝试都有回音</b>，包括被拒绝的那些（§12 最后一条）</span>
+            <span class="sp"></span>
+            <span class="dim">总线不提供返回值</span></header>
+          <div class="sk-ev-list" id="skEvList">
+            <div class="sk-ev-row"><span class="pl">点上面任意一个写操作，这里会显示它发出去的 patch 与回来的 result。</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>目录 Tab 的七个决定</h3>
+  <table>
+    <thead><tr><th style="width:28%">决定</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>卡片网格，不是表格</b></td>
+        <td>皮肤是<b>视觉对象</b>。工具那一行只需要「名字 + 来源 + 风险」，所以工具适合表格；
+          皮肤的价值有一半在<b>它长什么样</b>，而表格放不下缩略图。
+          <br>推论：<b>这个 Tab 一行文字都放不下动作清单</b> —— 所以动作计数只给一个数字，细节去「动作预览」Tab</td></tr>
+      <tr><td>内置 vs <b>我自建的</b><b>必须有徽章区分</b></td>
+        <td>走用户数据之后这个区分<b>有了实际后果</b>：内置皮随插件版本更新（用户改的名字会被覆盖），
+          用户皮只属于这个用户（升级插件动不了它）。
+          <br>所以徽章不只是「来源」——它决定<b>「我改这个名字会不会丢」</b>。
+          用户皮要标清这一点；<b>许可缺失显示警示而不是默认 MIT</b>（默认当 MIT 是把法律责任转给用户）</td></tr>
+      <tr><td>头部四个数字：皮肤数 / 自建数 / 缺动作数 / <b>占用字节</b></td>
+        <td>前三项沿用 tools 面板与角色面板的做法：<b>直接把「有几处不完整」摆在最上面</b>。
+          <br>第四项是走用户数据<b>新增</b>的：用户上传的立绘动辄几百 KB，
+          而<b>卸载插件不会清掉它们</b>（§11）。不给这个数字，用户不知道磁盘在被谁吃掉</td></tr>
+      <tr><td><b>「+ 新建皮肤」是头部第一个按钮</b>，不是卡片里的 hover 操作</td>
+        <td>这是这个视图<b>最频繁的动作</b>，而 hover 才出现的操作恰恰是最难被发现的。
+          <b>创建入口不该藏起来</b></td></tr>
+      <tr><td><b>停用 / 删除只在卡片展开后出现</b>，且<b>分成两处</b></td>
+        <td>停用是可逆的（资产保留），删除不可逆（§8 第 0 条）。
+          放在一起会让人以为「停用」也是某种删除。
+          <br><b>内置皮没有「删除」</b>，只有「停用」—— 内置皮是产品的，用户对它没有所有权</td></tr>
+      <tr><td>引用数写在卡片上，<b>但不给「去改」入口</b></td>
+        <td>见 §9 最后那条。写清「被 3 个角色引用」是有决策价值的（决定能不能删），
+          而跳转是另一个议题</td></tr>
+      <tr><td>排序<b>内置在前</b>，然后按名称</td>
+        <td>内置皮肤是默认值，用户最常需要它。
+          <br><b>不要按「最近更新」排</b> —— 走用户数据之后用户会频繁换图，
+          那一列一动，<b>用户点着的那一行会跳走</b>。
+          <code class="inil">updatedAt</code> 可以<b>显示</b>，但不作为排序键（§6）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>「缺动作」这件事必须逐个可见，而且要能补</h3>
+  <div class="note">
+    用户自建的皮肤常常只带 <code class="inil">portrait</code> 与 <code class="inil">idle</code>。
+    <b>缺哪几个必须逐个画出来</b>（虚线框 + 状态点），因为：
+    <ul style="margin:var(--s2) 0 0">
+      <li><b>隐藏缺失</b> → 用户以为这套皮肤「只有这些动作」，而回退是在会话里撞见的（§7 第 1 级是静默的）</li>
+      <li><b>合并成一句「部分动作缺失」</b> → 用户不知道该期待哪几个，于是每个都用不对的预期去撞</li>
+    </ul>
+    状态点三色与工具面板的 <code class="inil">pill</code> 语义一致：
+    <b>绿 = 有</b>，<b>灰 = 这个皮肤没声明</b>（不是错），<b>红 = 声明了但取不到</b>（是问题）。
+    <br>
+    <b>走用户数据之后，灰色的那几格要带一个「+ 补上」</b> —— 那是这个视图从「只读目录」变成
+    「编辑器」的具体体现，也是用户新建一套皮肤后最想做的事。
+  </div>
+
+  <div class="note bad">
+    <b>上传的四条约束（都要在界面上说清，不要让用户撞到）</b>：
+    <ul style="margin:var(--s2) 0 0">
+      <li><b>格式白名单</b>：<code class="inil">png / jpg / jpeg / webp / gif / svg</code>。
+        <b>没有 mp4</b> —— Core 的 MIME 表里没有它，会回落成 <code class="inil">octet-stream</code>
+        而 <code class="inil">&lt;video&gt;</code> 放不出来（§6）。动画 webp / gif 在
+        <code class="inil">&lt;img&gt;</code> 里就能播</li>
+      <li><b>大小上限</b>：单文件与服务总量两个上限都要有，且<b>上传前在客户端预检</b>
+        （<code class="inil">bytes</code> 是上传真值，§4）。<b>服务端要再验一遍</b> ——
+        客户端校验是为了体验，服务端校验是为了正确性</li>
+      <li><b>每次上传生成新的 <code class="inil">assetId</code></b>，不覆盖旧文件。
+        于是「换图后浏览器还显示旧的」结构上不会发生（§8 第 2 条）</li>
+      <li><b>失败要说清是哪一步</b>：格式不对 / 超大 / 磁盘写不了 / 校验不过。
+        合成为一句「上传失败」的话，用户重试三次就走了</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ══════════════════ 11 用户数据 ══════════════════ -->
+<section id="s11">
+  <h2><span class="n">11</span>用户数据：有，而且它是本插件的主体</h2>
+
+  <div class="tree"><span class="own">userData/plugin/skins/</span>          <span class="dim">← 本插件独占，别人读不到</span>
+├── skins.json                      <span class="std">owner: skin 服务</span>   <span class="dim">清单（内置 + 用户皮都在这里）</span>
+├── default/                        <span class="std">owner: skin 服务</span>   <span class="dim">内置皮的资产</span>
+│     └── assets/a1b2c3d4.png …
+├── mine/                           <span class="std">owner: skin 服务</span>   <span class="dim">用户自建</span>
+│     └── assets/…
+└── …/                              <span class="std">owner: skin 服务</span>
+
+<span class="std">userData/plugin/agents/characters.json</span>  <span class="dim">← 只有这一处有 skinId</span>
+  { "id": "reviewer", …, "skinId": "miku" }
+
+<span class="dim">plugins/skins/</span>
+├── plugin.json                     <span class="dim">归属信息（不含内容）</span>
+└── catalog.json                    <span class="dim">内置皮清单（随版本走，用于 mergeCatalog 的 fresh 侧）</span></div>
+
+  <div class="note ok">
+    <b>「数据目录必须有主人」这条纪律，在这里的表现是「目录有主人，而且只有一个」。</b>
+    <code class="inil">skins/</code> 整个归 <code class="inil">skin</code> 服务，
+    Core 不持有、不转发。这与 <code class="inil">models</code> 的
+    <code class="inil">pluginDataDir</code> 用法完全一致 ——
+    握手发给服务的那句 <code class="inil">dataDir</code> 就是这个目录。
+  </div>
+
+  <h3>卸载语义</h3>
+  <table>
+    <thead><tr><th style="width:22%">动作</th><th style="width:22%">资产与清单</th><th style="width:22%"><code class="inil">characters.json</code> 的 <code class="inil">skinId</code></th><th>界面</th></tr></thead>
+    <tbody>
+      <tr><td>卸载 / 停用 skins 插件</td><td><b>保留</b></td><td>保留</td>
+        <td>角色页显示「无法校验」+ <b>解绑可用</b>（§8 第 3 条）；
+          <code class="inil">widget.skins</code> 整个视图不存在（它是插件产物）</td></tr>
+      <tr><td><b>重装 skins 插件</b></td><td><b>原样回来</b></td><td>保留</td>
+        <td><b>用户的皮肤一张不少</b> —— 这就是走用户数据换来的东西。
+          然后 <code class="inil">mergeCatalog</code> 把新的内置皮并进来</td></tr>
+      <tr><td>升级 skins（新内置皮上线）</td><td>新增内置皮；<b>用户皮一条不动</b></td><td>保留</td>
+        <td>新皮<b>不会</b>自动绑到任何角色上 —— 绑定是一个显式的用户决定</td></tr>
+      <tr><td>删掉某个角色</td><td>不受影响</td><td>删那条</td>
+        <td>皮肤<b>不随之删除</b>：它可能被别的角色引用，也可能还没被引用</td></tr>
+      <tr><td>删除一套皮肤</td><td>连资产目录一起删（<b>不可逆</b>）</td>
+        <td><b>被引用则拒绝</b></td>
+        <td>二次确认，且要填 <code class="inil">confirmUnreferenced</code>（§4）。
+          <b>想保留就「停用」</b> —— 那个可逆</td></tr>
+      <tr><td>进程被 kill -9</td><td>不受影响</td><td>不受影响</td>
+        <td><b>正在显示的皮肤不受影响</b> —— 资产由 Core 的静态路由送，不经过这个进程</td></tr>
+      <tr><td>备份 / 迁移 dataDir</td><td>一起搬</td><td>一起搬</td>
+        <td>皮肤与引用关系<b>同时恢复</b>，不会出现「图在但引用丢了」</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>这一节与 tools 插件的卸载表<b>完全一致</b>，而且这正是应该的。</b>
+    <code class="inil">tools</code> 的 <code class="inil">approvals.json</code> 走「<b>数据保留、只是不再可用</b>」，
+    因为那是<b>用户的授权决定</b>。皮肤走同一条，因为它<b>也是用户的决定</b>
+    （§2 的判据）。
+    <br>
+    <b>对照一下 B 形态会是什么样</b>：资产随插件走，卸载即消失，
+    于是「重装之后我的皮肤没了」—— 而用户装插件是为了用它。
+    <b>那个形态下唯一说得通的皮肤是产品自带的那几张，用户一张也改不了。</b>
+  </div>
+
+  <div class="note bad">
+    <b>走用户数据之后，多了一个 B 形态没有的问题：<b>磁盘占用</b>。</b>
+    用户上传的立绘动辄几百 KB 一套，几十套就是几十 MB，而<b>卸载插件不会清掉它们</b>。
+    所以设置页要能回答「<code class="inil">userData/plugin/skins/</code> 占着多少」，
+    并给一个「清掉未被任何角色引用的皮肤」的入口。
+    <br>
+    ⚠️ 那个入口<b>不能</b>默认全选 —— 「未被引用」是一个<b>推断</b>
+    （读 <code class="inil">agent.state</code>，而那份可能没到，§4）。
+    所以列表要逐条列出来、让用户勾选，<b>默认勾选为空</b>。
+  </div>
+</section>
+
+<!-- ══════════════════ 12 不变式 ══════════════════ -->
+<section id="s12">
+  <h2><span class="n">12</span>不变式与红线（本设计不得破坏）</h2>
+
+  <div class="note bad" style="margin-top:0;border-left-width:3px">
+    <b>不新增进程间协议</b>：stdio JSON-RPC + <code class="inil">shared</code> 的 EventMap/CommandMap
+    仍是唯一入口。本设计的 4 个新 topic 全部是<b>这张表上的四行</b>，不是新机制。
+    <br>
+    <b>Core 的全部改动：一条路由。</b>
+    <code class="inil">GET /plugins/&lt;id&gt;/data/*</code>（<a href="#s6">§6</a>）——
+    <b>它不做穿越判断以外的事</b>，仍然是查白名单 + 搬字节。
+    <br>
+    <b>而这一条路由本身也不是新机制</b>：它与 <code class="inil">/plugins/&lt;id&gt;/ui/*</code>
+    <b>是同一段代码换了个根目录</b>（<code class="inil">registry.uiDir(id)</code> →
+    <code class="inil">pluginDataDir(dataDir, id)</code>）。
+    <b>唯一的行为差异是不做 SPA fallback</b>，而那是因为它伺服的是数据。
+  </div>
+
+  <table>
+    <thead><tr><th style="width:30%">不变式</th><th>本设计如何满足</th></tr></thead>
+    <tbody>
+      <tr><td><b>Core 不解析插件内容</b></td>
+        <td>皮肤清单是<b>内容</b>，经总线；资产是<b>字节</b>，经静态路由。
+          Core 只做穿越检查 + MIME + 缓存头 —— <b>它不知道什么是 portrait</b>，
+          <b>也不知道 userData 里哪个目录归哪个插件</b>（那是注册表给的现成答案）</td></tr>
+      <tr><td><b>能力存在性必须有重播通路</b></td>
+        <td><code class="inil">skin.list</code>（收集方上线问一次）+ <code class="inil">skin.state</code>（owner 重播整份）。
+          与 tools / models / skills 同一套。<b>写操作同理</b>：
+          <code class="inil">skin.set</code> 带 <code class="inil">requestId</code>，
+          <code class="inil">skin.set.result</code> 回同一个 id —— 总线不提供返回值，
+          <b>所以「谁在等」必须由发起方自己记住</b>，这一条对<b>读</b>是隐含的、对<b>写</b>必须显式</td></tr>
+      <tr><td><b>缺失是合法的</b></td>
+        <td>没装 skins 插件 / 角色没绑 <code class="inil">skinId</code> / 绑的 id 不存在 / 资产 404
+          —— <b>四者都不是错误</b>，只是「少一层外观」。角色<b>完全不受影响</b>（§8 第 4 条）</td></tr>
+      <tr><td><b>顺序必须确定</b></td>
+        <td>目录排序<b>内置在前、再按 name</b>，不依赖文件系统的 readdir 顺序。
+          动作渲染顺序由枚举定义，不依赖对象键序</td></tr>
+      <tr><td><b>写只限自己</b></td>
+        <td><b>本插件只写 <code class="inil">${dataDir}/</code></b> —— 那是握手时 Core 指给它的、
+          <b>本来就属于它</b>的目录。它<b>一个字都不写</b> <code class="inil">characters.json</code>。
+          <br><b>读</b>：清单走 fs，别的插件的数据经总线只读。
+          <br><b>这条纪律的形态变了，但没松</b>：B 形态是「零写路径」，
+          A 形态是「写路径存在，但它的根是 Core 发给我的那个根」</td></tr>
+      <tr><td><b>绑引用不绑实现</b></td>
+        <td><code class="inil">skinId</code> 与 <code class="inil">tools:["read_file"]</code> 同级。
+          <b>agents 的产物里没有任何一行与像素有关</b>；
+          <b>皮肤被删了，agents 那份数据也仍然合法</b>（它只是一个 id 字符串）</td></tr>
+      <tr><td><b>消息唯一写者</b></td>
+        <td>本插件<b>不写任何消息</b>，也不发 <code class="inil">loop.run</code>。
+          三个对话视图因此零改动</td></tr>
+      <tr><td><b>界面不做装饰性欺骗</b></td>
+        <td>没装插件则整个视图消失（它是插件产物）；角色侧显示「无法校验」而不是空白或写死的「默认」；
+          <b>停用是真的生效</b>（灰掉、引用变成无效），而不是点一下只改个本地变量</td></tr>
+      <tr><td><b>失败也要产结果</b></td>
+        <td><code class="inil">skin.state</code> 在清单读失败时<b>仍然发一份空清单</b>而不是不发 ——
+          订阅方要能区分「清单是空的」与「清单还在路上」；
+          <code class="inil">skin.set</code> 的<b>每一次</b>尝试（包括校验失败）都回一条
+          <code class="inil">skin.set.result</code> —— <b>不能只在成功时回</b>，
+          否则发命令的界面永远在转圈</td></tr>
+      <tr><td><b>删除不可逆，所以要两问</b></td>
+        <td>删资产要 UI 二次确认 + <code class="inil">confirmUnreferenced</code>。
+          <b>而确认框文案要写清「删了什么、能不能恢复」</b> ——
+          用户对「删掉一个皮肤」的直觉是「皮肤没了，素材还在」，
+          而实际上<b>资产目录一起没了</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bus">
+    <b>Core 的全部职责，本设计之后仍然是两句话。</b>
+    查白名单、搬字节（外加记生命周期）· 伺服静态产物。
+    <br>
+    本设计给它加的那条路由<b>正是它已经在做的第二句</b>，只是根从
+    <code class="inil">dist/ui</code> 换成了 <code class="inil">dataDir</code>。
+    <br>
+    <b>刻意没给的第三条</b>：Core<b>不参与删除判定</b>。
+    「这个皮肤有没有角色在用」只有 <code class="inil">agents</code> 知道，
+    而 Core 去查它意味着 Core 要理解 <code class="inil">characters.json</code> 的语义 ——
+    那就破了上面第一条不变式。所以判定在<b>插件里</b>，Core 只搬字节。
+  </div>
+</section>
+<section id="s13">
+  <h2><span class="n">13</span>测试矩阵</h2>
+
+  <div class="note ok" style="margin-top:0">
+    <b>M1 已完成</b>：<code class="inil">shared/src/skin.ts</code> +
+    <code class="inil">shared/tests/skin.test.ts</code>（<b>65 个单测全绿</b>）+
+    <code class="inil">shared/src/events.ts</code> 的 4 行 topic + <code class="inil">shared/src/index.ts</code> 的具名再导出。
+    下面这张表里标 <span class="tag have">已写</span> 的就是它。
+  </div>
+
+  <h3>本插件包内（跟着被测物走）</h3>
+  <table>
+    <thead><tr><th style="width:30%">测试</th><th>断言</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inil">parseSkinCatalog</code> <span class="tag have">已写</span></td>
+        <td>id 重复 → 报错并保留先到的；<b>路径 / <code class="inil">assetId</code> / <code class="inil">skinId</code>
+          任一不合法 → 整条皮肤标无效</b>（而非整份清单失败）；缺 <code class="inil">license</code> → 标警示但<b>不拒</b>；
+          <code class="inil">motions</code> 为空 → <b>合法</b>；六个之外的动作名 → 不报错但<b>不被引用</b>
+          （<b>而它的值仍要校验</b>）</td></tr>
+      <tr><td><code class="inil">mergeCatalog</code> <span class="tag have">已写</span></td>
+        <td>内置以 <code class="inil">fresh</code> 为准（用户改的名字被覆盖）；
+          用户皮以 <code class="inil">persisted</code> 为准（<code class="inil">fresh</code> 覆盖不进去）；
+          孤儿内置皮进 <code class="inil">orphanedBuiltin</code>；
+          <b>纯重排不算 <code class="inil">changed</code></b>（否则每次启动都重播整份）</td></tr>
+      <tr><td>路径与 id 校验 <span class="tag have">已写</span></td>
+        <td><code class="inil">assertSafeAssetPath</code>：11 种坏输入全拒（含
+          <code class="inil">C:\</code>、<code class="inil">..\</code>、<code class="inil">\0</code>）·
+          6 种合法输入全放行（含中文名与深层相对路径）；
+          <code class="inil">assertSafeSkinId</code>：<b>连普通分隔符都拒</b>
+          （它会变成一个目录名）+ 尾部点/空格拒（Windows 会静默剥掉）</td></tr>
+      <tr><td><code class="inil">skin</code> 服务</td>
+        <td>启动读清单 → <code class="inil">mergeCatalog</code> → 发整份；
+          收 <code class="inil">skin.list</code> → 再发一次；
+          <b>读失败仍发空清单</b>（§12 最后一条）；
+          <code class="inil">skin.set</code> 三种动作各自的失败路径，
+          <b>尤其「被引用中 → 拒绝并返回 blockedBy」</b></td></tr>
+      <tr><td><code class="inil">SkinRenderer</code></td>
+        <td>四级回退逐级可测：给一个坏 URL → 第 1 级 → 给一个不存在的 id → 第 2 级 →
+          给一个 <code class="inil">skin.state</code> 没来的环境 → 第 3 级 →
+          给一个清单里有、文件被删的 id → <b>第 4 级</b>。
+          <br><b>第 3 与第 4 级是最容易被漏的两条</b>，而它们<b>长得几乎一样</b>
+          （都是一个坏图），所以必须靠「第 3 级不产生 onerror」来区分</td></tr>
+      <tr><td><code class="inil">widget.skins</code></td>
+        <td>空清单 → <code class="inil">EmptyState</code>；缺动作的三种状态点分别渲染对；
+          <b>内置皮的删除按钮 disabled</b>（用户对产品皮没有所有权，§10）；
+          <b>删除按钮在被引用时 disabled 并列出引用者</b></td></tr>
+      <tr><td>上传的四条约束（§10）</td>
+        <td>格式白名单拒绝 <code class="inil">mp4</code>；超大小上限拒；
+          <b>每次上传生成新的 <code class="inil">assetId</code></b>（不覆盖）；
+          <b>服务端要再验一遍</b>客户端验过的格式与大小</td></tr>
+      <tr><td>服务协议符合性</td>
+        <td>照 <code class="inil">service-distribution.test.ts</code> 与
+          <code class="inil">plugin-ui-e2e.test.ts</code> 的做法：真构建 → 真 Core → 真请求</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Core 侧（一条新路由 + 四条契约测试）</h3>
+  <table>
+    <thead><tr><th style="width:34%">测试</th><th>断言</th></tr></thead>
+    <tbody>
+      <tr><td><b>新路由能取到 userData 里的二进制</b></td>
+        <td><code class="inil">GET /plugins/skins/data/default/assets/a1b2c3d4.png</code> →
+          200 + <code class="inil">image/png</code>。<b>这条是整个 A 形态的地基</b>：
+          它证明 Core 只需要「搬字节」就能支持用户数据</td></tr>
+      <tr><td><b>穿越被挡（三种）</b></td>
+        <td><code class="inil">…/data/../../agents/characters.json</code> → 403；
+          <code class="inil">…/data/%2e%2e%2f…</code> → 403（<b>先 decode 再剥分隔符</b>，
+          顺序反了 <code class="inil">normalize</code> 会把 <code class="inil">/../..</code> 塌成绝对路径）；
+          <b>符号链接指向目录外</b> → 403</td></tr>
+      <tr><td><b>没有 SPA fallback</b></td>
+        <td><code class="inil">…/data/nope.png</code> → <b>404，不是 200 + index.html</b>。
+          <br>与 <code class="inil">/plugins/*/ui/*</code> 的行为<b>故意不同</b> ——
+          它伺服的是数据不是页面。这条测试是把那个差异钉住，
+          好让将来有人「顺手统一」时知道会打坏 <code class="inil">SkinRenderer</code> 的第 4 级</td></tr>
+      <tr><td><b>Origin 白名单生效</b></td>
+        <td>带<b>非白名单 Origin</b> 的 <code class="inil">GET …/data/…</code> → 403；
+          <b>无 Origin</b>（iframe 嵌入）→ 放行。
+          <br>这条是<b>安全测试</b>：它伺服的是用户数据，不加白名单等于开了个 CSRF 读口</td></tr>
+      <tr><td>缓存头符合预期</td>
+        <td><code class="inil">a1b2c3d4.png</code> → <code class="inil">no-cache</code>
+          （不匹配 immutable 判据，§6 —— <b>立绘要走流量，待决</b>）；
+          未知扩展名 → <code class="inil">application/octet-stream</code>（不猜，§6 的 MIME 表）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>跨插件（只能在真 Core 上跑，所以不属于任何一个包）</h3>
+  <table>
+    <thead><tr><th style="width:34%">测试</th><th>断言</th></tr></thead>
+    <tbody>
+      <tr><td><b>chat-workbench 渲染 skins 的资产</b></td>
+        <td>两个插件都装上，<code class="inil">widget.chat-timeline</code> 里出现
+          <code class="inil">&lt;img src="/plugins/skins/data/…"&gt;</code> 且成功解码。
+          <b>同时断言两个插件之间一条消息都没有</b> —— 这是本设计最想保住的那条性质</td></tr>
+      <tr><td><b>agents 写 skinId → 下一帧就生效</b></td>
+        <td>在 <code class="inil">widget.agents</code> 改绑定 → 对话视图的 <code class="inil">&lt;img&gt;</code>
+          <b>立即</b>换 src，<b>不需要</b>重开会话、不需要下一轮。
+          <br><b>因为皮肤不参与装配</b>（§8 第 4 条），所以它<b>不该</b>有「下一轮生效」那条提示</td></tr>
+      <tr><td><b>换图后浏览器不显示旧的</b></td>
+        <td>上传新图（生成新 <code class="inil">assetId</code>）→ <b>不做任何缓存失效操作</b>，
+          <code class="inil">&lt;img&gt;</code> 立即显示新图（§8 第 2 条）</td></tr>
+      <tr><td>kill -9 skin 服务</td>
+        <td>已显示的皮肤<b>不动</b>（资产由 Core 送，不经过它）；新会话显示「无法校验」；
+          <b>角色其余能力完全不受影响</b></td></tr>
+      <tr><td><b>卸掉再重装 skins 插件</b></td>
+        <td>用户的皮肤<b>一张不少地回来</b>（§11 的 A 形态核心收益）；
+          新的内置皮被并进来；<b>用户皮一条不动</b>（<code class="inil">mergeCatalog</code> 第 2 条）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════════ 14 工作分解 ══════════════════ -->
+<section id="s14">
+  <h2><span class="n">14</span>工作分解与落地顺序</h2>
+
+  <p>顺序不是按模块切，是<b>按「每一步结束时用户能看到什么」</b>切。
+  六个里程碑各自都能单独演示。</p>
+
+  <table>
+    <thead><tr><th style="width:8%">阶段</th><th style="width:26%">交付</th><th style="width:40%">做完之后能演示什么</th><th>依赖</th></tr></thead>
+    <tbody>
+      <tr><td><b>M1</b><br><span class="tag have">已完成</span></td>
+        <td><code class="inil">shared/src/skin.ts</code>（<code class="inil">parseSkinCatalog</code> ·
+          <code class="inil">mergeCatalog</code> · <code class="inil">MOTIONS</code> ·
+          <code class="inil">SkinBrief</code> · <code class="inil">SkinSetPatch</code> ·
+          三条路径校验）<br><code class="inil">events.ts</code> 加 4 行 + 2 个常量表项</td>
+        <td><b>还不能演示任何东西</b>，但它把「motion 枚举共享」（§8 第 1 条）与
+          「内置/用户皮的合并规则」（§6）在<b>还没有消费方</b>时就固定下来 ——
+          否则等三个视图都各自硬编码一份就晚了。
+          <br><b>65 个单测全绿</b>（§13 表里标「已写」的那些）</td>
+        <td>—</td></tr>
+      <tr><td><b>M1.5</b><br><span class="tag spec">新增</span></td>
+        <td><b>Core 新路由</b> <code class="inil">GET /plugins/&lt;id&gt;/data/*</code>
+          （约 60 行，照 <code class="inil">plugin-ui.ts</code> 的形状）+ 四条契约测试</td>
+        <td><b>「<code class="inil">curl</code> 一下就能取到插件数据目录里的图」</b>。
+          <br><b>刻意排在 M2 之前</b>：它是 A 形态的地基，而<b>它独立于任何 UI</b> ——
+          先把它单独验完，才知道「Core 加这一条够不够」这个问题有答案。
+          <br>⚠️ 走用户数据之后<b>这一步成了关键路径</b>，不是可选项</td>
+        <td>M1</td></tr>
+      <tr><td><b>M2</b></td>
+        <td><code class="inil">plugins/skins/</code> 骨架：<code class="inil">plugin.json</code> ·
+          <code class="inil">services/skin</code>（读 <code class="inil">dataDir/skins.json</code> →
+          <code class="inil">mergeCatalog</code> → 发整份）· 一套内置资产</td>
+        <td><b>「装了 skins 插件，<code class="inil">skin.state</code> 出现在事件流里，
+          且能在 dataDir 下看到 skins.json」</b>。
+          还画不出任何东西，但<b>数据的往返已经通了</b>（写进去、重启后读回来）</td>
+        <td>M1.5</td></tr>
+      <tr><td><b>M3</b></td>
+        <td><code class="inil">SkinRenderer.vue</code>（三个 mode + <b>四级</b>回退）</td>
+        <td><b>「workbench 里能画出一个立绘，拔掉资产 URL 会回退」</b>。
+          <br><b>先有组件，再谈让谁用它</b> —— 这一步刻意排在 <code class="inil">widget.skins</code> 之前，
+          因为它才是「有没有渲染器」这个真问题的答案</td>
+        <td>M2</td></tr>
+      <tr><td><b>M4</b></td>
+        <td><code class="inil">widget.skins</code>（目录 / 动作预览 / 引用 三个 Tab，
+          <b>可写</b>：新建 / 上传 / 改名 / 停用 / 删除）</td>
+        <td><b>「我能传一张自己的图当立绘，改名，停用，删掉没人用的那套」</b>。
+          <br>到这一步插件<b>已经完整可用</b>，即使会话里还不会动</td>
+        <td>M3</td></tr>
+      <tr><td><b>M5</b></td>
+        <td><code class="inil">agents</code> 侧：<code class="inil">characters.json</code> 加
+          <code class="inil">skinId</code> · <code class="inil">widget.agents</code> 绑定 Tab 底部一行
+          （见 <code class="inil">../character_manager/智能体角色-组件Demo.html</code> §10）</td>
+        <td><b>「在角色页换外观，会话里立刻变」</b>。
+          <br>这是<b>端到端的验收信号</b>：一次跨越两个插件的改动，
+          且中间<b>零跨插件通信</b>（§3 第 5 跳）</td>
+        <td>M4</td></tr>
+      <tr><td><b>M6</b></td>
+        <td><code class="inil">widget.chat-timeline</code> 接 <code class="inil">SkinRenderer</code>
+          （<code class="inil">mode="avatar"</code> + <code class="inil">stage</code>）+ motion 映射</td>
+        <td><b>「运行中的角色会动」</b>。这是让皮肤<b>不只是个设置项</b>的那一步</td>
+        <td>M5</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>走用户数据之后，M1→M4 之间<b>不再</b>能「停而不留半成品」。</b>
+    B 形态下这个插件是只读的，卸掉它用户数据一字未动；A 形态下它<b>拥有用户数据</b>，
+    所以中途停手会留下<b>半套数据</b>（比如 M2 之后用户手动传了图，M4 还没做就被卸载 ——
+    数据留着，但没有任何界面能看见它）。
+    <br>
+    <b>处置</b>：M1.5（Core 路由）是<b>纯增量</b>、与插件无关，可以随时停。
+    M2→M4 建议<b>一次做完</b>再交付给用户试用 —— 或者在 M2 之后就让 <code class="inil">widget.skins</code>
+    以「只读目录」的形态先上（能看见、不能改），把「能改」留到 M4。
+    <br>
+    与 tools 插件对照：它也是插件拥有用户数据（<code class="inil">approvals.json</code>），
+    所以它同样有这个问题 —— 而它的处置是<b>闸门与目录视图同一个里程碑</b>，
+    不拆开交付。这条经验可以直接抄。
+  </div>
+
+  <div class="note bad">
+    <b>M6 之前不要碰 motion 映射。</b>
+    因为它依赖 <code class="inl">loop.state.changed</code> 与工具块状态
+    （<a href="#s7">§7 那张表</a>），而那些事件在今天<b>还不全</b>。
+    <br>
+    <b>先有一个能播的静态组件（M3），比先有一个接了半套运行态的舞台要好</b> ——
+    后者会在每个空档都触发一次回退，而回退是静默的（§7 第 1 级），于是你根本不知道它坏在哪。
+  </div>
+</section>
+
+<!-- ══════════════════ 15 待决 ══════════════════ -->
+<section id="s15">
+  <h2><span class="n">15</span>待决问题</h2>
+
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:32%">问题</th><th style="width:24%">选项</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Core 新路由的形态？</b></td>
+        <td>① <code class="inl">GET /plugins/&lt;id&gt;/data/*</code>（只读）
+          ② 同一路径支持 <code class="inl">PUT</code> / <code class="inil">DELETE</code>
+          ③ 走 <code class="inil">/api/command</code> 传字节</td>
+        <td><b>①</b>。<b>上传不该走 HTTP 路由</b> —— 那要让 Core 处理 multipart、临时文件、
+        大小限制、原子落盘，而 Core 的职责只有「查白名单、搬字节」。
+        <br>② 的问题更直接：<b>写入不需要 Core 参与</b> —— 服务握手里就有可写的
+        <code class="inil">dataDir</code>，它自己 <code class="inil">fs</code> 写就行，
+        然后重播 <code class="inil">skin.state</code>。给 Core 加 <code class="inil">PUT</code>
+        是<b>凭空多一个写入口</b>，而它一层都不需要。
+        <br>③ 要在 JSON 里塞二进制</td></tr>
+      <tr><td>1b</td><td><b>新路由要不要过 Origin 白名单？</b></td>
+        <td>① 要 ② 不要</td>
+        <td><b>① 必须</b>，与 <code class="inil">/plugins/*/ui/*</code> 同一套判定。
+          它伺服的是<b>用户的数据</b>（皮肤图），比 UI 更敏感 ——
+          不加就等于给 CSRF 开了个能读用户目录的口子。
+          而 iframe 嵌入不受影响（iframe 与顶层导航按 Fetch 规范不带 Origin，白名单本来就放行）</td></tr>
+      <tr><td>1c</td><td><b>皮肤这件事现在做吗？</b></td>
+        <td>① 做，按 M1→M6 ② 先只在 <code class="inil">widget.agents</code> 留一行占位 ③ 完全不做</td>
+        <td><b>①</b>，但按 M1→M4 走完就够了 —— <b>M5/M6 可以推迟</b>。
+          到 M4 时插件<b>已经完整可用</b>（用户能上传、预览、改名、删除、知道缺什么），
+          而<b>会话里还不会动</b>。那也是一个诚实的中间态。
+          <br><b>②</b> 的问题：留一个永远显示「未绑定」的行比没有这行更糟，
+          它会让用户去找「为什么我装不上皮肤」</td></tr>
+      <tr><td>2</td><td><b>皮肤进不进会话历史？</b></td>
+        <td>① 不进，渲染时按当前 <code class="inil">skinId</code> 取 ② 每条消息存一份快照</td>
+        <td><b>①</b>。② 会让历史里塞满 <code class="inil">assetId</code> 串，而且<b>删掉皮肤就看不到当初的样子</b> ——
+          而外观不进模型，历史里那句「它长这样」本来就不是模型说的。
+          <br>代价要说清：<b>用户换外观后，往日消息旁边的样子会跟着变</b>。
+          若这不可接受，那是 ②，但那时它就不是「皮肤」而是「消息附件」了</td></tr>
+      <tr><td>2b</td><td><b>「清掉未被引用的皮肤」这个清理入口要不要做？</b></td>
+        <td>① 做，逐条列出 + 默认不勾选 ② 不做，用户自己删 ③ 一键全清未被引用的</td>
+        <td><b>①</b>。走用户数据之后磁盘会一直涨（§11），不给出口用户就只能不管它。
+          <br><b>③ 绝对不行</b>：「未被引用」是一个<b>推断</b>（读 <code class="inil">agent.state</code>，
+          而那份可能没到，§4）—— 一键全清可能在数据没到时把用户正在用的图删掉。
+          <b>默认勾选为空</b>，并且每条旁边显示它占多少字节</td></tr>
+<tr><td>3</td><td><b>动画格式？</b></td>
+        <td>① png / webp / gif（Core 只加路由，MIME 表不用动）
+          ② 加 mp4 / webm（<code class="inil">contentTypeFor</code> 两行）</td>
+        <td><b>① 先上</b>，② 作为增量。动画 webp 在 <code class="inil">&lt;img&gt;</code> 里就能播，
+          体积换清晰度不值当先动 Core。
+          <br>若确有 mp4 的必要（长动作、渐变、大幅位移），② 是<b>纯增量</b>：
+          只加 MIME 表项，<b>不动路由与穿越检查</b>。
+          <br><b>注意这条的语境变了</b>：走用户数据之后，「不支持某格式」的代价不再是
+          「发一版就有了」，而是<b>用户传上去的那张图白传</b> ——
+          所以格式白名单要在<b>上传入口就显示出来</b>，不能让用户先选文件再被拒</td></tr>
+      <tr><td>4</td><td><b>插件 id 叫 <code class="inl">skins</code> 还是 <code class="inl">skin</code>？</b></td>
+        <td>① 复数 ② 单数</td>
+        <td><b>①</b>，与 <code class="inl">tools</code> / <code class="inl">skills</code> 一致。
+          它决定 URL <code class="inl">/plugins/skins/ui/</code> 与
+          <code class="inl">userData/plugin/skins/</code> 两处，
+          <b>越早定越好</b> —— 改它等于改所有硬编码的前缀</td></tr>
+      <tr><td>5</td><td><b>允许多个 skins 插件共存吗？</b></td>
+        <td>① 允许多个，各自 publish 自己的 <code class="inil">skin.state</code> ② 只允许一个</td>
+        <td><b>② 只允许一个。</b>走用户数据之后这条从「偏好」变成了<b>硬约束</b>：
+        两个插件都往 <code class="inil">userData/plugin/skins/</code> 写，
+        而那个目录<b>按 pluginId 分</b> —— 于是它们其实<b>天然不冲突</b>，
+        但 <code class="inil">skinId</code> 是<b>全局</b>引用（角色档案里只有一个字符串），
+        两个插件各有一半的皮肤，用户要<b>在两处</b>找同一张脸。
+          <br>而且 §6 的 <code class="inil">mergeCatalog</code> 是<b>按单个插件的数据目录</b>算的，
+        两份清单合并需要一个跨插件的规则，而那个规则<b>没有先例</b>。
+          <br><b>处置</b>：v1 只允许一个 skins 插件（另一个装不了），
+        并把「id 冲突」留给 §6 那三条规则处理<b>同一份清单内</b>的情况</td></tr>
+      <tr><td>6</td><td><b>同名 <code class="inl">motion</code> 的多源问题</b></td>
+        <td>① 皮肤自带的动作名以它自己为准 ② 全局唯一命名空间</td>
+        <td><b>①</b>。动作名是<b>皮肤自己的资产文件名</b>（<code class="inl">idle.webp</code>），
+          不是全局注册的资源名 —— 一个皮肤里叫 <code class="inl">idle</code> 的文件
+          与另一个皮肤里的同名文件<b>没有任何关系</b>。
+          <br>这与工具<b>正好相反</b>：<code class="inl">read_file</code> 是全局唯一的 name，
+          所以要防冲突；皮肤资产<b>不是</b>。<b>两条纪律不能互相套用</b></td></tr>
+      <tr><td>7</td><td><b>「引用」Tab 要不要给跨 iframe 跳转？</b></td>
+        <td>① 不给 ② 给一个「打开角色页」按钮</td>
+        <td><b>①</b>（§9 末）。② 要一条新的 Core/宿主协议让 dockview 开指定面板，
+          那是另一个议题。<b>写清「哪些角色绑了它」已经够用了</b> ——
+          那正是用户决定「要不要卸这个插件」所需要的信息</td></tr>
+      <tr><td>8</td><td><b>第三方皮肤的许可怎么管？</b></td>
+        <td>① 只显示，不校验 ② 校验 SPDX 且拒绝未知 ③ 打包时校验</td>
+        <td><b>①</b>。许可声明是<b>社区生态的事</b>，Core 不该持有法务判断。
+          <b>缺失时显示警示而不是默认 MIT</b> —— 默认当 MIT 是把法律责任转给了用户。
+          ② 的问题是「合法的许可表达式」有几十种，而我们的校验器必然漏项</td></tr>
+    </tbody>
+  </table>
+
+<h3>如果只记五句</h3>
+  <div class="note info">
+    <b>① 皮肤是用户的决定，所以它在 <code class="inil">userData</code>，卸载时保留。</b>
+    这是全篇唯一的地基。判据只有一句，与 <code class="inil">approvals.json</code>、
+    <code class="inil">preferences.json</code> 完全相同：
+    <b>这是用户的决定还是产品的一部分？</b>
+    <br>
+    代价是 Core 要加一条 <code class="inil">GET /plugins/&lt;id&gt;/data/*</code>（<a href="#s6">§6</a>），
+    而它仍然只是<b>换了个根目录的搬字节</b> —— Core 不知道什么是 portrait，
+    也不知道 userData 里哪个目录归哪个插件。
+    收益是界面<b>可写</b>、重装<b>不丢用户的图</b>。
+    <br>
+    <b>② 内置皮与用户皮共处一份 <code class="inil">skins.json</code>，靠 <code class="inil">mergeCatalog</code> 划界。</b>
+    分成两个存储位置就要回答「同名怎么办」，而那正是第二个真源的起点。
+    三条规则：内置以代码为准 · 用户皮以数据为准 · 孤儿内置皮<b>留痕并给删除按钮</b>。
+    <br>
+    <b>③ 角色侧只多一个字符串。</b>
+    <code class="inil">skinId</code> 与 <code class="inil">tools:["read_file"]</code> 同级，
+    owner 是 <code class="inil">agents</code> 服务，写它的界面是 <code class="inil">widget.agents</code>。
+    本插件<b>一个字都不写那个文件</b>；它只写自己的 <code class="inil">dataDir</code>。
+    <br>
+    <b>④ 皮肤一个字节也不进模型。</b>
+    不进 <code class="inil">loop.run</code>、不进 prompt、不进 <code class="inil">tools</code> 参数。
+    所以它<b>不参与装配</b>、<b>没有「下一轮生效」问题</b>、<b>坏了不影响角色能力</b>。
+    <b>不要给它加与提示词相同的那套文案</b> —— 那两条的时间尺度根本不同。
+    <br>
+    <b>⑤ 零跨插件通信是白捡的，不是绕出来的。</b>
+    <code class="inil">&lt;img src="/plugins/skins/data/…"&gt;</code> 是一次同源静态 GET。
+    <code class="inil">plugin-ui.ts</code> 当初为「同源存储」做的那套论证，
+    让「chat-workbench 的 iframe 画 skins 插件的皮肤」<b>不需要任何协议</b>。
+    <br>
+    <b>⑥ 四个「拿不到」必须分开说。</b>
+    没绑（合法回落）· 已确认悬空（说得出提供方，给解绑）· 无法校验（<b>说不出</b>提供方，给重试）
+    · 资产加载失败（清单在、文件不在）。
+    合成一句的代价很具体：用户在第二种情况会去重装插件，而真正该做的只是删掉那条绑定。
+  </div>
+</section>
+
+<div class="foot">
+  Osteosome · 皮肤管理插件设计稿 · 2026-10 ·
+  <b>本文所有「现状」均为仓库核对结果</b>，出处：
+  <code class="inl">core/src/sse-bridge/plugin-ui.ts</code>（同源论证 · <code class="inl">/plugins/&lt;id&gt;/ui/*</code> · 穿越检查 · SPA fallback · 缓存头判据）·
+  <code class="inl">core/src/sse-bridge/util.ts</code>（<code class="inl">contentTypeFor</code> 的 <code class="inl">MIME</code> 表）·
+  <code class="inl">core/src/service-manager/manager.ts</code>（<code class="inl">plugins.readFile</code>：
+  utf8 · 2 MiB · 仅自己插件目录 · 仅服务可调）·
+  <code class="inl">core/tests/{plugin-readfile,pack-plugin,manager}.test.ts</code> ·
+  <code class="inl">plugins/models/plugin.json</code> 与 <code class="inl">plugins/models/ui/vite.config.ts</code>
+  （<code class="inl">closeBundle</code> 复制 <code class="inl">catalog.json</code> 的先例）·
+  <code class="inl">plugins/models/ui/src/catalog.ts</code>（「一份被编写的文件，两个投递路径」）·
+  <code class="inl">shared/src/events.ts</code>（<code class="inl">CharacterBrief</code> 至今未定义，本文 §4 顺手定下）·
+  <code class="inl">pnpm-workspace.yaml</code>（插件布局）<br>
+  <b>天枢参考</b>：<code class="inl">C:\Users\dmql\Desktop\tianshu\TianShu\dev\docs\skin-decouple-plan.md</code>
+  §一（解耦动机）· §五.3（<code class="inl">skinId</code> fallback 规则）· §五.4（皮肤可被多角色复用）·
+  <code class="inl">web/client/src/features/skins/CharacterSkinBinder.tsx</code>（绑定器）·
+  <code class="inl">web/client/src/pages/CharacterDetailPage.tsx</code>（「视觉与动画」Tab 现状）·
+  <code class="inl">web/client/src/features/characters/CharacterVisualEditor.tsx</code>（<b>死代码</b>，改造前的形态）<br>
+  <b>配套</b>：<code class="inl">../character_manager/智能体角色-组件Demo.html</code> §10（角色界面上的落点）·
+  <code class="inl">../tool_manager/工具管理插件设计.html</code>（插件设计稿体例 · <b>插件拥有用户数据的先例</b>）·
+  <code class="inl">../chat-workbench/对话工作台-会话列表重设计.html</code>（<code class="inl">--motion-*</code> 令牌冲突）<br>
+  <b>本文定下的契约（<code class="inl">shared/</code> 已落地）</b>：
+  <code class="inl">shared/src/skin.ts</code>（类型 · 三条路径校验 · <code class="inl">parseSkinCatalog</code> ·
+  <code class="inl">mergeCatalog</code> · <code class="inl">SkinSetPatch</code>）·
+  <code class="inl">shared/tests/skin.test.ts</code>（<b>65 个单测</b>）·
+  <code class="inl">shared/src/events.ts</code>（<code class="inl">skin.state</code> /
+  <code class="inl">skin.set.result</code> / <code class="inl">skin.list</code> /
+  <code class="inl">skin.set</code>）· <code class="inl">shared/src/index.ts</code>（具名再导出）<br>
+  <b>样式全部取自 <code class="inl">sdk/ui/src/tokens.css</code> 的真名</b>，所以这份 demo 与真正组件库同源；
+  <b>组件交互是手写的，用来说明行为，不是产物代码</b>。
+</div>
+
+</div><!-- /.wrap -->
+
+<script>
+(function () {
+  'use strict';
+
+  /* ══ 主题 ══ */
+  var root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ══ 锚点高亮 ══ */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var sections = tocLinks.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncToc() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < sections.length; i++) { if (sections[i] && sections[i].offsetTop <= y) idx = i; }
+    tocLinks.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', syncToc, { passive: true });
+  syncToc();
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ══ 假数据：一份运行期成形的皮肤清单 ══
+     actions 里的三种值 = SkinRenderer 回退级的可测出口：
+       'ok'      正常
+       'missing' 这套皮肤没声明这个动作（第 1 级：静默退到 idle）
+       'broken'  声明了但取不到（第 3 级：SPA fallback 返回 index.html → onerror） */
+  var MOTIONS = ['idle', 'thinking', 'working', 'speaking', 'success', 'error'];
+  var MOTION_CN = {
+    idle: '待机', thinking: '思考', working: '工作',
+    speaking: '说话', success: '完成', error: '出错'
+  };
+  var SKINS = [
+    { id: 'default', name: '默认', builtin: true, license: 'MIT', glyph: '◍', enabled: true,
+      assets: { portrait: { bytes: 482103 }, avatar: { bytes: 12044 } },
+      actions: { idle: 'ok', thinking: 'ok', working: 'ok', speaking: 'ok', success: 'ok', error: 'ok' } },
+    { id: 'miku', name: '初音', builtin: true, license: 'MIT', glyph: '♪', enabled: true,
+      assets: { portrait: { bytes: 355002 }, avatar: { bytes: 11088 } },
+      actions: { idle: 'ok', thinking: 'ok', working: 'ok', speaking: 'ok', success: 'ok', error: 'ok' } },
+    { id: 'neon', name: '霓虹', builtin: false, license: 'CC-BY-4.0', glyph: '✦', enabled: true,
+      assets: { portrait: { bytes: 621884 } },
+      actions: { idle: 'ok', thinking: 'ok', working: 'ok', speaking: 'ok', success: 'missing', error: 'missing' } },
+    { id: 'paper', name: '纸片', builtin: false, license: '', glyph: '▤', enabled: true,
+      assets: { avatar: { bytes: 9021 } },
+      /* 声明了但取不到 —— 演示 §7 第 4 级 */
+      actions: { idle: 'ok', thinking: 'broken', working: 'broken', speaking: 'ok', success: 'ok', error: 'ok' } },
+    { id: 'ink', name: '水墨', builtin: false, license: 'MIT', glyph: '❋', enabled: false,
+      assets: { portrait: { bytes: 288140 } },
+      /* 一套静态皮肤：motions 全空 —— 这是合法的（§4「motions 可以为空」）。
+         且它被「停用」了 —— 停用与删除是两个动作（§8 第 0 条） */
+      actions: {} }
+  ];
+  var CHARS = [
+    { id: 'reviewer',   name: '代码评审员', emoji: '🔍', skinId: 'miku' },
+    { id: 'researcher', name: '调研员',     emoji: '📚', skinId: null },
+    { id: 'ops',        name: '运维值班',   emoji: '🛠️', skinId: null },
+    { id: 'writer',     name: '文档作者',   emoji: '📝', skinId: 'neon' },
+    { id: 'bare',       name: '裸会话',     emoji: '○',   skinId: null }
+  ];
+
+  /* 边界情形开关（§8 第 3 条：四级「拿不到」必须分开报） */
+  var EDGE = 'none';
+
+  var cur = 'default';
+  var q = '';
+
+  function byId(id) { return document.getElementById(id); }
+  function skin(id) { return SKINS.filter(function (s) { return s.id === id; })[0]; }
+  function nCommunity() { return SKINS.filter(function (s) { return !s.builtin; }).length; }
+  function nMissing() {
+    return SKINS.reduce(function (n, s) {
+      return n + MOTIONS.filter(function (m) { return s.actions[m] === 'missing'; }).length;
+    }, 0);
+  }
+  function nIncomplete() {
+    return SKINS.filter(function (s) {
+      return MOTIONS.some(function (m) { return s.actions[m] !== 'ok'; });
+    }).length;
+  }
+  function refsOf(id) { return CHARS.filter(function (c) { return c.skinId === id; }); }
+
+  /* ══ SkinRenderer 的替身：把回退链画出来 ══ */
+  function renderer(s, motion, mode, opts) {
+    opts = opts || {};
+    var box = 'sk-face mode-' + (mode || 'avatar');
+    var badge = '<span class="sk-mode-badge">' + esc(mode) + '</span>';
+
+    /* 第 2/3 级：连皮肤 id 都解析不出来 */
+    if (EDGE === 'noplugin' || EDGE === 'unverified' || EDGE === 'dangling') {
+      if (mode === 'avatar') {
+        return '<div class="' + box + '"><span class="sk-glyph">' + esc(opts.text || '○') + '</span>' + badge + '</div>';
+      }
+      var why = EDGE === 'noplugin' ? '插件未安装' : (EDGE === 'unverified' ? '无法校验' : '资产缺失');
+      return '<div class="' + box + '">' + badge +
+        '<span class="sk-fail" style="position:static;background:transparent">' + why + '</span></div>';
+    }
+
+    var st = s && motion ? (s.actions[motion] || 'missing') : 'missing';
+    if (st === 'ok') {
+      return '<div class="' + box + '"><span class="sk-glyph">' + esc(s.glyph) + '</span>' + badge + '</div>';
+    }
+    /* 第 1 级：动作图缺失 → 静默退到 idle */
+    if (s.actions.idle === 'ok' && motion !== 'idle') {
+      return '<div class="' + box + '" style="opacity:.75"><span class="sk-glyph">' + esc(s.glyph) + '</span>' +
+        '<span class="sk-mode-badge">回退 idle</span></div>';
+    }
+    if (mode === 'avatar') {
+      return '<div class="' + box + '"><span class="sk-glyph">' + esc(opts.text || '○') + '</span>' +
+        '<span class="sk-mode-badge">回退 文字</span></div>';
+    }
+    return '<div class="' + box + '">' + badge +
+      '<span class="sk-fail" style="position:static;background:transparent">' +
+      (st === 'broken' ? '资产加载失败' : '无此资产') + '</span></div>';
+  }
+
+  /* ══ skin.set：唯一的写操作（走用户数据之后才有落点，§4）══ */
+  var reqSeq = 12;
+  function sendSet(patch, why) {
+    var rid = 'sk-' + (++reqSeq);
+    logEv('skin.set', '{ requestId:"' + rid + '", patch:' + JSON.stringify(patch) + ' }   ← ' + why, true);
+    if (patch.removed === true) {
+      var refs = refsOf(patch.id).map(function (c) { return c.id; });
+      if (refs.length) {
+        logEv('skin.set.result', '{ requestId:"' + rid + '", ok:false, blockedBy:[' + refs.map(function (r) { return '"' + r + '"'; }).join(',') + '] }   ← 被角色引用中', true);
+        return { ok: false, blockedBy: refs };
+      }
+      logEv('skin.set.result', '{ requestId:"' + rid + '", ok:true, changed:["' + patch.id + '"] }   ← 资产目录已删除', true);
+      return { ok: true, removed: patch.id };
+    }
+    if (patch.enabled === false) {
+      var refs2 = refsOf(patch.id).map(function (c) { return c.id; });
+      if (refs2.length) {
+        logEv('skin.set.result', '{ requestId:"' + rid + '", ok:false, blockedBy:[' + refs2.map(function (r) { return '"' + r + '"'; }).join(',') + '] }   ← 先解绑再停用', true);
+        return { ok: false, blockedBy: refs2 };
+      }
+    }
+    logEv('skin.set.result', '{ requestId:"' + rid + '", ok:true, changed:["' + patch.id + '"] }', true);
+    return { ok: true, patch: patch };
+  }
+function logEv(topic, payload, out) {
+    EV.unshift({ t: now(), topic: topic, pl: payload, out: !!out, err: /ok:false/.test(payload) });
+    if (EV.length > 60) EV.pop();
+    var box = byId('skEvList');
+    if (box) box.innerHTML = EV.map(function (e) {
+      return '<div class="sk-ev-row' + (e.out ? ' out' : '') + (e.err ? ' err' : '') + '">' +
+        '<span class="t">' + esc(e.t) + '</span>' +
+        '<span class="topic">' + esc(e.topic) + '</span>' +
+        '<span class="pl">' + esc(e.pl) + '</span></div>';
+    }).join('');
+  }
+  function now() {
+    var d = new Date();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+  }
+  var EV = [];
+  /* 内置皮可以被停用，但不能被删除（它是产品的，用户没有所有权，§10） */
+  function totalBytes(list) {
+    return list.reduce(function (n, s) {
+      var b = 0;
+      for (var k in s.assets) b += s.assets[k].bytes;
+      for (var k in s.motions) b += s.motions[k].bytes;
+      return n + b;
+    }, 0);
+  }
+
+  /* ══ Tab 1 目录 ══ */
+  function renderCatalog() {
+    if (EDGE === 'noplugin') {
+      return '<div class="d-empty"><b>skins 插件未安装</b>这个视图是插件产物，插件没装就没有它。<br>' +
+        '角色那边会显示「无法校验」，而<b>角色本身完全不受影响</b>（§8 第 4 条）。</div>';
+    }
+    if (EDGE === 'empty') {
+      return '<div class="d-empty"><b>没有皮肤</b>skin.state 收到了，但清单是空的。<br>' +
+        '这与「清单还在路上」在界面上<b>必须能区分</b> —— 所以显示的是这一屏，不是骨架屏转圈（§12 最后一条）。</div>';
+    }
+    var rows = SKINS.filter(function (s) {
+      if (!q) return true;
+      return (s.id + ' ' + s.name).toLowerCase().indexOf(q.toLowerCase()) >= 0;
+    });
+
+    var selfBytes = totalBytes(SKINS);
+    var head = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:var(--space-3);flex-wrap:wrap">' +
+      '<button class="d-btn" data-act="new">+ 新建皮肤</button>' +
+      '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">' +
+        '<b style="color:var(--color-text)">' + SKINS.length + '</b> 皮肤 · ' +
+        '<b style="color:var(--ext)">' + nCommunity() + '</b> 我自建的 · ' +
+        '<b style="color:var(--color-warning)">' + nMissing() + '</b> 个动作缺失 · ' +
+        '<b style="color:var(--color-danger)">' + nIncomplete() + '</b> 套不完整 · ' +
+        '<b style="color:var(--color-text)">' + (selfBytes / 1024).toFixed(0) + ' KB</b> 占用' +
+      '</span>' +
+      '<span class="sp" style="flex:1"></span>' +
+      '<span class="sk-readonly">📁 userData/plugin/skins/ · 卸载插件<b>不会</b>清掉这里</span>' +
+      '<input class="d-input" id="skQ" style="width:130px" placeholder="搜索皮肤" value="' + esc(q) + '" />' +
+    '</div>';
+
+    if (!rows.length) {
+      return head + '<div class="d-empty"><b>没有匹配的皮肤</b>换个关键词，或新建一套</div>';
+    }
+
+    return head + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:var(--space-3)">' +
+      rows.map(function (s) {
+        var refs = refsOf(s.id);
+        var miss = MOTIONS.filter(function (m) { return s.actions[m] === 'missing'; });
+        var brk = MOTIONS.filter(function (m) { return s.actions[m] === 'broken'; });
+        var dead = EDGE === 'unverified' || EDGE === 'dangling';
+        var isCur = s.id === cur;
+        var bytes = 0;
+        for (var k in s.assets) bytes += s.assets[k].bytes;
+        for (var k2 in s.motions) bytes += s.motions[k2].bytes;
+        return '<div class="sk-card' + (dead ? ' dead' : '') + '" aria-current="' + isCur + '">' +
+          renderer(s, 'idle', 'avatar', { text: '○' }) +
+          '<div class="sk-card-main">' +
+            '<div class="sk-card-name">' + esc(s.name) +
+              (s.builtin ? '<span class="pill builtin">内置</span>'
+                         : '<span class="pill community">我自建的</span>') +
+              (s.enabled === false ? '<span class="pill off">已停用</span>' : '') +
+              (refs.length ? '<span class="pill src">' + refs.length + ' 角色引用</span>' : '') +
+            '</div>' +
+            '<div class="sk-card-sub"><span class="mono">' + esc(s.id) + '</span> · ' +
+              (Object.keys(s.actions).length === 0
+                ? '<span style="color:var(--color-warning)">静态皮肤 · 无动作</span>'
+                : MOTIONS.filter(function (m) { return s.actions[m] === 'ok'; }).length + '/6 动作') +
+              ' · ' + (bytes / 1024).toFixed(0) + ' KB</div>' +
+            (miss.length ? '<div class="sk-card-sub">缺 ' + miss.map(function (m) { return MOTION_CN[m]; }).join('、') + '</div>' : '') +
+            (brk.length ? '<div class="sk-card-sub" style="color:var(--color-danger)">⚠ ' +
+              brk.map(function (m) { return MOTION_CN[m]; }).join('、') + ' 取不到</div>' : '') +
+            (!s.license ? '<div class="sk-card-sub" style="color:var(--color-warning)">⚠ 未声明许可</div>' : '') +
+            /* 写操作只在展开后出现，且停用/删除分成两处（§10） */
+            (isCur && !dead
+              ? '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:var(--space-2);padding-top:var(--space-2);' +
+                  'border-top:1px dashed var(--color-border)">' +
+                  '<button class="d-btn sm ghost" data-act="upload">上传资产</button>' +
+                  '<button class="d-btn sm ghost" data-act="rename">改名</button>' +
+                  '<button class="d-btn sm ghost" data-act="toggle"' + (s.enabled === false ? '' : ' disabled') + '>' +
+                    (s.enabled === false ? '启用' : '停用') + '</button>' +
+                  (s.builtin
+                    ? '<button class="d-btn sm ghost" disabled title="内置皮属于产品，用户没有所有权（§10）">删除（内置不可删）</button>'
+                    : '<button class="d-btn sm danger" data-act="del">删除</button>') +
+                '</div>'
+              : '') +
+          '</div></div>';
+      }).join('') + '</div>';
+  }
+
+  /* ══ Tab 2 动作预览 ══ */
+  function renderMotions() {
+    if (EDGE === 'noplugin' || EDGE === 'unverified') {
+      return '<div class="d-empty"><b>' + (EDGE === 'noplugin' ? '插件未安装' : '无法校验') + '</b>' +
+        '<code class="inl">skin.state</code> 没来，连清单都没有 —— 所以<b>连「缺哪个动作」都答不了</b>。</div>';
+    }
+    if (EDGE === 'dangling') {
+      return '<div class="d-empty"><b>已绑定的 <code class="inl">' + esc(cur) + '</code> 不在清单里</b>' +
+        '这是<b>已确认的悬空引用</b>（清单收到了，但没有这个 id）—— 说得出提供方，给「解绑」入口。<br>' +
+        '与「无法校验」是两回事：那种情况下<b>连清单都没拿到，说出提供方就是猜</b>（§8 第 3 条）。</div>';
+    }
+    var s = skin(cur);
+    if (!s) return '<div class="d-empty"><b>先在目录里选一套皮肤</b></div>';
+    var isStatic = Object.keys(s.actions).length === 0;
+
+    return '<div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-3);flex-wrap:wrap">' +
+        '<b style="font-size:var(--text-md)">' + esc(s.name) + '</b>' +
+        '<span class="pill src">' + esc(s.id) + '</span>' +
+(s.builtin ? '<span class="pill builtin">内置</span>' : '<span class="pill community">我自建的</span>') +
+        (s.enabled === false ? '<span class="pill off">已停用</span>' : '') +
+        (s.license ? '<span class="pill src">' + esc(s.license) + '</span>'
+                   : '<span class="pill dangling">⚠ 未声明许可 —— <b>不默认当 MIT</b></span>') +
+        '<span style="flex:1"></span>' +
+        '<span class="d-card" style="padding:var(--space-1) var(--space-3);display:flex;gap:8px;align-items:center">' +
+          '<div class="sk-face mode-portrait" style="width:56px">' + esc(s.glyph) + '</div>' +
+          '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">portrait</span></span>' +
+        (isStatic ? '<span class="pill dangling">静态皮肤 · 一个动作都没有（合法，§4）</span>' : '') +
+      '</div>' +
+      '<div class="sk-motions">' +
+        MOTIONS.map(function (m) {
+          var st = s.actions[m] || 'missing';
+          var dot = st === 'ok' ? '' : (st === 'broken' ? ' bad' : ' miss');
+          return '<div class="sk-mbox">' +
+            '<div class="sk-mbox-hd">' + m + ' · ' + MOTION_CN[m] + '<span class="st' + dot + '"></span></div>' +
+            '<div class="sk-mbox-bd">' +
+              (st === 'ok'
+                ? '<span style="font-size:26px;opacity:.75">' + esc(s.glyph) + '</span>'
+                : (st === 'missing'
+                  ? '<span style="color:var(--color-text-muted)">未声明<br>→ 静默退到 idle</span>'
+                  : '<span style="color:var(--color-danger)">⚠ 取不到<br>→ 退到 idle</span>')) +
+            '</div></div>';
+        }).join('') +
+      '</div>' +
+      '<div class="sk-card-sub" style="margin-top:var(--space-3)">' +
+        '状态点：<b style="color:var(--color-success)">绿 = 有</b> · ' +
+        '<b style="color:var(--color-border-strong)">灰 = 这套皮肤没声明</b>（不是错） · ' +
+        '<b style="color:var(--color-danger)">红 = 声明了但取不到</b>（是问题）。<br>' +
+        '<b>三色都必须画出来</b> —— 隐藏缺失会让用户以为这套皮肤只有这些动作，' +
+        '而回退是在会话里撞见的、且是静默的（§7 第 1 级）。</div>';
+  }
+
+  /* ══ Tab 3 引用 ══ */
+  function renderRefs() {
+    if (EDGE === 'noplugin' || EDGE === 'unverified') {
+      return '<div class="d-empty"><b>收不到 <code class="inl">agent.state</code> 的部分无法核对</b>' +
+        '「引用」Tab 需要<b>两份只读数据</b>：本插件的 <code class="inl">skin.state</code> ' +
+        '与 agents 的 <code class="inl">agent.state</code>。<br>' +
+        '任何一份没来，这一格就只能显示「未知」，<b>不能显示 0</b> —— ' +
+        '0 会被读成「没有角色用它」，而真相是「还不知道」。</div>';
+    }
+    var s = skin(cur);
+    var refs = s ? refsOf(s.id) : [];
+    var orphan = CHARS.filter(function (c) { return c.skinId && !skin(c.skinId); });
+
+    var blocked = s ? refsOf(s.id) : [];
+    return '<div style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3)">' +
+        '<b style="font-size:var(--text-md)">' + (s ? esc(s.name) : '—') + '</b>' +
+        (s ? '<span class="pill src">' + esc(s.id) + '</span>' : '') +
+        '<span class="sp" style="flex:1"></span>' +
+        '<span class="sk-readonly">绑定写的是 <code class="inl">characters.json</code>，owner 是 ' +
+          '<code class="inl">agents</code> 服务（§9）—— <b>本页只读它</b></span>' +
+      '</div>' +
+      (s && !s.builtin
+        ? '<div style="display:flex;gap:var(--space-2);align-items:center;margin-bottom:var(--space-3);' +
+            'padding:var(--space-2) var(--space-3);background:var(--color-surface-2);' +
+            'border:1px dashed var(--color-border);border-radius:var(--radius-md)">' +
+            '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">我自建的，可以删：</span>' +
+            (blocked.length
+              ? '<button class="d-btn sm ghost" disabled title="被 ' + blocked.length + ' 个角色引用中">删除（被引用）</button>' +
+                '<span style="font-size:var(--text-xs);color:var(--color-danger)">' +
+                '✕ ' + blocked.map(function (c) { return esc(c.name); }).join('、') + ' 正在用它 —— 先去角色页解绑</span>'
+              : '<button class="d-btn sm danger" data-act="del">删除皮肤与资产</button>' +
+                '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">' +
+                '没有角色在用，可以删。<b>删资产不可逆</b> —— 想留着就「停用」</span>') +
+          '</div>'
+        : (s ? '<div class="sk-readonly" style="margin-bottom:var(--space-3)">' +
+            '🔒 内置皮属于产品，<b>可以停用但不能删除</b>（§10）—— 想改就 fork 一份</div>' : '')) +
+      '<table class="d-table"><thead><tr><th>角色</th><th>skinId</th><th>形态</th></tr></thead><tbody>' +
+        (s ? refs.map(function (c) {
+          return '<tr><td><span style="font-size:15px;margin-right:5px">' + c.emoji + '</span>' + esc(c.name) +
+            ' <span class="pill src">' + esc(c.id) + '</span></td>' +
+            '<td><span class="mono" style="font-size:12px">' + esc(c.skinId) + '</span></td>' +
+            '<td><span class="pill builtin">生效</span></td></tr>';
+        }).join('') : '') +
+        orphan.map(function (c) {
+          return '<tr class="row-dang"><td><span style="font-size:15px;margin-right:5px">' + c.emoji + '</span>' + esc(c.name) +
+            ' <span class="pill src">' + esc(c.id) + '</span></td>' +
+            '<td><span class="mono" style="font-size:12px">' + esc(c.skinId) + '</span></td>' +
+            '<td><span class="pill dangling">已确认悬空 · 忽略，不报错</span></td></tr>';
+        }).join('') +
+        (s && !refs.length && !orphan.length
+          ? '<tr><td colspan="3"><span style="color:var(--color-text-muted);font-size:var(--text-sm)">没有角色绑它</span></td></tr>' : '') +
+      '</tbody></table>' +
+      '<div class="sk-card-sub" style="margin-top:var(--space-3)">' +
+        '<b>没有「去角色页改」的按钮。</b>两个插件视图是两个同源 iframe，通信为零；' +
+        'Dockview 开指定面板是一条<b>尚不存在</b>的宿主能力（§9 末）。<br>' +
+        '写清「哪些角色绑了它」已经够用 —— 那正是决定<b>要不要卸这个插件</b>所需要的信息。</div>';
+  }
+
+  /* ══ Tab 4 边界 ══ */
+  var EDGE_CASES = [
+    { k: 'none',       t: '正常',       d: '清单收到了，资产取得到' },
+    { k: 'dangling',   t: '已确认悬空', d: '清单收到了，但没有绑的那个 id' },
+    { k: 'unverified', t: '无法校验',   d: 'skin.state 没来（插件未安装 / 服务挂了）' },
+    { k: 'noplugin',   t: '插件未装',   d: '整个视图不存在 —— 这是它正确的形态' },
+    { k: 'empty',      t: '清单为空',   d: '与「还在路上」必须能区分' }
+  ];
+  var EDGE_DESC = {
+    none:       '一切正常。卡片上有缩略图、动作计数、引用数、占用字节；<b>四个写操作都在</b>（新建 / 上传 / 改名 / 停用 / 删除），<b>而它们都会被引用关系挡住</b>。',
+    dangling:   '绑的 id 不在清单里。<b>已确认</b>，所以说得出提供方，给「解绑」。皮肤本身不参与装配，角色照常可用。',
+    unverified: 'skin.state 没来。<b>不能</b>说是谁没提供 —— 一份清单都没拿到，说出来就是猜。<b>解绑仍然要给</b>：校验不了 ≠ 清不掉。',
+    noplugin:   '插件没装 → <b>这个视图根本不存在</b>。给一个空的皮肤面板是在对用户说谎。角色那边显示「无法校验」。',
+    empty:      '清单是空的。这与「还在路上」在界面上<b>必须能区分开</b>，所以是这一屏而不是转圈。'
+  };
+  function renderEdge() {
+    var me = EDGE_CASES.filter(function (c) { return c.k === EDGE; })[0] || EDGE_CASES[0];
+    return '<div class="seg" style="margin-bottom:var(--space-3)">' +
+        EDGE_CASES.map(function (c) {
+          return '<button data-edge="' + c.k + '" aria-pressed="' + (EDGE === c.k) + '">' + c.t + '</button>';
+        }).join('') + '</div>' +
+      '<div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-3)">' + esc(me.d) + '</div>' +
+      '<div class="d-card" style="padding:var(--space-4)">' + EDGE_DESC[EDGE] + '</div>' +
+      '<div class="sk-card-sub" style="margin-top:var(--space-3)">' +
+        '<b>五种里没有一种应该出现红色报错块。</b>这就是 §8 第 4 条的可测形式：' +
+        '<b>皮肤降级不影响任何能力</b> —— 因为它一个字节也不进模型。' +
+        '而这条纪律要在界面上<b>写出来</b>，否则「界面变丑了」会被当成「Agent 坏了」，' +
+        '用户会重开会话，白白丢掉上下文。</div>';
+  }
+
+  /* ══ Tab 切换与渲染 ══ */
+  var TABS = ['catalog', 'motions', 'refs', 'edge'];
+  function renderAll() {
+    byId('skTabCatalog').innerHTML = renderCatalog();
+    byId('skTabMotions').innerHTML = renderMotions();
+    byId('skTabRefs').innerHTML = renderRefs();
+    byId('skTabEdge').innerHTML = renderEdge();
+  }
+  function showTab(k) {
+    var tabs = byId('skTabs');
+    tabs.querySelectorAll('button').forEach(function (x) {
+      x.setAttribute('aria-selected', String(x.getAttribute('data-t') === k));
+    });
+    TABS.forEach(function (t) {
+      byId('skTab' + t.charAt(0).toUpperCase() + t.slice(1)).hidden = (t !== k);
+    });
+  }
+  byId('skTabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-t]');
+    if (b) showTab(b.getAttribute('data-t'));
+  });
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-edge]');
+    if (b) { EDGE = b.getAttribute('data-edge'); renderAll(); return; }
+
+    /* skin.set 的四个动作 */
+    var a = e.target.closest('[data-act]');
+    if (a && !a.disabled) {
+      var act = a.getAttribute('data-act');
+      var s = skin(cur);
+      if (act === 'new') {
+        SKINS.push({
+          id: 'mine-' + (SKINS.length + 1), name: '新皮肤', builtin: false, license: '', glyph: '✧',
+          enabled: true, assets: {}, actions: {},
+        });
+        cur = 'mine-' + SKINS.length;
+        sendSet({ id: cur }, '新建');
+        renderAll();
+        return;
+      }
+      if (act === 'upload') {
+        if (!s) return;
+        s.actions.idle = 'ok';
+        s.actions.thinking = 'ok';
+        s.assets.avatar = { bytes: 10240 };
+        s.glyph = '⬆';
+        sendSet({ id: cur }, '上传资产（格式/大小/assetId 由 §10 那四条约束把关）');
+        renderAll();
+        return;
+      }
+      if (act === 'rename') {
+        if (!s) return;
+        s.name = s.name + '·改';
+        sendSet({ id: cur, name: s.name }, '改名');
+        renderAll();
+        return;
+      }
+      if (act === 'toggle') {
+        if (!s) return;
+        var r0 = sendSet({ id: cur, enabled: s.enabled === false }, s.enabled === false ? '启用' : '停用');
+        if (!r0.ok) { alert('停用失败：' + r0.blockedBy.join('、') + ' 正在用它。\n先去角色页解绑。'); return; }
+        s.enabled = s.enabled === false;
+        renderAll();
+        return;
+      }
+      if (act === 'del') {
+        if (!s) return;
+        var refs = refsOf(s.id).map(function (c) { return c.name; });
+        if (refs.length) { alert('删除被拒绝：' + refs.join('、') + ' 正在用它。'); return; }
+        if (!window.confirm('删除「' + s.name + '」及其全部资产？\n\n此操作**不可逆**。\n想保留的话请用「停用」。')) return;
+        /* confirmUnreferenced 是必填的 —— 服务拿 agent.state 核对，而那份可能没到（§4） */
+        var rr = sendSet({ id: cur, removed: true, confirmUnreferenced: true }, '删除（用户已二次确认）');
+        if (!rr.ok) { alert('删除被拒绝：' + rr.blockedBy.join('、')); return; }
+        SKINS = SKINS.filter(function (x) { return x.id !== rr.removed; });
+        cur = SKINS.length ? SKINS[0].id : '';
+        renderAll();
+        return;
+      }
+    }
+
+    var card = e.target.closest('.sk-card');
+    if (card && card.getAttribute('aria-current') === 'false') {
+      var mono = card.querySelector('.sk-card-sub .mono');
+      if (mono) cur = mono.textContent;
+      showTab('motions');
+      renderAll();
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'skQ') return;
+    q = e.target.value;
+    byId('skTabCatalog').innerHTML = renderCatalog();
+var box = byId('skQ');
+    box.focus();
+    box.setSelectionRange(q.length, q.length);
+  });
+
+  logEv('skin.state', '{ version:1, skins:5, builtin:2, userOwned:3, warnings:1 }   ← 服务重播整份（owner 的义务，§12）', false);
+  renderAll();
+})();
+</script>
+
+</body>
+</html>

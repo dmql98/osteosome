@@ -1,0 +1,24 @@
+{
+  "id": "skills",
+  "name": "技能管理",
+  "version": "1.0.0",
+  "icon": "🧩",
+  "author": "osteosome",
+  "license": "Apache-2.0",
+  "description": "技能管理：技能的事实来源是磁盘上的 SKILL.md 目录（frontmatter + 正文）。skills 服务是索引的收集方——各带技能的插件自己的服务读完后 publish skill.registered 交上来，它加上用户自建（userData/plugin/skills/custom/）汇总成全系统一份 skills.state。索引全系统一份，只有 name+description 进提示词（p10 一个片段），正文经 skill_read 按需回吐（属 tools 插件）。两个开关合成是 AND 且必须在服务端成立：本机可用（skills.json 机器级）∩ 角色绑定（characters.json·skills[]），经 skills.list{characterId} 落地。唯一写入口是 skill.package.write。装这个插件才有技能库与 p10 索引；没装则模型看不到任何技能。",
+  "services": ["skills"],
+  "components": [],
+  "ui": {
+    "views": [
+      { "id": "widget.skills", "title": "技能", "entry": "index.html" }
+    ]
+  },
+  "capabilities": [
+    { "name": "skills.state", "detail": "技能索引（重播整份，界面数据源）" },
+    { "name": "skills.list", "detail": "按角色要索引（本机可用 ∩ 角色绑定，AND 服务端）" },
+    { "name": "skill.enabled.set", "detail": "机器级「本机可用」开关（不影响角色绑定）" },
+    { "name": "skill.package.write", "detail": "写用户自建 SKILL.md（skills 服务唯一写者）" }
+  ],
+  "dependencies": [],
+  "autoStart": true
+}

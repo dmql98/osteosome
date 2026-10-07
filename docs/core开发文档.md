@@ -260,10 +260,7 @@ Content-Length: 123\r\n
 | 服务 → Core | `bus.subscribe` | 订阅 topic |
 | 服务 → Core | `bus.unsubscribe` | 取消订阅 |
 | 服务 → Core | `health.pong` | 心跳应答 |
-| 服务 → Core | `credentials.get` | 取凭证原值（仅服务进程；值不进总线 / SSE，见 §4.7） |
-| 服务 → Core | `credentials.set` | 写入凭证（值只经 stdio，不入事件报文） |
-| 服务 → Core | `credentials.delete` | 删除凭证 |
-| 服务 → Core | `credentials.list` | 取凭证掩码列表（前端经 `/api/credentials` 同口径） |
+| 服务 → Core | ~~`credentials.get/set/delete/list`~~ | **已退休**（密钥归使用方插件，见 §4.7）。取密钥改成「插件读自己的 `credentials.json`」 |
 | 服务 → Core | `shutdown` | 主动要求退出 |
 | Core → 服务 | `bus.event` | 推送订阅的事件 |
 | Core → 服务 | `health.ping` | 心跳探测 |
@@ -304,9 +301,15 @@ SIGTERM → 等待 timeoutMs（默认 5000）→ SIGKILL
 |---|---|---|
 | `/events` | GET | SSE 事件流，前端订阅总线事件 |
 | `/api/command` | POST | 前端投递命令到总线 |
-| `/api/preferences` | GET / PUT | 布局、主题、i18n 等偏好持久化 |
-| `/api/credentials` | GET / PUT / DELETE | 凭证管理（GET 只回掩码；**原值永不经过 SSE**，见 §4.7） |
+| `/api/preferences` | GET / PUT | Core 自己的偏好（布局 / 主题 / i18n / 插件启停）。PUT 遇到 `llm` 段会**丢掉并回一句原因** —— 那份数据已归 models 插件（§4.7） |
+| `/api/info` | GET | `{ dataDir, dataDirSource, defaultDataDir, configFilePath }` —— 设置页渲染「数据目录」那一格 |
+| `/api/config` | GET / PUT | 引导配置 `<应用根>/ost.config.json`：**改数据目录的唯一入口**。PUT `{dataDir: string \| null}`（`null` = 恢复缺省），成功回 `{ok, dataDir, restartRequired: true}` |
+| ~~`/api/credentials`~~ | — | **已退休**（404）。密钥与接入清单归 models 插件，前端经 `/api/command` + 总线读写（§4.7） |
 | `/*` | GET | 静态资源（Vue 构建产物） |
+
+`dataDir` 的来源优先级 `--data` > `OST_DATA` > `ost.config.json` > 缺省（发行版 `<安装根>/userData`、开发 `<应用根>/userData`），
+读写在 `core/src/config/boot-config.ts` + `config.ts`，HTTP 在 `core/src/sse-bridge/config.ts`。
+它**必须**待在数据目录之外：偏好住在 `<dataDir>/core/preferences.json` 里，把「数据目录」存进偏好就是鸡生蛋。
 
 ### 4.2 `/events` 语义
 
@@ -369,12 +372,17 @@ interface SseBridge {
 - 弹窗（`#/pane/:id`）连上即收流，无需额外鉴权
 - 同源共享 `localStorage` / cookie
 
-### 4.7 凭证 seam（P4 落点）
+### 4.7 凭证 seam（**已退休**：归使用方插件）
 
-- **归属**：凭证是 Core 职责（`core/src/credentials/`），非服务；落盘 `dataDir/credentials.json`（原子写，损坏降级）。
-- **红线**：原值**永不进总线 / SSE / 事件 payload**。服务进程取原值走 JSON-RPC `credentials.get`（stdio，见 §3.5）；前端只见掩码（`GET /api/credentials`）。
-- 事件（只增不改）：`credential.saved` / `credential.deleted` —— payload 仅 `{ id, name, provider }`，无值。
-- 详细方案：`docs/开发进度/P4-详细计划.md` WS-1。
+- **原设计**（P4，Core 职责）：`core/src/credentials/` + `dataDir/core/credentials.json` + JSON-RPC `credentials.get/list/set/delete` + `GET /api/credentials` + `credential.saved/deleted` 事件 + 独立的 `credentials` 能力位服务（`credentials.resolve` → `credentials.resolved`）。
+- **现状**：密钥归**使用方插件** —— `userData/plugin/models/credentials.json`，由 models 插件的 provider 服务（`llm-provider-openai`）读写，Core 不持有、不转发、不落盘。
+  - 明文只在该文件与 owner 进程内存里；**永不进总线 / SSE / 事件 payload**（这条红线没变，只是路径短了两跳）。
+  - 前端经总线读写：`models.credentials.put/delete/list` 命令 → `models.credentials.state`（**掩码**列表）。
+  - 凭证引用 scheme 由 `core:<id>` 改为 `file:<id>`（名字跟着位置走）。
+  - `credentials` 插件整体删除（6 服务 → 5）。
+- 迁移：`core/src/config/paths.ts` 的 `migratePluginOwnedData()`，启动时在起服务之前执行；密钥走「复制 → 校验 → 才删源」。
+- 依据：`docs/插件化架构优化.html` §4 三层布局 + §5「凭证能力位退休」。
+- 历史方案：`docs/开发进度/P4-详细计划.md` WS-1。
 
 ---
 
@@ -543,7 +551,7 @@ bus.subscribe('service.failed', (e) => services.restart(e.serviceId))
 6. 服务退出前：notification 'shutdown'，Core 回 'exit'
 ```
 
-> **数据目录约定（P1 起）**：`dataDir` 令服务进程知道往哪儿写数据——**它所属插件**的数据根 `userData/plugin/<pluginId>/`（`shared/src/paths.ts` 的 `pluginDataDir()`，P1a §3.1 的「每服务一个目录」被插件级取代：一个插件的 UI 与它的服务要看到同一份东西）。Core 自己的数据在 `userData/core/`（`preferences.json` / `credentials.json`，Core 解析它们）。
+> **数据目录约定（P1 起）**：`dataDir` 令服务进程知道往哪儿写数据——**它所属插件**的数据根 `userData/plugin/<pluginId>/`（`shared/src/paths.ts` 的 `pluginDataDir()`，P1a §3.1 的「每服务一个目录」被插件级取代：一个插件的 UI 与它的服务要看到同一份东西）。Core 自己的数据在 `userData/core/`（只有 `preferences.json`：布局 / 主题 / 插件启停，Core 解析它）。密钥与模型接入清单**不在 Core 那侧** —— 在 `userData/plugin/models/`（§4.7）。
 >
 > **缺省是安装目录内的 `userData/`**：发行版里是 `<exe 旁边>/osteosome/userData`（判据：exe 同级有 `.osteosome-dist` 标记文件 —— 必须是显式声明，因为开发时 `process.execPath` 指向 node.exe，用它的目录会得到荒谬路径），开发跑时退到 `%LOCALAPPDATA%/osteosome`（其它平台 `$XDG_DATA_HOME/osteosome`）。理由：接入配置、密钥、布局、会话都属于**用这个系统的人**，不属于某一份工作副本 —— 换个目录启动不该换一套配置，`git clone` 也不该带上密钥。换机器时整个 `userData/` 拷过去即可。
 >

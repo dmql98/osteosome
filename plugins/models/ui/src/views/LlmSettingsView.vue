@@ -57,37 +57,26 @@ import { Input } from '@osteosome/ui'
 import { Modal } from '@osteosome/ui'
 import { useEndpointProbe } from '@osteosome/core-client'
 import { useLlmProviders } from '@osteosome/core-client'
-import { usePreferences } from '@osteosome/core-client'
+import { useModelsPrefs, useModelCredentials } from '@osteosome/core-client'
 import CustomEndpointSection from './CustomEndpointSection.vue'
 import PluginProviderSection from './PluginProviderSection.vue'
 import VendorListSection from './VendorListSection.vue'
 import type { PendingRow } from './ProviderCatalog.vue'
 import type { ProviderCardData } from './ProviderCard.vue'
-import type { VendorPreset } from '@osteosome/shared'
+import type { EndpointOverride, MaskedCredential, VendorPreset } from '@osteosome/shared'
 import { useCatalog } from '../catalog'
 
-interface EndpointOverride {
-  id: string
-  label?: string
-  baseUrl: string
-  defaultModel?: string
-  /** `''` = 显式免凭证；**缺省 = 要凭证**（由 provider 去 env / 凭证库按 id 找） */
-  credentialRef?: string
-  api?: string
-}
-
-interface MaskedCredential {
-  id: string
-  name: string
-  provider: string
-}
-
-const preferences = usePreferences()
 const { list: providerList } = useLlmProviders()
 const probe = useEndpointProbe()
-
 /**
- * 厂商预设 = 插件自带的 `catalog.json`（P5），**运行时读**。
+ * 接入清单与密钥的**所有者是 models 插件的服务**（`userData/plugin/models/`），
+ * 这里经总线读订阅、发命令 —— 不再走 Core 的 `preferences.llm` 与 `/api/credentials`。
+ * 理由见 `sdk/core-client/src/useModelsPrefs.ts` 的头注。
+ */
+const modelsPrefs = useModelsPrefs()
+const modelCredentials = useModelCredentials()
+
+/** 厂商预设 = 插件自带的 `catalog.json`（P5），**运行时读**。
  *
  * 原来它是一份编译期常量（`VENDOR_PRESETS`）。改成数据文件之后：
  * 「加一家厂商」只改 `plugins/models/catalog.json`，不用重编译任何包；
@@ -101,7 +90,14 @@ const { state: catalogState, reload: reloadCatalog } = useCatalog()
 const catalog = computed<VendorPreset[]>(() =>
   catalogState.value.status === 'ready' ? catalogState.value.vendors : [],
 )
-const credentials = ref<MaskedCredential[]>([])
+/**
+ * owner 重播的整份清单是唯一真相，这里**只读引用**它。
+ *
+ * 原来这几个都是本地 ref，改完 `saveLlm()` 写回 Core 偏好 —— 于是「界面上改了」
+ * 与「owner 那边改了」之间有一个时间差，两个窗口同时开就会互相覆盖。
+ * 现在改成「owner 说了算」：本地只保留编辑中的中间态，落库仍由 owner 落。
+ */
+const credentials = modelCredentials.credentials
 const overrides = ref<EndpointOverride[]>([])
 /**
  * 已禁用的模型，元素是 `${providerId}::${model}`。
@@ -378,26 +374,22 @@ function openKey(providerId: string): void {
 
 async function onSaveCredential(): Promise<void> {
   if (!credentialValue.value) return
-  await fetch('/api/credentials', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: credentialId.value,
-      name: credentialName.value,
-      provider: keyTargetProvider.value,
-      value: credentialValue.value,
-    }),
+  await modelCredentials.put({
+    id: credentialId.value,
+    name: credentialName.value,
+    provider: keyTargetProvider.value,
+    value: credentialValue.value,
   })
   credentialValue.value = ''
   credentialOpen.value = false
-  await loadCredentials()
   // 刚给了密钥 → 那家可能刚刚注册成功，立刻探一次
   if (keyTargetProvider.value) await probe.probe(keyTargetProvider.value)
 }
 
 async function onDeleteCredential(id: string): Promise<void> {
-  await fetch(`/api/credentials?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-  credentials.value = credentials.value.filter((c) => c.id !== id)
+  // 列表由 owner 重播回来，所以这里**不**本地删 ——
+  // 本地删了而 owner 那次删除失败（写盘失败），界面就会显示一个已经不存在的状态。
+  await modelCredentials.remove(id)
 }
 
 async function removeKey(providerId: string): Promise<void> {
@@ -445,8 +437,8 @@ async function onSaveEndpoint(): Promise<void> {
   const item: EndpointOverride = {
     id,
     baseUrl: baseUrl.replace(/\/+$/, ''),
-    // 要凭证就**不写** credentialRef（provider 去 env / 凭证库按 id 找），
-    // 免凭证才显式写空串 —— 写成 `core:xxx` 反而会把不存在的引用钉死
+    // 要凭证就**不写** credentialRef（provider 去 env / 本插件凭证文件按 id 找），
+    // 免凭证才显式写空串 —— 写成 `file:xxx` 反而会把不存在的引用钉死
     ...(epNeedKey.value ? {} : { credentialRef: '' }),
     ...(epLabel.value.trim() ? { label: epLabel.value.trim() } : {}),
     ...(epModel.value.trim() ? { defaultModel: epModel.value.trim() } : {}),
@@ -456,17 +448,12 @@ async function onSaveEndpoint(): Promise<void> {
 
   // 凭证跟着端点一起填：一张表单办完，不用让用户再去找一次入口
   if (epNeedKey.value && epKeyValue.value) {
-    await fetch('/api/credentials', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: epCredId.value.trim() || `${id}-key`,
-        name: epCredName.value.trim() || `${id} API Key`,
-        provider: id,
-        value: epKeyValue.value,
-      }),
+    await modelCredentials.put({
+      id: epCredId.value.trim() || `${id}-key`,
+      name: epCredName.value.trim() || `${id} API Key`,
+      provider: id,
+      value: epKeyValue.value,
     })
-    await loadCredentials()
     epKeyValue.value = ''
   }
 
@@ -481,48 +468,41 @@ async function onDeleteOverride(id: string): Promise<void> {
   probe.clear(id)
 }
 
-// ── 偏好读写（唯一写入点 —— 见文件头） ──
+// ── 接入清单读写（owner = models 插件的服务）──
+//
+// **单一写入点**：`saveLlm()` 是唯一把编辑态推给 owner 的地方。
+// owner 每次都重播整份，于是两个窗口同时开也不会互相覆盖 —— 后写的那次赢，
+// 而两边最终都收敛到同一份 owner 状态（这是「owner 说了算」换来的东西）。
 async function saveLlm(): Promise<void> {
-  await preferences.patch({
-    llm: {
-      vendorOverrides: overrides.value,
-      enabledModels: disabledModels.value,
-      connectedVendors: connectedVendors.value,
-    },
+  await modelsPrefs.patch({
+    vendorOverrides: overrides.value,
+    enabledModels: disabledModels.value,
+    connectedVendors: connectedVendors.value,
   })
 }
 
-async function loadLlm(): Promise<void> {
-  try {
-    const prefs = (await preferences.get()) as {
-      llm?: { vendorOverrides?: unknown; enabledModels?: unknown; connectedVendors?: unknown }
-    }
-    overrides.value = Array.isArray(prefs.llm?.vendorOverrides)
-      ? (prefs.llm.vendorOverrides as EndpointOverride[])
-      : []
-    disabledModels.value = Array.isArray(prefs.llm?.enabledModels)
-      ? (prefs.llm.enabledModels as string[])
-      : []
-    connectedVendors.value = Array.isArray(prefs.llm?.connectedVendors)
-      ? prefs.llm.connectedVendors.filter((x): x is string => typeof x === 'string')
-      : []
-  } catch {
-    overrides.value = []
-    disabledModels.value = []
-    connectedVendors.value = []
-  }
-}
+/**
+ * owner 状态 → 本地编辑态（单向）。
+ *
+ * 原来是「挂载时 `preferences.get()` 拉一次」—— 那是**竞态**：owner 可能还没起，
+ * 于是拉到空清单并当成「用户什么都没配」。现在改成订阅 owner 的重播，
+ * 什么时候到什么时候更新，owner 晚起也不影响。
+ */
+watch(
+  () => modelsPrefs.prefs.value,
+  (prefs) => {
+    overrides.value = prefs.vendorOverrides
+    disabledModels.value = prefs.enabledModels
+    connectedVendors.value = prefs.connectedVendors
+  },
+  { immediate: true, deep: true },
+)
 
-async function loadCredentials(): Promise<void> {
-  try {
-    const res = await fetch('/api/credentials')
-    if (!res.ok) return
-    const body = (await res.json()) as { credentials?: MaskedCredential[] }
-    credentials.value = body.credentials ?? []
-  } catch {
-    credentials.value = []
-  }
-}
+/**
+ * 密钥列表由 owner 重播（`useModelCredentials` 订阅 `models.credentials.state`），
+ * 所以这里**没有**加载函数 —— 曾经那个 `GET /api/credentials` 的等价物是
+ * `models.credentials.list` 命令，而它由 composable 在 SSE 连上那一刻自动发。
+ */
 
 /**
  * 新注册的 provider 自动探一次。
@@ -546,8 +526,8 @@ watch(
 )
 
 onMounted(async () => {
-  // 厂商目录与偏好/凭证**并行**拉：三方互不依赖，串行会白等两倍时间
-  await Promise.all([reloadCatalog(), loadLlm(), loadCredentials()])
+  // 只剩厂商目录要拉：接入清单与凭证由 owner 主动重播（订阅式，见 useModelsPrefs）
+  await reloadCatalog()
 })
 </script>
 
@@ -663,7 +643,7 @@ onMounted(async () => {
               <Input v-model="epKeyValue" type="password" placeholder="只写入，不回显" />
             </label>
             <p class="form__note">
-              密钥明文只进 Core 凭证库，不进日志、不进总线。留空则稍后在卡片上单独设置。
+              密钥明文只进本插件的数据目录（userData/plugin/models/），只被 provider 服务读取，不进日志、不进事件、不回显。留空则稍后在卡片上单独设置。
             </p>
           </div>
         </div>
@@ -688,7 +668,7 @@ onMounted(async () => {
           <span class="form__key">密钥值</span>
           <Input v-model="credentialValue" type="password" placeholder="只写入，不回显" />
         </label>
-        <p class="form__note">密钥明文只进 Core 凭证库，不进日志、不进总线。</p>
+        <p class="form__note">密钥明文只进本插件的数据目录，只被 provider 服务读取，不进日志、不进事件、不回显。</p>
       </div>
       <template #footer>
         <Button size="sm" variant="ghost" @click="credentialOpen = false">取消</Button>

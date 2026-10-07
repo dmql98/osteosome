@@ -12,23 +12,32 @@
  *
  * env 覆盖：`<ID_UPPER>_BASE_URL` / `<ID_UPPER>_MODEL`。
  *
- * 凭证与自填端点有三个来源，优先级从高到低：
- * 1. **env**：`<ID_UPPER>_API_KEY`（部署者显式注入，脚本 / CI 用）
- * 2. **Core 凭证库**：用户在设置窗存的密钥（`credential.saved` 带 `provider` 字段，据此归类）
- * 3. **Core 偏好** `llm.vendorOverrides`：用户在设置窗填的自填端点
+ * ## 用户数据归本进程（`userData/plugin/models/`）
  *
- * 且**运行期会重算**：收到 `credential.saved` / `credential.deleted` 就重算实例列表并增删注册 ——
+ * 接入清单与密钥都由**这个服务持有**（`preferences.json` + `credentials.json`）：
+ * - 不再向 Core 读 `preferences.get` / `credentials.list`，也不再等 `credentials.resolve` 那一跳；
+ * - 明文密钥只在本进程内存与那个文件里 —— 比「Core 保管 → 凭证服务转发 → provider」短两跳，
+ *   而**红线没变**：明文永不入事件 / SSE / 日志，回给前端的一律掩码；
+ * - 前端经总线读写（`models.prefs.*` / `models.credentials.*`），Core 只转发不落盘。
+ *
+ * 配置有两个来源，优先级从高到低：
+ * 1. **env**：`<ID_UPPER>_API_KEY`（部署者显式注入，脚本 / CI 用）
+ * 2. **本插件的用户数据**：`credentials.json` 里用户在设置窗存的密钥（按 `provider` 归类）
+ *    与 `preferences.json` 里的自填端点
+ *
+ * 且**运行期会重算**：`models.credentials.put/delete`、`models.prefs.set` 一到就重算实例列表并增删注册 ——
  * 「存在性由配置决定」必须当场生效，否则用户在设置窗加了密钥还得重启进程才能看到下拉里多一家。
- * 读取走 Core 的点对点特权 RPC（`preferences.get` / `credentials.list`），不经总线。
  */
 import { Service } from '@osteosome/service-sdk'
-import { attachCredentialClient, CredentialClientError, loadPluginJson } from '@osteosome/service-sdk'
+import { loadPluginJson } from '@osteosome/service-sdk'
 import {
   isFinishBlock,
   listModels,
   normalizeThinking,
   parseVendorCatalog,
   presetsForWire,
+  type MaskedCredential,
+  type ModelsPrefs,
   type StreamChunk,
   type StreamError,
   type ToolSpec,
@@ -42,9 +51,9 @@ import {
   type VendorInstance,
 } from './instances'
 import { streamCompletions } from './provider'
+import { ModelsStore, ModelsStoreError } from './store'
 
-const service = new Service({ id: 'llm-provider-openai', version: '1.1.0' })
-const credentials = attachCredentialClient(service)
+const service = new Service({ id: 'llm-provider-openai', version: '1.2.0' })
 
 /** 插件自带目录文件（相对 `plugins/models/`）。Core 授予只读，边界在 Core 那边 */
 const CATALOG_PATH = 'catalog.json'
@@ -60,10 +69,15 @@ const inflight = new Map<string, AbortController>()
  */
 const instances = new Map<string, VendorInstance>()
 
-/** Core 凭证库快照：`厂商 id → 凭证 id`（启动时读一次，之后由事件增量维护） */
-const credentialIdByProvider = new Map<string, string>()
+/**
+ * 本插件的用户数据仓库 —— `service.start()` 之后才有 `service.dataDir`，所以那时才建。
+ *
+ * 顶层留 `null` 而不是造一个空壳：空壳会让「密钥都在哪」这个问题有两个答案，
+ * 而「建仓库必须晚于 start」正是本文件最容易写错的地方。
+ */
+let store: ModelsStore | null = null
 
-/** Core 偏好快照（`llm.vendorOverrides`）；设置窗写入后需要重启或事件触发才刷新 */
+/** 接入清单快照（`vendorOverrides` 参与注册计算；另两个键是 UI 的消费方） */
 let preferences: { vendorOverrides?: unknown } = {}
 
 /**
@@ -107,38 +121,59 @@ async function loadCatalog(): Promise<void> {
 }
 
 /**
- * 从 Core 的两个特权通道读配置。
+ * 打开自己的用户数据目录（`userData/plugin/models/`）。
  *
- * 为什么走 RPC 而不是读文件 / 上总线：
- * - 与 `credentials.get` 同一套「点对点特权读」纪律，**不经总线、不落事件**；
- * - 服务不知道也不该知道 Core 的 dataDir 布局。
+ * ## 为什么是「读自己的文件」而不是「问 Core」
  *
- * 读不到就退化成「只有 env」—— 宁可少几家可见，也不要因为配置通道故障而起不来。
+ * 原来这里是两条 Core 特权 RPC（`credentials.list` + `preferences.get`），
+ * 因为那时候密钥归 Core 保管。密钥归使用方插件之后，这个理由消失了：
+ * Core 拿到这些数据对它没有任何用处（它不解析厂商、不发请求），
+ * 却让密钥与接入清单都多了一个进程经手。
+ *
+ * ## 失败处置
+ *
+ * 目录建不起来 → **抛**（`ModelsStore` 内部抛）。这件事不能 fail-open：
+ * 静默退化成「空偏好」的话，用户会看到「我明明连了 LM Studio，怎么下拉里没有」，
+ * 而日志里只有一行 warn。宁可这个服务起不来 —— 状态面板会明说哪个服务 failed。
+ *
+ * 文件内容坏掉 → **不抛**（`prefsCorrupted` / `credsCorrupted` 标记出来并告警）：
+ * 一个坏文件不该连累用户连不上已经能用的本地端点。
  */
-async function loadConfigFromCore(): Promise<void> {
-  try {
-    const listed = await service.call<{ credentials?: Array<{ id?: string; provider?: string }> }>(
-      'credentials.list',
-    )
-    credentialIdByProvider.clear()
-    for (const item of listed?.credentials ?? []) {
-      if (typeof item?.id === 'string' && typeof item?.provider === 'string' && item.provider) {
-        credentialIdByProvider.set(item.provider, item.id)
-      }
-    }
-  } catch (err) {
-    console.warn(`llm-provider-openai: credentials.list unavailable (${String(err)}) — env-only`)
-  }
-  try {
-    const read = await service.call<{ preferences?: { llm?: { vendorOverrides?: unknown } } }>('preferences.get')
-    preferences = read?.preferences?.llm ?? {}
-  } catch (err) {
-    console.warn(`llm-provider-openai: preferences.get unavailable (${String(err)}) — env-only`)
-  }
+function openStore(): void {
+  store = new ModelsStore(service.dataDir)
+  preferences = { vendorOverrides: store.getPrefs().vendorOverrides }
+  const { prefs, credentials } = store.files
+  console.log(`llm-provider-openai: user data ${prefs}${store.prefsCorrupted ? ' (CORRUPTED)' : ''}`)
+  console.log(`llm-provider-openai: credentials ${credentials}${store.credsCorrupted ? ' (CORRUPTED)' : ''}`)
+  if (store.prefsCorrupted) console.warn(`llm-provider-openai: ${prefs} is corrupted — treated as empty`)
+  if (store.credsCorrupted) console.warn(`llm-provider-openai: ${credentials} is corrupted — treated as empty`)
 }
 
 function currentSources(): CredentialSources {
-  return { env: process.env, byProvider: new Map(credentialIdByProvider), preferences }
+  return { env: process.env, byProvider: store ? store.credentialIdByProvider() : new Map(), preferences }
+}
+
+/**
+ * 解析凭证引用 → 明文。**只在本进程**，结果不进事件 / 日志 / 返回值。
+ *
+ * 两种 ref：
+ * - `env:<VAR>` —— 本进程环境变量（部署者注入）
+ * - `file:<id>` —— 本插件 `credentials.json` 里的那一条
+ *
+ * 认不出的 scheme 抛错而不是给空串：空 apiKey 打过去换来的是上游 401，
+ * 那条报错会指向「厂商配错了」，而真实原因是引用格式坏了 —— 指向错的方向更难查。
+ */
+function resolveApiKey(ref: string): string {
+  if (!ref) return ''
+  const sep = ref.indexOf(':')
+  const scheme = sep > 0 ? ref.slice(0, sep) : ''
+  const rest = sep > 0 ? ref.slice(sep + 1) : ''
+  if (scheme === 'env') return process.env[rest] ?? ''
+  if (scheme === 'file') {
+    if (!store) throw new ModelsStoreError('not_found', 'store not open')
+    return store.credentialValue(rest)
+  }
+  throw new ModelsStoreError('not_found', `unsupported credentialRef scheme: '${scheme || ref}'`)
 }
 
 /**
@@ -210,34 +245,83 @@ service.subscribe('llm.provider.reannounce', () => {
 
 /** 注册本进程所有「已配置」的厂商实例 —— 握手完成、订阅生效后再调用 */
 async function registerCapabilities(): Promise<void> {
-  await loadConfigFromCore()
+  openStore()
   reconcile()
 }
 
-// 「存在性由配置决定」要当场生效：用户在设置窗存/删密钥后立刻重算，不用重启进程。
-service.subscribe('credential.saved', (payload) => {
-  const id = typeof payload.id === 'string' ? payload.id : ''
-  const provider = typeof payload.provider === 'string' ? payload.provider : ''
-  if (!id || !provider) return
-  credentialIdByProvider.set(provider, id)
-  const { added } = reconcile()
-  if (added.length > 0) console.log(`llm-provider-openai: registered via credential: ${added.join(', ')}`)
+// ── 本插件用户数据的命令面（owner = 本进程）────────────────────────
+//
+// 前端（模型接入面板）经 `/api/command` → 总线到这里读写；Core 只转发，不持有这些数据。
+//
+// 为什么每次变更都**重播整份**而不是发增量：订阅方可能晚于本进程启动（那一刻的增量早发完了），
+// 而「拿到全量就不需要补偿逻辑」这条性质比省几个字节重要得多。
+
+service.subscribe('models.prefs.get', () => {
+  if (!store) return
+  service.publish('models.prefs.state', { prefs: store.getPrefs() })
 })
 
-service.subscribe('credential.deleted', (payload) => {
-  const id = typeof payload.id === 'string' ? payload.id : ''
-  if (!id) return
-  // 只有当被删的正是「这家当前在用的那条」才摘掉；删了另一条不该影响已注册的厂商
-  let hit = false
-  for (const [provider, cid] of [...credentialIdByProvider]) {
-    if (cid !== id) continue
-    credentialIdByProvider.delete(provider)
-    hit = true
+service.subscribe('models.prefs.set', (payload) => {
+  if (!store) return
+  const patch = (payload as { patch?: unknown }).patch
+  if (!patch || typeof patch !== 'object') {
+    service.publish('models.prefs.state', { prefs: store.getPrefs() })
+    return
   }
-  if (!hit) return
-  // env 兜底：env 还在的话这一家仍然可用，不该注销
-  const { removed } = reconcile()
-  if (removed.length > 0) console.log(`llm-provider-openai: unregistered (credential removed): ${removed.join(', ')}`)
+  try {
+    const next = store.patchPrefs(patch as Partial<ModelsPrefs>)
+    // 自填端点变了要重算实例（端点/凭证引用是注册内容的一部分）
+    preferences = { vendorOverrides: next.vendorOverrides }
+    reconcile()
+    service.publish('models.prefs.state', { prefs: store.getPrefs() })
+  } catch (err) {
+    console.error(`llm-provider-openai: models.prefs.set failed: ${String(err)}`)
+    service.publish('models.prefs.state', { prefs: store.getPrefs() })
+  }
+})
+
+service.subscribe('models.credentials.list', () => {
+  if (!store) return
+  service.publish('models.credentials.state', { credentials: store.maskedCredentials() })
+})
+
+service.subscribe('models.credentials.put', (payload) => {
+  if (!store) return
+  const p = payload as { id?: string; name?: string; provider?: string; value?: string }
+  if (typeof p.value !== 'string' || !p.value) {
+    console.warn('llm-provider-openai: models.credentials.put without value — ignored')
+    service.publish('models.credentials.state', { credentials: store.maskedCredentials() })
+    return
+  }
+  try {
+    store.putCredential({
+      ...(typeof p.id === 'string' ? { id: p.id } : {}),
+      name: typeof p.name === 'string' ? p.name : '',
+      provider: typeof p.provider === 'string' ? p.provider : '',
+      value: p.value,
+    })
+  } catch (err) {
+    // 写盘失败必须让用户知道（密钥没存住 = 以为存住了其实没有）
+    console.error(`llm-provider-openai: models.credentials.put failed: ${String(err)}`)
+  }
+  const { added, removed } = reconcile()
+  if (added.length > 0) console.log(`llm-provider-openai: registered via credential: ${added.join(', ')}`)
+  if (removed.length > 0) console.log(`llm-provider-openai: unregistered: ${removed.join(', ')}`)
+  service.publish('models.credentials.state', { credentials: store.maskedCredentials() })
+})
+
+service.subscribe('models.credentials.delete', (payload) => {
+  if (!store) return
+  const id = typeof (payload as { id?: string }).id === 'string' ? (payload as { id: string }).id : ''
+  if (id) {
+    try {
+      store.deleteCredential(id)
+    } catch (err) {
+      console.error(`llm-provider-openai: models.credentials.delete failed: ${String(err)}`)
+    }
+    reconcile()
+  }
+  service.publish('models.credentials.state', { credentials: store.maskedCredentials() })
 })
 
 service.subscribe('llm.provider.request', async (payload) => {
@@ -254,13 +338,13 @@ service.subscribe('llm.provider.request', async (payload) => {
   let apiKey = ''
   if (instance.credentialRef) {
     try {
-      const resolved = await credentials.resolve(instance.credentialRef, requestId)
-      apiKey = resolved.apiKey
+      apiKey = resolveApiKey(instance.credentialRef)
+      if (!apiKey) throw new ModelsStoreError('not_found', `credential '${instance.credentialRef}' has no value`)
     } catch (err) {
       inflight.delete(requestId)
       const error: StreamError =
-        err instanceof CredentialClientError && err.error
-          ? err.error
+        err instanceof ModelsStoreError && err.reason
+          ? { code: 'missing_credential', message: err.message }
           : { code: 'missing_credential', message: String(err) }
       service.publish('llm.provider.chunk', {
         requestId,
@@ -340,7 +424,8 @@ service.subscribe('llm.models.list', async (payload) => {
     return
   }
   try {
-    const { apiKey } = await credentials.resolve(instance.credentialRef, requestId)
+    const apiKey = resolveApiKey(instance.credentialRef)
+    if (!apiKey) throw new ModelsStoreError('not_found', `credential '${instance.credentialRef}' has no value`)
     const result = await listModels({ baseURL: instance.baseUrl, apiKey, staticModels, timeoutMs: 5000 })
     service.publish('llm.models.list.result', { requestId, provider: target, models: result.models, catalog: result.source })
   } catch {

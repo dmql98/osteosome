@@ -38,7 +38,7 @@ export interface ProviderCardData {
   baseUrl: string
   /** 空串 = 免凭证（本地端点） */
   credentialEnv: string
-  /** Core 凭证库里有没有这家的密钥 */
+  /** 本插件的凭证文件里有没有这家的密钥（owner 重播的掩码列表） */
   hasKey: boolean
   /** 当前生效的默认模型（override 优先于预设） */
   defaultModel: string

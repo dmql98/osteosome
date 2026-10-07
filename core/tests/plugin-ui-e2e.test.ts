@@ -52,7 +52,8 @@ const UI_PLUGINS = [
       'widget.service-status',
     ],
   },
-  { id: 'chat-workbench', views: ['widget.session-list', 'widget.chat-timeline', 'widget.chat-composer'] },
+  { id: 'chat-workbench', views: ['widget.session-list', 'widget.chat-timeline', 'widget.chat-composer', 'widget.session-workspace'] },
+  { id: 'tools', views: ['widget.tools'] },
 ] as const
 
 const UI_PKGS = UI_PLUGINS.map((p) => join(REPO_ROOT, 'plugins', p.id, 'ui'))
@@ -83,7 +84,8 @@ beforeAll(async () => {
   workDir = mkdtempSync(join(tmpdir(), 'ost-ui-e2e-'))
   core = spawn('node', [join(REPO_ROOT, 'core', 'dist', 'main.js'), '--plugins', join(REPO_ROOT, 'plugins'), '--data', workDir], {
     cwd: REPO_ROOT,
-    env: { ...process.env, OSTEOSOME_PORT: '0' },
+    // OST_PORT 是 Core 认的变量名（config.ts），写成随机端口就不会撞上开发时占着 1420 的那个 Core
+    env: { ...process.env, OST_PORT: '0' },
   })
   let buffer = ''
   const port = await new Promise<number>((resolvePromise, rejectPromise) => {

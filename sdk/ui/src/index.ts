@@ -25,6 +25,7 @@
  * 与「把 vue 打进每个插件」相比省下的正是这点。
  */
 export { default as Button } from './components/Button.vue'
+export { default as Badge } from './components/Badge.vue'
 export { default as Card } from './components/Card.vue'
 export { default as Checkbox } from './components/Checkbox.vue'
 export { default as Dropdown } from './components/Dropdown.vue'
@@ -36,6 +37,7 @@ export { default as List } from './components/List.vue'
 export { default as Modal } from './components/Modal.vue'
 export { default as Select } from './components/Select.vue'
 export { default as Spinner } from './components/Spinner.vue'
+export { default as StatusDot } from './components/StatusDot.vue'
 export { default as Switch } from './components/Switch.vue'
 export { default as Tab } from './components/Tab.vue'
 export { default as Table } from './components/Table.vue'
@@ -43,3 +45,6 @@ export { default as Tabs } from './components/Tabs.vue'
 export { default as Textarea } from './components/Textarea.vue'
 export { default as Toast } from './components/Toast.vue'
 export { default as Tooltip } from './components/Tooltip.vue'
+
+/** 运行态 motion 枚举与中文标签（StatusDot / Badge 共用；视图层投影用） */
+export { PULSING_MOTIONS, MOTION_LABEL, type MotionState } from './motion'

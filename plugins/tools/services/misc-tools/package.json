@@ -1,0 +1,21 @@
+{
+    "name":  "@osteosome/misc-tools",
+    "version":  "0.0.0",
+    "private":  true,
+    "description":  "misc-tools 执行者（P7）：get_time/debug_sessions",
+    "buildOutput":  "../../dist/server/misc-tools/index.js",
+    "scripts":  {
+                    "build":  "node ../../../../scripts/build-service.mjs",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run --passWithNoTests"
+                },
+    "dependencies":  {
+                         "@osteosome/shared":  "workspace:*",
+                         "@osteosome/service-sdk":  "workspace:*"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^24.0.0",
+                            "typescript":  "^5.7.2",
+                            "vitest":  "^3.1.1"
+                        }
+}

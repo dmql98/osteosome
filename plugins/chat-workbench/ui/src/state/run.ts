@@ -278,6 +278,8 @@ export interface ComposerRunOptions {
   provider: () => string
   model: () => string
   thinking: () => ThinkingEffort
+  /** P5：本次选的角色 id（缺省空串 = 裸会话；loop 据此纳入 role:<id> 片段） */
+  characterId?: () => string
   onError: (message: string) => void
 }
 
@@ -300,6 +302,7 @@ export function useComposerRun(options: ComposerRunOptions): ComposerRun {
       const a = `run-${Date.now()}-${Math.random().toString(16).slice(2)}`
       const { send } = useCommand()
       const thinking = options.thinking()
+      const characterId = options.characterId?.() ?? ''
       // 缺省参数不下发 → 后端回落 env / 模型默认档
       void send('loop.run', {
         requestId: a,
@@ -308,6 +311,7 @@ export function useComposerRun(options: ComposerRunOptions): ComposerRun {
         ...(options.provider() ? { provider: options.provider() } : {}),
         ...(options.model() ? { model: options.model() } : {}),
         ...(thinking !== 'off' ? { thinking } : {}),
+        ...(characterId ? { characterId } : {}),
       })
       // **不返回、不等结果**：这一轮的全部后续（占位行 / token / 收尾）都由 SSE 驱动，
       // 这里等来的任何东西都会与事件重复。返回值保持 void 是刻意的。

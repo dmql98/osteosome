@@ -107,7 +107,12 @@ export function handlePluginUi(
         // 插件产物带内容哈希，但 index.html 不带；`no-cache` 让 index.html 永远回源
         // （否则插件升级后用户被旧 index.html 指着已删除的 chunk → 白屏），
         // 而带哈希的 assets 每次都会命中缓存，省掉重复下载。
-        'Cache-Control': /-[0-9a-zA-Z]{6,}\.[a-z0-9]+$/.test(target)
+        //
+        // 哈希字母表必须与打包器一致：Vite 默认用 base64url，**含 `-` 与 `_`**
+        // （`index-C3j-Xspt.js` 就是真的）。只认 `[0-9a-zA-Z]` 的话，
+        // 大约每五次构建就有一次哈希里带这两个字符，assets 静悄悄退回 no-cache ——
+        // 功能上没坏，只是每次都重下，而断言 immutable 的用例会随机变红。
+        'Cache-Control': /-[0-9a-zA-Z_-]{6,}\.[a-z0-9]+$/.test(target)
           ? 'public, max-age=31536000, immutable'
           : 'no-cache',
       })

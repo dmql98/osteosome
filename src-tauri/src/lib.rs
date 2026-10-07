@@ -279,6 +279,7 @@ fn on_panel_window_closing<R: Runtime>(app: &AppHandle<R>, label: &str) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(SnapState::default()))
         .on_window_event(|window, event| {
             match event {

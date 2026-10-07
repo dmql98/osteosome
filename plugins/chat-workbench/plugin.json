@@ -56,6 +56,11 @@
         "id": "widget.chat-composer",
         "title": "输入",
         "entry": "index.html#chat-composer"
+      },
+      {
+        "id": "widget.session-workspace",
+        "title": "工作区",
+        "entry": "index.html#session-workspace"
       }
     ]
   }

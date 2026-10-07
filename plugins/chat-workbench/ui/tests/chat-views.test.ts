@@ -499,16 +499,19 @@ describe('chat-composer（③）· 参数链路', () => {
     expect(composer.find('[data-testid="composer-send"]').exists()).toBe(true)
   })
 
-  it('设置页关掉的模型，这里选不到（llm.enabledModels 是真的生效，不是假开关）', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown) => {
-      if (String(input).includes('/api/preferences')) {
-        return new Response(JSON.stringify({ llm: { enabledModels: ['deepseek::deepseek-reasoner'] } }), { status: 200 })
-      }
-      return new Response(null, { status: 202 })
-    })
+  it('设置页关掉的模型，这里选不到（models 接入清单里的 enabledModels 是真开关，不是假开关）', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 202 }))
     const composer = mount(ChatComposerView)
     mounted.push(composer)
     await flushPromises()
+    // 接入清单归 models 插件的服务所有，它重播整份 —— 这里模拟它那份「关掉一个模型」
+    emit('models.prefs.state', {
+      prefs: {
+        connectedVendors: ['deepseek'],
+        vendorOverrides: [],
+        enabledModels: ['deepseek::deepseek-reasoner'],
+      },
+    })
     emit('llm.provider.registered', DESCRIPTOR)
     await flushPromises()
     emit('llm.models.list.result', {
@@ -553,6 +556,38 @@ describe('chat-composer（③）· 参数链路', () => {
     expect(run, '拿到 sessionId 之后才该发 loop.run').toBeTruthy()
     expect(run!.payload).toMatchObject({ sessionId: 'srv_new_1' })
     expect(currentSessionId().value, '新建后共享层也切过去').toBe('srv_new_1')
+  })
+
+  /**
+   * 回归：`create()` **不许换SSE 连接**。
+   *
+   * 症状（用户报的）：点「新建会话」后**会话列表不刷新**，要切走再切回来才行。
+   *
+   * 机制：`sse.subscribe()` 遇到新 topic 会 reconnect（关旧流、开新流），而新流此刻还没
+   * open对端尚未登记 —— 紧接着发的命令，回执与 `session.created` 就落进缝里全丢。
+   * 假 EventSource 忠实模拟了这一点（close 掉就不再投递），所以这里能直接断言连接数。
+   */
+  it('create() 不新增 SSE 连接（旧流一关，回执与 session.created 就都丢了）', async () => {
+    setCurrentSessionId('')
+    const { composer, fetchMock } = await mountViews('')
+    await flushPromises()
+    const before = fakeSse.openCount
+
+    await composer.get('[data-testid="composer-input"]').setValue('第一句')
+    await composer.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(fakeSse.openCount, 'create() 换了流 → 回执与事件会落进「旧流已关、新流未开」的缝').toBe(before)
+
+    // 而且回执要真的收得到：常驻订阅在bindEvents 里，与命令无关
+    const create = commandBodies(fetchMock).find((b) => b.topic === 'session.create')!
+    emit('session.create.result', {
+      requestId: (create.payload as { requestId: string }).requestId,
+      sessionId: 'srv_new_2',
+    })
+    emit('session.created', { sessionId: 'srv_new_2', title: '', updatedAt: new Date().toISOString() })
+    await flushPromises()
+    expect(currentSessionId().value).toBe('srv_new_2')
   })
 })
 
@@ -660,5 +695,73 @@ describe('跨 iframe 契约：同一批事件 → 同一份视图', () => {
 
     const gets = commandBodies(fetchMock).filter((b) => b.topic === 'session.get')
     expect(gets.at(-1)!.payload).toMatchObject({ sessionId: 's2' })
+  })
+})
+
+/**
+ * 对话侧审批卡（P7 WS-13）—— exec / workspace 两种 kind 就地答，不跳去 ① 工具页。
+ *
+ * 它只发 `tool.approval.resolved`；真正的执行由 loop 重派 —— 断言「发的是哪条命令」正是
+ * 证明它没越过这条边界。
+ */
+describe('chat-timeline（②）· 工具审批卡', () => {
+  const REQ = {
+    requestId: 'ap-1',
+    sessionId: 's1',
+    toolName: 'bash',
+    risk: 'proc',
+    kind: 'exec',
+    arguments: '{"command":"rm -rf /"}',
+  }
+
+  it('tool.approval.requested(exec) → 渲染卡；批准发 tool.approval.resolved{approved:true}', async () => {
+    const { timeline, fetchMock } = await mountViews('s1')
+    emit('tool.approval.requested', REQ)
+    await timeline.vm.$nextTick()
+    const card = timeline.get('[data-testid="timeline-approval"]')
+    expect(card.text()).toContain('bash')
+    expect(card.text()).toContain('rm -rf /')
+
+    await card.findAll('button').find((b) => b.text() === '批准')!.trigger('click')
+    await flushPromises()
+    const cmd = commandBodies(fetchMock).find((b) => b.topic === 'tool.approval.resolved')!
+    expect(cmd.payload).toMatchObject({ requestId: 'ap-1', approved: true })
+    await timeline.vm.$nextTick()
+    expect(timeline.find('[data-testid="timeline-approval"]').exists()).toBe(false)
+  })
+
+  it('workspace kind → 卡上显示越界路径与授权根', async () => {
+    const { timeline } = await mountViews('s1')
+    emit('tool.approval.requested', {
+      requestId: 'ap-2',
+      sessionId: 's1',
+      toolName: 'read',
+      risk: 'read',
+      kind: 'workspace',
+      arguments: '{}',
+      requestedPath: 'D:\\other\\secret.txt',
+      permissionRoot: 'D:\\other',
+    })
+    await timeline.vm.$nextTick()
+    const card = timeline.get('[data-testid="timeline-approval"]')
+    expect(card.text()).toContain('工作区授权')
+    expect(card.text()).toContain('D:\\other\\secret.txt')
+    expect(card.text()).toContain('D:\\other')
+  })
+
+  it('别的会话的请求不在这里出现', async () => {
+    const { timeline } = await mountViews('s1')
+    emit('tool.approval.requested', { ...REQ, requestId: 'ap-x', sessionId: 'other' })
+    await timeline.vm.$nextTick()
+    expect(timeline.find('[data-testid="timeline-approval"]').exists()).toBe(false)
+  })
+
+  it('tool.approval.resolved → 卡消失', async () => {
+    const { timeline } = await mountViews('s1')
+    emit('tool.approval.requested', REQ)
+    await timeline.vm.$nextTick()
+    emit('tool.approval.resolved', { requestId: 'ap-1', approved: false })
+    await timeline.vm.$nextTick()
+    expect(timeline.find('[data-testid="timeline-approval"]').exists()).toBe(false)
   })
 })

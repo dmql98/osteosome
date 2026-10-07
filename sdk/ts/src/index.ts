@@ -11,7 +11,9 @@
  * ```
  */
 export { Service, type ServiceOptions, type ServiceHandler } from './service'
-export { attachCredentialClient, CredentialClientError, type CredentialClient, type ResolvedCredential, type AttachCredentialClientOptions } from './credentials'
+// 注：`attachCredentialClient`（`credentials.resolve` 那一跳）已随 Core 凭证库一起退休——
+// 密钥归使用方插件之后，取值是「插件读自己的文件」，不需要一个中转服务。
+// 见 `docs/插件化架构优化.html` §4「凭证能力位退休」。
 export { performHandshake, assertInitializeResult, type HandshakeOptions } from './handshake'
 export {
   PLUGIN_READ_FILE_METHOD,

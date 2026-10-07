@@ -55,3 +55,4 @@ export {
 export { useLlmProviders, type LlmProviderEntry } from './useLlmProviders'
 export { useEndpointProbe, type ProbeResult } from './useEndpointProbe'
 export { useModelCatalog, type ModelCatalogEntry } from './useModelCatalog'
+export { useModelsPrefs, useModelCredentials, useEnabledModels } from './useModelsPrefs'

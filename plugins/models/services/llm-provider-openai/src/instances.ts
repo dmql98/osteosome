@@ -96,7 +96,7 @@ export function parseVendorOverrides(raw: string | undefined): VendorOverride[] 
  * 自填项 → 实例。
  *
  * 凭证解析顺序：`credentialRef` 缺省按 `env:<ID_UPPER>_API_KEY` 推断；该 env 没值时，
- * 退到 Core 凭证库里 `provider === 该 id` 的那条（用户在设置窗为自填端点存的密钥）。
+ * 退到本插件凭证文件里 `provider === 该 id` 的那条（用户在设置窗为自填端点存的密钥）。
  * 两条都没有 → 不返回（不注册）。
  */
 function instanceFromOverride(
@@ -128,8 +128,8 @@ function pickOverrideCredentialRef(
 ): string | null {
   const envRef = `env:${suffix}_API_KEY`
   if (typeof env[envRef.slice(4)] === 'string' && env[envRef.slice(4)]!.trim().length > 0) return envRef
-  const coreId = byProvider.get(id)
-  if (coreId) return `core:${coreId}`
+  const fileId = byProvider.get(id)
+  if (fileId) return `file:${fileId}`
   // 自填端点可以显式声明免凭证：`credentialRef: ''`
   return null
 }
@@ -137,25 +137,29 @@ function pickOverrideCredentialRef(
 /**
  * 凭证来源的真相。
  *
- * S3 之前只有 env（`credentialRef = env:<NAME>`）；S3 起用户在设置窗存密钥到 Core 凭证库，
- * 于是同一份「这家能不能用」有两个来源：
+ * S3 之前只有 env（`credentialRef = env:<NAME>`）；S3 起用户在设置窗存密钥，于是同一份
+ * 「这家能不能用」有两个来源：
  *
  * | 来源 | credentialRef | 谁写的 | 优先级 |
  * |---|---|---|---|
- * | 进程 env | `env:<VAR>` | 脚本 / CI / 自建端点 | **高** —— 显式注入优先于库里那份 |
- * | Core 凭证库 | `core:<id>` | 用户在设置窗 | 低（env 没有时兜底） |
+ * | 进程 env | `env:<VAR>` | 脚本 / CI / 自建端点 | **高** —— 显式注入优先于用户填的那份 |
+ * | 本插件 `credentials.json` | `file:<id>` | 用户在设置窗 | 低（env 没有时兜底） |
  * | 无 | 不注册 | — | 该厂商不出现 |
  *
- * env 优先的理由：env 是**部署者**的显式意图，凭证库是**用户**填的。冲突时听部署者的。
+ * env 优先的理由：env 是**部署者**的显式意图，用户填的密钥是**用户**的偏好。冲突时听部署者的。
+ *
+ * `file:` 这个 scheme 名对应「本插件用户数据目录里的那一条」（`userData/plugin/models/credentials.json`）。
+ * 它曾经叫 `core:<id>` —— 那时密钥住在 `userData/core/credentials.json`；密钥归使用方插件之后
+ * 名字跟着位置一起改，否则 `core:` 会指向一个再也没人读的地方。
  */
 export interface CredentialSources {
-  /** Core 凭证库：`厂商 id → 凭证 id`（`credential.saved` 带 `provider` 字段，据此归类） */
+  /** 本插件凭证文件：`厂商 id → 凭证 id` */
   byProvider?: ReadonlyMap<string, string>
   /** env 判定沿用 `hasVendorCredential`（免凭证端点恒真） */
   env?: NodeJS.ProcessEnv
   /**
-   * Core 偏好（`preferences.get` 的返回值）—— 用户在设置窗写的自填端点。
-   * 键：`llm.vendorOverrides`。
+   * 本插件的接入清单（`preferences.json`）—— 用户在设置窗写的自填端点。
+   * 键：`vendorOverrides`。
    */
   preferences?: { vendorOverrides?: unknown }
 }
@@ -166,11 +170,11 @@ export function resolveCredentialRef(preset: VendorPreset, sources: CredentialSo
   const envRef = vendorCredentialRef(preset)
   // 免凭证端点（credentialEnv 为空）→ 无需凭证即可用
   if (!envRef) return ''
-  // ① env 注入优先：存在就用它，不看凭证库（部署者的显式意图）
+  // ① env 注入优先：存在就用它，不看用户填的密钥（部署者的显式意图）
   if (hasVendorCredential(preset, env)) return envRef
-  // ② 退到 Core 凭证库：用户在设置窗为这家存的密钥
-  const coreId = sources.byProvider?.get(preset.id)
-  if (coreId) return `core:${coreId}`
+  // ② 退到本插件的凭证文件：用户在设置窗为这家存的密钥
+  const fileId = sources.byProvider?.get(preset.id)
+  if (fileId) return `file:${fileId}`
   // ③ 两边都没有 → 不可用
   return null
 }
@@ -180,7 +184,7 @@ export function resolveCredentialRef(preset: VendorPreset, sources: CredentialSo
  *
  * 规则：
  * 1. 只看**本进程实现的 wire**（`SERVED_WIRE`）的预设 —— 别的 wire 归别的进程；
- * 2. 遍历这些预设，**有可用凭证**（env / Core 凭证库 / 免凭证）的才注册；
+ * 2. 遍历这些预设，**有可用凭证**（env / 本插件凭证文件 / 免凭证）的才注册；
  * 3. 叠加用户自填项（同 id 时自填覆盖预设），其中 wire 不是本进程实现的那批**拒绝并告警**；
  * 4. 自填项同样要求凭证已配置；
  * 5. 结果按 id 排序，保证注册顺序稳定（冒烟断言可预期）。

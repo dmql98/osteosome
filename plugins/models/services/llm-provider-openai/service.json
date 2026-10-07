@@ -1,22 +1,25 @@
 {
   "id": "llm-provider-openai",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "protocolVersion": "1.0.0",
   "entry": "node dist/index.js",
   "publishes": [
     "llm.provider.registered",
     "llm.provider.chunk",
     "llm.provider.unregistered",
-    "credentials.resolve",
-    "llm.models.list.result"
+    "llm.models.list.result",
+    "models.prefs.state",
+    "models.credentials.state"
   ],
   "subscribes": [
     "llm.provider.request",
     "llm.provider.cancel",
     "llm.provider.reannounce",
-    "credentials.resolved",
     "llm.models.list",
-    "credential.saved",
-    "credential.deleted"
+    "models.prefs.get",
+    "models.prefs.set",
+    "models.credentials.list",
+    "models.credentials.put",
+    "models.credentials.delete"
   ]
 }

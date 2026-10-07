@@ -14,13 +14,16 @@
  *
  * ## 为什么能观察到这个变化
  *
- * `credential.saved` / `credential.deleted` 是总线事件，SSE 能收到；provider 收到后重算并发
- * `llm.provider.registered` / `llm.provider.unregistered`，主位据此增删路由。所以观察链是：
+ * 密钥与接入清单归 **models 插件自己的服务**（`userData/plugin/models/`），前端经总线读写：
  *
  * ```
- * PUT /api/credentials ──► Core 凭证库 ──► credential.saved ──► provider 重算
- *                                                     └─► llm.provider.registered ──► 前端下拉
+ * POST /api/command models.credentials.put ──► provider 服务写自己的 credentials.json
+ *                                          ├─► 重算实例 ──► llm.provider.registered ──► 前端下拉
+ *                                          └─► models.credentials.state（**掩码**列表）
  * ```
+ *
+ * 所以这条冒烟顺带证明两件事：运行期生效，以及**明文密钥不出现在任何事件里**
+ * （下面断言的是掩码形态，且事件里根本没有 `value` 字段）。
  *
  * 断言一律用**行为**（指定它发问能不能打通 / 是不是 unsupported_provider），
  * 不用 `llm.provider.registered` 事件 —— 那类事件在服务启动瞬间就发完了，冒烟阶段开的 SSE 看不到。
@@ -154,7 +157,6 @@ function startFakeUpstream(tag: string): Promise<{ server: Server; baseUrl: stri
 describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效）', () => {
   let core: Core | undefined
   let dataDir = ''
-  let toolRoot = ''
   let up: { server: Server; baseUrl: string; models: string[] } | undefined
   let credentialId = ''
 
@@ -166,9 +168,16 @@ describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效
     'OPENAI_API_KEY',
     'OLLAMA_BASE_URL',
     'LLM_PROVIDER',
-    'LLM_TOOL_ROOT',
   ]
   const base = (): string => `http://127.0.0.1:${core!.port}`
+
+  /** owner 重播的掩码凭证列表（SSE 里最后一条 `models.credentials.state`） */
+  function credentialList(raw: string): Array<Record<string, unknown>> {
+    const events = parseSseEvents(raw).filter((e) => e.topic === 'models.credentials.state')
+    const last = events.at(-1)
+    const list = last?.payload?.credentials
+    return Array.isArray(list) ? (list as Array<Record<string, unknown>>) : []
+  }
 
   /** 发一轮，回 'ok' | 'unsupported_provider' —— 行为断言，不用注册事件 */
   async function probe(sse: { text: () => string }, sessionId: string, provider: string): Promise<string> {
@@ -197,8 +206,6 @@ describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效
     process.env.DEEPSEEK_BASE_URL = up.baseUrl
     process.env.OLLAMA_BASE_URL = up.baseUrl
     process.env.LLM_PROVIDER = 'openai'
-    toolRoot = mkdtempSync(path.join(tmpdir(), 'ost-s3-tools-'))
-    process.env.LLM_TOOL_ROOT = toolRoot
 
     dataDir = mkdtempSync(path.join(tmpdir(), 'ost-s3-smoke-'))
     core = await startCore({
@@ -220,13 +227,12 @@ describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效
     for (const k of envKeys) delete process.env[k]
     up?.server.close()
     if (dataDir) rmSync(dataDir, { recursive: true, force: true })
-    if (toolRoot) rmSync(toolRoot, { recursive: true, force: true })
   }, 30_000)
 
   it(
     '存密钥 → 运行期注册（免重启）；删密钥 → 运行期注销',
     async () => {
-      const sse = await openSse(base(), '?topics=session.**,loop.**')
+      const sse = await openSse(base(), '?topics=session.**,loop.**,models.**')
       try {
         await waitFor(async () => {
           const res = await fetch(`${base()}/health`)
@@ -256,16 +262,24 @@ describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效
         // ② 免凭证的本地端点始终可用（对照组：它不受本次操作影响）
         expect(await probe(sse, sessionId, LOCAL)).toBe('ok')
 
-        // ③ 在设置窗「存密钥」：PUT /api/credentials，provider 字段就是厂商 id
-        const putRes = await fetch(`${base()}/api/credentials`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: `${VENDOR} key`, provider: VENDOR, value: 'sk-user-entered' }),
+        // ③ 在设置窗「存密钥」：命令直达 owner（models 插件的服务），provider 字段就是厂商 id
+        await post(base(), 'models.credentials.put', {
+          name: `${VENDOR} key`,
+          provider: VENDOR,
+          value: 'sk-user-entered',
         })
-        expect(putRes.status).toBe(200)
-        const saved = (await putRes.json()) as { credential?: { id?: string } }
-        credentialId = saved.credential?.id ?? ''
+        await waitFor(
+          () => credentialList(sse.text()).length > 0,
+          10_000,
+          `models.credentials.state（收到 ${parseSseEvents(sse.text()).map((e) => e.topic).join(',')}）`,
+        )
+        const saved = credentialList(sse.text())
+        expect(saved).toHaveLength(1)
+        credentialId = String(saved[0]!.id ?? '')
         expect(credentialId, '存密钥没返回 id').toBeTruthy()
+        // 红线：事件里只有掩码，**没有 value 字段**
+        expect(saved[0]).not.toHaveProperty('value')
+        expect(typeof saved[0]!.masked).toBe('string')
 
         // ④ **不重启任何进程**，该厂商立刻可用 —— 这就是 S3 的核心价值
         up!.models.length = 0
@@ -273,10 +287,12 @@ describe('S3 集成冒烟 · 设置窗新增 / 删除服务商（运行期生效
         expect(up!.models, '新增后的请求应打到 deepseek 端点').toHaveLength(1)
 
         // ⑤ 删掉密钥 → 立刻从路由里消失
-        const delRes = await fetch(`${base()}/api/credentials?id=${encodeURIComponent(credentialId)}`, {
-          method: 'DELETE',
-        })
-        expect(delRes.status).toBe(200)
+        await post(base(), 'models.credentials.delete', { id: credentialId })
+        await waitFor(
+          () => credentialList(sse.text()).length === 0,
+          10_000,
+          'models.credentials.state（删除后）',
+        )
         up!.models.length = 0
         expect(await probe(sse, sessionId, VENDOR)).toBe('unsupported_provider')
         expect(up!.models, '注销后不该再打到上游').toHaveLength(0)

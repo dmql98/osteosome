@@ -74,19 +74,30 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 
 ```
 osteosome/
-├── client/                    # Vue 3 工作台
+├── plugins/                   # 插件：代码与产物都在这，可直接分发（分发物就是它的子集）
+│   └── <id>/
+│       ├── plugin.json        # 清单：services[] / ui.views[] / capabilities[] / dependencies[]
+│       ├── catalog.json       # 插件自带数据（仅 models 有）
+│       ├── services/<sid>/    # 后端源码
+│       ├── ui/                # 前端源码
+│       └── dist/              # 编译产物，Core 只认它
+├── client/                    # Vue 3 工作台，只剩壳
 │   ├── src/layout/            # dockview 外层布局与偏好持久化
-│   ├── src/panes/             # Panel 容器、Panel 壳、标题动作
-│   ├── src/widgets/           # Widget 定义与自动发现
-│   └── src/components/        # 通用 UI 组件
-├── core/                      # Node.js + TypeScript 微内核
-├── services/                  # 独立服务进程（LLM 能力位拆分：llm 主位 / llm-provider-* / credentials / llm-retry）
-├── shared/                    # 跨 Core / 服务 / 前端的共享契约
-├── sdk/                       # 服务 SDK（当前为 TypeScript）
+│   ├── src/panes/             # Panel 容器、Widget 自由拖动与吸附
+│   └── src/widgets/           # iframe 宿主（注册表已空，组件在 plugins/*/ui）
+├── core/                      # Node.js + TypeScript 微内核：扫插件 · 起服务 · 伺服插件 UI
+├── shared/                    # 只剩跨进程契约：协议类型 / 事件表 / wire 解析
+├── sdk/
+│   ├── core-client/           # Core HTTP/SSE 客户端（宿主与插件共用的那一份）
+│   ├── ui/                    # 共享 UI 组件与设计令牌
+│   └── ts/                    # 服务 SDK 类型
+├── scripts/                   # 打包与辅助脚本（pack-plugin.mjs / build-service.mjs / smoke.mjs）
 ├── src-tauri/                 # Tauri 桌面壳、Rust 配置与图标
-├── scripts/                   # 冒烟与辅助脚本
-└── docs/                      # RFC、开发进度与现行实现说明
+├── docs/                      # RFC、开发进度与现行实现说明
+└── userData/                  # ★ 全部用户数据：core/ + plugin/<id>/（gitignore，拷走即换机器）
 ```
+
+仓库里还有 `node_modules/`（pnpm workspace 每个包各一个）、`dist/`、`src-tauri/target/`、`pack/` 与 `*.log` 等**构建 / 依赖产物**——它们由 `.gitignore` 排除，既不是源码，也不进交付物（`scripts/pack-plugin.mjs` 也会显式跳过 `node_modules/` 与 `.data/`）。
 
 ## 开发
 

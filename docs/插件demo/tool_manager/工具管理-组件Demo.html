@@ -1,0 +1,1714 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>工具管理 · 前端组件 Demo（widget.tools + ApprovalPanel） · OST P7</title>
+<style>
+  /* ══ 文档壳：沿用 docs/工具管理插件设计.html 同一套皮肤 ══ */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+    /* ══ Demo 内联令牌：与 sdk/ui/src/tokens.css 同名同值 ══ */
+    --color-bg:#f5f6f8; --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-success-soft:#e7f6ec;
+    --color-warning:#9a6700; --color-warning-soft:#fdf6e3;
+    --color-proc:#c2410c; --color-proc-soft:#fdeee2;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px; --text-xl:20px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+    --color-bg:#14171c; --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-success-soft:#16301f; --color-warning:#d29922;
+    --color-proc:#fb923c; --color-proc-soft:#3a2314;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family: var(--mono); }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:30; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:29; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s2); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px;
+    border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  td.mono, .mono { font-size:12px; }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+
+  /* ══ 设备框：模拟 iframe 里插件 UI 的实际尺寸 ══ */
+  .stage { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    box-shadow:var(--shadow-sm); overflow:hidden; margin:0 0 var(--s4); }
+  .stage > .stage-bar { display:flex; align-items:center; gap:var(--s2); padding:6px 10px;
+    background:var(--surface-2); border-bottom:1px solid var(--border); font-size:var(--xs); color:var(--muted); }
+  .stage > .stage-bar b { color:var(--text); font-size:var(--sm); }
+  .stage > .stage-bar .sp { flex:1; }
+  .stage > .stage-bar .dots::before { content:'\25CF \25CF \25CF'; color:var(--border-strong); letter-spacing:2px; font-size:9px; }
+  .stage > .frame { background:var(--color-bg); }
+  .caption { font-size:var(--xs); color:var(--muted); margin:0 0 var(--s4); }
+
+  /* ══════════════════════════════════════════════════════════
+     ↓↓↓ Demo 本体：widget.tools 与 ApprovalPanel
+     取值全部走 sdk/ui/src/tokens.css 的真名
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── 通用控件（对应 sdk/ui 组件） ── */
+  .u-btn { display:inline-flex; align-items:center; gap:5px; border:1px solid transparent;
+    border-radius:var(--radius-md); padding:5px 11px; font:inherit; font-size:var(--text-sm);
+    cursor:pointer; background:var(--color-primary); color:#fff; white-space:nowrap; }
+  .u-btn:hover:not(:disabled) { filter:brightness(1.06); }
+  .u-btn.sm { padding:3px 9px; font-size:var(--text-xs); }
+  .u-btn.ghost { background:var(--color-surface); color:var(--color-text); border-color:var(--color-border); }
+  .u-btn.ghost:hover:not(:disabled) { background:var(--color-surface-2); filter:none; }
+  .u-btn.danger { background:var(--color-danger); }
+  .u-btn.approve { background:var(--color-success); }
+  .u-btn.warn { background:var(--color-warning); }
+  .u-btn:disabled { opacity:.45; cursor:not-allowed; }
+
+  .u-input, .u-select, .u-textarea { background:var(--color-surface); color:var(--color-text);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:6px 9px;
+    font:inherit; font-size:var(--text-sm); width:100%; }
+  .u-textarea { font-family:var(--font-mono); font-size:12px; min-height:70px; resize:vertical; }
+  .u-input:focus, .u-textarea:focus, .u-select:focus { outline:2px solid var(--color-primary-soft);
+    border-color:var(--color-primary); }
+  .u-input::placeholder { color:var(--color-text-muted); }
+
+  .u-switch { display:inline-flex; align-items:center; gap:var(--space-2); cursor:pointer; }
+  .u-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .u-switch .track { width:32px; height:18px; border-radius:var(--radius-full);
+    background:var(--color-surface-3); position:relative; transition:background .18s; flex:none; }
+  .u-switch .thumb { position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.3); transition:transform .18s; }
+  .u-switch input:checked + .track { background:var(--color-primary); }
+  .u-switch input:checked + .track .thumb { transform:translateX(14px); }
+  .u-switch input:disabled + .track { opacity:.4; }
+  .u-switch.disabled { cursor:not-allowed; }
+
+  .u-tabs { display:flex; gap:var(--space-1); border-bottom:1px solid var(--color-border); }
+  .u-tabs button { padding:var(--space-2) var(--space-3); border:0; border-bottom:2px solid transparent;
+    background:transparent; color:var(--color-text-muted); cursor:pointer; font:inherit; font-size:var(--text-sm); }
+  .u-tabs button[aria-selected="true"] { border-bottom-color:var(--color-primary); color:var(--color-primary); font-weight:600; }
+  .u-tabs .badge { font-size:10px; margin-left:4px; padding:0 4px; border-radius:var(--radius-full);
+    background:var(--color-surface-3); color:var(--color-text-muted); }
+  .u-tabs button[aria-selected="true"] .badge { background:var(--color-primary-soft); color:var(--color-primary); }
+
+  .seg { display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius-md); overflow:hidden; }
+  .seg button { border:0; background:var(--color-surface); color:var(--color-text-muted); cursor:pointer;
+    font:inherit; font-size:var(--text-xs); padding:4px 10px; border-right:1px solid var(--color-border); }
+  .seg button:last-child { border-right:0; }
+  .seg button[aria-pressed="true"] { background:var(--color-primary); color:#fff; font-weight:600; }
+
+  .p-empty { padding:var(--space-5); text-align:center; color:var(--color-text-muted); font-size:var(--text-sm); }
+  .p-empty b { display:block; color:var(--color-text); margin-bottom:4px; }
+
+  /* 徽章：sdk/ui 无 Badge 组件，本 Demo 里是插件内联样式 */
+  .p-badge { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600;
+    border-radius:var(--radius-full); padding:1px 7px; white-space:nowrap; vertical-align:middle; }
+  .b-read  { background:var(--color-success-soft); color:var(--color-success); }
+  .b-write { background:var(--color-warning-soft); color:var(--color-warning); }
+  .b-net   { background:var(--ext-soft); color:var(--ext); }
+  .b-proc  { background:var(--color-proc-soft); color:var(--color-proc); }
+  .b-src   { background:var(--color-surface-2); color:var(--color-text-muted); font-family:var(--font-mono); }
+  .b-policy-auto  { background:var(--color-primary-soft); color:var(--color-primary); }
+  .b-policy-ask   { background:var(--color-surface-3); color:var(--color-text-muted); }
+  .b-policy-deny  { background:var(--color-danger-soft); color:var(--color-danger); }
+  .b-warn     { background:var(--color-warning-soft); color:var(--color-warning); }
+  .b-danger   { background:var(--color-danger-soft); color:var(--color-danger); }
+  .b-dangling { background:var(--color-danger-soft); color:var(--color-danger); border:1px dashed currentColor; }
+  .b-managed  { background:var(--color-surface-2); color:var(--color-text-muted); border:1px dashed var(--color-border-strong); }
+  .b-conflict { background:var(--color-danger-soft); color:var(--color-danger); }
+
+  /* ── 组件 1：ToolCatalogView ── */
+  .tools-view { display:flex; flex-direction:column; height:100%; background:var(--color-surface);
+    color:var(--color-text); font: var(--text-sm)/1.6 var(--font-sans); }
+  .tv-head { display:flex; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4);
+    border-bottom:1px solid var(--color-border); }
+  .tv-title { font-size:var(--text-lg); font-weight:600; }
+  .tv-count { font-size:var(--text-xs); color:var(--color-text-muted); }
+  .tv-tabs { padding:0 var(--space-4); }
+  .tv-body { flex:1; overflow:auto; padding:var(--space-4); }
+  .tv-filters { display:grid; grid-template-columns:1fr 140px 120px; gap:var(--space-2); margin-bottom:var(--space-3); }
+
+  .tool-table { width:100%; border-collapse:collapse; font-size:var(--text-sm); }
+  .tool-table th { padding:var(--space-2) var(--space-3); text-align:left; color:var(--color-text-muted);
+    font-weight:500; font-size:var(--text-xs); background:var(--color-surface-2);
+    border-bottom:1px solid var(--color-border); }
+  .tool-table td { padding:var(--space-2) var(--space-3); border-bottom:1px solid var(--color-border); vertical-align:middle; }
+  .tool-table tr:last-child td { border-bottom:0; }
+  .tool-table tbody tr:hover { background:var(--color-surface-2); }
+  .tool-table tr.row-off td { opacity:.45; }
+  .tool-table .t-name { font-family:var(--font-mono); font-size:12.5px; font-weight:600; }
+  .tool-table .t-desc { color:var(--color-text-muted); font-size:11.5px; margin-top:1px;
+    max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tool-table .t-note { font-size:11px; color:var(--color-text-muted); margin-top:2px; }
+  .tool-table .t-actions { display:flex; gap:4px; justify-content:flex-end; }
+
+  .group-row td { background:var(--color-surface-2); font-weight:600; font-size:var(--text-xs);
+    color:var(--color-text-muted); padding:var(--space-1) var(--space-3); }
+  .group-row td .g-count { font-weight:400; margin-left:6px; }
+
+  /* ToolDetailDrawer */
+  .dd-scrim { position:absolute; inset:0; background:rgba(0,0,0,.3); }
+  .dd-panel { position:absolute; top:0; right:0; bottom:0; width:420px; background:var(--color-surface);
+    border-left:1px solid var(--color-border); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; z-index:2; }
+  .dd-head { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-3) var(--space-4);
+    border-bottom:1px solid var(--color-border); }
+  .dd-name { font-family:var(--font-mono); font-size:var(--text-md); font-weight:600; }
+  .dd-body { flex:1; overflow:auto; padding:var(--space-4); }
+  .dd-foot { padding:var(--space-3) var(--space-4); border-top:1px solid var(--color-border);
+    background:var(--color-surface-2); display:flex; gap:var(--space-2); align-items:center; }
+  .dd-sec-title { font-size:var(--text-xs); color:var(--color-text-muted); margin:var(--space-4) 0 var(--space-2);
+    font-weight:600; }
+  .schema-tbl { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:11.5px; }
+  .schema-tbl td { padding:3px 6px; border-bottom:1px dashed var(--color-border); vertical-align:top; }
+  .schema-tbl td.k { color:var(--color-primary); white-space:nowrap; }
+  .schema-tbl td.t { color:var(--color-text-muted); }
+  .schema-tbl td.d { color:var(--color-text-muted); font-family:var(--font-sans); }
+
+  /* 约束编辑器 */
+  .cst { border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--space-3); margin-bottom:var(--space-2); }
+  .cst-head { display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-2); }
+  .cst-label { font-weight:600; font-size:var(--text-sm); flex:1; }
+  .cst-rule { font-family:var(--font-mono); font-size:10.5px; color:var(--color-text-muted);
+    background:var(--color-surface-2); border-radius:var(--radius-sm); padding:1px 5px; }
+  .cst-chips { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:var(--space-2); }
+  .chip { font-family:var(--font-mono); font-size:11px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:2px 6px;
+    display:inline-flex; align-items:center; gap:4px; }
+  .chip.deny { background:var(--color-danger-soft); color:var(--color-danger); border-color:transparent; }
+  .chip button { border:0; background:transparent; cursor:pointer; color:inherit; font-size:12px; line-height:1; padding:0; }
+  .cst-input { font-family:var(--font-mono); font-size:11.5px; }
+  .cst-warn { font-size:11px; color:var(--color-warning); margin-top:var(--space-2); }
+
+  /* 试调 */
+  .runner { display:grid; grid-template-columns:200px 1fr; gap:var(--space-3); }
+  .out-box { font-family:var(--font-mono); font-size:12px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--space-2);
+    white-space:pre-wrap; max-height:170px; overflow:auto; }
+  .out-box .ok { color:var(--color-success); } .out-box .bad { color:var(--color-danger); }
+  .out-box .hint { color:var(--color-text-muted); }
+
+  /* MCP 卡片（形态照天枢 McpView 的 mcp-card） */
+  .mcp-card { border:1px solid var(--color-border); border-radius:var(--radius-md);
+    padding:var(--space-3); margin-bottom:var(--space-2); background:var(--color-surface); }
+  .mcp-card.up { border-left:3px solid var(--color-success); }
+  .mcp-card.down { border-left:3px solid var(--color-border-strong); }
+  .mcp-head { display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-2); }
+  .mcp-name { font-family:var(--font-mono); font-weight:600; font-size:var(--text-sm); }
+  .mcp-cmd { font-family:var(--font-mono); font-size:11.5px; color:var(--color-text-muted);
+    background:var(--color-surface-2); border-radius:var(--radius-sm); padding:5px 8px; word-break:break-all; }
+  .mcp-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:var(--space-2); }
+  .mcp-res { font-size:var(--text-xs); margin-top:var(--space-2); padding:5px 8px; border-radius:var(--radius-sm); }
+  .mcp-res.ok { background:var(--color-success-soft); color:var(--color-success); }
+  .mcp-res.bad { background:var(--color-danger-soft); color:var(--color-danger); }
+  .mcp-note { font-size:var(--text-xs); color:var(--color-text-muted); margin:var(--space-2) 0 0; }
+
+  /* ── 组件 2：ApprovalPanel（对话内联，非浮层） ── */
+  .chat-view { background:var(--color-bg); font: var(--text-sm)/1.65 var(--font-sans);
+    color:var(--color-text); display:flex; flex-direction:column; height:100%; }
+  .chat-msgs { flex:1; overflow:auto; padding:var(--space-4); display:flex; flex-direction:column; gap:var(--space-3); }
+  .bubble { max-width:76%; padding:var(--space-2) var(--space-3); border-radius:var(--radius-md); font-size:var(--text-sm); }
+  .bubble.user { align-self:flex-end; background:var(--color-primary-soft); color:var(--color-primary); }
+  .bubble.ai { align-self:flex-start; background:var(--color-surface); border:1px solid var(--color-border); }
+  .chat-composer { border-top:1px solid var(--color-border); padding:var(--space-3); background:var(--color-surface); }
+  .cc-row { display:flex; gap:var(--space-2); align-items:flex-end; }
+  .cc-row textarea { flex:1; min-height:52px; }
+
+  /* 工具块：五种状态 */
+  .toolcard { border:1px solid var(--color-border); border-radius:var(--radius-md);
+    background:var(--color-surface); overflow:hidden; max-width:88%; }
+  .toolcard.wait   { border-left:3px solid var(--color-warning); }
+  .toolcard.running{ border-left:3px solid var(--color-primary); }
+  .toolcard.ok     { border-left:3px solid var(--color-success); }
+  .toolcard.bad    { border-left:3px solid var(--color-danger); }
+  .toolcard.ghost  { border-left:3px solid var(--color-border-strong); opacity:.6; }
+  .tc-head { display:flex; align-items:center; gap:var(--space-2); width:100%; padding:var(--space-2) var(--space-3);
+    background:transparent; border:0; font:inherit; color:inherit; cursor:pointer; text-align:left; }
+  .tc-ico { width:16px; height:16px; border-radius:4px; display:inline-grid; place-items:center;
+    font-size:10px; font-weight:700; flex:none; }
+  .tc-ico.read { background:var(--color-success-soft); color:var(--color-success); }
+  .tc-ico.write { background:var(--color-warning-soft); color:var(--color-warning); }
+  .tc-ico.net { background:var(--ext-soft); color:var(--ext); }
+  .tc-ico.proc { background:var(--color-proc-soft); color:var(--color-proc); }
+  .tc-name { font-family:var(--font-mono); font-weight:600; font-size:12.5px; }
+  .tc-dot { opacity:.6; }
+  .tc-status { font-size:var(--text-xs); white-space:nowrap; }
+  .tc-status.running { color:var(--color-primary); }
+  .tc-status.ok { color:var(--color-success); }
+  .tc-status.bad { color:var(--color-danger); }
+  .tc-status.ghost { color:var(--color-text-muted); }
+  .tc-time { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); }
+  .tc-caret { margin-left:auto; font-size:10px; opacity:.6; }
+  .tc-body { padding:0 var(--space-3) var(--space-3); }
+  .tc-label { display:block; font-size:10.5px; color:var(--color-text-muted); margin:2px 0 4px; letter-spacing:.4px; }
+  .tc-code { margin:0; padding:6px 8px; border-radius:var(--radius-sm); background:var(--color-surface-2);
+    border:1px solid var(--color-border); font-family:var(--font-mono); font-size:11.5px;
+    max-height:150px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
+
+  /* 权限选择面板 */
+  .appr { border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-surface);
+    overflow:hidden; max-width:88%; box-shadow:var(--shadow-sm); }
+  .appr-hd { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3);
+    background:var(--color-warning-soft); border-bottom:1px solid var(--color-border); }
+  .appr-title { font-weight:600; font-size:var(--text-sm); flex:1; }
+  .appr-tid { font-family:var(--font-mono); font-size:10.5px; color:var(--color-text-muted); }
+  .appr-bd { padding:var(--space-3); }
+  .appr-why { font-size:var(--text-sm); line-height:1.65; margin:0 0 var(--space-2); }
+  .appr-desc { font-size:var(--text-xs); color:var(--color-text-muted); margin:0 0 var(--space-2);
+    padding:6px 8px; background:var(--color-surface-2); border-radius:var(--radius-sm);
+    border-left:2px solid var(--color-border-strong); }
+  .appr-scope { display:flex; align-items:center; gap:var(--space-2); font-size:var(--text-xs);
+    color:var(--color-text-muted); padding:var(--space-2) var(--space-3);
+    border-top:1px dashed var(--color-border); }
+  .appr-ft { display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2) var(--space-3);
+    border-top:1px solid var(--color-border); background:var(--color-surface-2); flex-wrap:wrap; }
+  .appr-ft .sp { flex:1; }
+  .timer { font-family:var(--font-mono); font-size:11px; color:var(--color-text-muted); }
+  .appr.resolved { box-shadow:none; }
+  .appr.resolved .appr-hd { background:var(--color-surface-2); }
+  .appr.resolved.ok .appr-hd { background:var(--color-success-soft); }
+  .appr.resolved.no .appr-hd { background:var(--color-danger-soft); }
+  .appr-note { font-size:var(--text-xs); color:var(--color-text-muted); padding:var(--space-2) var(--space-3); }
+  .appr.need2 { border-color:var(--color-warning); }
+  .two-step { padding:var(--space-2) var(--space-3); background:var(--color-warning-soft);
+    border-top:1px dashed var(--color-warning); font-size:var(--text-xs); }
+
+  .scn-bar { display:flex; gap:var(--space-2); align-items:center; padding:var(--space-2) var(--space-3);
+    border-bottom:1px solid var(--color-border); background:var(--color-surface-2); flex-wrap:wrap; }
+  .scn-bar .lbl { font-size:var(--text-xs); color:var(--color-text-muted); }
+
+  /* 事件流 */
+  .evlog { font-family:var(--font-mono); font-size:11.5px; background:var(--color-surface-2);
+    border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--space-2);
+    max-height:230px; overflow:auto; }
+  .evlog div { padding:2px 4px; border-bottom:1px dashed var(--color-border); display:flex; gap:var(--space-2); }
+  .evlog div:last-child { border-bottom:0; }
+  .evlog .t { color:var(--color-text-muted); flex:none; }
+  .evlog .tp { color:var(--bus); flex:none; }
+  .evlog .pl { color:var(--color-text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .switcher { position:fixed; right:18px; bottom:18px; z-index:40; display:flex; gap:6px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-full);
+    padding:5px; box-shadow:var(--shadow-md); }
+  .switcher button { border:0; background:transparent; cursor:pointer; width:34px; height:34px;
+    border-radius:50%; font-size:15px; color:var(--muted); display:grid; place-items:center; }
+  .switcher button[aria-pressed="true"] { background:var(--primary); color:#fff; }
+  @media print { .switcher { display:none; } nav.toc { display:none; } header.bar { position:static; } }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>工具管理 · 前端组件 Demo</h1>
+    <span class="sp"></span>
+    <span class="sub">① widget.tools 管理面板　② ApprovalPanel 对话侧权限选择面板 · 参考天枢 dev 的 ToolView / McpView / ApprovalDialog / ToolCall</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s0">0 两个组件的分工</a>
+    <a href="#s1">1 管理面板 · 总览</a>
+    <a href="#s2">2 目录表</a>
+    <a href="#s3">3 详情抽屉 + 约束编辑器</a>
+    <a href="#s4">4 审批策略</a>
+    <a href="#s5">5 手工试调</a>
+    <a href="#s6">6 MCP 服务</a>
+    <a href="#s7">7 权限面板 · 三档选择</a>
+    <a href="#s8">8 proc 二次确认</a>
+    <a href="#s9">9 结算后的工具块</a>
+    <a href="#s10">10 四种边界情形</a>
+    <a href="#s11">11 组件映射</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>这份稿只画两个组件的<b>最终形态</b>与<b>交互</b>；服务与协议设计在 <code class="inl">../工具管理插件设计.html</code>。</b>
+  <br>
+  <b>① <code class="inl">widget.tools</code></b>（本插件唯一的视图，5 个 Tab）—— 管「这台机器上有什么能力」：
+  目录 · 审批 · 试调 · MCP · 事件。数据全部来自 <code class="inl">tools.state</code>，只订阅事件、不发请求。
+  <br>
+  <b>② <code class="inl">ApprovalPanel</code></b>（对话流里的一个内联块，住在 chat-workbench 的
+  <code class="inl">widget.chat-timeline</code>）—— 管「这一次允许吗」。三个按钮对应天枢的
+  <code class="inl">reject / once / always</code>，但<b>作用域要印在按钮上</b>（天枢没做这层）。
+  <br>
+  <b>两者共享 name / requestId(=toolCallId) / risk 三个 id</b>，所以同一个面板能被两个视图复用 ——
+  时间线按 <code class="inl">sessionId === curId</code> 渲染它，管理面板按
+  <code class="inl">sessionId === 'tools-console'</code> 渲染它。<b>零跨组件通信</b>。
+</div>
+
+<!-- ══════════ 0 ══════════ -->
+<section id="s0">
+  <h2><span class="n">0</span>两个组件的分工：同一份数据，两个消费者</h2>
+  <table>
+    <thead><tr><th>组件</th><th>住在哪个插件</th><th>数据源</th><th>回答</th><th>写什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>ToolCatalogView</b> + 4 个兄弟 Tab</td><td>tools（<code class="inl">widget.tools</code>）</td>
+        <td class="mono">tools.state（owner 每次变更重播整份）</td><td>「这台机器上有什么能力、我授权到哪一步了」</td>
+        <td class="mono">tools.set · tools.mcp.*</td></tr>
+      <tr><td><b>ApprovalPanel</b></td><td>chat-workbench（时间线内联块）</td>
+        <td class="mono">tool.approval.requested</td><td>「这一次允许吗」</td>
+        <td class="mono">tool.approval.resolved</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad">
+    <b>与天枢最大的形态差异：审批从「浮层对话框」改成「内联块」。</b>
+    天枢是 <code class="inl">.approval-overlay</code> + <code class="inl">ApprovalDialog.tsx</code>（居中浮层），
+    工具块是<b>另一条消息</b>（<code class="inl">ToolCall.tsx</code>）。两者一分离，浮层一关，
+    界面上就<b>看不出这一轮是被谁批准的</b> —— 而「谁批准的」是用户事后唯一会想查的事。
+    合并成一个内联块之后，<b>批准记录跟着工具块一直留在时间线上</b>。
+  </div>
+</section>
+
+<!-- ══════════ 1 ══════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>管理面板 · 总览</h2>
+  <p>面板本体。5 个 Tab 共用一份 <code class="inl">tools.state</code>，切 Tab 不重新取数、不重新订阅。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>widget.tools</b>
+      <span class="mono">index.html#catalog</span><span class="sp"></span>
+      <span>订阅 <code class="inl">tools.state</code> · 发 <code class="inl">tools.set</code> / <code class="inl">tools.invoke</code> / <code class="inl">tools.mcp.*</code></span></div>
+    <div class="frame" style="height:520px;"><div class="tools-view" id="toolsView"></div></div>
+  </div>
+  <p class="caption">560px 模拟 dockview 里一个中等面板的真实高度。窄于 900px 时目录表要退化成卡片列表（见 <a href="#s11">§11</a>）。</p>
+
+  <table>
+    <thead><tr><th>Tab</th><th>回答</th><th>为什么在这</th><th>章节</th></tr></thead>
+    <tbody>
+      <tr><td><b>目录</b></td><td>模型现在能看到哪些工具？谁提供的？风险多大？开了吗？</td>
+        <td>唯一能一眼看出「这台机器有什么」的地方</td><td><a href="#s2">§2</a></td></tr>
+      <tr><td><b>审批</b></td><td>我放过哪些工具？以后还问吗？</td>
+        <td>与目录<b>分开</b>：一个是「有什么」，一个是「我授权到哪」</td><td><a href="#s4">§4</a></td></tr>
+      <tr><td><b>试调</b></td><td>这个工具在当前机器上真的能用吗？</td>
+        <td>没有它，用户只能靠模型试错来发现问题</td><td><a href="#s5">§5</a></td></tr>
+      <tr><td><b>MCP</b></td><td>接了哪些外部 server？连上了吗？各带哪些工具？</td>
+        <td>server 是<b>配置</b>，与「有什么工具」不是一回事</td><td><a href="#s6">§6</a></td></tr>
+      <tr><td><b>事件</b></td><td>这个插件到底在总线上说了什么？</td>
+        <td>能力目录<b>运行期才成形</b>，排障只能看这里</td><td>点上面的 Tab</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>头部那三个数字是刻意加的</b>：总工具数 / 需审批数 / 未启用数。
+    「需审批」这个数直接告诉用户<b>模型每轮会弹几次窗</b> —— 而这个数在天枢的界面里<b>完全看不出来</b>
+    （它只有一张静态卡片列表，没有任何与风险/审批相关的呈现）。
+  </div>
+</section>
+
+<!-- ══════════ 2 ══════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>管理面板 · 目录表（按来源分组）</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ToolCatalogView</b>
+      <span class="sp"></span><span>点开关就地改 enabled；点「详情」开抽屉（下一节）；悬空引用 / 同名冲突灰显但不隐藏</span></div>
+    <div class="frame" style="height:400px;"><div class="tools-view" id="toolsCatalog"></div></div>
+  </div>
+
+  <h3>九个决定，都写在表里了</h3>
+  <table>
+    <thead><tr><th>决定</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>按来源分组</b>，不按名字排序</td>
+        <td>用户的问题是「MCP 那批怎么没连上」，不是「a 开头有哪些」。名字排序对这个问题<b>零帮助</b>；
+        分组还顺带回答了「哪个插件挂了会带走哪些工具」。</td></tr>
+      <tr><td>组内按 name 排序</td><td><b>这一条是给模型的</b>：<code class="inl">tool.registered</code> 的顺序必须
+        <code class="inl">serviceId → name</code> 稳定，否则 prompt 缓存全失效。
+        界面顺序与它一致，用户看到的就是模型看到的。</td></tr>
+      <tr><td>名称等宽字体 + 描述省略</td><td>名称是模型调用的<b>标识符</b>，用户要能一字不差核对；
+        描述长了不影响判断（抽屉里有全文）。</td></tr>
+      <tr><td>风险徽章紧挨名称</td><td>扫一行就知道「这行要不要点审批」，不用横向对齐看某列。</td></tr>
+      <tr><td>策略列显示<b>「按默认」</b>而非留空</td><td>空单元格会被读成「没设置」；
+        而 6 个只读工具<b>就是</b>按 risk 默认的。</td></tr>
+      <tr><td><code class="inl">managedBy:'auto'</code> 的行<b>禁用开关</b></td>
+        <td>skill_manager 由技能列表决定。给个点了不生效的开关比没有更糟 —— 它同时教会用户「这个界面不可信」。</td></tr>
+      <tr><td>悬空引用 / 同名冲突<b>灰显但不隐藏</b></td><td>灰 = 不参与这一轮；隐藏 = 用户以为是自己配错了。</td></tr>
+      <tr><td>「无约束声明」打警示</td><td>该工具<b>没有第二道闸</b>，审批是唯一一道。对 proc / net 类尤其显眼。</td></tr>
+      <tr><td><b>没有「删除工具」按钮</b></td><td>本插件<b>不拥有</b>工具实现，删它等于卸插件。给一个按钮等于骗用户。只有「停用」，而停用是可逆的。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 3 ══════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>管理面板 · 详情抽屉（含约束编辑器）</h2>
+  <p>点目录任意一行的「详情」。抽屉里除了看参数，还要能<b>就地改约束</b> —— 因为约束是本插件的第二道闸。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ToolDetailDrawer</b>
+      <span class="sp"></span><span>右滑出 · 四段：说明 / 参数 / <b>约束</b> / 策略</span></div>
+    <div class="frame" style="height:500px;"><div class="tools-view" id="toolsDrawer"></div></div>
+  </div>
+
+  <div class="note ok">
+    <b>约束编辑器是抽屉里最重要的部分</b>，因为它是<b>不弹窗</b>的那道闸。
+    每个 <code class="inl">constraintField</code> 渲染成一个卡片：标题 + <b>规则名</b> + 值 chip + 输入框。
+    <br>
+    <b>规则名（<code class="inl">glob-allow</code> / <code class="inl">bytes-max</code>）必须显示</b>。
+    只放一个「允许路径」输入框是不够的：用户需要知道<b>自己填的东西怎么被解释</b> ——
+    <code class="inl">glob-allow</code> 是<b>前缀匹配</b>（<code class="inl">src/**</code> 匹配 <code class="inl">src/a/b.ts</code>，
+    而 <code class="inl">**</code> 只在<b>末尾</b>有意义）。不解释的话，填个 <code class="inl">**</code> 会「意外全放行」。
+  </div>
+
+  <div class="note bad">
+    <b>三处刻意不提供的能力</b>：
+    <br>① <b>没有「允许所有路径」开关。</b>要放行全部只能显式填 <code class="inl">**</code>，
+    而引擎<b>拒绝</b>单独出现的 <code class="inl">*</code>/<code class="inl">**</code>（fail fast）——
+    所以这件事<b>在界面上也做不出来</b>。恢复成本由「常用值」快捷 chip 承担。
+    <br>② <b>没有「继承角色设置」。</b>约束是「机器级 + 角色级」两层，这个编辑器改的是<b>机器级</b>；
+    角色级在 <code class="inl">widget.agents</code>。在这里显示角色级会让人以为改这里能改角色。
+    <br>③ <b>risk 不可改</b>（界面上是只读徽章）。它是执行者<b>声明</b>的事实，不是用户能调的口径 ——
+    否则「把 <code class="inl">bash</code> 标成 <code class="inl">read</code>」就绕过了审批。
+  </div>
+</section>
+
+<!-- ══════════ 4 ══════════ -->
+<section id="s4">
+  <h2><span class="n">4</span>管理面板 · 审批策略</h2>
+  <p>与目录<b>分开一个 Tab</b>。目录回答「有什么」，审批回答「我授权到哪」，混在一张表里两个问题互相干扰。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ApprovalPolicyTab</b>
+      <span class="sp"></span><span>只列<b>需要决策</b>的行 · 点三档就地生效 · 「恢复询问」= 删掉那条覆盖</span></div>
+    <div class="frame" style="height:330px;"><div class="tools-view" id="toolsPolicy"></div></div>
+  </div>
+
+  <h3>三档与两个刻度</h3>
+  <table>
+    <thead><tr><th>档</th><th>效果</th><th>默认</th><th>谁能设成它</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">ask</td><td>每次执行都问</td><td class="mono">write / net / proc</td><td>用户</td></tr>
+      <tr><td class="mono">auto</td><td>直接放行</td><td class="mono">read</td>
+        <td><b>只有用户</b>；<code class="inl">proc</code> 档还要二次确认</td></tr>
+      <tr><td class="mono">deny</td><td>产失败结果，模型自我纠正</td><td>无</td><td>用户</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>「恢复询问」放在「变更」列而不是工具名旁边。</b>
+    它的语义是<b>撤销一次改动</b>，不是操作这个工具。放在名字旁边会让人以为它跟另外两档是平级三选一 ——
+    而它其实是「回到第 1 档」的快捷方式。
+    <br>
+    <b>这张表默认很短</b>（只列非 read 或已覆盖的），这不是「界面漏了」—— 表格下面那行小字专门说了这件事。
+  </div>
+
+  <div class="note bad">
+    <b>三档不是「让模型自己学」。</b>它们是<b>闸门的判定输入</b>，写进 <code class="inl">approvals.json</code>；
+    闸门<b>不认识工具</b>，只按 name 查这一条。所以「我把策略调松了但工具不生效」是<b>不可能</b>的状态 ——
+    目录里 <code class="inl">enabled=false</code> 的工具根本不会进这一轮的目录，压根到不了闸门。
+  </div>
+</section>
+
+<!-- ══════════ 5 ══════════ -->
+<section id="s5">
+  <h2><span class="n">5</span>管理面板 · 手工试调（会触发同一个权限面板）</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ToolRunner</b>
+      <span class="sp"></span><span>切到不同 risk 的工具看审批面板是否出现</span></div>
+    <div class="frame"><div class="tools-view" id="toolsRunner"></div></div>
+  </div>
+
+  <div class="note bad">
+    <b>这是整个面板里最容易被「优化掉」的一处，所以要写明。</b>
+    试调<b>必须</b>触发审批：<code class="inl">tools.invoke</code> 发一条合成 toolCallId，之后<b>完全走同一条链路</b> ——
+    执行者自审 → 闸门 → 审批面板 → 执行。
+    <br>
+    给试调开后门（管理界面里不审批），那么 <code class="inl">widget.tools</code> 就成了<b>审批系统的一个后门</b>：
+    点一下 <code class="inl">bash</code> 就等于执行了任意命令。<b>一个只有一条执行路径的系统才不会被绕过去。</b>
+  </div>
+
+  <div class="note ok">
+    <b>「参数（JSON）」旁的参数表直接由 <code class="inl">constraintFields</code> 的同源 schema 生成</b>，
+    给出示例 JSON 作为起点 —— 但它<b>不是校验器</b>。用户不该先查 schema 再手写。
+  </div>
+</section>
+
+<!-- ══════════ 6 ══════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>管理面板 · MCP 服务</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>McpServerPanel</b>
+      <span class="sp"></span><span>形态照天枢 <code class="inl">McpView</code> 的卡片，但删掉了「检测本机」入口、env 改掩码</span></div>
+    <div class="frame" style="height:400px;"><div class="tools-view" id="toolsMcp"></div></div>
+  </div>
+
+  <h3>与天枢 McpView 的三处不同</h3>
+  <table>
+    <thead><tr><th>天枢有</th><th>本设计</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>检测本机 MCP</b>（扫 opencode / Claude / Cursor 配置）</td><td><b>不做</b></td>
+        <td>读别的应用的配置目录 = <b>越界</b>。OST 的 <code class="inl">plugins.readFile</code> 只能读自己插件目录，
+        这条纪律不该为导入方便而破。要导入就<b>手贴 JSON</b> —— 那是有意识的一次动作。</td></tr>
+      <tr><td><b>导入 JSON</b></td><td><b>保留</b></td>
+        <td>粘贴配置是<b>用户主动给数据</b>，与扫别人目录性质不同。</td></tr>
+      <tr><td>卡片把 <code class="inl">env</code> <b>明文</b>列出（<code class="inl">K=V</code> 原样）</td>
+        <td><b>掩码</b>，悬停/点击才临时显示</td>
+        <td>MCP 的 <code class="inl">env</code> 里就是 <code class="inl">GITHUB_TOKEN</code> 这类东西。
+        天枢那条是 UI 便利，但<b>明文铺在卡片上</b>会进截图、进录屏、进 bug 报告。
+        形态照搬凭证插件已有的做法：<code class="inl">GITHUB_TOKEN=ghp_••••7f2a</code>。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>「删除」要终止子进程，不只是从列表里划掉。</b>
+    天枢的 <code class="inl">handleDelete</code> 只删配置。本设计要求同时<b>杀掉那个 server 进程</b> ——
+    否则「删了」只是 UI 上的删除，进程还在跑，那才是真正的暴露面。所以删除需要<b>二次确认</b>，文案要写明会终止进程。
+  </div>
+</section>
+
+<!-- ══════════ 7 ══════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>权限面板 · 形态与三档选择</h2>
+  <p>对话流里的一个<b>内联块</b>，不是浮层。三个按钮对应天枢的 <code class="inl">reject / once / always</code>，
+  但<b>作用域印在按钮上</b>。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ApprovalPanel</b>
+      <span class="sp"></span><span>换工具看不同 risk 的文案 · 切状态按钮看流转 · 点面板上的按钮真的能走完</span></div>
+    <div class="frame" style="height:520px;"><div class="chat-view" id="chatAppr"></div></div>
+  </div>
+
+  <h3>七行文案，每行都不能省</h3>
+  <table>
+    <thead><tr><th>行</th><th>示例</th><th>省掉会怎样</th></tr></thead>
+    <tbody>
+      <tr><td>① 工具名 + risk</td><td class="mono">bash <span class="p-badge b-proc">proc</span></td><td>用户不知道在批什么</td></tr>
+      <tr><td>② <b>为什么需要问</b></td><td>「这个工具会拉起一个子进程，也就是任意代码执行」</td>
+        <td>只能凭工具名猜。<b>尤其 MCP 必须有</b>：我们不知道那个 server 会做什么</td></tr>
+      <tr><td>③ 完整入参</td><td class="mono">{"command":"pnpm test"}</td><td>批一个没看过的命令 = 没批</td></tr>
+      <tr><td>④ toolCallId</td><td class="mono">T=call_8f2c1d</td><td>出问题后无法定位是哪一次（排障的唯一线索）</td></tr>
+      <tr><td>⑤ <b>超时</b></td><td>「60s 后按拒绝处理」</td><td>用户不知道放着不管会怎样</td></tr>
+      <tr><td>⑥ <b>作用域</b></td><td>「仅 <code class="inl">bash</code>」</td>
+        <td>「允许本机此工具」听起来像全局开关，必须写明范围</td></tr>
+      <tr><td>⑦ 结算后的结果</td><td>「已允许 · 已记住」</td>
+        <td>不点任何东西就不知道卡在哪 —— 而它<b>就在挡着模型</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad">
+    <b>「始终允许」这个按钮名要改。</b>
+    天枢的 <code class="inl">always</code> 在界面上叫「始终允许」，而它的实际作用域是
+    <b>本机 + 这一个工具名</b>。这个措辞差得很远 —— 用户以为买了永久通行证，
+    结果换个角色（约束更严）它又被拦。本设计改成把作用域印在按钮上：
+    <code class="inl">拒绝</code> / <code class="inl">允许一次</code> / <code class="inl">允许本机此工具</code>。
+    按钮变长了，但<b>它不再骗人</b>。
+  </div>
+
+  <div class="note info">
+    <b>不设「记住我的选择」复选框，而是让「允许本机此工具」成为一个独立档位。</b>
+    天枢是「仅本次 / 始终允许」两按钮、无复选框，于是「这次允许但别记」没有路径。
+    三档并列之后<b>每个选项都不需要解释</b>，而两档 + 复选框需要用户自己想清楚组合。
+  </div>
+</section>
+
+<!-- ══════════ 8 ══════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>权限面板 · proc 档的二次确认</h2>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>ApprovalPanel · 需要二次确认时</b>
+      <span class="sp"></span><span>只有 proc 档升到「本机此工具」会走这一步；切到 MCP 那条能看到 server 说明</span></div>
+    <div class="frame" style="height:400px;"><div class="chat-view" id="chatAppr2"></div></div>
+  </div>
+
+  <div class="note ok">
+    <b>为什么只有 <code class="inl">proc</code> 需要二次确认。</b>
+    <code class="inl">net</code> 也会把数据发出去，但它至少有 URL 与请求体可看，且用户通常知道自己在查什么；
+    <code class="inl">proc</code> 是<b>任意代码执行</b> —— <code class="inl">allowed_commands</code> 里哪怕有一条
+    <code class="inl">npm</code>，<code class="inl">npm run</code> 背后的东西也是不可预见的。
+    <br>
+    <b>这不是不信任用户，而是不信任「remember」这个动作本身</b>：用户可能只是手滑点了「允许本机此工具」，
+    而这一点的后果是<b>此后每次都自动放行</b>，他自己都不会再看。
+  </div>
+
+  <div class="note">
+    <b>MCP 的卡片比 <code class="inl">bash</code> 还要多一段：server 的 description 原文。</b>
+    <code class="inl">tools/list</code> 只给 name/description/inputSchema，
+    而<b>用户能判断的全部依据就是这几行</b> —— 不给他的话，这次审批就是在盲批。
+  </div>
+</section>
+
+<!-- ══════════ 9 ══════════ -->
+<section id="s9">
+  <h2><span class="n">9</span>权限面板 · 结算后的工具块</h2>
+  <p>批完之后，同一个块<b>原地变成结果</b>，而不是消失或换一条新消息。这是与天枢浮层方案最大的差别。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>一条完整时间线上的五种块</b>
+      <span class="sp"></span><span>点头部展开/折叠 · 注意成功块底部那行「依据：本机策略」</span></div>
+    <div class="frame" style="height:560px;"><div class="chat-view" id="chatBlocks"></div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>终态</th><th>头部</th><th>点开看到</th><th>什么时候</th></tr></thead>
+    <tbody>
+      <tr><td><b>执行中</b></td><td>名称 · <b>实时秒数</b> · 折叠箭头</td><td>参数（结果还没有）</td>
+        <td>照天枢 <code class="inl">LiveDuration</code>：从卡片创建时刻起算</td></tr>
+      <tr><td><b>成功</b></td><td>✓ 名称 · 后端结算的耗时</td><td>参数 + 结果 + <b>「依据」行</b></td><td>常规成功</td></tr>
+      <tr><td><b>失败</b></td><td>✗ 名称 · 耗时</td><td>参数 + <b>人话原因</b></td>
+        <td>执行报错 / 路径越界 / <b>约束层拒绝</b> / <b>被拒绝</b> / <b>审批超时</b></td></tr>
+      <tr><td><b>幽灵块</b></td><td>灰 · 名称 · 「本轮已结束」</td><td>不展开，只有一行说明</td>
+        <td>结果到达时 A 已释放。<b>不补发、不消失</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>被拒绝与执行失败合并成同一种呈现，是刻意的。</b>
+    loop 不区分这两者（同一个 <code class="inl">tool.execute.result{ok:false}</code>），
+    对用户的区别只在<b>原因那行字</b>：「用户拒绝了这次工具调用」vs「命令包含禁止模式」。
+    <br>
+    <b>但审批记录要留在块里</b>：折叠状态下头部要能看到「已允许 · 已记住」。
+    这是<b>事后唯一能查「谁批准的」的地方</b> —— 天枢的浮层方案给不了这个。
+  </div>
+
+  <div class="note ok">
+    <b>成功的块也保留「谁批的」。</b>
+    Demo 里那条 <code class="inl">bash</code> 走的是「允许本机此工具」，块底部会留一行
+    <code class="inl">依据：本机策略（2026-10-06 用户批准）</code>。
+    这样用户在长会话里扫一眼就知道<b>哪些动作是自动放行的</b> —— 极其有用。
+  </div>
+</section>
+
+<!-- ══════════ 10 ══════════ -->
+<section id="s10">
+  <h2><span class="n">10</span>权限面板 · 四种边界情形</h2>
+  <p>这四条是实现时最容易漏、且<b>都不会报错</b>的。</p>
+
+  <div class="stage">
+    <div class="stage-bar"><span class="dots"></span><b>边界情形</b>
+      <span class="sp"></span><span>点四个按钮逐一触发</span></div>
+    <div class="frame" style="height:460px;"><div class="chat-view" id="chatEdge"></div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>情形</th><th>界面必须显示</th><th>为什么不显示就是 bug</th></tr></thead>
+    <tbody>
+      <tr><td>① 审批中用户按了停止</td><td>该块变成「<b>本轮已结束</b>」，审批面板消失，<b>不产生任何结果块</b></td>
+        <td>不消失的话，一个永远等不到人的面板会<b>永久挡在时间线上</b>；
+        而补发一个「已取消」的工具结果，会让模型以为「取消」是一种工具行为</td></tr>
+      <tr><td>② 审批超时</td><td>块变成失败，原因写「<b>审批超时（未响应）</b>」</td>
+        <td>「一直转圈」是这个系统最容易出的症状。静默的等价物就是转圈</td></tr>
+      <tr><td>③ 工具已卸载但结果才到</td><td><b>幽灵块</b>（灰、不展开）</td>
+        <td>挂在已结束的轮次下面，用户会以为工具「偶尔失灵，重启一次就好了」</td></tr>
+      <tr><td>④ 刷新页面时正在审批</td><td><b>面板重新出现</b>，T 不变，倒计时从<b>原剩余</b>继续</td>
+        <td>pending 在闸门<b>进程</b>里且<b>经总线重播</b>，所以刷新后界面重订事件就能看到在途请求</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note info">
+    <b>④ 是天枢方案的一个真实缺陷。</b>
+    它的 <code class="inl">approvalRegistry</code> 把 pending 挂在进程内 Map，key 是
+    <code class="inl">(sessionId, toolCallId)</code>，注释写「不靠 stream 闭包所以重连还能答」——
+    <b>方向是对的</b>，但 Map 在 <b>agent 进程</b>里，所以重连要靠前端<b>另外去问</b>「有没有在途审批」。
+    本设计把 Map 放进<b>独立的闸门服务</b>，pending <b>状态本身</b>就经总线重播 ——
+    <b>不需要任何补偿逻辑</b>。
+  </div>
+</section>
+
+<!-- ══════════ 11 ══════════ -->
+<section id="s11">
+  <h2><span class="n">11</span>组件映射与事件契约</h2>
+
+  <table>
+    <thead><tr><th>组件（拟）</th><th>复用 <code class="inl">@osteosome/ui</code></th><th>消费事件</th><th>发命令</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">ToolCatalogView</td><td class="mono">Table · Input · Select · Switch · Tabs · EmptyState</td>
+        <td class="mono">tools.state</td><td>—（开关走本插件本地 enabled → 下一轮生效）</td></tr>
+      <tr><td class="mono">ToolDetailDrawer</td><td class="mono">Drawer · Input · Button</td>
+        <td class="mono">tools.state</td><td class="mono">tools.set{policies}</td></tr>
+      <tr><td class="mono">ConstraintEditor</td><td class="mono">Input · Button</td>
+        <td class="mono">tools.state</td><td class="mono">tools.set{constraints}</td></tr>
+      <tr><td class="mono">ToolRunner</td><td class="mono">Select · Textarea · Button</td>
+        <td class="mono">tools.state</td><td class="mono">tools.invoke</td></tr>
+      <tr><td class="mono">McpServerPanel</td><td class="mono">Table · Button · Modal · Input</td>
+        <td class="mono">tools.state</td><td class="mono">tools.mcp.set · tools.mcp.test</td></tr>
+      <tr><td class="mono">EventFeed</td><td>纯日志面板</td><td class="mono">tools.* · tool.*</td><td>—</td></tr>
+      <tr style="background:var(--surface-2)"><td colspan="4"><b>下面是 chat-workbench 侧的（不在本插件，但共用同一个 ApprovalPanel）</b></td></tr>
+      <tr><td class="mono">ApprovalPanel</td><td class="mono">Button · Checkbox</td>
+        <td class="mono">tool.approval.requested</td><td class="mono">tool.approval.resolved</td></tr>
+      <tr><td class="mono">ToolCallBlock</td><td>纯展示 + 折叠</td><td class="mono">loop.tool.executed</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>零新增 <code class="inl">@osteosome/ui</code> 组件。</b>
+    上表里出现的 11 个（Button / Input / Select / Textarea / Switch / Checkbox / Tabs / Table /
+    Drawer / Modal / EmptyState）<b>全部已存在</b>。本插件只新增 6 个<b>业务组件</b>，都是<b>组合</b>已有组件 + 一块表单。
+    <br>
+    唯一例外：<b>那几枚小徽章</b>。现有 18 个组件里<b>没有 Badge</b>
+    （Button / Card / Checkbox / Dropdown / Drawer / EmptyState / IconButton / Input / List / Modal /
+    Select / Spinner / Switch / Tab / Table / Tabs / Textarea / Toast / Tooltip）。
+    本 Demo 是<b>插件内联样式</b>，不抽进公共库 —— 一个只在本插件用、语义只有这里的徽章，
+    抽进 <code class="inl">sdk/ui</code> 只会让它长出第二个真源。
+  </div>
+
+  <h3>窄面板退化</h3>
+  <div class="note">
+    面板窄于 900px 时目录表的 6 列会挤成一团。两种做法：
+    <b>①</b> CSS <code class="inl">@container</code> 查询（dockview 面板宽度可用）→ 表格换卡片列表；
+    <b>②</b> 用 <code class="inl">Table</code> 的 <code class="inl">cell:*</code> 具名插槽把风险徽章挪到名称下面。
+    <br>
+    <b>建议 ①</b>：表格在这个面板里<b>是主形态</b>，退化成卡片就失去了「扫一眼对齐比较」的价值。
+    本 Demo 未实现窄屏退化（stage 宽度固定），实现时补。
+  </div>
+</section>
+
+<div class="foot">
+  Osteosome · 工具管理前端组件 Demo · 2026-10 ·
+  服务与协议设计见 <code class="inl">../工具管理插件设计.html</code> ·
+  组件取值对齐 <code class="inl">sdk/ui/src/tokens.css</code> ·
+  形态参考天枢 dev：<code class="inl">web/client/src/views/{ToolView,McpView}.tsx</code> ·
+  <code class="inl">components/Chat/{ApprovalDialog,ToolCall}.tsx</code> ·
+  <code class="inl">features/characters/toolBindings.ts</code> ·
+  <code class="inl">index.css</code>（<code class="inl">.approval-*</code> / <code class="inl">.tool-invoke*</code> / <code class="inl">.mcp-*</code>）·
+  服务端对照：<code class="inl">web/server/src/tools/*</code> · <code class="inl">agent/runtime/approval-registry.ts</code>
+</div>
+
+</div>
+
+<div class="switcher" role="group" aria-label="Demo 视图切换">
+  <button id="sw1" aria-pressed="true" title="① 管理面板">⚙</button>
+  <button id="sw2" aria-pressed="false" title="② 权限面板">🔑</button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ═══════════ 主题 ═══════════ */
+  var root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ═══════════ 锚点高亮 ═══════════ */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var sections = tocLinks.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncToc() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < sections.length; i++) { if (sections[i] && sections[i].offsetTop <= y) idx = i; }
+    tocLinks.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', syncToc, { passive: true });
+  syncToc();
+
+  /* ═══════════ 工具函数 ═══════════ */
+  function byId(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     数据：12 个静态工具 + MCP 动态族（清单见设计稿 §5.1）
+     ══════════════════════════════════════════════════════════ */
+  var TOOLS = [
+    { name: 'read', svc: 'fs-tools', risk: 'read', policy: 'auto', enabled: true, constrained: true,
+      desc: 'Read file contents from the workspace. Paginated: 2000 lines / 51200 bytes per page.',
+      params: [['path', 'string', true, '相对路径'], ['offset', 'integer', false, '起始行（默认 1）'], ['limit', 'integer', false, '最多行数'], ['include', 'string', false, '如 *.ts']],
+      cst: [['allowed_paths', '允许路径', 'glob-allow', ['src/**', 'docs/**']], ['denied_paths', '禁止路径', 'glob-deny', ['**/node_modules/**']]],
+      args: '{"path":"notes/today.md","limit":200}',
+      output: '今天的三件事：\n1. 工具插件拆成 1 闸门 + 6 执行者\n2. 审批闸门不认识工具清单\n3. 沙箱根随执行者走', ms: 12 },
+    { name: 'glob', svc: 'fs-tools', risk: 'read', policy: '', enabled: true, constrained: true,
+      desc: 'Find files matching a glob pattern（≤100 项）。',
+      params: [['pattern', 'string', true, '相对路径的 glob']], cst: [], args: '{"pattern":"src/**/*.ts"}',
+      output: 'src/layout/store.ts\nsrc/panes/PaneHost.vue\nsrc/plugins/registry.ts\n（4 more）', ms: 6 },
+    { name: 'grep', svc: 'fs-tools', risk: 'read', policy: '', enabled: true, constrained: true,
+      desc: 'Search file contents with a regex. ≤200 matches; ripgrep 30s 硬超时。',
+      params: [['pattern', 'string', true, '正则'], ['path', 'string', false, '搜索目录'], ['include', 'string', false, '如 *.ts']],
+      cst: [['max_rows', '最多结果数', 'max-number', []]], args: '{"pattern":"COMMAND_TOPICS","include":"*.ts"}',
+      output: 'shared/src/events.ts:408\ncore/src/sse-bridge/command.ts:46\n（2 matches）', ms: 240 },
+    { name: 'write', svc: 'fs-tools', risk: 'write', policy: 'ask', enabled: true, constrained: true,
+      desc: 'Write content to a file. Auto-creates parents, preserves BOM, reports metadata.',
+      params: [['path', 'string', true, '相对路径'], ['content', 'string', true, '文件内容']],
+      cst: [['allowed_paths', '允许路径', 'glob-allow', ['notes/**']], ['denied_paths', '禁止路径', 'glob-deny', []], ['max_file_size', '单文件大小', 'bytes-max', ['1MB']]],
+      args: '{"path":"notes/today.md","content":"…"}', output: '已写入 notes/today.md（38 字节）\n{ status:"created", bytes:38 }', ms: 9 },
+    { name: 'edit', svc: 'fs-tools', risk: 'write', policy: 'ask', enabled: true, constrained: true,
+      desc: 'Exact-string replacement, atomic rename, BOM-preserving, returns a diff.',
+      params: [['path', 'string', true, '相对路径'], ['oldString', 'string', true, '精确待替换串'], ['newString', 'string', true, '替换为'], ['replaceAll', 'boolean', false, '替换全部']],
+      cst: [['allowed_paths', '允许路径', 'glob-allow', []], ['denied_paths', '禁止路径', 'glob-deny', []]],
+      args: '{"path":"a.ts","oldString":"let x = 1","newString":"let x = 2"}', output: '1 处替换 · +1 −1 · 原子 rename 完成', ms: 15 },
+    { name: 'bash', svc: 'shell-tools', risk: 'proc', policy: 'ask', enabled: true, constrained: true,
+      desc: 'Execute a shell command in the workspace directory. 60s 超时 / 输出 1MB。',
+      params: [['command', 'string', true, 'shell 命令'], ['timeout_seconds', 'number', false, '默认 60']],
+      cst: [['allowed_commands', '允许命令', 'exact-allow', ['git', 'pnpm', 'node']], ['denied_patterns', '禁止模式', 'substring-deny', ['rm -rf', 'sudo', 'del']]],
+      args: '{"command":"pnpm test"}', output: 'Test Files  13 passed\nTests  294 passed', ms: 7420 },
+    { name: 'pwsh', svc: 'shell-tools', risk: 'proc', policy: 'ask', enabled: false, constrained: true,
+      desc: 'Execute a PowerShell command（windowsHide）。',
+      params: [['command', 'string', true, 'PowerShell 命令'], ['timeout_seconds', 'number', false, '默认 60']],
+      cst: [['allowed_commands', '允许命令', 'exact-allow', []], ['denied_patterns', '禁止模式', 'substring-deny', ['Remove-Item', 'Stop-Process']]],
+      args: '{"command":"Get-ChildItem src"}', output: '（示例）6 个文件/目录', ms: 890 },
+    { name: 'webfetch', svc: 'web-tools', risk: 'net', policy: 'ask', enabled: true, constrained: false,
+      desc: 'Fetch a URL as text/markdown/html. 响应 ≤5MB；超时 30s，上限 120s。',
+      params: [['url', 'string', true, 'http/https URL'], ['format', 'string', false, 'text|markdown|html'], ['readable', 'boolean', false, '抽正文'], ['timeout', 'number', false, '秒，上限 120']],
+      cst: [], args: '{"url":"https://example.com","format":"markdown"}', output: 'HTTP 200 · 12,043 字节 · markdown', ms: 1840 },
+    { name: 'websearch', svc: 'web-tools', risk: 'net', policy: 'ask', enabled: true, constrained: false,
+      desc: 'Search the web. ≤8 条；10s 超时。',
+      params: [['query', 'string', true, '搜索词']], cst: [], args: '{"query":"osteosome plugin"}', output: '8 条结果 · 10s', ms: 4200 },
+    { name: 'get_time', svc: 'misc-tools', risk: 'read', policy: '', enabled: true, constrained: false,
+      desc: '当前日期、时间与时区。模型需要知道「现在」时调它。',
+      params: [], cst: [], args: '{}', output: '2026-10-06T18:42:11+08:00 (Asia/Shanghai)', ms: 1 },
+    { name: 'debug_sessions', svc: 'misc-tools', risk: 'read', policy: '', enabled: true, constrained: true,
+      desc: '读 debug 会话记录（data/debug/），可按 session_id 过滤。',
+      params: [['session_id', 'string', false, '按会话过滤']], cst: [], args: '{}', output: '3 个会话 · 对话内容已合并', ms: 30 },
+    { name: 'skill_manager', svc: 'skills-tools', risk: 'read', policy: '', enabled: true, constrained: true, managedBy: 'auto',
+      desc: '发现技能包并懒激活子技能。managedBy:auto —— 技能列表为空时它根本不注册。',
+      params: [['action', 'string', true, 'discover|activate|deactivate']], cst: [],
+      args: '{"action":"discover"}', output: '3 个技能包 · 已激活 1 个', ms: 70 },
+    { name: 'mcp__github__create_issue', svc: 'mcp-tools', risk: 'proc', policy: 'ask', enabled: true, constrained: false, mcp: true, server: 'github',
+      desc: 'Create an issue in a repository.（目录来自 MCP tools/list，不来自 tools.json）',
+      params: [['title', 'string', true, '标题'], ['body', 'string', false, '正文']], cst: [],
+      args: '{"title":"P7 工具插件","body":"…"}', output: 'CallToolResult · issues/42', ms: 3100 },
+    { name: 'create_issue', svc: 'mcp-tools', risk: 'proc', policy: '', enabled: false, constrained: false, conflict: true,
+      desc: '（与 fs-tools 的同名工具冲突 → 已拒绝注册并标 ⚠）',
+      params: [['title', 'string', true, '标题']], cst: [], args: '{}', output: '不会执行：同名冲突', ms: 0 },
+    { name: 'pdf_extract', svc: '—', risk: 'read', policy: '', enabled: false, constrained: false, dangling: true,
+      desc: '（角色绑了它，但没有任何执行者注册这个 name → 悬空引用）',
+      params: [['file', 'string', true, 'PDF 路径']], cst: [], args: '{}', output: '不会发生', ms: 0 }
+  ];
+
+  var RISK_WHY = {
+    read: '这个工具只读，副作用被它自己的路径守卫与常量限死，不出网、不写文件。',
+    write: '这个工具会写入文件。它能碰到执行者目录之外的东西 —— 要不要由你决定。',
+    net: '这个工具会出网。请求体里的数据可能离开本机（Core 不代理网络，这一层它管不了）。',
+    proc: '这个工具会拉起一个子进程，也就是任意代码执行。'
+  };
+
+  var MCPS = [
+    { name: 'github', transport: 'stdio', command: 'npx -y @modelcontextprotocol/server-github', cwd: '~/dev', up: true, tools: 4,
+      env: ['GITHUB_TOKEN=ghp_••••7f2a'], desc: 'GitHub MCP Server —— issues / PRs / repos（官方）' },
+    { name: 'notion', transport: 'streamable-http', url: 'https://mcp.notion.com/mcp', up: true, tools: 7,
+      env: ['NOTION_TOKEN=ntn_••••91bc'], desc: 'Notion MCP —— 搜索 / 读写页面' },
+    { name: 'fetch', transport: 'stdio', command: 'npx -y mcp-fetch', cwd: '~', up: false, tools: 0, env: [],
+      desc: '（连不上：spawn ENOENT）' }
+  ];
+
+  function effPolicy(t) { return t.policy || (t.risk === 'read' ? 'auto' : 'ask'); }
+  function byName(n) { return TOOLS.filter(function (t) { return t.name === n; })[0]; }
+  function svcOrder(a, b) { return a === b ? 0 : a === '—' ? 1 : b === '—' ? -1 : a.localeCompare(b); }
+  function prettyJson(s) {
+    try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s; }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ① 管理面板
+     ══════════════════════════════════════════════════════════ */
+  var TABS = [
+    { k: 'catalog', label: '目录' }, { k: 'policy', label: '审批' }, { k: 'runner', label: '试调' },
+    { k: 'mcp', label: 'MCP' }, { k: 'events', label: '事件' }
+  ];
+
+  function counts() {
+    var c = { total: 0, ask: 0, off: 0 };
+    TOOLS.forEach(function (t) {
+      if (t.dangling || t.conflict) return;
+      c.total++;
+      if (effPolicy(t) === 'ask') c.ask++;
+      if (!t.enabled) c.off++;
+    });
+    return c;
+  }
+
+  function panelHead() {
+    var c = counts();
+    return '<div class="tv-head"><span class="tv-title">工具</span>' +
+      '<span class="tv-count">' + c.total + ' 个工具 · ' + c.ask + ' 个需审批 · ' +
+      (c.off ? c.off + ' 个未启用' : '全部启用') + '</span>' +
+      '<span style="flex:1"></span><span class="p-badge b-src">订阅 tools.state</span></div>';
+  }
+
+  function tabsBar(active, badge) {
+    return '<div class="tv-tabs"><div class="u-tabs">' + TABS.map(function (t) {
+      return '<button data-tab="' + t.k + '" aria-selected="' + (t.k === active) + '">' + t.label +
+        (badge && badge[t.k] ? '<span class="badge">' + badge[t.k] + '</span>' : '') + '</button>';
+    }).join('') + '</div></div>';
+  }
+
+  /* ── Tab: 目录 ── */
+  var filters = { q: '', svc: '', risk: '' };
+  function catalogTable() {
+    var q = filters.q.toLowerCase();
+    var rows = TOOLS.filter(function (t) {
+      if (filters.svc && t.svc !== filters.svc) return false;
+      if (filters.risk && t.risk !== filters.risk) return false;
+      if (!q) return true;
+      return (t.name + ' ' + t.desc + ' ' + t.svc).toLowerCase().indexOf(q) >= 0;
+    }).sort(function (a, b) { return svcOrder(a.svc, b.svc) || a.name.localeCompare(b.name); });
+
+    var svcs = [];
+    rows.forEach(function (t) { if (svcs.indexOf(t.svc) < 0) svcs.push(t.svc); });
+
+    var body = '';
+    if (!rows.length) {
+      body = '<tr><td colspan="6"><div class="p-empty"><b>没有匹配的工具</b>没装对应的执行者，或过滤条件太窄。</div></td></tr>';
+    } else {
+      svcs.forEach(function (svc) {
+        var group = rows.filter(function (t) { return t.svc === svc; });
+        body += '<tr class="group-row"><td colspan="6">' + esc(svc === '—' ? '未解析的引用' : svc) +
+          '<span class="g-count">' + group.length + ' 个</span></td></tr>';
+        group.forEach(function (t) {
+          var pol = effPolicy(t);
+          var swDis = t.dangling || t.conflict || t.managedBy === 'auto';
+          body += '<tr class="' + (t.enabled ? '' : 'row-off') + '">' +
+            '<td><div class="t-name">' + esc(t.name) + '</div>' +
+              '<div class="t-desc" title="' + esc(t.desc) + '">' + esc(t.desc) + '</div>' +
+              (t.dangling ? '<div class="t-note"><span class="p-badge b-dangling">悬空引用</span> 没有执行者注册这个 name</div>' : '') +
+              (t.conflict ? '<div class="t-note"><span class="p-badge b-conflict">同名冲突</span> 已拒绝注册，不覆盖</div>' : '') +
+              (t.managedBy ? '<div class="t-note"><span class="p-badge b-managed">自动门控</span> 由已安装技能包决定</div>' : '') +
+              (!t.constrained && !t.dangling && !t.conflict ? '<div class="t-note"><span class="p-badge b-warn">无约束声明</span> 审批是唯一一道闸</div>' : '') +
+              '</td>' +
+            '<td><span class="p-badge b-' + t.risk + '">' + t.risk + '</span></td>' +
+            '<td><span class="p-badge b-policy-' + pol + '">' + pol + '</span>' +
+              (t.policy ? '' : ' <span class="p-badge b-policy-ask">默认</span>') + '</td>' +
+            '<td><span class="p-badge b-src">' + esc(t.svc) + '</span></td>' +
+            '<td><label class="u-switch' + (t.managedBy ? ' disabled' : '') + '"' +
+                (t.managedBy ? ' title="由已安装技能包决定，不能手动开关"' : '') + '>' +
+              '<input type="checkbox" data-en="' + esc(t.name) + '"' + (t.enabled ? ' checked' : '') +
+              (swDis ? ' disabled' : '') + ' aria-label="启用 ' + esc(t.name) + '">' +
+              '<span class="track"><span class="thumb"></span></span></label></td>' +
+            '<td><div class="t-actions"><button class="u-btn sm ghost" data-detail="' + esc(t.name) + '">详情</button></div></td>' +
+            '</tr>';
+        });
+      });
+    }
+
+    var svcOpts = [];
+    TOOLS.forEach(function (t) { if (svcOpts.indexOf(t.svc) < 0) svcOpts.push(t.svc); });
+
+    return '<div class="tv-filters">' +
+      '<input class="u-input" id="fq" placeholder="按名称 / 描述 / 来源过滤…" value="' + esc(filters.q) + '">' +
+      '<select class="u-select" id="fsvc"><option value="">全部来源</option>' +
+        svcOpts.map(function (v) {
+          return '<option value="' + esc(v) + '"' + (filters.svc === v ? ' selected' : '') + '>' + esc(v) + '</option>';
+        }).join('') + '</select>' +
+      '<select class="u-select" id="frisk"><option value="">全部风险</option>' +
+        ['read', 'write', 'net', 'proc'].map(function (r) {
+          return '<option value="' + r + '"' + (filters.risk === r ? ' selected' : '') + '>' + r + '</option>';
+        }).join('') + '</select></div>' +
+      '<table class="tool-table"><thead><tr><th style="width:44%">工具</th><th style="width:9%">风险</th>' +
+        '<th style="width:16%">策略</th><th style="width:13%">来源</th><th style="width:8%">启用</th><th style="width:10%"></th>' +
+      '</tr></thead><tbody>' + body + '</tbody></table>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '表格显示<b>注册并集</b>。模型真正能用的是「并集 ∩ 角色绑定」—— 当前角色绑了 <code>*</code>，所以一致。' +
+        '悬空引用与同名冲突<b>灰显但不隐藏</b>：它们是状态，不是错误。</p>';
+  }
+
+  function renderCatalog() {
+    return panelHead() + tabsBar('catalog') + '<div class="tv-body">' + catalogTable() + '</div>';
+  }
+
+  /* ── Tab: 审批 ── */
+  function renderPolicy() {
+    var rows = TOOLS.filter(function (t) { return !t.dangling && !t.conflict && (t.policy || t.risk !== 'read'); });
+    return panelHead() + tabsBar('policy') + '<div class="tv-body">' +
+      '<p style="font-size:var(--text-sm);margin:0 0 var(--space-3)">策略是<b>闸门的判定输入</b>，落 ' +
+        '<code>userData/plugin/tools/approvals.json</code>。闸门<b>不认识工具</b>，只按 name 查这一条。</p>' +
+      '<table class="tool-table"><thead><tr><th style="width:30%">工具</th><th style="width:9%">风险</th>' +
+        '<th style="width:25%">策略</th><th style="width:16%">变更</th><th style="width:20%"></th>' +
+      '</tr></thead><tbody>' + rows.map(function (t) {
+        var cur = effPolicy(t);
+        return '<tr data-pol="' + esc(t.name) + '"><td><span class="t-name">' + esc(t.name) + '</span>' +
+          (t.constrained ? '' : '<div class="t-note"><span class="p-badge b-warn">无约束声明</span></div>') + '</td>' +
+          '<td><span class="p-badge b-' + t.risk + '">' + t.risk + '</span></td>' +
+          '<td><div class="seg">' + ['ask', 'auto', 'deny'].map(function (p) {
+            var tip = (p === 'auto' && t.risk === 'proc') ? ' title="proc 档升到 auto 需二次确认"' : '';
+            return '<button data-set="' + p + '" aria-pressed="' + (cur === p) + '"' + tip + '>' + p + '</button>';
+          }).join('') + '</div></td>' +
+          '<td><span class="p-badge ' + (t.policy ? 'b-policy-auto' : 'b-policy-ask') + '">' +
+            (t.policy ? '已覆盖' : '按 risk 默认') + '</span></td>' +
+          '<td>' + (t.policy ? '<button class="u-btn sm ghost" data-reset="1">恢复询问</button>'
+            : '<span style="color:var(--color-text-muted);font-size:var(--text-xs)">—</span>') + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '表里没出现的行 = 按 risk 默认（read → auto，其余 ask）。写一条就是显式覆盖；「恢复询问」= 删掉那条。' +
+        '⚠ 标「无约束声明」的行<b>没有第二道闸</b>，审批是唯一一道。</p></div>';
+  }
+
+  /* ── Tab: 试调 ── */
+  var runnerName = 'bash';
+  function renderRunner() {
+    var usable = TOOLS.filter(function (t) { return !t.dangling && !t.conflict && t.enabled; });
+    if (!usable.some(function (t) { return t.name === runnerName; })) runnerName = usable[0].name;
+    var t = byName(runnerName);
+    var pol = effPolicy(t);
+
+    var appr = '';
+    if (pol === 'ask') {
+      appr = '<div class="appr" style="margin-top:var(--space-3);max-width:100%">' +
+        '<div class="appr-hd"><span class="p-badge b-' + t.risk + '">试调需要审批</span>' +
+          '<span class="appr-title">' + esc(t.name) + '</span>' +
+          '<span class="p-badge b-src">tools-console</span><span class="appr-tid">T=ui-' + esc(t.name) + '</span></div>' +
+        '<div class="appr-bd"><p class="appr-why">' + esc(RISK_WHY[t.risk]) + '</p></div>' +
+        '<div class="appr-scope"><span>作用域：仅 <code>' + esc(t.name) + '</code></span></div>' +
+        '<div class="appr-ft"><span class="timer">60s 后按拒绝处理</span><span class="sp"></span>' +
+          '<button class="u-btn sm danger" data-rno="1">拒绝</button>' +
+          '<button class="u-btn sm approve" data-ryes="1">允许一次</button></div></div>';
+    }
+
+    return panelHead() + tabsBar('runner') + '<div class="tv-body"><div class="runner">' +
+      '<div><span style="font-size:var(--text-xs);color:var(--color-text-muted)">工具</span>' +
+        '<select class="u-select" id="rsel" style="margin-top:4px">' + usable.map(function (x) {
+          return '<option value="' + esc(x.name) + '"' + (x.name === runnerName ? ' selected' : '') + '>' + esc(x.name) + '</option>';
+        }).join('') + '</select>' +
+        '<table class="schema-tbl" style="margin-top:var(--space-3)"><tbody>' + t.params.map(function (p) {
+          return '<tr><td class="k">' + esc(p[0]) + (p[2] ? ' *' : '') + '</td><td class="t">' + esc(p[1]) + '</td>' +
+            '<td class="d">' + esc(p[3]) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+      '<div><span style="font-size:var(--text-xs);color:var(--color-text-muted)">参数（JSON）</span>' +
+        '<textarea class="u-textarea" id="rargs" style="margin-top:4px">' + esc(t.args) + '</textarea>' +
+        '<div style="display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2)">' +
+          '<button class="u-btn" id="rgo">试调</button>' +
+          '<span class="p-badge b-policy-' + pol + '">' + pol +
+            (pol === 'ask' ? ' · 会弹审批' : pol === 'deny' ? ' · 必定失败' : ' · 直接执行') + '</span>' +
+          '<span style="flex:1"></span>' +
+          '<span id="rtime" style="font-family:var(--font-mono);font-size:11px;color:var(--color-text-muted)"></span>' +
+        '</div>' +
+        '<div class="out-box" id="rout" style="margin-top:var(--space-3)"><span class="hint">（尚未执行）</span></div>' +
+        appr + '</div></div>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '<b>试调走的是和模型完全相同的一条链路</b>：拼一条合成 toolCallId → 同一套策略判定 → 同一个 ' +
+        '<code>tool.execute</code>。所以它<b>也要过审批</b> —— 管理界面必须与运行时同一条纪律，否则它就是个后门。</p></div>';
+  }
+
+  /* ── Tab: MCP ── */
+  function renderMcp() {
+    return panelHead() + tabsBar('mcp', { mcp: MCPS.length }) + '<div class="tv-body">' +
+      '<div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-3)">' +
+        '<button class="u-btn">+ 添加服务</button><button class="u-btn ghost">导入 JSON</button>' +
+        '<span style="flex:1"></span><span class="p-badge b-src">mcp-servers.json · owner: mcp-tools</span></div>' +
+      MCPS.map(function (s, i) {
+        var mine = TOOLS.filter(function (t) { return t.server === s.name; });
+        return '<div class="mcp-card ' + (s.up ? 'up' : 'down') + '">' +
+          '<div class="mcp-head"><span class="mcp-name">' + esc(s.name) + '</span>' +
+            (s.up ? '<span class="p-badge b-read">已连接 · ' + s.tools + ' 个工具</span>'
+                  : '<span class="p-badge b-policy-ask">未连接</span>') +
+            (s.transport !== 'stdio' ? '<span class="p-badge b-src">' + esc(s.transport) + '</span>' : '') +
+            '<span style="flex:1"></span>' +
+            '<button class="u-btn sm ghost" data-mt="' + i + '">测试</button>' +
+            '<button class="u-btn sm ghost">编辑</button>' +
+            '<button class="u-btn sm danger" data-md="' + i + '">删除</button></div>' +
+          '<div class="mcp-cmd">' + esc(s.transport === 'stdio' ? s.command + '   (cwd: ' + s.cwd + ')' : s.url) + '</div>' +
+          (s.env.length ? '<div class="mcp-tags">' + s.env.map(function (e) {
+            return '<span class="chip">' + esc(e) + ' <button title="点一下临时显示明文">👁</button></span>';
+          }).join('') + '</div>' : '') +
+          (mine.length ? '<div class="mcp-tags">' + mine.map(function (t) {
+            return '<span class="chip">' + esc(t.name) + '</span>';
+          }).join('') + '</div>' : '') +
+          (s.up ? '' : '<div class="mcp-res bad">连接失败：spawn ENOENT — 命令不存在</div>') +
+          (s.up ? '<div class="mcp-note">' + esc(s.desc) + '</div>' : '') + '</div>';
+      }).join('') +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 var(--space-2)">' +
+        '<b>MCP 的工具恒为 <code>risk:\'proc\'</code>，且永远逐次审批</b> —— <code>tools/list</code> 只给 ' +
+        'name/description/inputSchema，<b>我们不知道那个 server 会做什么</b>，所以「按 server 批量信任」根本不存在。</p>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0">' +
+        '不提供「检测本机 MCP」：扫 opencode / Claude / Cursor 的配置目录等于<b>越界</b>，' +
+        'OST 的 <code>plugins.readFile</code> 只读自己插件目录。env 显示掩码而非明文。</p></div>';
+  }
+
+  /* ── Tab: 事件 ── */
+  var EVENTS = [
+    ['service.ready', '{ serviceId:"mcp-tools" }'],
+    ['tool.registered', '{ serviceId:"fs-tools", tools:[5] }'],
+    ['tool.registered', '{ serviceId:"shell-tools", tools:["bash","pwsh"] }'],
+    ['tools.state', '{ tools:14, policies:"2 已覆盖", managedBy:"auto ×1" }']
+  ];
+  function renderEvents() {
+    return panelHead() + tabsBar('events') + '<div class="tv-body">' +
+      '<div class="evlog" id="evlog">' + EVENTS.map(function (e) {
+        return '<div><span class="t">recv</span><span class="tp">' + esc(e[0]) + '</span><span class="pl">' + esc(e[1]) + '</span></div>';
+      }).join('') + '</div>' +
+      '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-3) 0 0">' +
+        '能力目录是<b>运行期才成形</b>的（晚启动的收集方可能少收、进程被杀会残留）。' +
+        '没有这个窗口，用户只能靠翻日志排障 —— 与当初做服务状态视图是同一个理由。</p></div>';
+  }
+
+  function logEv(topic, payload) {
+    var box = byId('evlog');
+    if (!box) return;
+    var d = document.createElement('div');
+    d.innerHTML = '<span class="t">now</span><span class="tp">' + esc(topic) + '</span><span class="pl">' + esc(JSON.stringify(payload)) + '</span>';
+    box.insertBefore(d, box.firstChild);
+    while (box.children.length > 40) box.removeChild(box.lastChild);
+  }
+
+  /* ── 详情抽屉（叠在目录之上） ── */
+  var drawerName = 'bash';
+  function drawerPanel(t) {
+    var pol = effPolicy(t);
+    var cstHtml;
+    if (t.cst && t.cst.length) {
+      cstHtml = t.cst.map(function (f, fi) {
+        var fv = f[3] || [];
+        var bad = fv.some(function (v) { return v === '*' || v === '**'; });
+        var denyRule = (f[2] === 'glob-deny' || f[2] === 'substring-deny');
+        return '<div class="cst"><div class="cst-head"><span class="cst-label">' + esc(f[1]) + '</span>' +
+          '<span class="cst-rule">' + esc(f[2]) + '</span>' +
+          '<span style="flex:1"></span><span class="p-badge b-src">' + esc(f[0]) + '</span></div>' +
+          '<div class="cst-chips">' + fv.map(function (v, vi) {
+            return '<span class="chip' + (denyRule ? ' deny' : '') + '" data-chip="' + fi + ':' + vi + '">' +
+              esc(v) + ' <button data-del="' + fi + ':' + vi + '" title="删除">×</button></span>';
+          }).join('') + '<span class="chip" style="border-style:dashed">+ 常用：src/** / notes/**</span></div>' +
+          '<input class="u-input cst-input" data-cst="' + fi + '" placeholder="输入后回车添加">' +
+          (fv.length === 0 && !denyRule
+            ? '<div class="cst-warn">空 = 该维度<b>不限制</b>。要「禁止一切」只能显式写 <code>**</code>，而引擎会拒绝单独出现的 <code>*</code>/<code>**</code>。</div>'
+            : '') +
+          (bad ? '<div class="cst-warn">⚠ 这里的 <code>**</code> 会被引擎判为<b>无效声明并 fail fast</b> —— 工具不能自己解除限制。</div>' : '') +
+          '</div>';
+      }).join('');
+    } else {
+      cstHtml = '<p style="font-size:var(--text-xs);color:var(--color-warning);margin:0">' +
+        '⚠ 该工具<b>没有声明任何 constraintFields</b> —— 审批是它唯一的一道闸。' +
+        '对 proc / net 类工具这很显眼，因为那正是最该有约束（允许命令 / 禁止模式）的地方。</p>';
+    }
+
+    return '<div class="dd-scrim" data-close="1"></div><div class="dd-panel">' +
+      '<div class="dd-head"><span class="dd-name">' + esc(t.name) + '</span>' +
+        '<span class="p-badge b-' + t.risk + '">' + t.risk + '</span>' +
+        '<span class="p-badge b-src">' + esc(t.svc) + '</span><span style="flex:1"></span>' +
+        '<button class="u-btn sm ghost" data-close="1">关闭</button></div>' +
+      '<div class="dd-body"><p style="font-size:var(--text-sm);margin:0 0 var(--space-3)">' + esc(t.desc) + '</p>' +
+        '<div class="dd-sec-title">参数（模型看到的 schema）</div>' +
+        (t.params.length ? '<table class="schema-tbl"><tbody>' + t.params.map(function (p) {
+          return '<tr><td class="k">' + esc(p[0]) + (p[2] ? ' *' : '') + '</td><td class="t">' + esc(p[1]) + '</td>' +
+            '<td class="d">' + esc(p[3]) + '</td></tr>';
+        }).join('') + '</tbody></table>'
+          : '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0">（无参数）</p>') +
+        '<div class="dd-sec-title">约束（第二道闸 · 不弹窗）</div>' + cstHtml +
+        '<div class="dd-sec-title">审批策略（闸门的判定输入）</div>' +
+        '<div class="seg">' + ['ask', 'auto', 'deny'].map(function (p) {
+          return '<button data-dpol="' + p + '" aria-pressed="' + (pol === p) + '"' +
+            ((p === 'auto' && t.risk === 'proc') ? ' title="proc 档升到 auto 需二次确认"' : '') + '>' + p + '</button>';
+        }).join('') + '</div>' +
+        '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:var(--space-2) 0 0">' +
+          '当前 <code>' + pol + '</code>' + (t.policy ? '（已覆盖）' : '（按 risk 默认）') +
+          ' · <b>risk 不可改</b>：它是执行者声明的事实，不是用户能调的口径。</p></div>' +
+      '<div class="dd-foot">' +
+        (t.dangling || t.conflict ? '<span style="font-size:var(--text-xs);color:var(--color-text-muted)">无执行者，无法试调</span>'
+          : '<button class="u-btn sm" data-run="' + esc(t.name) + '">在此试调</button>') +
+        '<span style="flex:1"></span><span style="font-size:var(--text-xs);color:var(--color-text-muted)">约束改动即时生效，下一轮起</span>' +
+      '</div></div>';
+  }
+
+  function renderDrawerHost() {
+    var host = byId('toolsDrawer');
+    var t = byName(drawerName);
+    return panelHead() + tabsBar('catalog') + '<div class="tv-body" style="position:relative">' +
+      catalogTable() + drawerPanel(t) + '</div>';
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ② 权限面板
+     ══════════════════════════════════════════════════════════ */
+  var ICONS = { read: 'R', write: 'W', net: 'N', proc: 'P' };
+  var ST_TXT = { running: '执行中…', ok: '✓ 成功', bad: '✗ 失败', ghost: '本轮已结束' };
+
+  function apprPanel(t, T, mode, sessionId) {
+    if (mode === 'cancel') {
+      return '<div class="appr resolved" style="max-width:100%"><div class="appr-hd">' +
+        '<span class="p-badge b-src">已取消</span><span class="appr-title">' + esc(t.name) + '</span>' +
+        '<span class="appr-tid">T=' + esc(T) + '</span></div>' +
+        '<div class="appr-note">本轮已结束 —— 该次调用<b>没有发生</b>，也没有产生结果块。' +
+        '（面板消失是对的：它永远等不到人，留着会永久挡在时间线上。）</div></div>';
+    }
+    if (mode === 'once' || mode === 'always' || mode === 'no') {
+      var okc = mode !== 'no';
+      return '<div class="appr resolved ' + (okc ? 'ok' : 'no') + '" style="max-width:100%"><div class="appr-hd">' +
+        '<span class="p-badge ' + (okc ? 'b-read' : 'b-danger') + '">' + (okc ? '已允许' : '已拒绝') + '</span>' +
+        '<span class="appr-title">' + esc(t.name) + '</span>' +
+        '<span class="appr-tid">T=' + esc(T) + '</span></div>' +
+        '<div class="appr-note">' + (mode === 'always'
+          ? '已记住：<b>本机 · 仅此工具</b>（approvals.json）。' + (t.risk === 'proc' ? 'proc 档已二次确认。' : '')
+          : mode === 'once' ? '仅本次，不写入策略。'
+          : '已写入 tool.execute.result{ok:false}，模型会知道这次被拒。') + '</div></div>';
+    }
+    if (mode === 'timeout') {
+      return '<div class="appr resolved no" style="max-width:100%"><div class="appr-hd">' +
+        '<span class="p-badge b-danger">超时</span><span class="appr-title">' + esc(t.name) + '</span>' +
+        '<span class="appr-tid">T=' + esc(T) + '</span></div>' +
+        '<div class="appr-note">审批超时（未响应）→ 按<b>拒绝</b>处理。不会无限等待 —— ' +
+        '「一直转圈」是这个系统最容易出的症状，静默的等价物就是转圈。</div></div>';
+    }
+
+    var mcpDesc = t.mcp
+      ? '<div class="appr-desc"><b>server 说明：</b>' + esc((MCPS[0] && MCPS[0].desc) || '') +
+        '<br><b>我们不知道它会做什么</b> —— <code>tools/list</code> 只给 name/description/inputSchema。</div>'
+      : '';
+    var step2 = mode === 'two-step'
+      ? '<div class="two-step"><b>proc 档二次确认：</b>选「允许本机此工具」后，<code>' + esc(t.name) +
+        '</code> <b>此后每次都会自动放行</b>，不再询问。确认要这样吗？' +
+        '<div style="display:flex;gap:var(--space-2);margin-top:var(--space-2)">' +
+        '<button class="u-btn sm danger" data-a-no="1">不，只是本次</button>' +
+        '<button class="u-btn sm warn" data-a-always="1">确认，此后自动放行</button></div></div>'
+      : '';
+
+    return '<div class="appr need2" style="max-width:100%"><div class="appr-hd">' +
+      '<span class="p-badge b-' + t.risk + '">需要审批</span>' +
+      '<span class="appr-title">' + esc(t.name) + '</span>' +
+      '<span class="p-badge b-src">' + esc(sessionId || 'model') + '</span>' +
+      '<span class="appr-tid">T=' + esc(T) + '</span></div>' +
+      '<div class="appr-bd"><p class="appr-why">' + esc(RISK_WHY[t.risk]) + '</p>' + mcpDesc +
+        '<span class="tc-label">完整入参</span>' +
+        '<div class="tc-code">' + esc(prettyJson(t.args)) + '</div></div>' +
+      '<div class="appr-scope"><span>' + (t.risk === 'proc'
+        ? '⚠ <b>proc 档</b>：选「允许本机此工具」需再确认一次'
+        : '作用域：仅 <code>' + esc(t.name) + '</code>，不随角色变化') + '</span></div>' +
+      step2 +
+      '<div class="appr-ft"><span class="timer">60s 后按拒绝处理 · 刷新页面后此面板会回来</span><span class="sp"></span>' +
+      '<button class="u-btn sm danger" data-a-no="1">拒绝</button>' +
+      '<button class="u-btn sm ghost" data-a-once="1">允许一次</button>' +
+      (mode === 'two-step' ? '' : '<button class="u-btn sm approve" data-a-always="1">允许本机此工具</button>') +
+      '</div></div>';
+  }
+
+  function toolBlock(t, T, st, extra) {
+    var time = st === 'running' ? '· 2.4s' : (st === 'ok' || st === 'bad') ? '· ' + t.ms + 'ms' : '';
+    var body;
+    if (st === 'ghost') {
+      body = '<div class="appr-note">结果到达时本轮已结束 —— <b>静默丢弃，不补发</b>。' +
+        '（不消失是因为消失了用户会以为它没发生过。）</div>';
+    } else {
+      body = '<div class="tc-body"><span class="tc-label">参数</span>' +
+        '<div class="tc-code">' + esc(prettyJson(t.args)) + '</div>' +
+        (st === 'running' ? '' : '<span class="tc-label" style="margin-top:8px">' +
+          (st === 'ok' ? '结果' : '原因') + '</span><div class="tc-code">' +
+          esc(st === 'ok' ? t.output : (extra || '用户拒绝了这次工具调用')) + '</div>') +
+        (st === 'ok' && extra ? '<div class="appr-note">' + esc(extra) + '</div>' : '') + '</div>';
+    }
+    return '<div class="toolcard ' + st + '"><button class="tc-head">' +
+      '<span class="tc-ico ' + t.risk + '">' + ICONS[t.risk] + '</span>' +
+      '<span class="tc-name">' + esc(t.name) + '</span><span class="tc-dot">·</span>' +
+      '<span class="tc-status ' + st + '">' + ST_TXT[st] + '</span>' +
+      '<span class="tc-time">' + time + '</span><span class="tc-caret">▸</span></button>' + body + '</div>';
+  }
+
+  function chatShell(inner, hint) {
+    return '<div class="chat-msgs">' + inner + '</div>' +
+      '<div class="chat-composer"><div class="cc-row">' +
+      '<textarea class="u-textarea" placeholder="' + esc(hint || '说点什么…') + '"></textarea>' +
+      '<button class="u-btn" style="height:34px">发送</button></div></div>';
+  }
+
+  /* §7 主场景 */
+  var apprState = 'wait';
+  var apprTool = 'bash';
+  var ST_LABEL = { wait: '等待审批', 'two-step': 'proc 二次确认', running: '执行中', ok: '成功', no: '被拒绝', timeout: '超时', cancel: '本轮被取消' };
+  function renderAppr() {
+    var t = byName(apprTool), T = 'call_8f2c1d';
+    var inner = '<div class="bubble user">帮我把测试跑一遍，看看有没有红的。</div>' +
+      '<div class="bubble ai">好，我用 <code>pnpm test</code> 跑一下。</div>' +
+      '<div class="toolcard ok"><button class="tc-head"><span class="tc-ico read">R</span>' +
+        '<span class="tc-name">read</span><span class="tc-dot">·</span>' +
+        '<span class="tc-status ok">✓ 成功</span><span class="tc-time">· 12ms</span>' +
+        '<span class="tc-caret">▸</span></button></div>';
+    if (apprState === 'wait' || apprState === 'two-step') inner += apprPanel(t, T, apprState);
+    else if (apprState === 'once') inner += apprPanel(t, T, 'once') + toolBlock(t, T, 'ok', '依据：本次授权（单次）');
+    else if (apprState === 'always') inner += apprPanel(t, T, 'always') +
+      toolBlock(t, T, 'ok', '依据：本机策略（2026-10-06 用户批准「允许本机此工具」）');
+    else if (apprState === 'running') inner += toolBlock(t, T, 'running');
+    else if (apprState === 'ok') inner += toolBlock(t, T, 'ok', '依据：本机策略（2026-10-06 用户批准「允许本机此工具」）');
+    else if (apprState === 'no') inner += toolBlock(t, T, 'bad');
+    else if (apprState === 'timeout') inner += toolBlock(t, T, 'bad', '审批超时（未响应）');
+    else if (apprState === 'cancel') inner += apprPanel(t, T, 'cancel');
+
+    var bar = '<div class="scn-bar"><span class="lbl">工具</span>' +
+      '<select class="u-select" id="apprTool" style="width:210px">' +
+        ['bash', 'pwsh', 'mcp__github__create_issue', 'webfetch', 'write'].map(function (n) {
+          return '<option value="' + esc(n) + '"' + (n === apprTool ? ' selected' : '') + '>' + esc(n) + '</option>';
+        }).join('') + '</select><span class="lbl">状态</span>' +
+      Object.keys(ST_LABEL).map(function (s) {
+        return '<button class="u-btn sm ' + (apprState === s ? '' : 'ghost') + '" data-as="' + s + '">' + ST_LABEL[s] + '</button>';
+      }).join('') + '</div>';
+    return bar + chatShell(inner, apprState === 'running' ? '本轮执行中…（输入框锁定）' : '说点什么…');
+  }
+
+  /* §8 proc 二次确认 */
+  var procStep = 1;
+  function renderAppr2() {
+    var t = byName('bash'), T = 'call_p1';
+    var inner = '<div class="bubble user">把这个仓库的提交历史整理一下。</div>' +
+      '<div class="bubble ai">需要执行 git 命令。</div>' +
+      apprPanel(t, T, procStep === 1 ? 'wait' : 'two-step');
+    var bar = '<div class="scn-bar"><span class="lbl">第 ' + procStep + ' 步</span>' +
+      '<button class="u-btn sm ' + (procStep === 1 ? '' : 'ghost') + '" data-ps="1">① 普通三档</button>' +
+      '<button class="u-btn sm ' + (procStep === 2 ? '' : 'ghost') + '" data-ps="2">② 点「允许本机此工具」后</button>' +
+      '<span style="flex:1"></span><span class="p-badge b-proc">proc</span></div>';
+    return bar + chatShell(inner, '说点什么…');
+  }
+
+  /* §9 一条完整时间线 */
+  function renderBlocks() {
+    var bash = byName('bash'), mcp = byName('mcp__github__create_issue'), read = byName('read');
+    var inner =
+      '<div class="bubble user">跑一下测试，然后把结果发到 GitHub。</div>' +
+      toolBlock(read, 'c1', 'ok') +
+      '<div class="appr resolved ok" style="max-width:88%"><div class="appr-hd">' +
+        '<span class="p-badge b-read">已允许</span><span class="appr-title">bash</span>' +
+        '<span class="appr-tid">T=c2</span></div>' +
+        '<div class="appr-note">已记住：<b>本机 · 仅此工具</b>（approvals.json）。proc 档已二次确认。</div></div>' +
+      toolBlock(bash, 'c2', 'ok', '依据：本机策略（2026-10-06 用户批准「允许本机此工具」）') +
+      apprPanel(mcp, 'c3', 'wait') +
+      '<div class="bubble ai">先建个 issue。</div>' +
+      toolBlock(mcp, 'c3', 'ok') +
+      toolBlock(bash, 'c9', 'bad', '命令包含禁止模式：&quot;rm -rf&quot;（约束层直接拒绝，<b>不弹审批</b>）') +
+      toolBlock(bash, 'c7', 'ghost') +
+      '<div class="appr resolved" style="max-width:88%"><div class="appr-hd">' +
+        '<span class="p-badge b-src">已取消</span><span class="appr-title">bash</span>' +
+        '<span class="appr-tid">T=c8</span></div>' +
+        '<div class="appr-note">本轮已结束 —— 该次调用<b>没有发生</b>，也没有产生结果块。</div></div>';
+    return chatShell(inner, '说点什么…');
+  }
+
+  /* §10 边界情形 */
+  var edge = 0;
+  var EDGES = [
+    { t: '① 审批中按了停止', d: '面板消失、块变「本轮已结束」、<b>不产生任何结果块</b>。' },
+    { t: '② 审批超时', d: '60s 后按<b>拒绝</b>处理，块变成失败且原因写明「审批超时（未响应）」。' },
+    { t: '③ 工具已卸载但结果才到', d: '<b>幽灵块</b>：灰、不展开、不补发。它挂着是因为消失了用户会以为没发生过。' },
+    { t: '④ 刷新页面时正在审批', d: 'pending 在<b>闸门进程</b>里、经总线<b>重播</b> —— 面板会回来，T 不变，倒计时从原剩余继续。' }
+  ];
+  function renderEdge() {
+    var t = byName('bash'), T = 'call_e1';
+    var body;
+    if (edge === 0) body = apprPanel(t, T, 'wait');
+    else if (edge === 1) body = apprPanel(t, T, 'timeout') + toolBlock(t, T, 'bad', '审批超时（未响应）');
+    else if (edge === 2) body = toolBlock(t, T, 'ghost');
+    else body = apprPanel(t, T, 'wait', '刷新回来了');
+
+    var bar = '<div class="scn-bar">' + EDGES.map(function (e, i) {
+      return '<button class="u-btn sm ' + (edge === i ? '' : 'ghost') + '" data-edge="' + i + '">' + esc(e.t) + '</button>';
+    }).join('') + '</div>';
+    var note = '<div style="padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-border);' +
+      'background:var(--color-surface);font-size:var(--text-sm)"><b>' + esc(EDGES[edge].t) + '</b><br>' +
+      '<span style="color:var(--color-text-muted)">' + EDGES[edge].d + '</span></div>';
+    return bar + chatShell('<div class="bubble user">跑一下测试。</div>' + body, '说点什么…') + note;
+  }
+
+  /* ═══════════ 渲染调度 ═══════════ */
+  var activeTab = 'catalog';
+  function render() {
+    byId('toolsView').innerHTML =
+      activeTab === 'catalog' ? renderCatalog()
+      : activeTab === 'policy' ? renderPolicy()
+      : activeTab === 'runner' ? renderRunner()
+      : activeTab === 'mcp' ? renderMcp()
+      : renderEvents();
+    byId('toolsCatalog').innerHTML = renderCatalog();
+    byId('toolsDrawer').innerHTML = renderDrawerHost();
+    byId('toolsPolicy').innerHTML = renderPolicy();
+    byId('toolsRunner').innerHTML = renderRunner();
+    byId('toolsMcp').innerHTML = renderMcp();
+    byId('chatAppr').innerHTML = renderAppr();
+    byId('chatAppr2').innerHTML = renderAppr2();
+    byId('chatBlocks').innerHTML = renderBlocks();
+    byId('chatEdge').innerHTML = renderEdge();
+  }
+
+  /* ═══════════ 事件委托 ═══════════ */
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+
+    /* Tab 切换（任一面板） */
+    var tab = el.closest('[data-tab]');
+    if (tab) {
+      activeTab = tab.getAttribute('data-tab');
+      render();
+      return;
+    }
+
+    /* 目录：开关 */
+    var en = el.closest('[data-en]');
+    if (en && !en.disabled) {
+      var tn = byName(en.getAttribute('data-en'));
+      tn.enabled = en.checked;
+      logEv('tools.state', { tool: tn.name, enabled: tn.enabled });
+      render();
+      return;
+    }
+
+    /* 目录：详情抽屉 */
+    var det = el.closest('[data-detail]');
+    if (det) { drawerName = det.getAttribute('data-detail'); byId('toolsDrawer').innerHTML = renderDrawerHost(); return; }
+    if (el.closest('[data-close]')) { byId('toolsDrawer').innerHTML = renderCatalog(); return; }
+
+    /* 抽屉：策略 */
+    var dpol = el.closest('[data-dpol]');
+    if (dpol) {
+      var dt = byName(drawerName);
+      dt.policy = dpol.getAttribute('data-dpol');
+      logEv('tools.set', { policies: (function () { var o = {}; o[dt.name] = dt.policy; return o; })() });
+      byId('toolsDrawer').innerHTML = renderDrawerHost();
+      return;
+    }
+    /* 抽屉：约束 chip 删除 */
+    var del = el.closest('[data-del]');
+    if (del) {
+      var dt2 = byName(drawerName);
+      var parts = del.getAttribute('data-del').split(':');
+      var arr = dt2.cst[Number(parts[0])][3];
+      arr.splice(Number(parts[1]), 1);
+      logEv('tools.set', { constraints: (function () { var o = {}; o[dt2.cst[Number(parts[0])][0]] = arr; return o; })() });
+      byId('toolsDrawer').innerHTML = renderDrawerHost();
+      return;
+    }
+    /* 抽屉：在此试调 */
+    var run = el.closest('[data-run]');
+    if (run) {
+      document.querySelector('nav.toc a[href="#s5"]').click();
+      runnerName = run.getAttribute('data-run');
+      render();
+      return;
+    }
+
+    /* 审批策略 Tab */
+    var set = el.closest('[data-set]');
+    if (set) {
+      var row = set.closest('[data-pol]');
+      var t2 = byName(row.getAttribute('data-pol'));
+      t2.policy = set.getAttribute('data-set');
+      logEv('tools.set', { policies: (function () { var o = {}; o[t2.name] = t2.policy; return o; })() });
+      render();
+      return;
+    }
+    if (el.closest('[data-reset]')) {
+      var row2 = el.closest('[data-pol]');
+      var t3 = byName(row2.getAttribute('data-pol'));
+      t3.policy = '';
+      logEv('tools.set', { policies: { reset: t3.name } });
+      render();
+      return;
+    }
+
+    /* 试调 */
+    if (el.closest('#rgo')) {
+      var rt = byName(runnerName), rpol = effPolicy(rt);
+      var out = byId('rout');
+      byId('rtime').textContent = 'T=ui-' + rt.name;
+      if (rpol === 'deny') { out.innerHTML = '<span class="bad">ok:false · 策略 deny</span>'; return; }
+      if (rpol === 'ask') { out.innerHTML = '<span class="bad">等待审批…</span>（面板已在上方）'; return; }
+      out.innerHTML = '<span style="color:var(--color-text-muted)">执行中…（' + esc(rt.name) + '）</span>';
+      setTimeout(function () {
+        out.innerHTML = '<span class="ok">ok:true</span> · ' + rt.ms + 'ms\n\n' + esc(rt.output);
+        byId('rtime').textContent = 'T=ui-' + rt.name + ' · ok:true · ' + rt.ms + 'ms';
+        logEv('tool.execute.result', { ok: true, summary: rt.output.slice(0, 20) });
+      }, 450);
+      return;
+    }
+    if (el.closest('[data-ryes]')) {
+      byId('rout').innerHTML = '<span class="ok">ok:true</span> · ' + byName(runnerName).ms + 'ms\n\n' +
+        esc(byName(runnerName).output);
+      logEv('tool.execute.result', { ok: true, via: 'tools.invoke' });
+      render();
+      return;
+    }
+    if (el.closest('[data-rno]')) {
+      byId('rout').innerHTML = '<span class="bad">ok:false · 用户拒绝</span>';
+      logEv('tool.execute.result', { ok: false, via: 'tools.invoke' });
+      return;
+    }
+
+    /* MCP：测试 / 删除 */
+    var mt = el.closest('[data-mt]');
+    if (mt) {
+      var idx = Number(mt.getAttribute('data-mt'));
+      mt.textContent = '测试中…';
+      mt.disabled = true;
+      setTimeout(function () {
+        mt.textContent = '测试'; mt.disabled = false;
+        logEv('tools.mcp.test', { server: MCPS[idx].name, ok: MCPS[idx].up });
+      }, 500);
+      return;
+    }
+    var md = el.closest('[data-md]');
+    if (md) {
+      var si = Number(md.getAttribute('data-md'));
+      var srv = MCPS[si];
+      if (md.dataset.confirm) {
+        MCPS.splice(si, 1);
+        logEv('tools.mcp.set', { removed: srv.name, killed: true });
+        render();
+      } else {
+        md.dataset.confirm = '1';
+        md.textContent = '确认删除（会终止进程）';
+        setTimeout(function () { delete md.dataset.confirm; md.textContent = '删除'; }, 4000);
+      }
+      return;
+    }
+    /* MCP：env 明文临时显示 */
+    var chipBtn = el.closest('.chip button');
+    if (chipBtn) {
+      var chip = chipBtn.parentNode;
+      var raw = chip.textContent.replace('👁', '').trim();
+      var masked = raw.match(/^([A-Z_]+)=(.+)$/);
+      if (masked) {
+        chip.textContent = masked[1] + '=••••' + masked[2].slice(-4);
+        chipBtn.textContent = '🙈';
+        chipBtn.onclick = function () {
+          chip.textContent = masked[1] + '=<明文已隐藏，此处仅为演示>';
+          chipBtn.textContent = '👁';
+          chipBtn.onclick = function () { chip.textContent = raw; chipBtn.textContent = '👁'; chipBtn.onclick = null; };
+        };
+      }
+      return;
+    }
+
+    /* 权限面板按钮 */
+    if (el.closest('[data-a-no]')) {
+      if (el.closest('#chatAppr2')) { procStep = 1; }
+      if (el.closest('#chatEdge')) { edge = 1; }
+      else apprState = 'no';
+      render(); return;
+    }
+    if (el.closest('[data-a-once]')) { apprState = 'once'; render(); return; }
+    if (el.closest('[data-a-always]')) {
+      var at = byName(el.closest('#chatAppr2') ? 'bash' : apprTool);
+      if (at.risk === 'proc') { at.policy = 'auto'; logEv('tools.set', { policies: (function () { var o = {}; o[at.name] = 'auto'; return o; })(), secondConfirm: true }); }
+      if (el.closest('#chatAppr2')) procStep = 1; else apprState = 'always';
+      render(); return;
+    }
+
+    /* §7 状态切换 */
+    var as = el.closest('[data-as]');
+    if (as) { apprState = as.getAttribute('data-as'); render(); return; }
+    var ps = el.closest('[data-ps]');
+    if (ps) { procStep = Number(ps.getAttribute('data-ps')); render(); return; }
+    var ed = el.closest('[data-edge]');
+    if (ed) { edge = Number(ed.getAttribute('data-edge')); render(); return; }
+
+    /* 工具块折叠 */
+    var head = el.closest('.tc-head');
+    if (head) {
+      var card = head.parentNode;
+      var bodyEl = card.querySelector('.tc-body, .appr-note');
+      if (bodyEl) { bodyEl.style.display = bodyEl.style.display === 'none' ? '' : 'none'; }
+      return;
+    }
+
+    /* Demo 视图切换 */
+    if (el.closest('#sw1')) {
+      document.getElementById('sw1').setAttribute('aria-pressed', 'true');
+      document.getElementById('sw2').setAttribute('aria-pressed', 'false');
+      document.querySelector('nav.toc a[href="#s1"]').click();
+      return;
+    }
+    if (el.closest('#sw2')) {
+      document.getElementById('sw2').setAttribute('aria-pressed', 'true');
+      document.getElementById('sw1').setAttribute('aria-pressed', 'false');
+      document.querySelector('nav.toc a[href="#s7"]').click();
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.id === 'apprTool') { apprTool = el.value; render(); return; }
+    if (el.id === 'rsel') { runnerName = el.value; render(); return; }
+    if (el.id === 'fsvc') { filters.svc = el.value; byId('toolsCatalog').innerHTML = renderCatalog(); return; }
+    if (el.id === 'frisk') { filters.risk = el.value; byId('toolsCatalog').innerHTML = renderCatalog(); return; }
+  });
+
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (el.id === 'fq') { filters.q = el.value; byId('toolsCatalog').innerHTML = renderCatalog(); restoreFocus('fq', el.value); }
+    if (el.hasAttribute && el.hasAttribute('data-cst') && el.value.trim() && el.tagName === 'INPUT') {
+      /* 约束输入：回车添加 —— 这里只做视觉反馈 */
+      el.placeholder = '回车添加：' + el.value.trim();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.hasAttribute && e.target.hasAttribute('data-cst')) {
+      e.preventDefault();
+      var t = byName(drawerName);
+      var fi = Number(e.target.getAttribute('data-cst'));
+      var val = e.target.value.trim();
+      if (!val) return;
+      t.cst[fi][3].push(val);
+      logEv('tools.set', { constraints: (function () { var o = {}; o[t.cst[fi][0]] = t.cst[fi][3]; return o; })() });
+      byId('toolsDrawer').innerHTML = renderDrawerHost();
+    }
+  });
+
+  /* 输入框重渲染后保持焦点与光标 */
+  function restoreFocus(id, val) {
+    var el = byId(id);
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(val.length, val.length);
+  }
+
+  render();
+})();
+</script>
+
+</body>
+</html>

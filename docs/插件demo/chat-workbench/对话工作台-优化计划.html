@@ -1,0 +1,1311 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>对话工作台 · 优化计划（chat-workbench · P0~P3） · OST P4b</title>
+<style>
+  /* ══ 文档壳：沿用 docs/插件demo/tool_manager/工具管理-组件Demo.html 同一套皮肤 ══ */
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673; --inverse:#fff;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --ext:#0f8a8a; --ext-soft:#e2f4f4; --proc:#c2410c; --proc-soft:#fdeee2;
+    --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    --shadow-lg:0 12px 32px rgba(16,22,26,.18);
+
+    /* ══ Demo 内联令牌：与 sdk/ui/src/tokens.css 同名同值 ══ */
+    --color-bg:#f5f6f8; --color-surface:#fff; --color-surface-2:#eef0f4; --color-surface-3:#e3e7ed;
+    --color-border:#d5dae1; --color-border-strong:#b6bec9;
+    --color-text:#1b2027; --color-text-muted:#5c6673; --color-text-inverse:#fff;
+    --color-primary:#2f6feb; --color-primary-hover:#2559c4; --color-primary-active:#1f4ba5;
+    --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-warning:#9a6700; --color-focus-ring:#2f6feb;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px; --text-xl:20px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+    --duration-fast:120ms; --duration-base:200ms;
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2; --inverse:#14171c;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --ext:#2fc4c4; --ext-soft:#123536; --proc:#fb923c; --proc-soft:#3a2314;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.6);
+
+    --color-bg:#14171c; --color-surface:#1c2027; --color-surface-2:#232832; --color-surface-3:#2b313c;
+    --color-border:#333a45; --color-border-strong:#454e5c;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2; --color-text-inverse:#14171c;
+    --color-primary:#4f8cff; --color-primary-hover:#6b9fff; --color-primary-active:#3a72e0;
+    --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-warning:#d29922; --color-focus-ring:#4f8cff;
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family: var(--mono); }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:30; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:29; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s2); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px;
+    border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  td.mono, .mono { font-size:12px; }
+  code.inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+
+  .tree { font-family:var(--font-mono); font-size:var(--text-xs); line-height:1.9;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); overflow-x:auto; margin:0 0 var(--s3); white-space:pre; }
+  .asci { font-family:var(--font-mono); font-size:var(--text-xs); line-height:1.8; color:var(--muted);
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3) var(--s4); overflow-x:auto; margin:0 0 var(--s3); white-space:pre; }
+  .kv td:first-child { white-space:normal; font-size:var(--sm); }
+  .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:var(--r-full);
+    border:1px solid var(--border); color:var(--muted); white-space:nowrap; }
+  .tag.ok { color:var(--success); border-color:var(--success); background:var(--success-soft); }
+  .tag.bad { color:var(--danger); border-color:var(--danger); background:var(--danger-soft); }
+  .tag.warn { color:var(--warning); border-color:var(--warning); background:var(--warning-soft); }
+  .tag.info { color:var(--primary); border-color:var(--primary); background:var(--primary-soft); }
+
+  /* ══ 阶段图 ══ */
+  .phases { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--s3); margin:var(--s3) 0 var(--s4); }
+  .ph { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    padding:var(--s3) var(--s4); box-shadow:var(--shadow-sm); position:relative; }
+  .ph::after { content:''; position:absolute; right:-9px; top:50%; width:9px; height:2px;
+    background:var(--border-strong); }
+  .ph:last-child::after { display:none; }
+  .ph__id { font-size:var(--xs); font-weight:700; letter-spacing:.5px; }
+  .ph__t { font-size:var(--sm); font-weight:600; margin:2px 0 var(--s2); }
+  .ph__g { font-size:var(--xs); color:var(--muted); line-height:1.6; }
+  .ph--p0 { border-top:3px solid var(--primary); } .ph--p0 .ph__id { color:var(--primary); }
+  .ph--p1 { border-top:3px solid var(--ext); }     .ph--p1 .ph__id { color:var(--ext); }
+  .ph--p2 { border-top:3px solid var(--warning); }  .ph--p2 .ph__id { color:var(--warning); }
+  .ph--p3 { border-top:3px solid var(--danger); }   .ph--p3 .ph__id { color:var(--danger); }
+
+  /* ══ 工单看板 ══ */
+  .board { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface);
+    box-shadow:var(--shadow-sm); overflow:hidden; margin:0 0 var(--s3); }
+  .board__bar { display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3);
+    background:var(--surface-2); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .board__bar .lb { font-size:var(--xs); color:var(--muted); margin-right:2px; }
+  .seg { border:1px solid var(--border); background:var(--surface); color:var(--muted);
+    border-radius:var(--r-full); padding:2px 10px; font:inherit; font-size:var(--xs); cursor:pointer; }
+  .seg:hover { border-color:var(--primary); color:var(--primary); }
+  .seg[aria-pressed="true"] { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
+  .board table { margin:0; }
+  .board td.id { white-space:nowrap; font-family:var(--font-mono); font-size:12px; }
+  .board tr[hidden] { display:none; }
+  .board__empty { padding:var(--s4); text-align:center; font-size:var(--sm); color:var(--muted); display:none; }
+
+  /* ══ 仪表 ══ */
+  .gauge { border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+    padding:var(--s3) var(--s4); margin:0 0 var(--s3); }
+  .gauge__h { display:flex; align-items:baseline; gap:var(--s2); margin-bottom:6px; }
+  .gauge__v { font-size:var(--text-xl); font-weight:700; font-variant-numeric:tabular-nums; }
+  .gauge__u { font-size:var(--text-xs); color:var(--muted); }
+  .gauge__b { height:8px; border-radius:var(--r-full); background:var(--surface-3); overflow:hidden; }
+  .gauge__f { height:100%; border-radius:var(--r-full); background:var(--success); }
+  .gauge__m { font-size:var(--text-xs); color:var(--muted); margin-top:5px; }
+  .gauge--hot .gauge__f { background:var(--danger); }
+  .gauge--hot .gauge__v { color:var(--danger); }
+
+  @media (max-width: 900px) {
+    .phases { grid-template-columns:1fr 1fr; }
+    .ph::after { display:none; }
+  }
+  @media print {
+    .board__bar { display:none; } nav.toc { display:none; } header.bar { position:static; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar"><div class="wrap">
+  <h1>对话工作台 · 优化计划</h1>
+  <span class="sp"></span>
+  <span class="sub">chat-workbench 插件 · 会话列表层（P0）+ 存储正确性与止血（P1）+ 字段补齐（P2）+ 存储升级（P3）　·　P4b</span>
+  <button class="btn ghost" id="theme">切换深色</button>
+</div></header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#s0">0 怎么读</a>
+  <a href="#s1">1 现状盘点</a>
+  <a href="#s2">2 分期与门禁</a>
+  <a href="#s3">3 P0 会话列表层</a>
+  <a href="#s4">4 P1 存储正确性</a>
+  <a href="#s5">5 P2 字段与命令</a>
+  <a href="#s6">6 P3 存储升级</a>
+  <a href="#s7">7 明确不做</a>
+  <a href="#s8">8 风险台账</a>
+  <a href="#s9">9 验收清单</a>
+  <a href="#s10">10 决策记录</a>
+</div></nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <p><b>这份计划是什么。</b>chat-workbench 插件（三个服务 + 三个视图）的可执行优化清单。
+  形态设计在同目录的 <a href="./对话工作台-会话列表重设计.html">对话工作台-会话列表重设计.html</a> ——
+  那份说<b>长什么样</b>，这份说<b>按什么顺序改、改哪几行、怎么验收</b>。</p>
+  <p><b>三条硬约束，贯穿每一项：</b></p>
+  <ol>
+    <li><b>协议契约一字不改。</b>三视图边界、<code class="inl">curId</code> 走 <code class="inl">sessionStorage</code> 跨 iframe 共享、
+      <code class="inl">loop.*</code> 的事件形状。<b>只加字段与命令，不改语义。</b></li>
+    <li><b>会话服务是唯一写者。</b>并发防护靠单进程串行，不引入跨进程锁。</li>
+    <li><b>不假装不存在的字段。</b>凡是需要新字段才成立的形态，要么排进 P2，要么这一版就别放那个按钮。</li>
+  </ol>
+  <p><b>下面每一条结论都带证据</b>：文件路径 + 行号，或本机实测输出。拿不准的写进 §10 的待决问题。</p>
+  <div class="note bad" style="margin-bottom:0">
+    <b>版本：2026-10-07 修订。</b>§6 已按实测重写。上一版判「P3 不触发、JSON 够用」，
+    那个判断建立在「一条消息 ≈ 300 字节」的假设上，实测证明<b>错了三个数量级</b> ——
+    现在 <b>P3 是已触发状态</b>，并且多出一个前置项 P3-0（Node 运行时没锁）。
+    修订依据见 <a href="#s6">§6.1 的实测表</a>。
+  </div>
+</div>
+
+<div class="note ok" id="progress">
+  <b>落地进度（2026-10-07）。</b><b>P0（17 项）/ P1（6 项）/ P2（5 项）全部已落地并全绿</b>，随「阶段 A」完成：
+  <ul>
+    <li><b>P0 会话列表层</b>：去 Card、时间桶分组、行解剖（运行态圆点 / 预览行 / 相对时间↔操作）、行内菜单（对象=本行）、就地改名、listbox 键盘、搜索、三空态、<code class="inl">@container</code> 窄栏退化、会话级 motion、令牌修复。落点 <code class="inl">plugins/chat-workbench/ui/src/views/SessionListView.vue</code> + <code class="inl">ui/src/state/{buckets,list-prefs,motion}.ts</code>。</li>
+    <li><b>P1 存储</b>：D1–D5 修复 + <b>P1-6 会话文件转 JSONL</b>（append 从 O(M) 变 O(1)）。落点 <code class="inl">services/session/src/store.ts</code>。</li>
+    <li><b>P2 字段/命令</b>：<code class="inl">session.pin</code> / <code class="inl">session.archive</code> / <code class="inl">lastMessage</code> / <code class="inl">parentId</code>（子会话树）/ <code class="inl">session.export</code>（Markdown 下载）。</li>
+  </ul>
+  <b>P3 部分落地</b>：<b>P3-0（锁 Node 运行时）已落地</b>（根 <code class="inl">engines.node "&gt;=22.5.0"</code> + <code class="inl">.node-version</code> + <code class="inl">start-client.cmd</code> 启动前校验）；<b>P3-1（<code class="inl">node:sqlite</code>）仍待办</b>；P1-6 的 JSONL 输出即 P3-1 的迁移输入。
+  <br>验证：<code class="inl">pnpm -r run typecheck</code> 全绿 · <code class="inl">pnpm -r run test</code> 987 · <code class="inl">node scripts/smoke.mjs</code> PASS · <code class="inl">node scripts/pack-plugin.mjs</code> 4 插件成功。
+</div>
+
+<section id="s0">
+  <h2><span class="n">0</span>怎么读</h2>
+  <p>四个阶段。<b>P0 与 P1 有排期</b>；P2 视 P0 的落地反馈决定；<b>P3 已触发</b>，但它的第一步（P3-0）不在存储里。</p>
+  <div class="tree">P0  会话列表层      不碰存储   17 项   门禁：跑通现有 session.* 与 loop.* 测试，无回归
+ ▲
+ └─ P0-0 是 P0-7 的前置（message.append 后必须发 session.updated，否则侧栏拿不到新的 updatedAt）
+
+P1  存储正确性      不换存储    6 项   门禁：每项一条故障注入测试
+ ▲                └─ 其中 P1-6（会话文件转 JSONL）是本版的止血项，见 §6.5
+ └─ 与 P0 无依赖，可并行
+
+P2  字段与命令      要动协议    5 项   门禁：P0 落地后按实际缺口决定，不必全做
+
+P3  存储形态升级    SQLite     已触发  ← 上一版写「不排期」，实测后推翻
+ ▲
+ └─ P3-0 锁 Node 运行时是硬前置：node:sqlite 需要 Node ≥ 22.5，而仓库里没有任何版本约束</div>
+  <div class="note info">
+    <b>为什么 P0 排在存储前面。</b>存储的两条问题（D1/D2 数据可能静默丢失、append 全量重写）
+    都已经量化清楚了，而且各有明确的最小修法；列表层的十七项则是<b>用户每天都在难受</b>的东西。
+    两边可以并行 —— P1 只动 <code class="inl">store.ts</code>，P0 只动 UI 目录。
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="n">1</span>现状盘点</h2>
+  <p>全部结论来自源码行号与本机实测。凡是「实测」都附了输出。</p>
+
+  <h3>1.1 存储：不是 SQLite，是 JSON 文件</h3>
+  <div class="asci">&lt;userData&gt;/plugin/chat-workbench/sessions/
+  ├─ index.json          ← SessionMeta[]        列表视图唯一来源
+  ├─ s_&lt;16hex&gt;.json    ← { meta, messages }   单会话全文
+  └─ *.json.tmp          ← 写入期间的临时文件</div>
+  <p class="foot-ref">store.ts:69 <code class="inl">INDEX_FILE='index.json'</code>　·　
+  store.ts:112 <code class="inl">join(this.dir, id + '.json')</code>　·　
+  store.ts:86 <code class="inl">this.dir = join(dataDir,'sessions')</code>　·　
+  manager.ts:188 <code class="inl">dataDirOf()</code> → shared/src/paths.ts:36 <code class="inl">pluginDataDir()</code></p>
+
+  <table>
+    <thead><tr><th style="width:18%">操作</th><th style="width:13%">复杂度</th><th style="width:34%">做什么</th><th style="width:35%">代价</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">session.list</td><td><b>零磁盘 I/O</b></td>
+        <td>返回构造函数里 <code class="inl">loadIndex()</code> 读进的内存数组（store.ts:88, 180）</td>
+        <td>零 stat、零目录扫描。<b>这是现存储的优点，升级时不许丢掉</b></td></tr>
+      <tr><td class="mono">message.append</td><td><b>O(M + N)</b></td>
+        <td><code class="inl">push</code> 后 <code class="inl">writeSession()</code> 全量重写会话文件（:257）
+          ＋ <code class="inl">syncIndex()</code> 全量重写索引（:258 → :266）</td>
+        <td><b>长会话的主要死因</b>。实测见 <a href="#s6">§6.1</a>：平均 20 KB 的消息、5000 条时，
+          一次 append 写 96 MB / 耗时 399 ms</td></tr>
+      <tr><td class="mono">session.rename</td><td><b>O(M)</b></td>
+        <td>改一个 title，重写<b>全部消息</b>（:206）</td>
+        <td>改个标题 = 再来一次全量写。JSONL 也解决不了，要 SQLite</td></tr>
+      <tr><td class="mono">session.get</td><td>O(M) 传输</td>
+        <td>整个 messages 数组进 <code class="inl">session.get.result</code> 走 SSE</td>
+        <td><b>长会话的第二个死法</b>：40 MB 的数组要序列化、走 SSE、在前端 parse，三处都摊不掉</td></tr>
+      <tr><td class="mono">（内存）</td><td><b>无界</b></td>
+        <td><code class="inl">store.cache</code> 是个无上限 Map（store.ts:82）</td>
+        <td>打开过的会话<b>永远常驻内存</b>，一个 40 MB 的会话就是常驻 40 MB RAM，没有淘汰</td></tr>
+      <tr><td class="mono">session.delete</td><td>O(N)</td>
+        <td>先 <code class="inl">writeIndex()</code>（:217）再 <code class="inl">rmSync()</code>（:218）</td>
+        <td><b>顺序反了</b>：中间崩了留孤儿文件，而 store.ts 里没有 <code class="inl">readdirSync</code>，那文件<b>永远看不见</b></td></tr>
+      <tr><td class="mono">session.clear</td><td>O(N)</td>
+        <td>逐个 unlink，<code class="inl">deletedCount</code> 取自索引长度（:223-232）</td>
+        <td>索引损坏期间丢掉的会话<b>既不会被删也不会被计数</b></td></tr>
+    </tbody>
+  </table>
+  <div class="note ok">
+    <b>实测规模：</b><code class="inl">userData\plugin\chat-workbench\sessions\</code> 当前 3 个会话，
+    最多 4 条消息，<b>index.json 0.46 KB</b>。
+    <b>但这个数字不能用来论证「整写可接受」</b> —— 它只说明<b>还没人用过</b>。
+    判断阈值要看的是 §6.1 的 B/C 两组，不是当前这 3 个会话。
+  </div>
+
+  <h3>1.2 已验证的五个缺陷</h3>
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:23%">缺陷</th><th style="width:36%">证据</th><th style="width:36%">后果</th></tr></thead>
+    <tbody>
+      <tr><td><b>D1</b></td><td><code class="inl">atomicWrite</code> 的注释是错的，而且它自己造出了非原子窗口</td>
+        <td>store.ts:115-119 注释「Windows 的 rename 不能覆盖已存在文件 → 先删旧再 rename」；
+          :124 <code class="inl">rmSync(file)</code>；:125 <code class="inl">renameSync(tmp,file)</code>。
+          <b>实测</b>：<code class="inl">renameSync overwrote target: NEW | exists a: false</code></td>
+        <td>那个 <code class="inl">rmSync</code> 多余<b>且有害</b>：删掉到 rename 之间有一瞬目标文件不存在，
+          崩了就丢整个会话。POSIX 上更没必要</td></tr>
+      <tr><td><b>D2</b></td><td>索引坏掉 → 全部会话文件变孤儿，<b>永不恢复</b></td>
+        <td>store.ts:105-108 catch 后 <code class="inl">this.index = []</code>，注释写「create 会重建索引文件」；
+          但 <code class="inl">readdirSync</code> 在 store.ts 里<b>一次都没出现</b>（实测 grep 零命中），
+          create 只是<b>加新的</b>，从不重扫旧的</td>
+        <td>一次断电 = <b>所有会话不可见且不可恢复</b>，文件还在硬盘上。注释承诺的「重建」不存在</td></tr>
+      <tr><td><b>D3</b></td><td><code class="inl">message.append</code> <b>不发</b> <code class="inl">session.updated</code></td>
+        <td>index.ts:72-77 只 publish <code class="inl">message.appended</code>；
+          <code class="inl">session.updated</code> 只在 create/rename 时发（index.ts:53-63）。
+          但 store.ts:256 <code class="inl">file.meta.updatedAt = message.createdAt</code> 已经更新了</td>
+        <td><b>P0 唯一的硬阻塞</b>：服务端知道 updatedAt 变了却不说。
+          客户端 session.ts:140 <b>已经订阅了</b> <code class="inl">session.updated</code>，只等服务端这一行</td></tr>
+      <tr><td><b>D4</b></td><td><code class="inl">Message</code> 接口缺 <code class="inl">reasoning?</code>，但实现写了</td>
+        <td>store.ts:35-48 <code class="inl">interface Message</code> 无该字段；
+          :61 <code class="inl">NewMessage.reasoning?</code> 有；:249 <code class="inl">appendMessage</code> 写入它</td>
+        <td>磁盘上有、类型上没有。S4 特意把思维链从正文分出来正是靠这个字段，读回来却拿不到类型保证。
+          <b>而思维链正是让单条消息变大的元凶之一</b>（§6.1 场景 C）</td></tr>
+      <tr><td><b>D5</b></td><td>每条命令都白白拷贝两次全量索引</td>
+        <td>index.ts:47 <code class="inl">const before = new Set(store.list().map(...))</code> 在
+          <code class="inl">dispatch</code> 之前<b>无条件</b>执行（含 <code class="inl">message.append</code>）；
+          :55 又一次 <code class="inl">store.list()</code></td>
+        <td>每条消息额外分配 N 个索引副本，其中 :47 那份<b>只为发 <code class="inl">session.deleted</code> 而存在，
+          而 append 分支根本不用它</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3>1.3 list 层：只有工具条和一条平铺列表</h3>
+  <p><code class="inl">SessionListView.vue</code> 130 行，<code class="inl">&lt;Card title="会话"&gt;</code> + 三个工具条按钮 +
+  一个 <code class="inl">&lt;List&gt;</code>。没有搜索、没有分组、没有 pin 开关、没有键盘、没有预览行。
+  七个断层见 <a href="./对话工作台-会话列表重设计.html">重设计 Demo §0</a>。这里只记两个<b>与存储无关</b>的结论：</p>
+  <ul>
+    <li><b><code class="inl">pinned</code> 字段存在但不可达。</b>store.ts:30 有 <code class="inl">pinned?: boolean</code>，
+      却没有命令能把它置 true：<code class="inl">session.rename</code> 要求 title 非空（session.ts:77-84），
+      <code class="inl">session.pin</code> 不存在。<b>最便宜的一处补齐</b>（P2-1）。</li>
+    <li><b>全仓库没有任何会话搜索。</b>store.ts 只有 8 个公开成员，无 <code class="inl">search</code>；
+      session.ts 只 dispatch 7 个 topic。所以 P0-8 的搜索是<b>纯客户端</b>，不需要动存储。</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2><span class="n">2</span>分期与门禁</h2>
+  <div class="phases">
+    <div class="ph ph--p0">
+      <div class="ph__id">P0</div><div class="ph__t">会话列表层 <span class="tag ok">已落地</span></div>
+      <div class="ph__g">17 项。形态见 <a href="./对话工作台-会话列表重设计.html">重设计 Demo</a>。
+        <b>除 P0-0 外不碰存储</b> —— 全部只依赖「索引已在内存数组里」这一个事实。</div>
+    </div>
+    <div class="ph ph--p1">
+      <div class="ph__id">P1</div><div class="ph__t">存储正确性与止血 <span class="tag ok">已落地</span></div>
+      <div class="ph__g">6 项。P1-1~5 修 D1/D2/D4；<b>P1-6 会话文件转 JSONL 是止血项</b>，
+        零新依赖把 append 从 O(M) 变 O(1)。</div>
+    </div>
+    <div class="ph ph--p2">
+      <div class="ph__id">P2</div><div class="ph__t">字段与命令 <span class="tag ok">已落地</span></div>
+      <div class="ph__g">5 项，要动 <code class="inl">shared/src/events.ts</code>。
+        <b>视 P0 落地后的实际缺口决定，不必全做。</b></div>
+    </div>
+    <div class="ph ph--p3">
+      <div class="ph__id">P3</div><div class="ph__t">存储升级 <span class="tag part">P3-0 已做</span> <span class="tag bad">P3-1 未做</span></div>
+      <div class="ph__g"><b>已触发</b>（§6.1 实测）。三步：P1-6 止血 → P3-0 锁 Node 运行时 → P3-1 上
+        <code class="inl">node:sqlite</code>。<b>不装 better-sqlite3</b>（§6.3）。</div>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th style="width:10%">阶段</th><th style="width:44%">做完的判据</th><th style="width:46%">怎么验</th></tr></thead>
+    <tbody>
+      <tr><td><b>P0</b></td><td>重设计 Demo §2~§7 的每一项在真插件里可见可用</td>
+        <td><code class="inl">ui/tests/chat-views.test.ts</code> 现有 699 行断言不得回归；
+          新增 list 层的键盘与菜单断言</td></tr>
+      <tr><td><b>P1</b></td><td>D1/D2/D4 各有一条<b>故障注入</b>测试；P1-6 后 append 耗时与消息数<b>无关</b></td>
+        <td><code class="inl">services/session/tests/store.test.ts</code> 现有 12 项不得回归；
+          新增「rename 前崩溃」「索引写坏后重启」「双写者」「1000 条消息 append 仍 &lt; 5 ms」四类</td></tr>
+      <tr><td><b>P2</b></td><td>每加一个字段都有 store 单测 + 命令层测试</td>
+        <td><code class="inl">services/session/tests/commands.test.ts</code></td></tr>
+      <tr><td><b>P3</b></td><td>数据零丢失迁移，旧目录保留为可回滚副本；Node 版本被强制校验</td>
+        <td>迁移前后逐会话比对消息条数 + 内容哈希；在 Node 20 上启动必须给出明确报错</td></tr>
+    </tbody>
+  </table>
+</section>
+<section id="s3">
+  <h2><span class="n">3</span>P0 · 会话列表层</h2>
+  <p>形态全部来自 <a href="./对话工作台-会话列表重设计.html">重设计 Demo</a>，这里只列<b>改哪几行、依赖谁、怎么验</b>。
+  看板可按阶段与性质筛选。</p>
+
+  <div class="board" id="board">
+    <div class="board__bar">
+      <span class="lb">阶段</span>
+      <button class="seg" data-f="phase" data-v="P0" aria-pressed="true">P0</button>
+      <button class="seg" data-f="phase" data-v="P1" aria-pressed="false">P1</button>
+      <button class="seg" data-f="phase" data-v="P2" aria-pressed="false">P2</button>
+      <button class="seg" data-f="phase" data-v="P3" aria-pressed="false">P3</button>
+      <span class="lb" style="margin-left:var(--s4)">性质</span>
+      <button class="seg" data-f="kind" data-v="block" aria-pressed="false">阻塞项</button>
+      <button class="seg" data-f="kind" data-v="front" aria-pressed="false">前置项</button>
+      <button class="seg" data-f="kind" data-v="ui" aria-pressed="false">纯前端</button>
+      <button class="seg" data-f="kind" data-v="store" aria-pressed="false">碰存储</button>
+      <button class="seg" data-f="kind" data-v="proto" aria-pressed="false">动协议</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:7%">ID</th><th style="width:7%">阶段</th><th style="width:28%">做什么</th>
+        <th style="width:24%">落点</th><th style="width:22%">验收断言</th><th style="width:12%">依赖</th>
+      </tr></thead>
+      <tbody>
+        <tr data-phase="P0" data-kind="block ui">
+          <td class="id">✅ P0-0</td><td><span class="tag info">P0</span></td>
+          <td><b>append 后补发 <code class="inl">session.updated</code></b>（D3）</td>
+          <td class="mono">services/session/src/index.ts:72-77<br>客户端 session.ts:140 已订阅</td>
+          <td>发一条消息 → 该行 updatedAt 前移、跨桶重排</td><td class="mono">—</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-1</td><td><span class="tag info">P0</span></td>
+          <td>侧栏去掉 <code class="inl">&lt;Card&gt;</code> 外壳，直接铺满宿主盒子</td>
+          <td class="mono">views/SessionListView.vue</td>
+          <td>盒子里不再出现第二层白底与内边距</td><td class="mono">P0-0</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-2</td><td><span class="tag info">P0</span></td>
+          <td>行内菜单取代工具条的重命名/删除（<b>动作对象永远是它那一行</b>）</td>
+          <td class="mono">+ 新组件 SessionRowMenu</td>
+          <td>点第 7 行的 ⋯ → 菜单里是第 7 行的字段</td><td class="mono">P0-1</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-3</td><td><span class="tag info">P0</span></td>
+          <td>就地改名（双击 / <kbd>F2</kbd> → 行变 input）取代 Modal</td>
+          <td class="mono">行组件 + SessionRowMenu</td>
+          <td>Enter 提交 / Esc 撤销；发 <code class="inl">session.rename</code></td><td class="mono">P0-2</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-4</td><td><span class="tag info">P0</span></td>
+          <td>删除走<b>打断式</b>确认框（不可逆，值得一次打断）</td>
+          <td class="mono">SessionRowMenu</td>
+          <td>确认框写明删的是哪一条；取消不删</td><td class="mono">P0-2</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-5</td><td><span class="tag info">P0</span></td>
+          <td>相对时间取代 <code class="inl">toLocaleString()</code>；24h 后降级到 昨天 / M-D</td>
+          <td class="mono">ui/state/session.ts 加 timeAgo()</td>
+          <td>无横向溢出；不永远停在「N 天前」</td><td class="mono">P0-1</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-6</td><td><span class="tag info">P0</span></td>
+          <td>listbox 语义 + 漫游 tabindex + ↑↓/Enter/F2/Del/<kbd>/</kbd>/⌘K/Esc</td>
+          <td class="mono">SessionListView</td>
+          <td>折叠组内的行被跳过；↑↓ 只移焦点不切换会话</td><td class="mono">P0-1</td>
+        </tr>
+        <tr data-phase="P0" data-kind="front ui">
+          <td class="id">✅ P0-7</td><td><span class="tag info">P0</span></td>
+          <td>时间桶分组（置顶/今天/昨天/本周/更早/归档）</td>
+          <td class="mono">行组件；纯 UI 派生</td>
+          <td>发消息后该行跨桶前移；搜索时强制展开</td><td class="mono"><b>P0-0</b></td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-8</td><td><span class="tag info">P0</span></td>
+          <td>头部开关式搜索（纯客户端，只匹配标题）</td>
+          <td class="mono">SessionListView</td>
+          <td>无结果给退路；<b>不需要</b>任何服务端搜索能力</td><td class="mono">P0-7</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-9</td><td><span class="tag info">P0</span></td>
+          <td>分组折叠 + 整组置顶（<b>纯本地偏好，不写库</b>）</td>
+          <td class="mono">新增 state/list-prefs.ts</td>
+          <td>偏好键带 schema 版本后缀，改结构能降级</td><td class="mono">P0-7</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-10</td><td><span class="tag info">P0</span></td>
+          <td>未读点（<code class="inl">sessionStorage</code>，<b>不是 localStorage</b>）</td>
+          <td class="mono">state/list-prefs.ts</td>
+          <td>两个窗口互不清对方的未读</td><td class="mono">P0-2</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-11</td><td><span class="tag info">P0</span></td>
+          <td>手动拖拽排序（同分区内；跨桶与跨置顶性<b>拒绝并给 toast 说明原因</b>）</td>
+          <td class="mono">state/list-prefs.ts</td>
+          <td>拒绝的四种情况都有提示，不是静默失败</td><td class="mono">P0-7 P0-9</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-12</td><td><span class="tag info">P0</span></td>
+          <td>三种空态（还没有会话 / 无匹配 / 归档为空）</td>
+          <td class="mono">SessionListView</td>
+          <td>零会话与零命中走不同文案与退路</td><td class="mono">P0-8</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-13</td><td><span class="tag info">P0</span></td>
+          <td>窄栏退化用 <code class="inl">@container</code>（不是媒体查询）；预览行可整栏关</td>
+          <td class="mono">.rail 上 container-type</td>
+          <td>拖到 176px 时仍能新建/选中/改名/删除</td><td class="mono">P0-1</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-14</td><td><span class="tag info">P0</span></td>
+          <td>会话级 motion 表（<b>只在 ① 里算</b>，复用 run.ts 已有的 7 个订阅，不新增订阅）</td>
+          <td class="mono">ui/state/run.ts</td>
+          <td>四个会话同时呈现四种 motion；终态按 TTL 回落</td><td class="mono">P0-0</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-15</td><td><span class="tag info">P0</span></td>
+          <td>② 时间线复用<b>同一个</b> motion 点；补「别的会话出错」的失败摘要</td>
+          <td class="mono">views/ChatTimelineView.vue</td>
+          <td>侧栏圆点与时间线状态一致，不是两套判断</td><td class="mono">P0-14</td>
+        </tr>
+        <tr data-phase="P0" data-kind="ui">
+          <td class="id">✅ P0-16</td><td><span class="tag info">P0</span></td>
+          <td>修两个不存在的令牌 <code class="inl">--color-accent</code> / <code class="inl">--color-surface-1</code></td>
+          <td class="mono">ChatTimelineView.vue:149,155,160,167,183,184</td>
+          <td>用户气泡有底色、流式光标可见</td><td class="mono">—</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="board__empty" id="boardEmpty">当前筛选下没有工单</div>
+  </div>
+
+  <h3>P0-0 为什么是唯一的阻塞项</h3>
+  <p>时间桶分组、跨桶重排、手动排序的持久化，全都建立在「客户端知道每条会话最新的
+  <code class="inl">updatedAt</code>」之上。而现在：store.ts:256 <b>已经把</b> <code class="inl">meta.updatedAt</code>
+  改成消息时间，index.ts:72-77 <b>却不发</b> <code class="inl">session.updated</code>。
+  于是客户端的 <code class="inl">SessionMeta.updatedAt</code> 只在 create/rename 时更新 —— 分组会停在错误位置且不自愈。</p>
+  <div class="note ok">
+    <b>接缝已经在了。</b>ui/state/session.ts:140 已经订阅 <code class="inl">session.updated</code>，
+    :143 会重排列表。所以 P0-0 是<b>服务端加一个 publish</b>，不是加一条通道。
+  </div>
+
+  <h3>P0-14 的两条硬规矩</h3>
+  <div class="note bad">
+    <b>① 绝对不要为了画一个点去临时订阅新 topic。</b>ui/state/session.ts:183 记着这个坑：
+    <code class="inl">sse.subscribe()</code> 遇到<b>之前没订阅过的 topic</b> 会触发 <code class="inl">reconnect()</code> ——
+    旧 EventSource 已关、新的还没 open，中间窗口里发出的命令<b>没有回音</b>。
+    session 级 motion 表<b>必须</b>由 run.ts 已有的 7 个永久订阅（:117 / :132 / :143 / :174 / :186 / :202 / :211）投影出来。
+    <br><b>② 只在 ① 这个视图里算。</b>三个 iframe 各算一份 = 内存与 CPU ×3，而只有侧栏需要它。
+    按 view id 分流，不是无条件生效。
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="n">4</span>P1 · 存储正确性与止血</h2>
+  <p>六项，<b>不换存储、不改数据格式</b>。P1-1~5 是正确性，P1-6 是<b>性能止血</b>。
+  全部只动 <code class="inl">store.ts</code>，与 P0 无依赖可并行。</p>
+  <table>
+    <thead><tr><th style="width:7%">ID</th><th style="width:21%">改什么</th><th style="width:19%">证据</th>
+      <th style="width:53%">做法与验收</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">✅ P1-1</td><td><b>删掉 <code class="inl">rmSync</code></b>，让 rename 自己覆盖</td>
+        <td>store.ts:115-125（D1）</td>
+        <td>改 1 行 + 删 4 行注释。<b>验收</b>：故障注入 —— 在 <code class="inl">renameSync</code> 前抛错，
+          断言目录里要么是完整的旧文件、要么是完整的新文件，<b>不允许两者都不存在</b></td></tr>
+      <tr><td class="mono">✅ P1-2</td><td><b>反转 remove()/clear() 顺序</b>：先 unlink 再写索引</td>
+        <td>store.ts:217-218、:230</td>
+        <td>现在先写索引再 unlink → 崩了留孤儿文件，而没有 readdir 对账，那个文件会被<b>重新「复活」</b>。
+          反转后崩了是「索引有条、文件没了」，对账会正确丢掉它。
+          <b>必须与 P1-3 一起上</b>，单独上会引入新 bug</td></tr>
+      <tr><td class="mono">✅ P1-3</td><td><b>启动时 readdir 对账</b>，修「索引坏 → 全孤儿」</td>
+        <td>store.ts:96-109；注释承诺的「重建」不存在（D2）</td>
+        <td>构造函数里扫目录：<b>目录有、索引无</b> → 补进索引（读 meta，解析失败标 <code class="inl">corrupted</code>）；
+          <b>索引有、目录无</b> → 从索引剔除。<b>验收</b>：把 index.json 写成 <code class="inl">{</code> 非法 JSON，
+          重启后 <code class="inl">list()</code> 仍返回全部会话</td></tr>
+      <tr><td class="mono">✅ P1-4</td><td><b>临时文件名唯一化</b></td>
+        <td>store.ts:121 <code class="inl">\`${file}.tmp\`</code> 是固定名</td>
+        <td>两个写者竞争<b>同一个</b>临时路径：A 的 <code class="inl">renameSync</code> 可能把 B 写了一半的文件搬上正式位置 ——
+          得到一个<b>合法 JSON 但内容混合</b>的文件。改成 <code class="inl">.${process.pid}.${randomUUID()}.tmp</code></td></tr>
+      <tr><td class="mono">✅ P1-5</td><td><b><code class="inl">Message</code> 补 <code class="inl">reasoning?</code></b></td>
+        <td>store.ts:35-48 vs :61 vs :249（D4）</td>
+        <td>纯类型修正。<b>验收</b>：<code class="inl">appendMessage({reasoning})</code> 后 <code class="inl">get()</code>
+          返回值上的 <code class="inl">reasoning</code> 有类型</td></tr>
+      <tr style="background:var(--success-soft)"><td class="mono"><b>✅ P1-6</b></td>
+        <td><b>会话文件 <code class="inl">.json</code> → <code class="inl">.jsonl</code></b><br>
+          <span class="tag ok">止血项</span></td>
+        <td><a href="#s6">§6.1 实测</a>：append 成本 O(M)，长会话到 96 MB / 399 ms</td>
+        <td>首行写 meta，其余每行一条 message；<code class="inl">appendMessage</code> 从
+          <code class="inl">writeSession()</code>（全量重写）改成 <code class="inl">appendFileSync</code> 追加一行，
+          <b>不再碰整个文件</b>。<br>
+          <b>验收</b>：1000 条、平均 2 KB 的会话，append 耗时 <b>&lt; 5 ms</b> 且与消息数<b>无关</b>
+          （现在 11.2 ms 且随 M 线性涨）；旧 <code class="inl">.json</code> 首次读取时自动迁移，可回退。<br>
+          <b>它不解决</b>：rename 的全量重写、cache 无界、get 走全量 SSE —— 那三条留给 P3-1</td></tr>
+    </tbody>
+  </table>
+
+  <h3>P1 顺手带走的一个性能项</h3>
+  <p>D5 说 index.ts:47 那次 <code class="inl">store.list()</code> 在每条命令前无条件执行，唯一用途是给
+  <code class="inl">session.clear</code> 逐个发 <code class="inl">session.deleted</code>。
+  改法：<b>把快照挪进 <code class="inl">topic === 'session.clear'</code> 分支</b>，
+  或让 store 暴露 <code class="inl">ids()</code> 返回 <code class="inl">Set</code>（省掉 N 个对象拷贝）。
+  这不是性能优化，是<b>删掉一笔别的命令白付的钱</b>。</p>
+
+  <div class="note">
+    <b>P1-1~5 全做完，append 仍是 O(M)。</b>它们修的是<b>数据可能静默丢失</b>这件事。
+    <b>只有 P1-6 是性能止血</b> —— 它把 append 从 O(M) 变 O(1)，是当前规模下唯一能立刻消掉
+    §6.1 那张表里全部成本的改动。<b>别把两者混为一谈。</b>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="n">5</span>P2 · 字段与命令补齐</h2>
+  <p>五项，都要动 <code class="inl">shared/src/events.ts</code>。<b>视 P0 落地后的实际缺口决定，不必全做。</b>
+  排优先级时看两个问题：<b>缺了它哪个界面元素做不了</b>、<b>补它的协议成本多大</b>。</p>
+  <table>
+    <thead><tr><th style="width:7%">ID</th><th style="width:13%">能力</th><th style="width:18%">需要什么</th>
+      <th style="width:10%">现状</th><th style="width:25%">缺了会怎样</th><th style="width:27%">建议</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">✅ P2-1</td><td><b>置顶</b></td><td class="mono">SessionMeta.pinned<br>（已有）+ 新命令</td>
+        <td><span class="tag ok">字段有<br>命令缺</span></td>
+        <td>整个「置顶」分组判据不可用 —— 而它是<b>唯一一个</b>现成的分组键</td>
+        <td><b>最便宜，先做。</b>加 <code class="inl">session.pin{requestId,sessionId,pinned}</code>。
+          <b>并且置顶不得改 <code class="inl">updatedAt</code></b> —— 否则点一下置顶，会话就跳进「今天」最顶上</td></tr>
+      <tr><td class="mono">✅ P2-2</td><td>归档</td><td class="mono">archived? 字段 + 命令</td>
+        <td><span class="tag bad">都没有</span></td>
+        <td>会话越堆越多，只能删；删不可逆</td>
+        <td>加 <code class="inl">archived?: boolean</code>。
+          <b>不加的话这一版就把归档菜单项删掉</b>，别留点了没反应的按钮</td></tr>
+      <tr><td class="mono">✅ P2-3</td><td>子会话树</td><td class="mono">parentId? 字段</td>
+        <td><span class="tag bad">都没有</span></td>
+        <td>子代理发起的对话没有归属，列表里全是平级碎片</td>
+        <td>加 <code class="inl">parentId?: string</code>。<b>不要照抄天枢的 N+1</b> ——
+          它对每个根会话各发一次子会话请求；我们已有 <code class="inl">session.list</code> 全量返回，
+          子会话直接在前端按 parentId 归组</td></tr>
+      <tr><td class="mono">✅ P2-4</td><td>预览行</td><td class="mono">lastMessage? 字段</td>
+        <td><span class="tag bad">没有</span></td>
+        <td>列表全是标题，光看标题认不出是哪一段</td>
+        <td>加 <code class="inl">lastMessage?</code>，由 session 服务在 append 时截断拼接。
+          <b>顺带抄天枢的 <code class="inl">cleanMessagePreview</code></b>：去控制字符 → 压连续空白 → 截 120 码点。
+          <b>注意</b>：这会让每次 append 多写一点索引，但相对 P1-6 之后的 append 成本可忽略</td></tr>
+      <tr><td class="mono">✅ P2-5</td><td>导出会话</td><td class="mono">session.export</td>
+        <td><span class="tag bad">无</span></td>
+        <td>菜单里那个按钮只能是死的</td>
+        <td>要么实现，要么这一版不放这个菜单项。<b>会话是用户唯一的原创内容</b>，
+          优先级排在 P0/P1 之后</td></tr>
+    </tbody>
+  </table>
+  <div class="note info">
+    <b>P2-1 里那条「置顶不改 updatedAt」值得单独强调。</b>天枢 <code class="inl">sessionStore.update()</code>
+    里有一段专门逻辑：<code class="inl">const touchKeys = Object.keys(patch).filter(k =&gt; k !== 'pinned' &amp;&amp; k !== 'archived')</code>，
+    <code class="inl">shouldTouch = touchKeys.length &gt; 0</code> —— 即<b>只有 pin/archived 变化时不 bump 时间</b>。
+    理由很直白：不这么做，点一下置顶会把会话顶到「最近」最前面，行尾时间也跟着变 ——
+    用户操作的是<b>分类</b>，不是<b>活动时间</b>。这条直接决定 P0-7 的分桶结果对不对。
+  </div>
+</section>
+<section id="s6">
+  <h2><span class="n">6</span>P3 · 存储形态升级</h2>
+
+  <div class="note ok">
+    <b>状态（2026-10-07）：三步里 P1-6 与 P3-0 已落地，P3-1 未做。</b>会话文件已转 JSONL，<code class="inl">appendMessage</code> 走
+    <code class="inl">appendFileSync</code>（O(M)→O(1)）；Node 运行时已锁（<code class="inl">engines.node &gt;= 22.5.0</code> + <code class="inl">.node-version</code> + 启动前校验）；
+    <b>P3-1（<code class="inl">node:sqlite</code>）尚未开始</b>。下面 §6.1~§6.7 保留的是当时实测与决策依据，读时以本行为准。
+  </div>
+
+  <div class="note bad">
+    <b>本节已按 2026-10-07 实测重写。上一版判「P3 不触发、JSON 够用」是错的</b> ——
+    那个判断建立在「一条消息 ≈ 300 字节」的假设上，实测证明那个假设错了三个数量级。
+    结论从「不触发」改成「<b>已触发</b>」，并多出一个前置项 P3-0。
+  </div>
+
+  <h3>6.1 实测：append 的真实成本</h3>
+  <p>下面这张表是<b>实测输出</b>，不是估算。跑的是 <code class="inl">store.ts</code> 的真实写入路径
+  （<code class="inl">appendMessage</code> → <code class="inl">writeSession</code> → <code class="inl">syncIndex</code> →
+  <code class="inl">writeIndex</code>，含 store.ts:124 那个 <code class="inl">rmSync</code>），
+  <code class="inl">JSON.stringify(x, null, 2)</code> 与实际一致。</p>
+  <table>
+    <thead><tr><th style="width:19%">场景</th><th style="width:8%">会话数</th><th style="width:10%">单会话消息数</th>
+      <th style="width:9%">平均消息</th><th style="width:12%">会话文件</th><th style="width:10%">索引</th>
+      <th style="width:11%">写放大</th><th style="width:16%">每次 append</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="4"><b>A 轻量</b><br><span class="tag">我原来的假设</span></td>
+        <td>13</td><td>200</td><td>300 B</td><td>80 KB</td><td>2 KB</td><td>82 KB</td><td>3.6 ms</td></tr>
+      <tr><td>13</td><td>1 000</td><td>300 B</td><td>397 KB</td><td>2 KB</td><td>399 KB</td><td>5.6 ms</td></tr>
+      <tr><td>13</td><td>5 000</td><td>300 B</td><td>1.9 MB</td><td>2 KB</td><td>1.9 MB</td><td>12.7 ms</td></tr>
+      <tr><td>13</td><td>20 000</td><td>300 B</td><td>7.8 MB</td><td>2 KB</td><td>7.8 MB</td><td>40.6 ms</td></tr>
+
+      <tr><td rowspan="4"><b>B 真实</b><br><span class="tag warn">带 reasoning + toolCalls</span></td>
+        <td>13</td><td>200</td><td>2 KB</td><td>413 KB</td><td>2 KB</td><td>415 KB</td><td>6.0 ms</td></tr>
+      <tr><td>13</td><td><b>1 000</b></td><td>2 KB</td><td><b>2.0 MB</b></td><td>2 KB</td><td>2.0 MB</td><td>11.2 ms</td></tr>
+      <tr><td>13</td><td>5 000</td><td>2 KB</td><td><b>10.0 MB</b></td><td>2 KB</td><td>10.0 MB</td><td>45.8 ms</td></tr>
+      <tr><td>13</td><td>20 000</td><td>2 KB</td><td><b>40.2 MB</b></td><td>2 KB</td><td>40.2 MB</td>
+        <td><b style="color:var(--danger)">214.3 ms</b> 可感知</td></tr>
+
+      <tr><td rowspan="3"><b>C 重</b><br><span class="tag bad">工具参数内含整份文件</span></td>
+        <td>13</td><td><b>200</b></td><td>20 KB</td><td><b>3.9 MB</b></td><td>2 KB</td><td>3.9 MB</td><td>20.8 ms</td></tr>
+      <tr><td>13</td><td>1 000</td><td>20 KB</td><td><b>19.2 MB</b></td><td>2 KB</td><td>19.2 MB</td>
+        <td><b>78.6 ms</b> 开始有感</td></tr>
+      <tr><td>13</td><td>5 000</td><td>20 KB</td><td><b>95.9 MB</b></td><td>2 KB</td><td>95.9 MB</td>
+        <td><b style="color:var(--danger)">399.4 ms</b> 可感知</td></tr>
+
+      <tr><td rowspan="4"><b>D 会话多</b><br><span class="tag">瓶颈不在这里</span></td>
+        <td>500</td><td>200</td><td>2 KB</td><td>413 KB</td><td>68 KB</td><td>482 KB</td><td>13.2 ms</td></tr>
+      <tr><td>2 000</td><td>200</td><td>2 KB</td><td>413 KB</td><td>274 KB</td><td>688 KB</td><td>5.0 ms</td></tr>
+      <tr><td>5 000</td><td>200</td><td>2 KB</td><td>413 KB</td><td>687 KB</td><td>1.1 MB</td><td>8.0 ms</td></tr>
+      <tr><td>20 000</td><td>200</td><td>2 KB</td><td>413 KB</td><td><b>2.7 MB</b></td><td>3.1 MB</td><td>16.9 ms</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 三个结论</h3>
+  <ol>
+    <li><b>瓶颈是<b>单会话文件</b>，不是索引。</b>看 D 组：20000 个会话、索引 2.7 MB，
+      每次 append 仍只要 16.9 ms —— 索引是一次性顺序写。
+      而 B 组只要 13 个会话、单会话 5000 条，append 就要 45.8 ms。
+      <b>长会话是主要矛盾，会话多是次要的。</b>上一版把两者并列，是错的。</li>
+    <li><b>C 组是最坏情况，也是最可能的情况。</b><code class="inl">Message.toolCalls[].arguments</code>
+      会原样存工具入参 —— <code class="inl">write</code> / <code class="inl">edit</code> 的入参<b>包含整份文件内容</b>。
+      加上 S4 单独存的 <code class="inl">reasoning</code>（思维链动辄数千字），
+      <b>一条消息 20 KB 不是极端假设</b>。这一组里 200 条消息就已经 3.9 MB。
+      而 ost 的<b>主用途</b>就是带工具调用的 Agent Loop —— 长会话是常态，不是边缘情况。</li>
+    <li><b>真正的断点比「占用太大」更早、更硬。</b>上面只算了磁盘写。还有三处同量级甚至更糟：
+      <ul>
+        <li><b><code class="inl">session.get.result</code> 把整个 messages 数组塞进 SSE</b>
+          （session.ts:169 → shared/src/events.ts 的 <code class="inl">SessionFile</code>）。
+          40 MB 的数组要序列化、走 SSE、在前端 <code class="inl">JSON.parse</code>，三处都摊不掉。</li>
+        <li><b><code class="inl">store.cache</code> 是无界 Map</b>（store.ts:82）。
+          打开过的会话<b>永远留在内存里</b>，一个 40 MB 的会话就是常驻 40 MB RAM，没有淘汰、没有上限。</li>
+        <li><b><code class="inl">rename</code> 重写全部消息</b>（store.ts:206）。
+          在长会话上改个标题 = 再来一次全量写。</li>
+      </ul></li>
+  </ol>
+  <div class="note bad">
+    <b>所以「JSON 占用太大」这个说法要更精确一点。</b>问题不是磁盘占用 —— 96 MB 磁盘不贵。
+    问题是<b>每追加一条消息就要重写这 96 MB</b>，以及<b>打开会话时要把这 96 MB 走一遍 SSE</b>。
+    前者把 append 从 O(1) 变成 O(M)，后者让长会话根本打不开。
+    <b>换 SQLite 同时解决这两件</b>（append 是一条 INSERT；get 可以按游标取）—— 这才是它该换的理由。
+  </div>
+
+  <h3>6.3 「SQLite 是踩过的坑」—— 坑是 better-sqlite3，不是 SQLite</h3>
+  <p>这条要澄清，因为它直接决定用哪个 SQLite。ost 仓库<b>从未用过 SQLite</b>
+  （<code class="inl">git log --diff-filter=A</code> 全历史零个 sqlite / <code class="inl">.db</code> 文件；
+  文档里每次提到 SQLite 都是<b>推迟到 P8</b>：P1a L24 / P3 L16,28,244 / 阶段追踪 L137,253）。
+  所以「踩过」指的是<b>天枢</b>。它那份 963 行的迁移指南把原因写得很清楚：</p>
+  <div class="tree">天枢 docs/跨平台客户端与Node-SQLite迁移开发指南.md
+
+L18   用 node:sqlite 替代 better-sqlite3，消除额外的 SQLite 原生插件和 ABI 风险。
+L41   Node 24 已无官方 Windows x86 运行时；Electron 43 是最后一个提供 x86 预编译产物的系列。
+L212  Phase 2 完成后，运行时只能存在 node:sqlite。不得保留：
+L214    · better-sqlite3（dependencies / devDependencies / optionalDependencies 任一）
+L215    · @types/better-sqlite3
+L216    · 动态 import('better-sqlite3')
+L217    · 「node:sqlite 失败就回退 better-sqlite3」的双驱动逻辑
+L218    · 针对 better_sqlite3.node 的 ABI 检查 / 复制 / 打包 / 下载代码
+L55   保留 SQLite 文件格式，只替换 Node 驱动。不得迁移到远程数据库。</div>
+  <div class="note ok">
+    <b>结论：坑是「原生模块 + ABI + 跨平台打包」，不是「SQLite」。</b>
+    逃法就是 L12 给的那句：<b>用 Node 内置的 <code class="inl">node:sqlite</code></b>。
+    它是 Node 自带的，<b>零原生依赖、零 ABI、零 <code class="inl">.node</code> 文件</b>，
+    打包时不需要为它做任何跨平台编译 —— 也就是<b>把天枢那个坑整个绕开，而不是重蹈覆辙</b>。
+    本机 Node 24.14 实测可用（仅一条 <code class="inl">ExperimentalWarning</code>）。
+    <br><b>写成红线：<code class="inl">services/session/package.json</code> 里永远不出现 better-sqlite3。</b>
+  </div>
+
+  <h3>6.4 真正的拦路虎：Node 运行时没锁</h3>
+  <p>这条是上一版<b>完全漏掉</b>的，也是 <code class="inl">node:sqlite</code> 落地前的<b>唯一硬前置</b>。</p>
+  <table>
+    <thead><tr><th style="width:28%">事实</th><th style="width:38%">证据</th><th style="width:34%">后果</th></tr></thead>
+    <tbody>
+      <tr><td>Tauri 壳<b>不</b>启动 Node</td>
+        <td><code class="inl">src-tauri/src/lib.rs:295</code>：
+          <code class="inl">// Core / Vite 由 start-client.cmd 负责启动，壳只做窗口</code>；
+          <code class="inl">tauri.conf.json</code> 无 <code class="inl">externalBin</code> / sidecar</td>
+        <td>Node 运行时<b>不由产品控制</b></td></tr>
+      <tr><td>Core 跑在<b>用户 PATH 上的 node</b></td>
+        <td><code class="inl">start-client.cmd:116</code>：<code class="inl">node core\dist\main.js</code>；
+          <code class="inl">core/src/service-manager/process.ts:33</code>：
+          <code class="inl">if (argv[0]==='node') argv[0]=process.execPath</code></td>
+        <td>服务进程继承 Core 的 Node 版本 —— 也就是<b>用户装的那个</b></td></tr>
+      <tr><td><b>仓库里没有任何 Node 版本约束</b></td>
+        <td>根 <code class="inl">package.json</code> 有 <code class="inl">packageManager: pnpm@11.1.2</code>、
+          <code class="inl">@types/node ^24.13.6</code>，但<b>没有 <code class="inl">engines.node</code></b>；
+          无 <code class="inl">.node-version</code>；<code class="inl">start-client.cmd</code>
+          只检查 pnpm（:28）与 cargo（:35），<b>不检查 node 版本</b></td>
+        <td>用户在 Node 20 上跑，<code class="inl">require('node:sqlite')</code> 直接抛错</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad">
+    <b>这就是天枢那份指南存在的理由。</b>同一件事它写了 963 行：
+    <code class="inl">engines: {node:'24.x'}</code> + <code class="inl">.node-version</code> +
+    下载内嵌 Node 运行时 + <code class="inl">SHASUMS256.txt</code> 校验（L206：「校验失败必须立即终止构建，
+    禁止降级为继续使用缓存」）+ 平台/架构矩阵。ost 这一整套<b>还没有</b>。
+    <b>所以 <code class="inl">node:sqlite</code> 不能先上，必须先把 Node 运行时锁住。</b>
+  </div>
+
+  <h3>6.5 三步走</h3>
+  <div class="tree">P1-6  会话文件 JSON → JSONL      ← 立刻止血，零新依赖，约 20 行
+        appendMessage 从「全量重写」变成 appendFileSync 追加一行
+        砍掉 6.2 那三处的 append 成本。不碰 runtime、不碰依赖、可回退。
+   ▲
+P3-0  锁 Node 运行时                   ← node:sqlite 的硬前置
+        engines.node + .node-version + start-client.cmd 启动前校验 + （打包时）内嵌运行时
+        天枢那份指南的最小可交付子集
+   ▲
+P3-1  store.ts → node:sqlite          ← 真正的目标形态
+        sessions / messages 两张表 + 迁移器 + 四个索引 + get 游标分页
+        解决 rename 全量重写、cache 无界、get 走全量 SSE 这三件 JSONL 解决不了的事</div>
+  <table>
+    <thead><tr><th style="width:8%">项</th><th style="width:25%">做什么</th><th style="width:32%">解决什么</th>
+      <th style="width:14%">新依赖</th><th style="width:21%">可回退性</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">✅ P1-6</td>
+        <td>会话文件 <code class="inl">&lt;id&gt;.json</code> → <code class="inl">&lt;id&gt;.jsonl</code>：
+          首行 meta，其余每行一条 message；<code class="inl">appendMessage</code> 改 <code class="inl">appendFileSync</code></td>
+        <td>append 从 O(M) 变 O(1)。<b>这是当前成本最低的止血点</b> ——
+          一条消息平均 20 KB 时，它把 399 ms 降到一次追加</td>
+        <td><b>无</b></td>
+        <td><b>高</b>：读时两种格式都兼容，旧 <code class="inl">.json</code> 首次打开时迁移</td></tr>
+      <tr><td class="mono">P3-0</td>
+        <td>Node 版本约束 + 启动前校验；打包阶段内嵌运行时</td>
+        <td>让 <code class="inl">node:sqlite</code> 可用；同时修掉「用户在 Node 20 上跑才发现」这类问题</td>
+        <td><b>无</b>（下载的是 Node 本体，不是包）</td>
+        <td>中：约束本身随时可撤，内嵌运行时是独立产物</td></tr>
+      <tr><td class="mono">P3-1</td>
+        <td><code class="inl">store.ts</code> 实现换成 <code class="inl">node:sqlite</code>：
+          两张表 + 迁移器 + 四个索引 + <code class="inl">session.get</code> 游标分页</td>
+        <td><b>rename 全量重写</b>（→ 单列 UPDATE）、<b>cache 无界</b>（→ 不再整会话常驻）、
+          <b>get 走全量 SSE</b>（→ 按页取）。这三条 JSONL 解决不了</td>
+        <td>零（Node 内置）</td>
+        <td>中：迁移前备份 + 迁移后逐会话比对</td></tr>
+    </tbody>
+  </table>
+  <div class="note info">
+    <b>为什么先 JSONL 而不是直接 SQLite。</b>因为 <code class="inl">node:sqlite</code>
+    <b>今天还上不了</b>（§6.4：运行时没锁），而「长会话 append 要重写全部」是<b>当前就在流血</b>的问题。
+    JSONL 用 20 行、零依赖把它按住；等 P3-0 做完再上 SQLite 时，
+    <b>JSONL 里那份数据就是迁移脚本的输入</b>，不浪费。
+    <br>反过来，如果现在直接硬上 <code class="inl">node:sqlite</code>，要么引入 better-sqlite3（重蹈天枢的坑），
+    要么在运行时没锁的状态下让一部分用户 <code class="inl">require</code> 就炸。
+  </div>
+
+  <h3>6.6 SQLite 阶段的抄与不抄</h3>
+  <table>
+    <thead><tr><th style="width:25%">天枢的做法</th><th style="width:37%">为什么值得抄</th><th style="width:38%">落点</th></tr></thead>
+    <tbody>
+      <tr><td><code class="inl">node:sqlite</code> 的 <code class="inl">DatabaseSync</code>，<b>只此一个驱动</b></td>
+        <td>零原生依赖，绕开 ABI / 打包那一整套（§6.3）</td>
+        <td><code class="inl">services/session/package.json</code> <b>不加任何依赖</b></td></tr>
+      <tr><td>migrations 引擎 + <code class="inl">_migrations</code> 版本表 + 每 migration 一个
+          <code class="inl">BEGIN IMMEDIATE</code> + <code class="inl">addColumnIfMissing</code> 幂等加列</td>
+        <td>直接消灭 D2 那一类问题（结构坏了只能手改 JSON）</td>
+        <td>新建 <code class="inl">services/session/src/migrator.ts</code></td></tr>
+      <tr><td><b>四个索引</b>：<code class="inl">updated_at DESC</code> / <code class="inl">pinned</code> /
+          <code class="inl">archived</code> / <code class="inl">messages(session_id, id)</code></td>
+        <td>P0-7 的时间桶分组直接吃到第一个。
+          <b>天枢这四个索引一个都没有</b> —— 我对它 live db 跑 <code class="inl">EXPLAIN QUERY PLAN</code> 得到
+          <code class="inl">SCAN sessions</code> + <code class="inl">USE TEMP B-TREE FOR ORDER BY</code></td>
+        <td>migration 1</td></tr>
+      <tr><td><code class="inl">normalizeFlags</code> / <code class="inl">toDbFlags</code>：存 0/1，对外 boolean</td>
+        <td><code class="inl">node:sqlite</code> <b>绑不了 JS boolean</b></td>
+        <td>store 层读写边界各一个函数</td></tr>
+      <tr><td>迁移前一次性备份 <code class="inl">sessions.db.pre-*</code></td>
+        <td>换存储不可逆，没有回滚就是赌</td>
+        <td>migrator 入口，<b>备份不删</b></td></tr>
+      <tr><td>驱动无关的<b>门面</b>：只暴露 <code class="inl">exec / prepare().run|get|all / close</code> +
+          <code class="inl">withTransaction</code>（外层 <code class="inl">BEGIN IMMEDIATE</code>，内层 <code class="inl">SAVEPOINT</code>）</td>
+        <td>指南 L227 明确「允许并推荐破坏性修改所有 store 调用点，不要求模仿 better-sqlite3 的完整 API」。
+          门面小 = 换驱动的成本低</td>
+        <td>新建 <code class="inl">src/db.ts</code></td></tr>
+    </tbody>
+  </table>
+  <h3>不要抄天枢的六件</h3>
+  <ul>
+    <li><b>36 列的 <code class="inl">sessions</code> 表。</b>大半是角色、世界书、多工作区、事件、分叉、缓存命中 ——
+      它服务的是「角色扮演」。ost 是 Agent Loop 工具台，现有 6 个字段是对的，加到 10~12 个刚好。</li>
+    <li><b><code class="inl">SELECT *</code> 的列表查询。</b>天枢 <code class="inl">GET /api/sessions</code> 是
+      <code class="inl">SELECT * ORDER BY updated_at DESC LIMIT 50</code>：无 WHERE、无 join，
+      连可能很大的 <code class="inl">compaction_summary</code> 一起过线。ost 要显式列名。</li>
+    <li><b>全量 update。</b>天枢 <code class="inl">update()</code> 重写全部 36 列且<b>不在事务里</b> → 并发丢写。要按列 UPDATE。</li>
+    <li><b>没有分页。</b>天枢 <code class="inl">getMessages(limit=1000)</code>，调用方传 <code class="inl">100000</code>
+      → 变相全量。<b>长会话的第二个死法就在这里</b>，不能重蹈。</li>
+    <li><b>没有 FTS 的「经验」。</b>天枢<b>也没有</b>全文检索（grep <code class="inl">fts5|VIRTUAL TABLE</code> 零命中），
+      搜索是纯客户端 <code class="inl">Array.includes</code>，只搜 title + character_id，不搜正文。
+      <b>别拿「天枢有全文检索」当 SQLite 的正当性依据 —— 它没有。</b>真要搜正文就在 migration 里加 fts5。</li>
+    <li><b>未读写 localStorage。</b>天枢 <code class="inl">sessionListPrefs.ts</code> 把它存 localStorage（跨窗口），
+      两个窗口会互相清对方未读。我们用 sessionStorage（P0-10）。</li>
+  </ul>
+  <div class="note bad">
+    <b>P1-6 与 P3-1 的头号风险都是 dataDir 解析。</b>index.ts:8-18 记着上一代事故：
+    <code class="inl">service.dataDir</code> 在 <code class="inl">start()</code> 之前恒为 <code class="inl">''</code>，
+    代码退到相对路径，<b>487 条会话被写进了 <code class="inl">dist/server/session/</code></b>，
+    而文档约定的目录一次都没被创建 —— <code class="inl">dist/</code> 还会被
+    <code class="inl">vite build</code> 的 <code class="inl">emptyOutDir</code> 清掉。
+    现在的 <code class="inl">fail fast</code>（index.ts:89-94）是那次事故的正确遗产。
+    <b>两个迁移脚本都必须复用它</b>：拿不到 dataDir 就退出，绝不猜相对路径 ——
+    否则「迁移」会造出第二份数据，而旧的已经被清掉了。
+  </div>
+
+  <h3>6.7 重新校准的阈值</h3>
+  <p>上一版三条阈值按 300 B/条拍，实测证明<b>权重也拍错了</b>（会话文件是主项，索引是次项）。
+  下表按 §6.1 反推，拖滑块可以自己验：</p>
+  <div class="board">
+    <div class="board__bar">
+      <span class="lb">校准后的假设</span>
+      <span style="font-size:var(--text-xs);color:var(--muted)">
+        会话数 <b id="vN">13</b>　·　单会话消息数 <b id="vM">1000</b>　·　平均消息
+        <b id="vS">2.0 KB</b>　·　SessionMeta ≈ 200 B　·　拟合自 §6.1 实测点（±40%）
+      </span>
+    </div>
+    <div style="padding:var(--s3) var(--s4)">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s4)">
+        <label style="font-size:var(--text-xs)">会话数
+          <input id="inN" type="range" min="1" max="20000" step="1" value="13" style="width:100%" /></label>
+        <label style="font-size:var(--text-xs)">单会话消息数
+          <input id="inM" type="range" min="1" max="20000" step="1" value="1000" style="width:100%" /></label>
+        <label style="font-size:var(--text-xs)">平均消息字节
+          <input id="inS" type="range" min="300" max="40000" step="100" value="2000" style="width:100%" /></label>
+      </div>
+
+      <div class="gauge" id="g1" style="margin-top:var(--s3)">
+        <div class="gauge__h"><span class="gauge__v" id="g1v">—</span>
+          <span class="gauge__u"><b>主项</b> · 单会话文件体积（每次 append 全量重写它；<code class="inl">get</code> 还要整份走 SSE）　阈值 <b>2 MB</b></span></div>
+        <div class="gauge__b"><div class="gauge__f" id="g1f" style="width:0%"></div></div>
+        <div class="gauge__m" id="g1m"></div>
+      </div>
+
+      <div class="gauge" id="g2">
+        <div class="gauge__h"><span class="gauge__v" id="g2v">—</span>
+          <span class="gauge__u">次项 · 每次 append 的总写量（会话文件 + 索引）　阈值 <b>4 MB</b></span></div>
+        <div class="gauge__b"><div class="gauge__f" id="g2f" style="width:0%"></div></div>
+        <div class="gauge__m" id="g2m"></div>
+      </div>
+
+      <div class="gauge" id="g3">
+        <div class="gauge__h"><span class="gauge__v" id="g3v">—</span>
+          <span class="gauge__u">次项 · index.json 体积　阈值 <b>1 MB</b>
+            （实测：到 2.7 MB 仍只有 16.9 ms，所以这条最晚触发）</span></div>
+        <div class="gauge__b"><div class="gauge__f" id="g3f" style="width:0%"></div></div>
+        <div class="gauge__m" id="g3m"></div>
+      </div>
+
+      <div class="note" id="verdict" style="margin-bottom:0">移动滑块以计算。</div>
+    </div>
+  </div>
+  <div class="note ok">
+    <b>对照 §6.1 的实测行：</b>「B 真实 / 1000 条 / 2 KB」= 单会话 2.0 MB、append 11.2 ms → <b>主项已越阈</b>；
+    「C 重 / 200 条 / 20 KB」= 单会话 3.9 MB → <b>主项与总写量双越阈</b>。
+    <b>一个正常的、带工具调用的 agent 会话，在 200 条消息时就已经该走 P1-6 了。</b>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="n">7</span>明确不做</h2>
+  <table>
+    <thead><tr><th style="width:26%">不做</th><th style="width:38%">理由</th><th style="width:36%">什么时候重新考虑</th></tr></thead>
+    <tbody>
+      <tr><td><b>用 better-sqlite3</b></td>
+        <td>天枢已经为此付出过代价并写了一份 963 行的迁移指南来摆脱它（§6.3）。
+          <code class="inl">node:sqlite</code> 是同一件事的正确答案，且零原生依赖</td>
+        <td><b>永不</b>。这是红线，不是偏好</td></tr>
+      <tr><td>引入 workspace / project 分组</td>
+        <td><code class="inl">SessionMeta</code> 没有这个字段。硬造要动协议与存储，
+          而时间桶已经解决了 240px 侧栏的真实痛点（要找昨天那条）</td>
+        <td>用户真的开始「按项目找会话」。届时 <code class="inl">bucketOf()</code> 是唯一改动点</td></tr>
+      <tr><td>全文检索</td>
+        <td>天枢也没有（§6.6）。前端 filter 搜标题够用；搜正文必须先有 fts5</td>
+        <td>P3-1 的 migration 里一并加</td></tr>
+      <tr><td>虚拟滚动</td>
+        <td>240px 宽的侧栏最多几十行。<code class="inl">session.list</code> 是零磁盘 I/O（store.ts:180）</td>
+        <td>实测列表 &gt; 200 行且滚动掉帧</td></tr>
+      <tr><td>把 motion 色硬编码在插件里</td>
+        <td>天枢侧栏现在就是这么干的（<code class="inl">#d59b2d</code> / <code class="inl">#4f80c9</code> /
+          <code class="inl">#6f5acb</code>），深色主题下会糊。
+          <code class="inl">core/tests/tokens-parity.test.ts</code> 存在的意义就是防这件事复发</td>
+        <td>不要有「以后再说」—— 要么进 <code class="inl">sdk/ui/src/tokens.css</code>，要么用中性色</td></tr>
+      <tr><td>服务端 read receipt（未读）</td>
+        <td>sessionStorage 已经覆盖「同窗口组」。服务端 read receipt 涉及多端同步，属另一个量级的产品决策</td>
+        <td>用户开始抱怨「换台电脑未读乱了」</td></tr>
+      <tr><td>动三视图边界 / <code class="inl">curId</code> 共享机制</td>
+        <td>同源 SSE + sessionStorage 的形状是对的。本次所有改动都在这个形状之内</td>
+        <td>没有理由动</td></tr>
+      <tr><td>为 P2 的字段预留 UI 骨架</td>
+        <td>「预留」在实践中就是「留一个死按钮」——
+          天枢 <code class="inl">header-icon-btn.add</code> 有类名没规则、
+          <code class="inl">.add-btn</code> 样式定义了却从不渲染</td>
+        <td>不要。字段到位时再加 UI</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s8">
+  <h2><span class="n">8</span>风险台账</h2>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:23%">风险</th><th style="width:31%">触发条件</th><th style="width:40%">缓解</th></tr></thead>
+    <tbody>
+      <tr><td>R1</td><td>SSE reconnect 窗口内命令落空</td>
+        <td>为画 motion 点临时 <code class="inl">subscribe()</code> 一个新 topic</td>
+        <td>P0-14 硬规矩①：只用 run.ts 已有的 7 个永久订阅。session.ts:183 有完整说明</td></tr>
+      <tr><td>R2</td><td>三 iframe 各自 bootstrap，<code class="inl">session.list</code> 发三次</td>
+        <td>现状，非本次新增（session.ts:59「每个 iframe 都要自己约」是有意的）</td>
+        <td>幂等、几十字节。换成「不依赖别人」换来的是 ②③ 单独打开也能用</td></tr>
+      <tr><td>R3</td><td>P1-2 单独上线导致「删了又活」</td>
+        <td>先反转 unlink 顺序，但还没做 readdir 对账</td>
+        <td><b>P1-2 与 P1-3 必须同一个 PR</b>。单测里显式写这条依赖</td></tr>
+      <tr><td>R4</td><td>P1-6 / P3-1 迁移造出第二份数据</td>
+        <td>迁移脚本拿不到 dataDir 时退到相对路径</td>
+        <td>复用 index.ts:89-94 的 fail fast；迁移<b>只复制不删除</b>
+          （同 core/src/config/paths.ts 的 <code class="inl">migrateFlatLayout</code> 策略），验证完再手动清理</td></tr>
+      <tr><td>R5</td><td>本地偏好（折叠/顺序/未读）改结构后无法降级</td>
+        <td>偏好键没有版本，或版本变了还按老结构解析</td>
+        <td>键名带 schema 后缀；解析失败<b>当空偏好</b>，不抛错、不清空（清空会丢用户的手动排序）</td></tr>
+      <tr><td>R6</td><td>motion 表在三个 iframe 各算一份</td>
+        <td>P0-14 无条件生效</td>
+        <td>按 view id 分流，只在 <code class="inl">#session-list</code> 里算</td></tr>
+      <tr><td>R7</td><td>P0-0 让 <code class="inl">session.updated</code> 频率暴涨</td>
+        <td>每条消息一次 append → 每条消息一次 <code class="inl">session.updated</code></td>
+        <td><b>这是对的</b>：一个会话一轮 2~6 条消息，量级与 <code class="inl">message.appended</code> 同阶，
+          客户端本来就订阅了这条。要防的是把 token 流也转成 <code class="inl">session.updated</code> —— 不做</td></tr>
+      <tr><td>R8</td><td><code class="inl">Message.reasoning</code> 补类型后，前端开始依赖此前无类型的字段</td>
+        <td>P1-5</td>
+        <td>不是风险，是<b>修正</b>。S4 的设计本就包含它，前端 <code class="inl">ChatRow.reasoning</code>（state/types.ts）已在用</td></tr>
+      <tr><td>R9</td><td><b>P1-6 之后仍会长会话变大</b>，只是不再每条重写</td>
+        <td>用户跑一个几千条消息的 agent 会话</td>
+        <td>append 已 O(1)，但 <b><code class="inl">session.get</code> 全量 SSE</b> 与
+          <b>cache 无界</b>两条还在 → 它们是 P3-1 的内容，不是 P1-6 能解决的。
+          <b>不要因为上了 JSONL 就认为长会话问题结束了。</b></td></tr>
+      <tr><td>R10</td><td>Node 版本校验拦住了现有用户的正常启动</td>
+        <td>P3-0 加了 <code class="inl">engines.node</code> 但用户 Node 太旧</td>
+        <td>校验失败必须<b>给出明确版本号与下载地址</b>，不是静默降级；
+          且在 <code class="inl">start-client.cmd</code> 里加检查（:28 附近）而不是只写在 package.json</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s9">
+  <h2><span class="n">9</span>验收清单</h2>
+  <p>可执行断言，不是「看起来对」。每条都指明落点测试文件。</p>
+  <div class="note ok">
+    <b>P0 / P1 / P2 断言已随阶段 A 落地。</b>实际覆盖见
+    <code class="inl">plugins/chat-workbench/services/session/tests/{store,store-atomic,commands}.test.ts</code> 与
+    <code class="inl">plugins/chat-workbench/ui/tests/{session-list-view,buckets,list-prefs-motion,chat-views}.test.ts</code>；
+    P1-6 的「append 与消息数无关」与「旧 .json 迁移」两条在 <code class="inl">store.test.ts</code>。
+    <b>P3 断言（迁移零丢失 / Node 版本校验）未做。</b>下表保留原始清单。
+  </div>
+  <h3>P0</h3>
+  <table>
+    <thead><tr><th style="width:58%">断言</th><th style="width:42%">落点</th></tr></thead>
+    <tbody>
+      <tr><td>append 一条消息 → 收到 <code class="inl">session.updated</code>，且 <code class="inl">updatedAt</code> 等于该消息的 createdAt</td><td class="mono">services/session/tests/commands.test.ts</td></tr>
+      <tr><td>点第 N 行的 ⋯ → 菜单里显示的是<b>第 N 行</b>的标题，不是当前会话的</td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td>↑↓ 在折叠组内移动时，跳过该组内不可见的行</td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td><kbd>↑</kbd><kbd>↓</kbd> 移动焦点<b>不</b>改变 curId</td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td>搜索有输入时，所有分组 <code class="inl">aria-expanded="true"</code></td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td>搜索无结果 → 显示「没有匹配」的退路，<b>不是</b>「还没有会话」</td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td>拖到另一个时间桶 → 出 toast 说明原因，<b>顺序不变</b></td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td>四个会话分别处于 thinking / working / speaking / error → 四种圆点同时正确</td><td class="mono">ui/tests/chat-views.test.ts</td></tr>
+      <tr><td>整份 CSS 里 <code class="inl">grep -c "var(--color-accent)\|var(--color-surface-1)"</code> 为 0</td><td class="mono">构建后产物扫描</td></tr>
+      <tr><td>侧栏宽度拖到 176px → 新建/选中/改名/删除仍可用</td><td class="mono">手工 + @container 断言</td></tr>
+    </tbody>
+  </table>
+  <h3>P1</h3>
+  <table>
+    <thead><tr><th style="width:58%">断言</th><th style="width:42%">落点</th></tr></thead>
+    <tbody>
+      <tr><td>在 <code class="inl">renameSync</code> 前注入异常 → 目录里存在<b>完整</b>旧文件<b>或</b>完整新文件（不能都没有）</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr><td>把 index.json 写成非法 JSON → 重启后 <code class="inl">list()</code> 仍返回全部会话</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr><td>索引里塞一条不存在的 id → 对账后 <code class="inl">list()</code> 不含它</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr><td>在 unlink 与 writeIndex 之间崩溃 → 重启后该会话<b>不再出现</b>（不得复活）</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr><td>两个 store 实例并发写同一会话 → 无 <code class="inl">*.tmp</code> 残留，内容不混合</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr><td><code class="inl">appendMessage({reasoning})</code> → <code class="inl">get()</code> 返回值上该字段有类型</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr><td>连发 100 条消息 → 磁盘临时文件名互不相同</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr style="background:var(--success-soft)"><td><b>（P1-6）</b> 1000 条、平均 2 KB 的会话，
+        连续 append 100 次 → <b>每次 &lt; 5 ms</b>，且第 100 次与第 1 次<b>耗时相同</b>（与消息数无关）</td>
+        <td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr style="background:var(--success-soft)"><td>（P1-6）旧 <code class="inl">.json</code> 会话首次读取后被迁移为
+        <code class="inl">.jsonl</code>，消息条数与内容逐条相等</td><td class="mono">services/session/tests/store.test.ts</td></tr>
+      <tr style="background:var(--success-soft)"><td>（P1-6）拿不到 dataDir 时<b>退出</b>，不创建相对路径目录</td>
+        <td class="mono">services/session/tests/store.test.ts</td></tr>
+    </tbody>
+  </table>
+  <div class="note info">
+    <b>现有 <code class="inl">store.test.ts</code> 已有 12 项</b>，其中「原子写不留 .tmp 文件」
+    「索引坏了 → 退化为空」「并发 append 不会让 updatedAt 倒退且两条都在」三项与 P1 高度相关 ——
+    P1 是<b>扩展</b>它们，不是替换。特别是「索引坏了 → 退化为空」那条，
+    P1-3 之后它的<b>期望值必须改</b>（从「退化为空」改成「从目录恢复」）。
+    这是本次唯一一处需要改既有断言的地方，改的时候要在测试名里写清为什么。
+  </div>
+</section>
+
+<section id="s10">
+  <h2><span class="n">10</span>决策记录与待决</h2>
+  <table>
+    <thead><tr><th style="width:8%">ID</th><th style="width:25%">决策</th><th style="width:39%">理由</th><th style="width:28%">推翻它需要什么</th></tr></thead>
+    <tbody>
+      <tr><td><b>DR-1</b></td><td><b>（已修订）</b>换存储：<b>P3 已触发</b>，按 P1-6 → P3-0 → P3-1 三步走</td>
+        <td>上一版判「不触发」建立在 300 B/条的假设上。§6.1 实测：平均 2 KB 时 1000 条就是 2 MB / 11 ms，
+          平均 20 KB 时 5000 条是 <b>96 MB / 399 ms</b>，且 <code class="inl">get</code> 全量走 SSE。
+          而 ost 的主用途就是带工具调用的长会话</td>
+        <td>几乎推翻不了。要推翻需要拿出 ost 真实会话的消息大小分布，且证明 P95 远低于 2 KB</td></tr>
+      <tr><td><b>DR-2</b></td><td>只用 Node 内置 <code class="inl">node:sqlite</code>，<b>永不 better-sqlite3</b></td>
+        <td>天枢为摆脱 better-sqlite3 的原生模块 / ABI / 跨平台打包问题写了 963 行迁移指南（§6.3）。
+          <code class="inl">node:sqlite</code> 零原生依赖，是同一件事的正确答案</td>
+        <td><b>永不</b>。这是红线</td></tr>
+      <tr><td><b>DR-3</b></td><td><code class="inl">node:sqlite</code> 上线前必须先有 Node 版本约束</td>
+        <td>lib.rs:295 + start-client.cmd:116 说明 Node 来自用户 PATH，仓库<b>无任何版本约束</b>（§6.4）。
+          <code class="inl">node:sqlite</code> 需要 Node ≥ 22.5</td>
+        <td>除非产品决定<b>内嵌</b>一个 Node 运行时并强制使用 —— 那其实就是 P3-0 的一种形态</td></tr>
+      <tr><td><b>DR-4</b></td><td>先 JSONL（P1-6），不一步跳到 SQLite</td>
+        <td><code class="inl">node:sqlite</code> 今天还上不了（DR-3），而 O(M) 重写是当前就在流血的问题。
+          JSONL 20 行、零依赖、可回退，且它的输出就是 P3-1 迁移脚本的输入</td>
+        <td>若 P3-0 提前做完，可跳过 P1-6 直接上 SQLite</td></tr>
+      <tr><td><b>DR-5</b></td><td>分组键用时间桶，不引入 workspace</td>
+        <td><code class="inl">SessionMeta</code> 没有该字段；时间桶零成本且解决真实痛点</td>
+        <td>用户开始按项目找会话；届时 <code class="inl">bucketOf()</code> 是唯一改动点</td></tr>
+      <tr><td><b>DR-6</b></td><td>置顶/归档<b>不</b>改 <code class="inl">updatedAt</code></td>
+        <td>抄天枢 <code class="inl">update()</code> 的 <code class="inl">touchKeys</code> 规则。
+          操作分类 ≠ 操作活动时间</td>
+        <td>几乎没有。它是 P0-7 分桶正确性的前提</td></tr>
+      <tr><td><b>DR-7</b></td><td>未读存 <code class="inl">sessionStorage</code>，不用 localStorage</td>
+        <td>localStorage 跨窗口，两个窗口会互相清对方未读（天枢现状即如此）</td>
+        <td>要做跨窗口/跨端未读 → 那是服务端 read receipt，属另一个量级</td></tr>
+      <tr><td><b>DR-8</b></td><td>会话级 motion 只在 ① 里算</td>
+        <td>三个 iframe 各算一份 = 资源 ×3，而只有侧栏需要</td>
+        <td>② 或 ③ 也开始需要跨会话状态</td></tr>
+      <tr><td><b>DR-9</b></td><td>P1-1~5 只算「正确性」，P1-6 才算「性能」</td>
+        <td>混为一谈会让 §6.7 的阈值失真，也会让人以为上了 P1 就解决了长会话（其实 get/cache 两条还在，R9）</td>
+        <td>不要</td></tr>
+    </tbody>
+  </table>
+
+  <h3>待决问题（不猜，列出来）</h3>
+  <table>
+    <thead><tr><th style="width:7%">Q</th><th style="width:37%">问题</th><th style="width:31%">为什么现在答不了</th><th style="width:25%">谁来答</th></tr></thead>
+    <tbody>
+      <tr><td><b>Q1</b></td>
+        <td>「进程内队列」是补上还是把注释删掉？<br>
+          P3 详细计划 L245 写「命令串行执行（进程内队列）」，<b>但代码里没有这个队列</b>；
+          实际靠 Node 单线程 + 全同步 <code class="inl">writeFileSync</code>/<code class="inl">renameSync</code> 兜着</td>
+        <td>取决于<b>是否可能有两个 Core 实例共享同一个 dataDir</b>。
+          不可能 → 补队列是纯开销；可能 → P1-4 的 <code class="inl">.tmp</code> 唯一化只是止血</td>
+        <td>Core 侧：dataDir 是按端口隔离还是全局共享？</td></tr>
+      <tr><td><b>Q2</b></td>
+        <td><code class="inl">session.get</code> 要不要做游标分页？<br>
+          现在是整个 <code class="inl">messages</code> 数组进 SSE（§6.2 第三点）</td>
+        <td>要改 <code class="inl">session.get</code> 的<b>线格式</b>，而 DR 约束说「协议契约一字不改」。
+          分页必然要改它 —— 所以这不是「不改」，而是「什么时候改」</td>
+        <td>P3-1 立项时；若长会话问题提前爆发则提前</td></tr>
+      <tr><td><b>Q3</b></td>
+        <td><code class="inl">store.cache</code> 的淘汰策略？</td>
+        <td>无界 Map 现在没造成问题（3 个会话），但 P1-6 之后它会变成<b>唯一</b>的长会话内存问题</td>
+        <td>P3-1 设计时；或先加一个朴素的 LRU 上限</td></tr>
+      <tr><td><b>Q4</b></td>
+        <td><code class="inl">session.clear</code> 要不要进度反馈？<br>
+          现在是一次同步循环删 N 个并<b>同步 publish N 条 <code class="inl">session.deleted</code></b>（index.ts:68-70）</td>
+        <td>N 到底能有多大没人测过。索引 1 MB ≈ 5000 会话时是一次 5000 条的同步广播</td>
+        <td>等 P1-3 的对账上线后，N 就是可测的真实数字</td></tr>
+      <tr><td><b>Q5</b></td>
+        <td>预览行要不要默认开？</td>
+        <td>默认开 = 一眼认出会话；默认关 = 侧栏能塞更多行（240px 下差 3~4 行）</td>
+        <td><b>P0-13 做成可切换就是了</b>，别在计划里替用户定</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>这份计划不排期，只排序。</b>P0 的 17 项里有 3 项（重命名对象错误、键盘不可达、令牌不存在）是<b>今天就在报错</b>的，
+    加起来不到半天。P1-1~5 是数据安全问题。P1-6 是<b>性能止血</b> ——
+    它不需要等任何前置，是当前投入产出比最高的一项。<b>真正需要排期的只有 P3-0</b>：
+    锁 Node 运行时是 <code class="inl">node:sqlite</code> 的硬前置，而它是一条独立的、不依赖存储的工作线。
+  </div>
+</section>
+</div>
+
+<div class="foot">
+  Osteosome · 对话工作台优化计划 · 2026-10-07 修订 · 现状依据
+  <code class="inl">plugins/chat-workbench/services/session/src/{store,session,index}.ts</code>、
+  <code class="inl">plugins/chat-workbench/ui/src/{state,views}/</code>、
+  <code class="inl">shared/src/events.ts</code>、<code class="inl">core/src/service-manager/</code>、
+  <code class="inl">core/src/config/paths.ts</code>、<code class="inl">sdk/ui/src/tokens.css</code>、
+  <code class="inl">src-tauri/src/lib.rs</code>、<code class="inl">start-client.cmd</code> ·
+  形态见 ./对话工作台-会话列表重设计.html · 原始契约见
+  <code class="inl">docs/开发进度/P3-详细计划.md</code> 与 <code class="inl">docs/开发进度/P4b-对话工作台-交接.md</code> ·
+  SQLite 驱动的历史教训见 天枢 <code class="inl">docs/跨平台客户端与Node-SQLite迁移开发指南.md</code>
+</div>
+</div>
+
+<div class="toast" id="toast" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;
+  background:var(--color-text);color:var(--color-bg);font-size:var(--text-xs);padding:7px 14px;
+  border-radius:var(--r-full);box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;
+  transition:opacity var(--duration-base)"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ═══════════ 主题 ═══════════ */
+  var root = document.documentElement;
+  document.getElementById('theme').addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ═══════════ 锚点高亮 ═══════════ */
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var sections = tocLinks.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncToc() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < sections.length; i++) { if (sections[i] && sections[i].offsetTop <= y) idx = i; }
+    tocLinks.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', syncToc, { passive: true });
+  syncToc();
+
+  function $(sel, r) { return (r || document).querySelector(sel); }
+  function $$(sel, r) { return Array.prototype.slice.call((r || document).querySelectorAll(sel)); }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     §3 工单看板筛选：阶段 × 性质
+     ══════════════════════════════════════════════════════════════════════════ */
+  var board = document.getElementById('board');
+  var rows = $$('tbody tr', board);
+  var emptyBox = document.getElementById('boardEmpty');
+  var filters = { phase: 'P0', kind: '' };
+
+  function applyBoard() {
+    var shown = 0;
+    rows.forEach(function (tr) {
+      var p = tr.getAttribute('data-phase') || '';
+      var k = tr.getAttribute('data-kind') || '';
+      var ok = (!filters.phase || p === filters.phase) && (!filters.kind || k.indexOf(filters.kind) >= 0);
+      tr.hidden = !ok;
+      if (ok) shown++;
+    });
+    emptyBox.style.display = shown ? 'none' : 'block';
+  }
+  $$('.seg', board).forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var f = btn.getAttribute('data-f');
+      filters[f] = (filters[f] === btn.getAttribute('data-v')) ? '' : btn.getAttribute('data-v');
+      $$('.seg[data-f="' + f + '"]', board).forEach(function (b) {
+        b.setAttribute('aria-pressed', String(filters[f] === b.getAttribute('data-v')));
+      });
+      applyBoard();
+    });
+  });
+  applyBoard();
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     §6.7 阈值仪表 —— 按 §6.1 实测重新校准
+
+     上一版按「一条消息 300 B」算，实测错了三个数量级，且把权重也拍错了：
+     瓶颈是**单会话文件**，不是索引（§6.2 第一点，场景 D 是证据）。
+
+     现在的假设：
+       · 一条 Message       ≈ S 字节（滑块可调 300 B ~ 40 KB）
+       · 一条 SessionMeta   ≈ 200 字节（2 空格缩进 pretty print）
+       · 会话文件固定开销   ≈ 200 字节（meta 本体）
+
+     阈值（重新校准后的）：
+       主项 会话文件   2 MB   —— 它决定 append 的重写量，也决定 get 要走多少 SSE
+       次项 总写量     4 MB
+       次项 index     1 MB   —— 实测到 2.7 MB 仍只有 16.9 ms，所以这条最晚触发
+
+     ★ 跨文档一致性：下面 (13, 1000, 2000) 三个默认值 = §6.1 的 B 组实测行
+       （单会话 2.0 MB / append 11.2 ms）。改默认值就等于改那张表的读数。
+     ══════════════════════════════════════════════════════════════════════════ */
+  var META_B = 200, FILE_FIXED_B = 200;
+  var T_FILE = 2 * 1024 * 1024, T_WRITE = 4 * 1024 * 1024, T_INDEX = 1 * 1024 * 1024;
+
+  var inN = document.getElementById('inN');
+  var inM = document.getElementById('inM');
+  var inS = document.getElementById('inS');
+
+  function fmt(b) {
+    if (b >= 1024 * 1024) return (b / 1024 / 1024).toFixed(2) + ' MB';
+    if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+    return Math.round(b) + ' B';
+  }
+  function paint(id, value, limit) {
+    var box = document.getElementById(id);
+    var ratio = Math.min(1, value / limit);
+    document.getElementById(id + 'v').textContent = fmt(value);
+    document.getElementById(id + 'f').style.width = (ratio * 100).toFixed(1) + '%';
+    box.classList.toggle('gauge--hot', ratio >= 1);
+    document.getElementById(id + 'm').textContent = ratio >= 1
+      ? '已越阈值 —— ' + (value / limit).toFixed(1) + '×'
+      : '占阈值 ' + Math.round(ratio * 100) + '%';
+    return ratio >= 1;
+  }
+
+  function recompute() {
+    var N = Number(inN.value);
+    var M = Number(inM.value);
+    var S = Number(inS.value);
+    document.getElementById('vN').textContent = N.toLocaleString();
+    document.getElementById('vM').textContent = M.toLocaleString();
+    document.getElementById('vS').textContent = fmt(S);
+
+    var fileBytes = FILE_FIXED_B + M * S;
+    var indexBytes = N * META_B;
+    var writeBytes = fileBytes + indexBytes;
+
+    var h1 = paint('g1', fileBytes, T_FILE);
+    var h2 = paint('g2', writeBytes, T_WRITE);
+    var h3 = paint('g3', indexBytes, T_INDEX);
+
+    var verdict = document.getElementById('verdict');
+    var hits = [];
+    if (h1) hits.push('单会话文件体积');
+    if (h2) hits.push('每次 append 的总写量');
+    if (h3) hits.push('index.json 体积');
+    verdict.className = 'note' + (hits.length ? ' bad' : ' ok');
+    verdict.style.marginBottom = '0';
+    verdict.innerHTML = hits.length
+      ? '<b>已越阈值：' + hits.join('、') + '。</b>append 是 O(M) 的全量重写，'
+        + '长会话会在这里先崩。→ 上 <b>P1-6</b>（会话文件转 JSONL，append 变 O(1)，零新依赖）；'
+        + 'index 那条若单独越阈，优先做 <b>P1-1~5</b>。'
+      : '<b>三条阈值都没到。</b>但注意：这<b>不等于</b>「可以不管」——'
+        + '当前实测只有 3 个会话 / 4 条消息，而 ost 的主用途是带工具调用的长 agent 会话，'
+        + '把上面的「单会话消息数」拉到 1000 或「平均消息字节」拉到 20000 再看一次。';
+  }
+  inN.addEventListener('input', recompute);
+  inM.addEventListener('input', recompute);
+  inS.addEventListener('input', recompute);
+  recompute();
+})();
+</script>
+
+</body>
+</html>
