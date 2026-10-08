@@ -219,7 +219,7 @@
     <li><b>P1 存储</b>：D1–D5 修复 + <b>P1-6 会话文件转 JSONL</b>（append 从 O(M) 变 O(1)）。落点 <code class="inl">services/session/src/store.ts</code>。</li>
     <li><b>P2 字段/命令</b>：<code class="inl">session.pin</code> / <code class="inl">session.archive</code> / <code class="inl">lastMessage</code> / <code class="inl">parentId</code>（子会话树）/ <code class="inl">session.export</code>（Markdown 下载）。</li>
   </ul>
-  <b>P3 部分落地</b>：<b>P3-0（锁 Node 运行时）已落地</b>（根 <code class="inl">engines.node "&gt;=22.5.0"</code> + <code class="inl">.node-version</code> + <code class="inl">start-client.cmd</code> 启动前校验）；<b>P3-1（<code class="inl">node:sqlite</code>）仍待办</b>；P1-6 的 JSONL 输出即 P3-1 的迁移输入。
+  <b>P3 已落地</b>：<b>P3-0（锁 Node 运行时）</b>（根 <code class="inl">engines.node "&gt;=22.13.0"</code> + <code class="inl">.node-version</code> + <code class="inl">start-client.cmd</code> 启动前校验）；<b>P3-1（<code class="inl">node:sqlite</code>）已完成</b>（阶段 F M0–M4：两张表 + 迁移器 + 游标分页 + UI 加载更多）。<b>硬切口径：不迁移旧 JSONL</b>。
   <br>验证：<code class="inl">pnpm -r run typecheck</code> 全绿 · <code class="inl">pnpm -r run test</code> 987 · <code class="inl">node scripts/smoke.mjs</code> PASS · <code class="inl">node scripts/pack-plugin.mjs</code> 4 插件成功。
 </div>
 
@@ -362,7 +362,7 @@ P3  存储形态升级    SQLite     已触发  ← 上一版写「不排期」�
         <b>视 P0 落地后的实际缺口决定，不必全做。</b></div>
     </div>
     <div class="ph ph--p3">
-      <div class="ph__id">P3</div><div class="ph__t">存储升级 <span class="tag part">P3-0 已做</span> <span class="tag bad">P3-1 未做</span></div>
+      <div class="ph__id">P3</div><div class="ph__t">存储升级 <span class="tag have">P3-0/P3-1 完成</span></div>
       <div class="ph__g"><b>已触发</b>（§6.1 实测）。三步：P1-6 止血 → P3-0 锁 Node 运行时 → P3-1 上
         <code class="inl">node:sqlite</code>。<b>不装 better-sqlite3</b>（§6.3）。</div>
     </div>
@@ -642,9 +642,8 @@ P3  存储形态升级    SQLite     已触发  ← 上一版写「不排期」�
   <h2><span class="n">6</span>P3 · 存储形态升级</h2>
 
   <div class="note ok">
-    <b>状态（2026-10-07）：三步里 P1-6 与 P3-0 已落地，P3-1 未做。</b>会话文件已转 JSONL，<code class="inl">appendMessage</code> 走
-    <code class="inl">appendFileSync</code>（O(M)→O(1)）；Node 运行时已锁（<code class="inl">engines.node &gt;= 22.5.0</code> + <code class="inl">.node-version</code> + 启动前校验）；
-    <b>P3-1（<code class="inl">node:sqlite</code>）尚未开始</b>。下面 §6.1~§6.7 保留的是当时实测与决策依据，读时以本行为准。
+    <b>状态（2026-10-08）：三步全部落地。</b>P1-6 会话文件转 JSONL（<code class="inl">appendFileSync</code>）；Node 运行时已锁（<code class="inl">engines.node &gt;= 22.13.0</code> + <code class="inl">.node-version</code> + 启动前校验）；
+    <b>P3-1（<code class="inl">node:sqlite</code>）已完成</b>（阶段 F M0–M4：两张表 + 迁移器 + 游标分页 + UI 加载更多；<b>硬切，不迁移旧 JSONL</b>）。下面 §6.1~§6.7 保留的是当时的实测与决策依据。
   </div>
 
   <div class="note bad">
@@ -1125,9 +1124,11 @@ P3-1  store.ts → node:sqlite          ← 真正的目标形态
       <tr><td><b>Q2</b></td>
         <td><code class="inl">session.get</code> 要不要做游标分页？<br>
           现在是整个 <code class="inl">messages</code> 数组进 SSE（§6.2 第三点）</td>
-        <td>要改 <code class="inl">session.get</code> 的<b>线格式</b>，而 DR 约束说「协议契约一字不改」。
-          分页必然要改它 —— 所以这不是「不改」，而是「什么时候改」</td>
-        <td>P3-1 立项时；若长会话问题提前爆发则提前</td></tr>
+        <td><b>已定（阶段 F / P3-1）：做，且硬切</b> ——
+          <code class="inl">session.get</code> <b>改为恒分页</b>：<code class="inl">limit</code>（缺省 50）/ <code class="inl">before</code>，
+          结果恒带 <code class="inl">page{hasMore,nextCursor,total}</code>；<b>不再保留「不传 limit 返回全量」的旧行为</b>。
+          细化见 <code class="inl">docs/开发进度/P3-对话存储升级-详细计划.html</code> §4.4</td>
+        <td>P3-1 已立项（阶段 F）</td></tr>
       <tr><td><b>Q3</b></td>
         <td><code class="inl">store.cache</code> 的淘汰策略？</td>
         <td>无界 Map 现在没造成问题（3 个会话），但 P1-6 之后它会变成<b>唯一</b>的长会话内存问题</td>

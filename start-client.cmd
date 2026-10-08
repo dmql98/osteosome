@@ -33,21 +33,22 @@ if errorlevel 1 (
 )
 
 rem -------------------------------------------------------------------------
-rem  Node runtime check (P3-0). The repo pins no runtime, and node:sqlite
-rem  (the P3-1 storage path) needs Node >= 22.5. Fail fast right here with the
-rem  exact detected version and a download link, instead of letting a stale
-rem  Node blow up later inside a service process nobody is watching.
+rem  Node runtime check (P3-0 / P3-1). The repo pins no runtime, and node:sqlite
+rem  (the P3-1 storage path) needs Node >= 22.13.0 -- v22.5 introduced the module
+rem  but kept it behind --experimental-sqlite until v22.13.0 / v23.4.0. Fail fast
+rem  right here with the exact detected version and a download link, instead of
+rem  letting a stale Node blow up later inside a service process nobody watches.
 rem  Keep this file ASCII-only (see header).
 rem -------------------------------------------------------------------------
 where node >nul 2>nul
 if errorlevel 1 (
   echo [client] ERROR: node was not found in PATH.
-  echo [client] Install Node.js 22.5+ from https://nodejs.org/en/download then rerun.
+  echo [client] Install Node.js 22.13+ from https://nodejs.org/en/download then rerun.
   pause
   exit /b 1
 )
 
-powershell.exe -NoProfile -Command "try { $v = [Version]((node --version).TrimStart('v')); if ($v -lt [Version]'22.5.0') { Write-Host ('[client] ERROR: Node ' + $v + ' is too old; need >= 22.5.0 for node:sqlite. Download: https://nodejs.org/en/download'); exit 1 } } catch { Write-Host '[client] ERROR: could not parse the Node version.'; exit 1 }"
+powershell.exe -NoProfile -Command "try { $v = [Version]((node --version).TrimStart('v')); if ($v -lt [Version]'22.13.0') { Write-Host ('[client] ERROR: Node ' + $v + ' is too old; need >= 22.13.0 for node:sqlite. Download: https://nodejs.org/en/download'); exit 1 } } catch { Write-Host '[client] ERROR: could not parse the Node version.'; exit 1 }"
 if errorlevel 1 (
   pause
   exit /b 1

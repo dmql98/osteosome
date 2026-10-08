@@ -526,7 +526,7 @@ userData/plugin/&lt;plugin-id&gt;/     <span class="free">← 同样完全自由
       <tr><td>Core 版本</td><td class="mono">需要 Core ≥ 0.2</td><td class="mono">coreCompatibility</td><td><span class="tag have">已有</span></td></tr>
       <tr><td>另一个插件</td><td class="mono">需要 models 提供 provider</td><td class="mono">dependencies[]</td><td><span class="tag have">已有</span></td></tr>
       <tr style="background:var(--warning-soft)"><td><b>用户机器上的程序</b></td><td class="mono">需要 git / codegraph / 某个 CLI</td><td class="mono"><b>requires</b>（新）</td><td><span class="tag todo">缺</span></td></tr>
-      <tr style="background:var(--warning-soft)"><td><b>Node 版本</b></td><td class="mono">插件要用 node:sqlite<br>（需要 Node ≥ 22.5）</td><td class="mono"><b>requires</b>（新）</td><td><span class="tag todo">缺</span></td></tr>
+      <tr style="background:var(--warning-soft)"><td><b>Node 版本</b></td><td class="mono">插件要用 node:sqlite<br>（需要 Node ≥ 22.13）</td><td class="mono"><b>requires</b>（新）</td><td><span class="tag todo">缺</span></td></tr>
       <tr><td>Node 侧 npm 包 / 原生模块</td><td class="mono">better-sqlite3 …</td><td><b>不该在 plugin.json</b></td><td>见下</td></tr>
     </tbody>
   </table>
@@ -554,7 +554,7 @@ userData/plugin/&lt;plugin-id&gt;/     <span class="free">← 同样完全自由
   <h3>形状</h3>
   <div class="tree">// plugins/&lt;id&gt;/plugin.json
 "requires": [
-  { "kind": "node", "version": "&gt;=22.5" },
+  { "kind": "node", "version": "&gt;=22.13" },
   { "kind": "executable", "name": "git", "why": "读写仓库快照" }
 ]
 <span class="dim">// 不写 = 不限（与 coreCompatibility / dataReadableBy 同一条缺省纪律）</span></div>
@@ -1171,7 +1171,7 @@ const RequiresSchema = z.discriminatedUnion('kind', [
   /* ══ §7 requires 体检三态 ══ */
   /* 每行的 [扫盘期, doctor] 两档 —— 演示「detected 能升级成 verified，missing 与 unknown 不动」 */
   var REQ = [
-    { what: '{ kind:"node", version:">=22.5" }', why: '插件用了 node:sqlite',
+    { what: '{ kind:"node", version:">=22.13" }', why: '插件用了 node:sqlite',
       s: ['detected', 'verified'], note: '扫盘期字符串比较就够；doctor 读 process.versions 复核一次。' },
     { what: '{ kind:"executable", name:"git" }', why: '读写仓库快照',
       s: ['detected', 'verified'], note: 'PATH 扫描判存在（零成本）；doctor 真跑 --version 才给得起 verified。' },

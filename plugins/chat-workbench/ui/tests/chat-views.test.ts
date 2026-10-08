@@ -765,3 +765,76 @@ describe('chat-timeline（②）· 工具审批卡', () => {
     expect(timeline.find('[data-testid="timeline-approval"]').exists()).toBe(false)
   })
 })
+
+/**
+ * 分页加载（P3-1 M3/M4）—— 首屏带 limit，「加载更早」带 before prepend，去重，切会话重置。
+ */
+describe('chat-timeline（②）· 分页加载', () => {
+  const page = (messages: unknown[], hasMore: boolean, nextCursor: string | null) => ({
+    session: { meta: { id: 's1' }, messages },
+    page: { hasMore, nextCursor, total: messages.length },
+  })
+
+  it('首屏 session.get 带 limit=50', async () => {
+    const { fetchMock } = await mountViews('s1')
+    const gets = commandBodies(fetchMock).filter((b) => b.topic === 'session.get')
+    expect(gets.length).toBeGreaterThan(0)
+    expect((gets.at(-1)!.payload as { limit?: number }).limit).toBe(50)
+  })
+
+  it('page.hasMore → 出现「加载更早」；点击发 session.get 带 before', async () => {
+    const { timeline, fetchMock } = await mountViews('s1')
+    emit('session.get.result', { requestId: 'g1', ...page([{ id: 'm2', role: 'user', content: '最新' }], true, '7') })
+    await timeline.vm.$nextTick()
+    const btn = timeline.find('[data-testid="timeline-load-more"]')
+    expect(btn.exists()).toBe(true)
+
+    await btn.trigger('click')
+    await flushPromises()
+    const gets = commandBodies(fetchMock).filter((b) => b.topic === 'session.get')
+    expect((gets.at(-1)!.payload as { before?: string }).before).toBe('7')
+  })
+
+  it('加载更早 → prepend 且按 id 去重', async () => {
+    const { timeline, fetchMock } = await mountViews('s1')
+    // 首屏：m2,m3，还有更早
+    emit('session.get.result', { requestId: 'g1', ...page([
+      { id: 'm2', role: 'user', content: '第二' },
+      { id: 'm3', role: 'assistant', content: '第三' },
+    ], true, '2') })
+    await timeline.vm.$nextTick()
+
+    await timeline.get('[data-testid="timeline-load-more"]').trigger('click')
+    await flushPromises()
+    const rid = (commandBodies(fetchMock).filter((b) => b.topic === 'session.get').at(-1)!.payload as { requestId: string }).requestId
+    // 更早一页：m1 全新，m2 与首屏重复（应被去重）
+    emit('session.get.result', {
+      requestId: rid,
+      ...page([
+        { id: 'm1', role: 'user', content: '第一' },
+        { id: 'm2', role: 'user', content: '第二' },
+      ], false, null),
+    })
+    await timeline.vm.$nextTick()
+
+    const text = timeline.get('[data-testid="timeline-messages"]').text()
+    expect(text.indexOf('第一')).toBeGreaterThanOrEqual(0)
+    expect(text.indexOf('第一')).toBeLessThan(text.indexOf('第二'))
+    // m2 只出现一次
+    expect(text.split('第二').length - 1).toBe(1)
+    // 到底 → 按钮消失
+    expect(timeline.find('[data-testid="timeline-load-more"]').exists()).toBe(false)
+  })
+
+  it('切会话 → 分页态重置（按钮消失）', async () => {
+    const { timeline } = await mountViews('s1')
+    emit('session.get.result', { requestId: 'g1', ...page([{ id: 'm1', role: 'user', content: 'x' }], true, '5') })
+    await timeline.vm.$nextTick()
+    expect(timeline.find('[data-testid="timeline-load-more"]').exists()).toBe(true)
+
+    setCurrentSessionId('s2')
+    await flushPromises()
+    await timeline.vm.$nextTick()
+    expect(timeline.find('[data-testid="timeline-load-more"]').exists()).toBe(false)
+  })
+})

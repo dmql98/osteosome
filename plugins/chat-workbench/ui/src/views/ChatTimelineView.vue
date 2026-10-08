@@ -7,7 +7,16 @@
       <span class="chat-timeline__sp" />
       <span class="chat-timeline__count">{{ rows.length }} 条</span>
     </div>
-    <div class="chat-timeline__messages" data-testid="timeline-messages">
+    <div ref="messagesEl" class="chat-timeline__messages" data-testid="timeline-messages">
+      <button
+        v-if="hasMore"
+        class="chat-timeline__more"
+        data-testid="timeline-load-more"
+        :disabled="loadingMore"
+        @click="onLoadMore"
+      >
+        {{ loadingMore ? '加载中…' : '加载更早的消息' }}
+      </button>
       <EmptyState
         v-if="!rows.length"
         icon="💬"
@@ -124,13 +133,30 @@
  * 真名是 `--color-primary` 与 `--color-surface`。token 名写错 CSS 与 TS 都不报错，
  * 症状是「用户气泡没有底色、流式尾光标是透明的」——这正是 tokens-parity 那类测试想防的事。
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Badge, Button, Card, EmptyState, Spinner } from '@osteosome/ui'
 import { sse, useCommand } from '@osteosome/core-client'
 import { currentSessionId, useRunState, useSessionState, type ChatRow } from '../state'
 
 const sessions = useSessionState()
+const { hasMore, loadingMore, loadMore } = sessions
 const curId = currentSessionId()
+
+/** 消息滚动容器 —— 「加载更早」prepend 后用它做滚动锚定 */
+const messagesEl = ref<HTMLElement | null>(null)
+
+/**
+ * 加载更早一页并把视口锚住：记录 prepend 前的 `scrollHeight`，DOM 更新后按增量下移 `scrollTop`，
+ * 否则用户正在看的那条会「跳走」。
+ */
+async function onLoadMore(): Promise<void> {
+  const el = messagesEl.value
+  const before = el?.scrollHeight ?? 0
+  const top = el?.scrollTop ?? 0
+  await loadMore()
+  await nextTick()
+  if (el) el.scrollTop = top + (el.scrollHeight - before)
+}
 
 const run = useRunState({
   curId: () => curId.value,
@@ -254,6 +280,13 @@ onBeforeUnmount(() => {
 .chat-timeline__messages::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); }
 .chat-timeline__messages::-webkit-scrollbar-track { background: transparent; }
 .chat-timeline__messages > :deep(.ui-empty-state) { flex: 1; align-content: center; }
+.chat-timeline__more {
+  align-self: center; flex: none; margin-bottom: var(--space-2);
+  border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-muted);
+  border-radius: var(--radius-full); padding: 3px 12px; font: inherit; font-size: var(--text-xs); cursor: pointer;
+}
+.chat-timeline__more:disabled { opacity: .6; cursor: default; }
+.chat-timeline__more:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
 
 .chat-timeline__bubble {
   max-width: min(760px, 88%);

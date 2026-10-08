@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>P3 · 对话存储升级（阶段 F）· 详细计划 · OST</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --surface:#fff; --surface-2:#eef0f4; --surface-3:#e3e7ed;
+    --border:#d5dae1; --border-strong:#b6bec9; --text:#1b2027; --muted:#5c6673;
+    --primary:#2f6feb; --primary-soft:#e7effd; --topbar:#0e4c8a; --topbar-text:#f2f7ff;
+    --danger:#cf222e; --danger-soft:#fdecee; --success:#1a7f37; --success-soft:#e7f6ec;
+    --warning:#9a6700; --warning-soft:#fdf6e3; --bus:#7c4dff; --bus-soft:#efe9ff;
+    --proc:#c2410c; --proc-soft:#fdeee2;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --xs:12px; --sm:13px; --md:14px; --lg:16px;
+    --shadow-sm:0 1px 2px rgba(16,22,26,.08); --shadow-md:0 4px 14px rgba(16,22,26,.14);
+    --color-surface:#fff; --color-surface-2:#eef0f4; --color-border:#d5dae1;
+    --color-text:#1b2027; --color-text-muted:#5c6673;
+    --color-primary:#2f6feb; --color-primary-soft:#e7effd;
+    --color-danger:#cf222e; --color-danger-soft:#fdecee;
+    --color-success:#1a7f37; --color-success-soft:#e7f6ec;
+    --color-warning:#9a6700; --color-proc:#c2410c;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px;
+    --radius-sm:4px; --radius-md:6px; --radius-lg:10px; --radius-full:999px;
+    --text-xs:12px; --text-sm:13px; --text-md:14px; --text-lg:16px;
+    --font-mono:var(--mono); --font-sans:var(--sans);
+  }
+  :root[data-theme="dark"] {
+    --bg:#14171c; --surface:#1c2027; --surface-2:#232832; --surface-3:#2b313c;
+    --border:#333a45; --border-strong:#454e5c; --text:#e6e9ee; --muted:#9aa4b2;
+    --primary:#4f8cff; --primary-soft:#1d2b45; --topbar:#0b3f74; --topbar-text:#eaf2ff;
+    --danger:#f85149; --danger-soft:#3a1d20; --success:#3fb950; --success-soft:#16301f;
+    --warning:#d29922; --warning-soft:#33280f; --bus:#a683ff; --bus-soft:#251d3d;
+    --proc:#fb923c; --proc-soft:#3a2314;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --color-surface:#1c2027; --color-surface-2:#232832; --color-border:#333a45;
+    --color-text:#e6e9ee; --color-text-muted:#9aa4b2;
+    --color-primary:#4f8cff; --color-primary-soft:#1d2b45;
+    --color-danger:#f85149; --color-danger-soft:#3a1d20;
+    --color-success:#3fb950; --color-success-soft:#16301f; --color-warning:#d29922;
+    --color-proc:#fb923c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: var(--md)/1.7 var(--sans); }
+  code, pre, .mono { font-family: var(--mono); }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 var(--s5) var(--s6); }
+
+  header.bar { position:sticky; top:0; z-index:30; background:var(--topbar); color:var(--topbar-text); }
+  header.bar .wrap { display:flex; align-items:center; gap:var(--s3); padding:10px 0; }
+  header.bar h1 { font-size:var(--lg); margin:0; font-weight:600; }
+  header.bar .sp { flex:1; }
+  header.bar .sub { font-size:var(--xs); opacity:.75; }
+  .btn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-md); padding:6px 12px;
+    font:inherit; font-size:var(--sm); cursor:pointer; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:rgba(255,255,255,.14); }
+
+  nav.toc { position:sticky; top:41px; z-index:29; background:var(--surface); border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow-sm); }
+  nav.toc .wrap { display:flex; gap:var(--s2); overflow-x:auto; padding:6px var(--s5); }
+  nav.toc a { font-size:var(--xs); color:var(--muted); text-decoration:none; padding:3px 8px;
+    border-radius:var(--r-full); white-space:nowrap; }
+  nav.toc a:hover { background:var(--surface-2); color:var(--primary); }
+  nav.toc a.on { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+
+  section { margin:var(--s6) 0 0; scroll-margin-top:88px; }
+  h2 { font-size:var(--lg); margin:0 0 var(--s3); display:flex; align-items:center; gap:var(--s2);
+    border-bottom:1px solid var(--border); padding-bottom:var(--s2); }
+  h2 .n { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px;
+    padding:0 6px; background:var(--primary); color:#fff; border-radius:var(--r-full); font-size:var(--xs); font-weight:700; }
+  h3 { font-size:var(--md); margin:var(--s5) 0 var(--s2); color:var(--muted); font-weight:600; }
+  h4 { font-size:var(--sm); margin:var(--s4) 0 var(--s2); font-weight:700; }
+  p { margin:0 0 var(--s3); }
+  ul,ol { margin:0 0 var(--s3); padding-left:1.25em; }
+  li { margin:4px 0; }
+  table { width:100%; border-collapse:collapse; margin:var(--s3) 0 var(--s4); font-size:var(--sm); }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:var(--xs); }
+  tbody tr:hover { background:var(--surface); }
+  td.mono, .mono { font-size:12px; }
+  td.nowrap { white-space:nowrap; }
+  pre { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+    padding:var(--s3); font-size:12.5px; line-height:1.65; overflow-x:auto; margin:0 0 var(--s4); }
+  code.inl, .inl { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:1px 5px; font-size:12px; }
+
+  .lead { background:var(--primary-soft); border-left:3px solid var(--primary); padding:var(--s3) var(--s4);
+    border-radius:var(--r-md); margin:0 0 var(--s4); font-size:var(--sm); }
+  .note { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--warning);
+    padding:var(--s3) var(--s4); border-radius:var(--r-md); margin:var(--s3) 0; font-size:var(--sm); }
+  .note.bad { border-left-color:var(--danger); background:var(--danger-soft); }
+  .note.ok { border-left-color:var(--success); background:var(--success-soft); }
+  .note.info { border-left-color:var(--primary); background:var(--primary-soft); }
+  .note.bus { border-left-color:var(--bus); background:var(--bus-soft); }
+
+  .tag { display:inline-block; font-size:11px; font-weight:700; border-radius:var(--r-sm); padding:1px 6px;
+    color:#fff; background:var(--muted); white-space:nowrap; vertical-align:middle; }
+  .tag.have { background:var(--success); } .tag.todo { background:var(--danger); }
+  .tag.part { background:var(--warning); } .tag.spec { background:var(--primary); }
+  .tag.new { background:var(--bus); } .tag.fix { background:var(--proc); }
+  .tag.crit { background:var(--danger); }
+
+  .board { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s3); box-shadow:var(--shadow-sm); }
+  .msgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:var(--s2); margin:var(--s3) 0; }
+  .ms { border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s2) var(--s3); background:var(--surface);
+    font-size:var(--sm); }
+  .ms .t { font-weight:700; font-size:12.5px; }
+  .ms .d { color:var(--muted); font-size:11.5px; }
+  .ms .p { font-family:var(--mono); font-size:11px; color:var(--primary); }
+  .ms.crit { border-color:var(--danger); }
+  .ms.crit .p { color:var(--danger); }
+
+  .foot { margin:var(--s6) 0 var(--s5); padding-top:var(--s3); border-top:1px solid var(--border);
+    font-size:var(--xs); color:var(--muted); }
+  @media print { nav.toc { display:none; } header.bar { position:static; } }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <h1>P3 · 对话存储升级（阶段 F）· 详细计划</h1>
+    <span class="sp"></span>
+    <span class="sub">JSONL → <code>node:sqlite</code> · 硬切分页 · 设计见 <code>docs/插件demo/chat-workbench/对话工作台-优化计划.html</code> §6</span>
+    <button class="btn ghost" id="theme">切换深色</button>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#s0">0 目标与范围</a>
+    <a href="#s1">1 前置与基线</a>
+    <a href="#s2">2 里程碑</a>
+    <a href="#s3">3 工作分解</a>
+    <a href="#s4">4 固定设计</a>
+    <a href="#s5">5 测试矩阵</a>
+    <a href="#s6">6 验收标准</a>
+    <a href="#s7">7 风险台账</a>
+    <a href="#s8">8 顺序与回滚</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<div class="lead">
+  <b>本计划只做一件事：把 chat-workbench 的会话存储从 JSONL 换成 Node 内置 <code class="inl">node:sqlite</code>，
+  并把「整份 messages 走 SSE」硬切成按游标分页</b>（含对话时间线 UI 的「加载更早」）。
+  <br>
+  <b>它解决 JSONL 解决不了的三件</b>：① <code class="inl">rename</code> 全量重写（→ 单列 UPDATE）；
+  ② <code class="inl">cache</code> 无界（→ 不再整会话常驻内存）；③ <code class="inl">session.get</code> 全量 SSE（→ 按页取）。
+  <br>
+  <b>红线：只用 <code class="inl">node:sqlite</code>，永不 better-sqlite3</b>；<b>且不做旧兼容</b>（§0.3）。
+</div>
+
+<!-- ══════════ 0 ══════════ -->
+<section id="s0">
+  <h2><span class="n">0</span>目标与范围</h2>
+
+  <h3>0.1 一句话</h3>
+  <p><code class="inl">plugins/chat-workbench/services/session/src/store.ts</code> 的持久化实现由 JSONL 换成 SQLite；
+  <code class="inl">session.get</code> <b>改为</b>游标分页（不再支持整份返回）；时间线 UI 改为分页加载。</p>
+
+  <h3>0.2 做什么</h3>
+  <ul>
+    <li><b>底座</b>：<code class="inl">src/db.ts</code>（<code class="inl">node:sqlite</code> 门面 + <code class="inl">withTransaction</code>）；<b>不加任何依赖</b>。</li>
+    <li><b>schema + 迁移引擎</b>：<code class="inl">src/migrator.ts</code>，<code class="inl">_migrations</code> 版本表、每步 <code class="inl">BEGIN IMMEDIATE</code>、迁移前备份 <code class="inl">sessions.db.pre-*</code>。</li>
+    <li><b>两张表 + 四索引</b>：<code class="inl">sessions</code> / <code class="inl">messages</code>；索引见 §4.1。</li>
+    <li><b>store 换实现</b>：<code class="inl">root/list/ids/meta/create/rename/setPinned/setArchived/setWorkspace/remove/clear/appendMessage</code> 全走 SQL；缓存归零。<b>删除全部 JSONL 代码路径</b>。</li>
+    <li><b>游标分页（硬切）</b>：<code class="inl">session.get</code> <b>恒返回</b> <code class="inl">page{hasMore,nextCursor,total}</code>；<code class="inl">limit</code> 缺省取服务端默认（50）。旧的全量行为<b>移除</b>。</li>
+    <li><b>UI</b>：<code class="inl">ChatTimelineView</code> 首屏取一页 + 顶部「加载更早」，与流式事件去重、滚动位置保持。</li>
+  </ul>
+
+  <h3>0.3 不做的事（含「不做旧兼容」）</h3>
+  <table>
+    <thead><tr><th style="width:28%">不做</th><th style="width:44%">理由</th><th>何时再议</th></tr></thead>
+    <tbody>
+      <tr><td><b>旧 JSONL 数据迁移</b> <span class="tag fix">已决定</span></td>
+        <td>不写 <code class="inl">index.json</code>/<code class="inl">.jsonl</code> → SQLite 的导入器；旧 <code class="inl">sessions/</code> 不再被读取。<b>用户历史会话不迁移、不保证可见</b></td>
+        <td>若之后必须找回旧数据 —— 另立一次性脚本，不属本阶段</td></tr>
+      <tr><td><b>旧 <code class="inl">.json</code> 单文件格式兼容</b></td>
+        <td>P1-6 早已迁到 JSONL，旧格式兼容代码随本次一并删除</td>
+        <td>不再</td></tr>
+      <tr><td><b><code class="inl">session.get</code> 全量返回</b> <span class="tag fix">已决定</span></td>
+        <td>分页是本次的目的之一；保留「不传 limit = 全量」等于把长会话死法留在原地</td>
+        <td>不再</td></tr>
+      <tr><td><b>回退到 JSONL 实现的路径</b></td>
+        <td>既然不迁移旧数据，回退只等于「删 DB + 换回旧代码」，旧 JSONL 目录已不再被任何代码读取</td>
+        <td>不再</td></tr>
+      <tr><td>better-sqlite3</td><td>原生 ABI / 打包坑；<code class="inl">node:sqlite</code> 是同一件事的零依赖答案</td><td><b>永不</b>（红线）</td></tr>
+      <tr><td>全文检索（fts5）</td><td>前端只搜标题，正文搜索是另一件事</td><td>真需要搜正文时加一条 migration</td></tr>
+      <tr><td>36 列大表 / 多工作区分组</td><td>本产品是 Agent 工具台；现有 ~10 字段足够</td><td>字段真的不够时</td></tr>
+      <tr><td>服务端未读 / 多端同步 / 虚拟滚动</td><td>未读走 sessionStorage；分页后单页有界</td><td>各自触发条件出现时</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 1 ══════════ -->
+<section id="s1">
+  <h2><span class="n">1</span>前置与基线</h2>
+
+  <table>
+    <thead><tr><th style="width:24%">前置</th><th style="width:40%">现状</th><th>本阶段要做的</th></tr></thead>
+    <tbody>
+      <tr><td><b>Node 版本闸门</b> <span class="tag fix">需上调</span></td>
+        <td>阶段 A6 已锁 <code class="inl">engines.node &gt;=22.5.0</code> + <code class="inl">.node-version</code> + <code class="inl">start-client.cmd</code> 校验。<code class="inl">node:sqlite</code> 虽 v22.5 引入，但 <b>v22.5~v22.12 需要 <code class="inl">--experimental-sqlite</code> 标志</b>（官文：v23.4.0 / v22.13.0 起才不再需要标志）</td>
+        <td><b>M0 把下限提到 <code class="inl">&gt;=22.13.0</code></b>（去掉标志的最小 22.x）。本地 <code class="inl">v24.14.0</code> 直接可用。启动校验失败信息给出该版本号</td></tr>
+      <tr><td><b>dataDir 红线</b></td>
+        <td><code class="inl">index.ts</code>：<code class="inl">service.dataDir</code> 在 <code class="inl">start()</code> 前恒为 <code class="inl">''</code>；拿不到就 fail fast（487 条会话写进 dist/ 的事故遗产）</td>
+        <td>复用该 fail fast：拿不到 dataDir 直接退出，绝不猜相对路径。<b>新库建在 <code class="inl">service.dataDir</code> 下</b></td></tr>
+      <tr><td><b>本机运行时</b></td>
+        <td>Node <code class="inl">v24.14.0</code>；<code class="inl">node:sqlite</code> 可用（仍打一条 ExperimentalWarning）</td>
+        <td>接受该警告（不全局 <code class="inl">--no-warnings</code>）；测试用内存库</td></tr>
+      <tr><td><b>旧 JSONL 目录</b></td>
+        <td><code class="inl">sessions/index.json</code> + <code class="inl">&lt;id&gt;.jsonl</code> 存在于老用户的 dataDir</td>
+        <td><b>不再读取</b>。新库与它不同名（<code class="inl">sessions.db</code>），互不干扰；旧目录原样留着（不删，也不再解析）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note ok">
+    <b>基线</b>：阶段 D 收官时全量 <b>1052 tests 全绿</b>。本阶段验收统一为
+    <code class="inl">pnpm -r run typecheck</code> / <code class="inl">pnpm -r run test</code> /
+    <code class="inl">node scripts/smoke.mjs</code> / <code class="inl">node scripts/pack-plugin.mjs</code>。
+  </div>
+
+  <div class="note info">
+    <b>为什么能安全渐进</b>：<code class="inl">SessionStore</code> 的方法签名（除 <code class="inl">get</code> 外）仍是稳定契约。
+    M2 换实现时 <code class="inl">session.ts</code>/<code class="inl">index.ts</code> 的 CRUD 调用零改动；
+    <b>M3 改的是 <code class="inl">session.get</code> 的协议</b>（硬切分页），调用点（<code class="inl">ui/state/session.ts</code>）随之改。
+  </div>
+</section>
+
+<!-- ══════════ 2 ══════════ -->
+<section id="s2">
+  <h2><span class="n">2</span>里程碑</h2>
+
+  <div class="board">
+    <div class="msgrid">
+      <div class="ms"><div class="p">M0</div><div class="t">底座与版本闸门</div><div class="d">db.ts 门面 · engines 上调</div></div>
+      <div class="ms crit"><div class="p">M1</div><div class="t">schema + 迁移引擎</div><div class="d">两表四索引 · _migrations · 备份</div></div>
+      <div class="ms crit"><div class="p">M2</div><div class="t">store 换实现（硬切）</div><div class="d">冷启动空库 · 删 JSONL 代码</div></div>
+      <div class="ms crit"><div class="p">M3</div><div class="t">游标分页（协议）</div><div class="d">session.get 恒分页</div></div>
+      <div class="ms"><div class="p">M4</div><div class="t">UI 分页加载</div><div class="d">时间线 · 去重 · 滚动</div></div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>里程碑</th><th>内容</th><th>绿灯（必须全过）</th><th>回滚成本</th></tr></thead>
+    <tbody>
+      <tr><td class="nowrap"><b>M0 底座</b> <span class="tag star">前置</span></td>
+        <td class="mono">db.ts（DatabaseSync 门面 + withTransaction）+ engines&gt;=22.13.0</td>
+        <td>内存库 <code class="inl">exec/prepare/run|get|all/close</code> 可用；嵌套事务 <code class="inl">SAVEPOINT</code> 正确；版本校验失败给出「需要 ≥22.13.0」</td>
+        <td>极低（纯新增）</td></tr>
+      <tr><td class="nowrap"><b>M1 schema+引擎</b></td>
+        <td class="mono">migrator.ts：_migrations + migration 1 建两表四索引 + 备份</td>
+        <td>重复打开不重复建（幂等）；<code class="inl">BEGIN IMMEDIATE</code> 包裹；迁移前生成 <code class="inl">sessions.db.pre-*</code> 且不删</td>
+        <td>低</td></tr>
+      <tr><td class="nowrap"><b>M2 store 换实现</b> <span class="tag crit">破坏性</span></td>
+        <td class="mono">全部方法走 SQL；append=INSERT；rename=单列 UPDATE；删缓存；删 JSONL 代码</td>
+        <td>store 单测（改写后）全绿；append 成本与消息数无关；rename 不触碰 messages；工作区/pin/archive/preview 语义不变；<b>仓库内不再有读 <code class="inl">sessions/</code> 的代码</b></td>
+        <td>中（换回旧 store 文件；旧数据不迁移）</td></tr>
+      <tr><td class="nowrap"><b>M3 游标分页</b> <span class="tag crit">协议变更</span></td>
+        <td class="mono">session.get 恒分页：limit 缺省 50，返回 page{hasMore,nextCursor,total}</td>
+        <td>结果恒带 <code class="inl">page</code>；取到的最新 N 条 = 全量的末 N 条；翻页拼回 = 全量；边界（空会话/单页/越界 cursor）正确；export 仍完整</td>
+        <td>低（协议变更，见 §8）</td></tr>
+      <tr><td class="nowrap"><b>M4 UI 分页加载</b></td>
+        <td class="mono">ChatTimelineView 首屏一页 + 「加载更早」+ 去重 + 滚动保持</td>
+        <td>打开长会话只拉一页；点「加载更早」prepend 且不重复；流式新消息与历史页不重；切会话重置</td>
+        <td>低</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note bad"><b>关键路径</b>：<code class="inl">M0 → M1 → M2 → M3 → M4</code> 串联。
+  M0/M1 纯新增可先落地；<b>M2 是唯一破坏性 PR</b>（换存储 + 删旧代码），合并前打 tag；
+  M3 是协议变更（<code class="inl">session.get</code> 硬切分页），调用点与 UI 必须同批改，否则 UI 读不到消息。</div>
+</section>
+
+<!-- ══════════ 3 ══════════ -->
+<section id="s3">
+  <h2><span class="n">3</span>工作分解</h2>
+
+  <table>
+    <thead><tr><th style="width:9%">WS</th><th style="width:8%">里程碑</th><th style="width:37%">做什么</th><th style="width:30%">完成判据</th><th style="width:16%">涉及文件</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">F0a</td><td>M0</td>
+        <td><code class="inl">src/db.ts</code>：<code class="inl">openDb(path)</code> 返回门面 <code class="inl">{exec, prepare(...).run|get|all, close, withTransaction}</code>；<code class="inl">withTransaction</code> 外层 <code class="inl">BEGIN IMMEDIATE</code>、内层 <code class="inl">SAVEPOINT</code></td>
+        <td>内存库单测：建表/插入/查询/回滚/嵌套保存点全对；<code class="inl">PRAGMA foreign_keys=ON</code> 生效</td>
+        <td class="mono">src/db.ts · tests/db.test.ts</td></tr>
+      <tr><td class="mono">F0b</td><td>M0</td>
+        <td>根 <code class="inl">package.json</code> <code class="inl">engines.node</code> → <code class="inl">&gt;=22.13.0</code>；<code class="inl">start-client.cmd</code> 校验文案同步</td>
+        <td>启动校验在本机（24.x）通过；旧版本给明确下载提示</td>
+        <td class="mono">package.json · start-client.cmd</td></tr>
+      <tr><td class="mono">F1a</td><td>M1</td>
+        <td>migration 1：建 <code class="inl">sessions</code> / <code class="inl">messages</code> 两表 + 四索引（DDL 见 §4.1）</td>
+        <td>DDL 幂等；<code class="inl">PRAGMA table_info</code> 字段齐全</td>
+        <td class="mono">src/migrator.ts</td></tr>
+      <tr><td class="mono">F1b</td><td>M1</td>
+        <td><code class="inl">_migrations(version,name,applied_at)</code> + 每步 <code class="inl">BEGIN IMMEDIATE</code> + 迁移前备份 <code class="inl">sessions.db.pre-&lt;ver&gt;-&lt;ts&gt;</code>（不删）</td>
+        <td>重复 <code class="inl">migrate()</code> 无副作用；备份文件存在；中途抛错整体回滚</td>
+        <td class="mono">src/migrator.ts · tests/migrator.test.ts</td></tr>
+      <tr><td class="mono">F2a</td><td>M2</td>
+        <td>逐方法换 SQL：list/ids/meta（查 sessions）、create/rename/setPinned/setArchived/setWorkspace/remove/clear（列级/事务）、appendMessage（INSERT + UPDATE）</td>
+        <td>方法语义与旧实现一致；pin/archive/workspace 不改 updated_at</td>
+        <td class="mono">src/store.ts</td></tr>
+      <tr><td class="mono">F2b</td><td>M2</td>
+        <td><b>删除全部 JSONL 代码路径</b>（<code class="inl">index.json</code> / <code class="inl">atomicWrite</code> / <code class="inl">reconcile</code> / <code class="inl">readFile</code> / <code class="inl">readLegacy</code> / 消息缓存）；<code class="inl">seq</code> = 单会话内 <code class="inl">MAX(seq)+1</code>；<code class="inl">toolCalls/workspaces</code> 存 JSON 文本</td>
+        <td>打开 5000 条会话不再常驻内存；append 实测与消息数无关；仓库无 <code class="inl">sessions/</code> 读代码</td>
+        <td class="mono">src/store.ts</td></tr>
+      <tr><td class="mono">F2c</td><td>M2</td>
+        <td>重写 <code class="inl">store.test.ts</code>：<b>删</b>「JSONL/index.json/.tmp/旧 .json 迁移」用例，改为 SQLite 语义；保留 pin/archive/preview/workspace/parentId 断言语义</td>
+        <td>改写后 store 单测全绿；无迁移用例</td>
+        <td class="mono">tests/store.test.ts</td></tr>
+      <tr><td class="mono">F3a</td><td>M3</td>
+        <td><code class="inl">store.getPage(id,{limit,before?})</code>：<code class="inl">WHERE session_id=? AND seq&lt;before ORDER BY seq DESC LIMIT n</code>，结果反转为升序；<code class="inl">nextCursor</code> = 本页最旧 seq</td>
+        <td>页与全量末 N 条一致；<code class="inl">hasMore</code> 正确；cursor 不透明字符串</td>
+        <td class="mono">src/store.ts</td></tr>
+      <tr><td class="mono">F3b</td><td>M3</td>
+        <td><code class="inl">dispatch('session.get')</code> <b>恒</b>组装 <code class="inl">page</code>（<code class="inl">limit</code> 缺省 50）；<code class="inl">session.export</code> 内部翻页取全量（不暴露给协议）</td>
+        <td>所有 <code class="inl">session.get.result</code> 都带 <code class="inl">page</code>；export 内容完整</td>
+        <td class="mono">src/session.ts</td></tr>
+      <tr><td class="mono">F4a</td><td>M4</td>
+        <td><code class="inl">ui/state/session.ts</code> + <code class="inl">ChatTimelineView.vue</code>：切会话发 <code class="inl">session.get{limit:50}</code>，顶部「加载更早 N 条」用 <code class="inl">before</code> 取上页</td>
+        <td>长会话打开只拉一页；「加载更早」prepend 正确</td>
+        <td class="mono">ui/src/state/session.ts · ui/src/views/ChatTimelineView.vue</td></tr>
+      <tr><td class="mono">F4b</td><td>M4</td>
+        <td>去重（按 message id）+ 滚动锚定：prepend 后保持视口不跳；流式/落库事件与历史页合并去重</td>
+        <td>加载更多后正在看的消息位置不移动；无重复行</td>
+        <td class="mono">ui/src/state/run.ts · ChatTimelineView.vue</td></tr>
+      <tr><td class="mono">F5</td><td>M4</td>
+        <td>收尾：更新进度文档与基线；<code class="inl">pack-plugin</code> 确认无新依赖；端到端冒烟覆盖「分页取历史」</td>
+        <td>四命令全绿；7 插件打包；<code class="inl">session/package.json</code> 零新增依赖</td>
+        <td class="mono">docs · tests</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 4 ══════════ -->
+<section id="s4">
+  <h2><span class="n">4</span>固定设计</h2>
+
+  <h3>4.0 驱动（红线）</h3>
+  <ul>
+    <li><code class="inl">import { DatabaseSync } from 'node:sqlite'</code>，<b>只此一个驱动</b>。同一进程里<b>不得</b>存在「失败就回退 better-sqlite3」的双驱动分支。</li>
+    <li><code class="inl">services/session/package.json</code> <b>不加任何依赖</b>（内置模块无需声明）。</li>
+    <li>门面刻意小：只暴露 <code class="inl">exec</code> / <code class="inl">prepare().run|get|all</code> / <code class="inl">close</code> / <code class="inl">withTransaction</code>。允许破坏性修改 store 调用点，不模仿 better-sqlite3 的完整 API。</li>
+  </ul>
+
+  <h3>4.1 schema（migration 1）</h3>
+  <pre>CREATE TABLE sessions (
+  id           TEXT PRIMARY KEY,
+  title        TEXT    NOT NULL,
+  created_at   TEXT    NOT NULL,
+  updated_at   TEXT    NOT NULL,
+  pinned       INTEGER NOT NULL DEFAULT 0,   -- 0/1，对外 boolean
+  archived     INTEGER NOT NULL DEFAULT 0,   -- 0/1，对外 boolean
+  parent_id    TEXT,
+  last_message TEXT,
+  workspace    TEXT,
+  workspaces   TEXT,                          -- JSON 数组文本
+  corrupted    INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE messages (
+  id                TEXT PRIMARY KEY,
+  session_id        TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  seq               INTEGER NOT NULL,          -- 单会话内单调递增（排序/游标键）
+  role              TEXT NOT NULL,
+  created_at        TEXT NOT NULL,
+  content           TEXT NOT NULL,
+  finish_reason     TEXT,
+  prompt_tokens     INTEGER,
+  completion_tokens INTEGER,
+  reasoning         TEXT,
+  tool_call_id      TEXT,
+  tool_name         TEXT,
+  tool_calls        TEXT                        -- JSON 数组文本
+);
+
+CREATE INDEX idx_sessions_updated_at ON sessions(updated_at DESC);
+CREATE INDEX idx_sessions_pinned     ON sessions(pinned);
+CREATE INDEX idx_sessions_archived   ON sessions(archived);
+CREATE INDEX idx_messages_session_seq ON messages(session_id, seq);</pre>
+  <div class="note">
+    <b>与设计稿的一处必要偏差</b>：设计稿写索引 <code class="inl">messages(session_id, id)</code>。
+    但 message id 是随机 <code class="inl">m_&lt;uuid&gt;</code>，<b>不随写入单调</b>，不能当游标。
+    故新增 <code class="inl">seq</code> 列并以其建索引 —— 游标分页与「取最新 N 条」都靠它。这是实现层决定，不改对外协议。
+  </div>
+  <div class="note"><b>boolean 边界</b>：<code class="inl">node:sqlite</code> 绑不了 JS boolean。
+  读写边界各一个 <code class="inl">toDbFlags</code> / <code class="inl">normalizeFlags</code>：写 <code class="inl">0/1</code>，对外 <code class="inl">undefined</code>（假）。</div>
+
+  <h3>4.2 迁移引擎</h3>
+  <pre>_migrations(version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)
+
+migrate(db):
+  for m in MIGRATIONS where m.version &gt; current:
+    backup(dbFile)                     // sessions.db.pre-&lt;version&gt;-&lt;ts&gt;，不删
+    withTransaction(() =&gt; { m.up(db); record(m) })   // BEGIN IMMEDIATE，失败整体回滚</pre>
+  <p>新增列一律走幂等 <code class="inl">addColumnIfMissing</code>（查 <code class="inl">PRAGMA table_info</code> 后再 <code class="inl">ALTER TABLE</code>），方便后续 migration 复用。</p>
+
+  <h3>4.3 冷启动与旧数据处置（不做迁移）</h3>
+  <ol>
+    <li>每次启动：<code class="inl">openDb(&lt;dataDir&gt;/sessions.db)</code> → <code class="inl">migrate()</code>（首次即建 schema）。</li>
+    <li><b>不读、不导入</b>旧 <code class="inl">sessions/</code> 目录；<code class="inl">index.json</code> / <code class="inl">.jsonl</code> / <code class="inl">.json</code> 的解析代码全部删除。</li>
+    <li>旧目录<b>原样留着</b>（不删）—— 不是因为要兼容，而是「删用户数据」应是显式动作；本阶段不管它。</li>
+    <li>新库与外层目录<b>不同名</b>（<code class="inl">sessions.db</code> vs <code class="inl">sessions/</code>），互不干扰。</li>
+    <li>dataDir 缺失 → fail fast（复用 index.ts 的既有红线）。</li>
+  </ol>
+
+  <h3>4.4 对外 API 与分页线格式（硬切）</h3>
+  <p><b>SessionStore</b>：CRUD 方法名/语义不变；<code class="inl">get</code>（整份）保留为内部用（export/markdown），新增 <code class="inl">getPage</code>：</p>
+  <pre>get(id): SessionFile | null                      // 内部：export / markdown
+getPage(id, { limit, before? }): { file: SessionFile; page: { hasMore; nextCursor; total } } | null</pre>
+  <p><b>命令与结果</b> —— <code class="inl">session.get</code> <b>恒分页</b>：</p>
+  <pre>// 请求（limit 可缺省 = 50；before 空 = 最新一页）
+session.get { requestId, sessionId, limit?, before? }
+
+// 结果（恒带 page；messages = 本页，升序）
+session.get.result {
+  requestId,
+  session: { meta, messages },
+  page: { hasMore: boolean, nextCursor: string | null, total: number }
+}</pre>
+  <ul>
+    <li><code class="inl">limit</code> 缺省 = <b>50</b>（服务端常量，UI 可覆写）。</li>
+    <li><code class="inl">before</code> 缺省 = 从最新往上取；<code class="inl">before = nextCursor</code> 取更早一页。</li>
+    <li><code class="inl">nextCursor</code> = 本页最旧消息的 <code class="inl">seq</code>（字符串）；无更早消息时 <code class="inl">null</code>。</li>
+    <li><code class="inl">total</code> = 该会话消息总数（<code class="inl">COUNT(*)</code>）。</li>
+    <li><b>没有「不传 limit 就返回全量」这条分支</b> —— 那是被砍掉的旧兼容。</li>
+  </ul>
+
+  <h3>4.5 UI（M4）</h3>
+  <ul>
+    <li>首屏：切会话时发 <code class="inl">session.get{limit:50}</code>；<code class="inl">sessions.messages</code> 存当前已加载历史。</li>
+    <li>顶部「加载更早 N 条」：<code class="inl">hasMore</code> 为真时显示；点击发 <code class="inl">before:nextCursor</code>，将返回消息 <b>prepend</b> 并更新 cursor。</li>
+    <li>去重：以 message <code class="inl">id</code> 为主键合并历史页与 <code class="inl">message.appended</code>/流式占位行（占位行无服务端 id，落库后按内容/id 换入，沿用现有逻辑）。</li>
+    <li>滚动锚定：prepend 前后记录 <code class="inl">scrollHeight</code> 差，保持视口位置（不跳到顶部）。</li>
+    <li>切会话重置分页状态；<code class="inl">session.updated</code> 只动 meta，不动已加载消息。</li>
+  </ul>
+</section>
+
+<!-- ══════════ 5 ══════════ -->
+<section id="s5">
+  <h2><span class="n">5</span>测试矩阵</h2>
+  <p>跑法：<code class="inl">pnpm -r run test</code>。测试跟着被测物走 —— db/migrator/store 在 <code class="inl">services/session/tests</code>，UI 在 <code class="inl">ui/tests</code>。</p>
+  <table>
+    <thead><tr><th style="width:16%">层</th><th style="width:40%">用例</th><th>断言要点</th></tr></thead>
+    <tbody>
+      <tr><td>db 门面</td><td>建表 / 插入 / 查询 / 事务回滚 / 嵌套 SAVEPOINT / 外键级联</td><td>内存库；回滚后无残留；<code class="inl">ON DELETE CASCADE</code> 生效</td></tr>
+      <tr><td>migrator</td><td>首次建表 / 重复 migrate 幂等 / 备份存在 / 中途抛错回滚</td><td><code class="inl">_migrations</code> 记录；<code class="inl">sessions.db.pre-*</code> 存在且不删</td></tr>
+      <tr><td>store（改写）</td><td>CRUD / append-only / pin·archive 不改 updated_at / preview 只取 user·assistant / workspace 合并式 / parentId / remove·clear / 不存在返回 null</td><td>语义与旧实现一致（断言从「文件形状」改为「读回内容」）</td></tr>
+      <tr><td>性能回归</td><td>append 成本与消息数无关（撑到 ~600 条后仍持平）</td><td>沿用旧测试的 <code class="inl">late &lt; early*6 + 3</code> 量级</td></tr>
+      <tr><td>分页（硬切）</td><td>恒带 page / limit 缺省 50 / 传 limit = 末 N 条 / 翻页拼接 = 全量 / 空会话 / 越界 cursor / hasMore 边界</td><td>分页拼回与全量 <code class="inl">toEqual</code>；<code class="inl">total</code> 正确；<b>不存在全量结果形状</b></td></tr>
+      <tr><td>UI</td><td>首屏只发一页 / 「加载更早」prepend / 去重 / 切会话重置</td><td>命令身体、渲染文本、滚动锚点</td></tr>
+      <tr><td>集成</td><td>p7 等冒烟中会话仍可读；<code class="inl">smoke.mjs</code>；<code class="inl">pack-plugin.mjs</code></td><td>四命令全绿；7 插件打包；session 零新依赖</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 6 ══════════ -->
+<section id="s6">
+  <h2><span class="n">6</span>验收标准</h2>
+  <h3>6.1 命令</h3>
+  <pre>pnpm -r run typecheck           # 零错
+pnpm -r run test                # 全绿（基线 1052 + 本阶段新增）
+node scripts/smoke.mjs          # PASS
+node scripts/pack-plugin.mjs    # 7 插件</pre>
+  <h3>6.2 判据</h3>
+  <ul>
+    <li><b>三件已解</b>：rename 不写 messages（用 SQL 影响行数证明）；无整会话常驻缓存；<code class="inl">session.get</code> 只走一页。</li>
+    <li><b>硬切到位</b>：<code class="inl">session.get.result</code> <b>恒带</b> <code class="inl">page</code>；仓库内无「不传 limit 返回全量」分支；无任何读旧 <code class="inl">sessions/</code> 的代码。</li>
+    <li><b>零新依赖</b>：<code class="inl">services/session/package.json</code> 的 <code class="inl">dependencies</code> 相对阶段 D 无变化。</li>
+    <li><b>干净启动</b>：旧 JSONL 目录存在时启动不报错、不导入、不删（DB 独立）。</li>
+  </ul>
+</section>
+
+<!-- ══════════ 7 ══════════ -->
+<section id="s7">
+  <h2><span class="n">7</span>风险台账</h2>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:24%">风险</th><th style="width:32%">触发条件</th><th style="width:38%">缓解</th></tr></thead>
+    <tbody>
+      <tr><td>R1</td><td>用户 Node 落在 22.5~22.12</td><td>只有 <code class="inl">engines&gt;=22.5.0</code> 时 <code class="inl">require('node:sqlite')</code> 需标志</td><td>M0 上调下限到 <code class="inl">&gt;=22.13.0</code>；启动校验给明确版本号与下载地址，不静默降级</td></tr>
+      <tr><td>R2</td><td><code class="inl">node:sqlite</code> 仍打 ExperimentalWarning</td><td>Node 官方标 experimental</td><td>接受该行日志；不全局关闭 warnings（会盖住真问题）</td></tr>
+      <tr><td>R3</td><td>不迁移 = 用户旧会话「消失」</td><td>升级后旧 JSONL 不再被读，历史列表变空</td><td><b>已接受</b>（§0.3）。旧目录不删，给「另立脚本找回」留后路；发布说明须写明</td></tr>
+      <tr><td>R4</td><td>M2/M3 不同批改导致 UI 读不到消息</td><td><code class="inl">session.get</code> 已恒分页但 UI 仍按全量解析（或反之）</td><td><b>M3 与 F4a 同批</b>；单测断言结果恒带 page</td></tr>
+      <tr><td>R5</td><td>分页打乱「运行时行 + 历史页」</td><td>prepend 与流式事件交错、占位行与落库行重复</td><td>统一按 message id 去重；prepend 记录 scrollHeight 差值锚定；切会话重置</td></tr>
+      <tr><td>R6</td><td>cursor 语义写死成 seq 后难改</td><td>将来改用时间戳/复合键</td><td>cursor 作为<b>不透明字符串</b>对外，解码只在 store 内；换键不改协议</td></tr>
+      <tr><td>R7</td><td>workspaces / toolCalls 存文本丢结构</td><td>JSON 序列化/解析不对称</td><td>读写边界各一个 <code class="inl">parseJson</code>/<code class="inl">stringify</code>，坏值回退空数组并单测</td></tr>
+      <tr><td>R8</td><td>并发写同一 DB</td><td>两个 Core 实例共享 dataDir</td><td>SQLite 自身串行化 + <code class="inl">BEGIN IMMEDIATE</code>；本阶段不引入进程内队列（现网单实例）</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════ 8 ══════════ -->
+<section id="s8">
+  <h2><span class="n">8</span>顺序与回滚</h2>
+  <h3>8.1 落地顺序</h3>
+  <ol>
+    <li><b>M0</b>（db.ts + engines）：纯新增，先合。</li>
+    <li><b>M1</b>（schema + 引擎）：独立，合。</li>
+    <li><b>M2</b>（store 换实现，唯一破坏性 PR）：换 SQL + 删 JSONL 代码 + 重写 store 单测；合并前打 tag。</li>
+    <li><b>M3 + F4a 同批</b>（协议 + UI 首屏）：<code class="inl">session.get</code> 恒分页，UI 随之。否则界面空白。</li>
+    <li><b>M4</b>：UI「加载更早」+ 去重 + 滚动锚定。</li>
+    <li><b>F5</b>：文档 + 基线 + 冒烟。</li>
+  </ol>
+  <h3>8.2 回滚</h3>
+  <table>
+    <thead><tr><th style="width:20%">阶段</th><th style="width:38%">回滚动作</th><th>数据影响</th></tr></thead>
+    <tbody>
+      <tr><td>M0 / M1</td><td>直接 revert（未产生业务数据）</td><td>无</td></tr>
+      <tr><td>M2</td><td>revert 代码；删 <code class="inl">sessions.db*</code></td><td>新库期间写入的会话丢失（旧 JSONL 本就不迁移）</td></tr>
+      <tr><td>M3 / M4</td><td>同 M2 一并 revert（协议与 UI 同批）</td><td>同上</td></tr>
+    </tbody>
+  </table>
+  <div class="note bad"><b>回滚的代价本次是真实的</b>：因为不迁移旧数据，且 DB 是唯一真相源，
+  revert 会丢掉「切到 SQLite 之后新建/追加的会话」。
+  <br><b>降低代价的手段</b>：M2 上线前对老用户 dataDir 做一次整目录备份（发布流程），
+  并且 <code class="inl">sessions.db</code> 是单文件、可备份可复制。这属于发布纪律，不是代码兼容。</div>
+</section>
+
+<div class="foot">
+  <b>状态（2026-10-08）</b>：<b>M0–M4 全部完成</b>（M0：<code class="inl">db.ts</code> 门面 + <code class="inl">engines&gt;=22.13.0</code>；M1：<code class="inl">migrator.ts</code> + 两表四索引 + 备份；M2：<code class="inl">store.ts</code> 全 SQL 化 + 删 JSONL 代码；M3：<code class="inl">session.get</code> 恒分页（limit 缺省 50 + before）；M4：<code class="inl">ChatTimelineView</code> 「加载更早」+ 去重 + 滚动锚定）。阶段 F 收官。
+  本计划覆盖 P3-1 <b>硬切</b>口径：后端替换 + 游标分页 + UI 分页加载，<b>不做旧数据迁移、不保留 session.get 全量兼容</b>（§0.3）。
+  依据 <code>docs/插件demo/chat-workbench/对话工作台-优化计划.html</code> §6。
+  <br><b>基线</b>：阶段 D 收官 1052 tests；M2 后 1065；M3+M4 后 <b>1075</b>（session 66 + chat-workbench ui 81）。验收命令见 §6.1。
+</div>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme');
+  try { var saved = localStorage.getItem('ost-doc-theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  function label() { btn.textContent = root.getAttribute('data-theme') === 'dark' ? '切换浅色' : '切换深色'; }
+  btn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('ost-doc-theme', next); } catch (e) {}
+    label();
+  });
+  label();
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function onScroll() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < secs.length; i++) if (secs[i] && secs[i].offsetTop <= y) idx = i;
+    links.forEach(function (a, i) { a.classList.toggle('on', i === idx); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+
+</body>
+</html>

@@ -18,6 +18,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  store.close()
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -36,10 +37,31 @@ describe('session 七命令（IPC 全链）', () => {
     dispatch(store, 'message.append', { requestId: 'r2', sessionId, message: { role: 'user', content: 'hi' } })
     const got = dispatch(store, 'session.get', { requestId: 'r3', sessionId })
     expect((got.session as { messages: unknown[] }).messages).toHaveLength(1)
+    // 分页恒存在（M3）
+    expect(got.page).toMatchObject({ hasMore: false, nextCursor: null, total: 1 })
     // 不存在 → null（不 error，调用方回退）
     const missing = dispatch(store, 'session.get', { requestId: 'r4', sessionId: 'nope' })
     expect(missing.session).toBeNull()
     expect(missing.error).toBeUndefined()
+  })
+
+  it('session.get 分页（M3）：limit 取最新一页，before 翻更早，拼回 = 全量', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1' })
+    for (let i = 0; i < 5; i += 1) {
+      dispatch(store, 'message.append', { requestId: `a${i}`, sessionId, message: { role: 'user', content: `m${i}` } })
+    }
+    const p1 = dispatch(store, 'session.get', { requestId: 'g1', sessionId, limit: 2 })
+    expect((p1.session as { messages: { content: string }[] }).messages.map((m) => m.content)).toEqual(['m3', 'm4'])
+    expect(p1.page).toMatchObject({ hasMore: true, total: 5 })
+    const before = (p1.page as { nextCursor: string }).nextCursor
+    const p2 = dispatch(store, 'session.get', { requestId: 'g2', sessionId, limit: 2, before })
+    expect((p2.session as { messages: { content: string }[] }).messages.map((m) => m.content)).toEqual(['m1', 'm2'])
+  })
+
+  it('session.get 非法/缺省 limit → 回落 50', () => {
+    const { sessionId } = dispatch(store, 'session.create', { requestId: 'r1' })
+    const got = dispatch(store, 'session.get', { requestId: 'g', sessionId, limit: -3 })
+    expect(got.page).toMatchObject({ total: 0 })
   })
 
   it('session.rename → result 带新标题；不存在 → error{not_found}', () => {

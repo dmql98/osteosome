@@ -2,7 +2,7 @@
   "name": "@osteosome/session",
   "version": "0.0.0",
   "private": true,
-  "description": "会话能力位（P3 WS-1）：会话 CRUD + 消息 append-only，dataDir JSON 持久化",
+  "description": "会话能力位（P3 WS-1 + P3-1）：会话 CRUD + 消息 append-only，dataDir node:sqlite 持久化",
   "buildOutput": "../../dist/server/session/index.js",
   "scripts": {
     "build": "node ../../../../scripts/build-service.mjs",

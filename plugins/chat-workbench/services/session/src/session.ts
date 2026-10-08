@@ -26,6 +26,16 @@ export interface CommandResult {
 const CODE_INVALID = 'invalid_request'
 const CODE_NOT_FOUND = 'not_found'
 
+/** `session.get` 分页缺省与上限（P3-1 M3）：缺省 50，上限防调用方传 100000。 */
+const DEFAULT_PAGE_LIMIT = 50
+const MAX_PAGE_LIMIT = 500
+
+/** 解析 `limit`：非法/缺省 → 50；上限 500。 */
+function parsePageLimit(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return DEFAULT_PAGE_LIMIT
+  return Math.min(Math.floor(raw), MAX_PAGE_LIMIT)
+}
+
 /** 中立 finishReason 白名单（与 shared 的 FinishReason 同枚举）；非法值丢弃而非乱存 */
 const FINISH_REASONS: readonly NonNullable<Message['finishReason']>[] = [
   'stop',
@@ -104,9 +114,16 @@ export function dispatch(store: SessionStore, topic: string, payload: Record<str
     case 'session.get': {
       const sessionId = str(payload, 'sessionId')
       if (!sessionId) return err(requestId, CODE_INVALID, 'session.get: sessionId is required')
-      const file = store.get(sessionId)
-      // 不存在/损坏 → null（P3 §3.3：null → 调用方回退最近会话）
-      return { requestId, session: file }
+      // P3-1 M3：**恒分页** —— limit 缺省 50；before = 上一页的 nextCursor。
+      const result = store.getPage(sessionId, {
+        limit: parsePageLimit(payload.limit),
+        ...(typeof payload.before === 'string' || typeof payload.before === 'number'
+          ? { before: String(payload.before) }
+          : {}),
+      })
+      // 不存在/会话为空 → session:null（调用方回退最近会话；不 error）
+      if (!result) return { requestId, session: null }
+      return { requestId, session: result.file, page: result.page }
     }
 
     case 'session.create': {

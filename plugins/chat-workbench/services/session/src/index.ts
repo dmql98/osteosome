@@ -157,7 +157,7 @@ async function main(): Promise<void> {
     )
   }
   store = new SessionStore(dir)
-  console.log(`session: dataDir=${store.root}`)
+  console.log(`session: db=${store.root}`)
 }
 
 main().catch((err: unknown) => {

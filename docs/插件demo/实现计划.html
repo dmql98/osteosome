@@ -569,16 +569,17 @@
   </div>
 
   <div class="board phase">
-    <div class="bh"><b>阶段 F · 对话工作台 P3 存储升级（独立工作线）</b><span class="sp"></span><span class="tag part">视情况</span></div>
+    <div class="bh"><b>阶段 F · 对话工作台 P3 存储升级（独立工作线）</b><span class="sp"></span><span class="tag have">M0–M4 全部完成</span></div>
     <div class="note info" style="margin-top:0"><b>P1-6 / P2 已并入阶段 A</b>（见上）；本阶段只剩真正的存储形态升级。
-      chat-workbench 优化计划 §6.5 的三步走：<b>P1-6（阶段 A）→ P3-0 → P3-1</b>。</div>
+      chat-workbench 优化计划 §6.5 的三步走：<b>P1-6（阶段 A）→ P3-0 → P3-1</b>。
+      <b>P3-1 详细计划见 <code>docs/开发进度/P3-对话存储升级-详细计划.html</code></b>（M0 底座 → M1 schema+引擎 → M2 JSONL 迁移 → M3 store 换实现 → M4 游标分页 → M5 UI 加载更多）。</div>
     <table>
       <thead><tr><th>工作</th><th>内容</th><th>说明</th></tr></thead>
       <tbody>
         <tr><td><b>P3-0 Node 锁定</b> <span class="tag have">已完成</span></td><td class="mono">engines.node + .node-version + 启动前校验</td>
-          <td><code>node:sqlite</code> 的硬前置；<b>已由阶段 A6 交付</b>（<code>engines.node&gt;=22.5.0</code> + <code>.node-version</code> + <code>start-client.cmd</code> 校验）</td></tr>
-        <tr><td><b>P3-1 node:sqlite</b></td><td class="mono">store.ts 换实现：两张表 + 迁移器 + 四索引 + get 游标分页</td>
-          <td>解决 JSONL 解决不了的三件：rename 全量写 / cache 无界 / get 全量 SSE。<b>P1-6 的 JSONL 输出就是迁移输入</b></td></tr>
+          <td><code>node:sqlite</code> 的硬前置；<b>已由阶段 A6 交付</b>（<code>engines.node&gt;=22.5.0</code> + <code>.node-version</code> + <code>start-client.cmd</code> 校验）。P3-1 会把它上调到 <code>&gt;=22.13.0</code>（去掉 <code>--experimental-sqlite</code> 标志的最小版本）</td></tr>
+        <tr><td><b>P3-1 node:sqlite</b> <span class="tag have">完成</span></td><td class="mono">store.ts 换实现：两张表 + 迁移器 + 四索引 + get 游标分页 + UI 加载更多</td>
+          <td>解决 JSONL 解决不了的三件：rename 全量写 / cache 无界 / get 全量 SSE。<b>硬切口径：不做旧 JSONL 数据迁移，也不保留 session.get 全量兼容</b>（避免把长会话死法留在原地）。细化见 P3 详细计划</td></tr>
         <tr><td><b>P2-5 导出（若 A4 未做）</b></td><td class="mono">session.export</td>
           <td>会话是用户唯一的原创内容；要么实现，要么本版不放这个菜单项（A4 已实现）</td></tr>
       </tbody>
@@ -751,7 +752,8 @@ node scripts/pack-plugin.mjs  # 打包产物只含 dist/ 与清单</pre>
   <br><b>2026-10-07 更新</b>：阶段 0 完成并冻结基线（修正为 939 tests）；阶段 A 扩围为「含 chat-workbench 全量优化」
   （P0 组件重设计 / P1 存储正确性与 P1-6 JSONL 止血 / P2 字段）并<b>完成 A1–A6</b>；
   A5 决策冻结、A6 Node 运行时锁定完成；<b>阶段 B（角色 P5 / agents）、阶段 C（技能 P6 / skills）完成</b>；
-  <b>阶段 D（工作区 + 工具 P7）已完成：M0–M6 全部完成（工作区 / 契约骨架 / fs-tools + 闸门 / 主线切换 / 六个执行者含 MCP / widget.tools 5 Tab + widget.session-workspace + 对话审批卡 / 收尾清理：删 loop 种子工具、删 dataReadableBy、工具改名）</b>。P3-1（node:sqlite）留阶段 F。
+  <b>阶段 D（工作区 + 工具 P7）已完成：M0–M6 全部完成（工作区 / 契约骨架 / fs-tools + 闸门 / 主线切换 / 六个执行者含 MCP / widget.tools 5 Tab + widget.session-workspace + 对话审批卡 / 收尾清理：删 loop 种子工具、删 dataReadableBy、工具改名）</b>。
+  <b>阶段 F（P3-1 node:sqlite + 游标分页 + UI）计划已细化</b>（见 <code>docs/开发进度/P3-对话存储升级-详细计划.html</code>），尚未开工。
   当前全量 <b>1052 tests 全绿</b>。
 </div>
 

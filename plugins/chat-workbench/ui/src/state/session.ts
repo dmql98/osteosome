@@ -31,8 +31,12 @@ import { currentSessionId, setCurrentSessionId } from './session-sync'
 export interface SessionState {
   /** 全量会话索引（按 updatedAt 倒序展示） */
   list: Ref<SessionMeta[]>
-  /** 当前会话的消息缓存 —— 只装 curId 那一个会话的 */
+  /** 当前会话的消息缓存 —— 只装 curId 那一个会话的（首屏一页 + 已加载的更早页） */
   messages: Ref<Message[]>
+  /** 是否还有更早的消息可加载（P3-1 M3 分页） */
+  hasMore: Ref<boolean>
+  /** 正在加载更早一页 */
+  loadingMore: Ref<boolean>
   loading: Ref<boolean>
   error: Ref<string>
   hydrated: Ref<boolean>
@@ -66,9 +70,14 @@ export interface SessionState {
    * 而 curId 变化时三个 iframe 各自 watch 到、各自载入一遍。
    */
   loadHistory: (sessionId: string) => Promise<void>
+  /** 加载更早一页（P3-1 M3）：`session.get` 带 `before=nextCursor`，结果 prepend */
+  loadMore: () => Promise<void>
   /** 仅测试用：解绑本函数绑的事件 */
   dispose: () => void
 }
+
+/** 每次 `session.get` 取多少条（P3-1 M3）；服务端上限 500。 */
+const PAGE_SIZE = 50
 
 function toMeta(payload: unknown): SessionMeta | undefined {
   const p = payload as Partial<SessionMeta> & { sessionId?: string }
@@ -88,6 +97,10 @@ function toMeta(payload: unknown): SessionMeta | undefined {
 export function useSessionState(): SessionState {
   const list = ref<SessionMeta[]>([])
   const messages = ref<Message[]>([])
+  const hasMore = ref(false)
+  const loadingMore = ref(false)
+  /** 上一页返回的更早游标；`loadMore` 用它取下一页。内部态，不对外暴露 */
+  const nextCursor = ref('')
   const loading = ref(false)
   const error = ref('')
   const hydrated = ref(false)
@@ -95,6 +108,9 @@ export function useSessionState(): SessionState {
 
   /** 本函数绑的退订函数；bindEvents 幂等，重复调用不叠加 */
   let unsubs: Array<() => void> = []
+
+  /** 在途的 `session.get`：requestId → { mode, sessionId }。用配对而非「全收」，防别的 iframe 的结果串进来 */
+  const pendingGets = new Map<string, { mode: 'replace' | 'prepend'; sessionId: string }>()
 
   /**
    * 在途的 `create()`：`requestId → 结算`。
@@ -192,14 +208,38 @@ export function useSessionState(): SessionState {
       }),
       // 切会话 → 清缓存并载入新会话的历史。
       // **每个 iframe 都要自己载入**：curId 从共享层来，但历史不共享。
+      //
+      // P3-1 M3：结果恒带 `page`。用 requestId 配对区分「首屏替换」与「加载更早 prepend」；
+      // 没有配对时（例如测试注入）退化为按 `meta.id === curId` 判断的替换。
       sse.subscribe('session.get.result', (payload) => {
-        const p = payload as { session?: { id?: string; messages?: unknown[] } | null }
+        const p = payload as {
+          requestId?: string
+          session?: { meta?: { id?: string }; messages?: unknown[] } | null
+          page?: { hasMore?: boolean; nextCursor?: string | null; total?: number }
+        }
+        const req = p?.requestId ? pendingGets.get(p.requestId) : undefined
+        if (req?.mode === 'prepend') loadingMore.value = false
+
+        const targetId = req?.sessionId ?? p?.session?.meta?.id
+        // 别的会话的结果不串进来（广播 + 三个 iframe）
+        if (targetId && targetId !== curId.value) return
+        if (p?.requestId) pendingGets.delete(p.requestId)
+
         if (!p?.session) {
           // 会话为空/已删
           messages.value = []
+          hasMore.value = false
           return
         }
-        messages.value = (p.session.messages ?? []) as Message[]
+        const incoming = (p.session.messages ?? []) as Message[]
+        if (req?.mode === 'prepend') {
+          const seen = new Set(messages.value.map((m) => m.id))
+          messages.value = [...incoming.filter((m) => !seen.has(m.id)), ...messages.value]
+        } else {
+          messages.value = incoming
+        }
+        hasMore.value = p.page?.hasMore === true
+        nextCursor.value = p.page?.nextCursor ?? ''
       }),
       /**
        * `session.create.result` **必须常驻**，不能在 `create()` 里临时订阅。
@@ -255,18 +295,37 @@ export function useSessionState(): SessionState {
   }
 
   async function loadHistory(sessionId: string): Promise<void> {
+    // 切会话先清分页态（否则新会话会沿用旧会话的 hasMore / 加载中）
+    hasMore.value = false
+    loadingMore.value = false
+    nextCursor.value = ''
     if (!sessionId) {
       messages.value = []
       return
     }
     messages.value = []
     const { send } = useCommand()
-    await send('session.get', { requestId: `get-${Date.now()}`, sessionId })
+    const requestId = `get-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    pendingGets.set(requestId, { mode: 'replace', sessionId })
+    await send('session.get', { requestId, sessionId, limit: PAGE_SIZE })
+  }
+
+  /** 加载更早一页（P3-1 M3）：带 `before=nextCursor`；结果由 handler prepend。 */
+  async function loadMore(): Promise<void> {
+    const sessionId = curId.value
+    if (!sessionId || !hasMore.value || loadingMore.value) return
+    loadingMore.value = true
+    const { send } = useCommand()
+    const requestId = `more-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    pendingGets.set(requestId, { mode: 'prepend', sessionId })
+    await send('session.get', { requestId, sessionId, limit: PAGE_SIZE, before: nextCursor.value })
   }
 
   return {
     list,
     messages,
+    hasMore,
+    loadingMore,
     loading,
     error,
     hydrated,
@@ -364,9 +423,11 @@ export function useSessionState(): SessionState {
       return result
     },
     loadHistory,
+    loadMore,
     dispose: () => {
       for (const off of unsubs) off()
       unsubs = []
+      pendingGets.clear()
     },
   }
 }

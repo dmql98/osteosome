@@ -320,6 +320,17 @@ describe('P7 集成冒烟 · 最小工具循环', () => {
         expect(toolMsgRow).toMatchObject({ toolCallId, toolName: 'read' })
         expect(String(appended[3].payload.message ? (appended[3].payload.message as { content: string }).content : '')).toBe('a.txt 的内容是 hello')
 
+        // 断言④b：session.get 恒分页（P3-1 M3）—— limit=2 只取最新两条，page 描述还有更早
+        await post(base(), 'session.get', { requestId: 'get-page', sessionId, limit: 2 })
+        await waitFor(
+          () => parseSseEvents(sse.text()).some((e) => e.topic === 'session.get.result' && e.payload.requestId === 'get-page'),
+          10_000,
+          'session.get.result(page)',
+        )
+        const paged = parseSseEvents(sse.text()).find((e) => e.topic === 'session.get.result' && e.payload.requestId === 'get-page')!
+        expect((paged.payload.session as { messages: unknown[] }).messages).toHaveLength(2)
+        expect(paged.payload.page).toMatchObject({ hasMore: true, total: 4 })
+
         // 断言⑤：工具轮中间没有多余的 idle（state 只在最后收一次）
         const states = events.filter((e) => e.topic === 'loop.state.changed' && e.payload.requestId === a)
         expect(states).toHaveLength(2)
