@@ -43,6 +43,9 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 | [`docs/前端工作台-现行实现.md`](./docs/前端工作台-现行实现.md) | **当前代码权威说明**：dockview 外层 + vue-movable-box 内层、Widget 注册、布局持久化与组件职责 |
 | [`docs/开发进度/P2-详细计划.md`](./docs/开发进度/P2-详细计划.md) | P2 里程碑详细计划（能力位拆分·六插件 LLM：llm 主位 + 3×provider + credentials + llm-retry + 2 Widget，WS-1~9） |
 | [`docs/开发进度/LLM能力位拆分设计.md`](./docs/开发进度/LLM能力位拆分设计.md) | **LLM 能力位拆分设计定案**（六插件拓扑 / 运行时契约 / 超越 dsh 论证） |
+| [`docs/开发进度/P7-工具管理-详细计划.html`](./docs/开发进度/P7-工具管理-详细计划.html) | P7 里程碑详细计划（工具插件化 8 服务 / 审批闸门 / MCP 接入，甘特式 WS 清单） |
+| [`docs/开发进度/插件编写指南.md`](./docs/开发进度/插件编写指南.md) | **新增一个插件照着抄**（plugin.json / service.json / Service SDK API 面 / 自验六条） |
+| [`docs/开发进度/开发日志.md`](./docs/开发进度/开发日志.md) | **交接与进度 follow**：现状数据 / 遗留清单 / 踩过的坑 / 验证命令 / 关键文件地图 |
 | [`docs/开发进度/P3-详细计划.md`](./docs/开发进度/P3-详细计划.md) | P3 里程碑详细计划（会话存储 + 会话列表 Pane + Loop 编排 + 命令/结果 IPC） |
 | [`docs/开发进度/P4-详细计划.md`](./docs/开发进度/P4-详细计划.md) | P4 里程碑详细计划（凭证 seam + 三 provider + 模型目录 + retry 执行器 + 设置 Pane） |
 | [`docs/core-modules.svg`](./docs/core-modules.svg) | Core 模块依赖图（`core开发文档.md` §1.3 引用） |
@@ -75,6 +78,10 @@ Osteosome 是一个**本地运行**的桌面 AI 智能体壳。**它的特色不
 ```
 osteosome/
 ├── plugins/                   # 插件：代码与产物都在这，可直接分发（分发物就是它的子集）
+│   │                          # 当前 7 个（唯一真源 plugins/<id>/plugin.json，Core 只认 dist/）：
+│   │                          #   agents(角色) · chat-workbench(会话+loop+llm 路由) · models(12 厂商 wire
+│   │                          #   + 凭证) · reliability(llm-retry) · skills(SKILL.md 索引) · tools(审批闸门
+│   │                          #   + workspace + fs/shell/web/misc/skills/mcp 执行者) · workbench(纯 UI)
 │   └── <id>/
 │       ├── plugin.json        # 清单：services[] / ui.views[] / capabilities[] / dependencies[]
 │       ├── catalog.json       # 插件自带数据（仅 models 有）

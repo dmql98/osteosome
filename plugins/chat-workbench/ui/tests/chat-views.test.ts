@@ -530,7 +530,7 @@ describe('chat-composer（③）· 参数链路', () => {
     const composer = mount(ChatComposerView)
     mounted.push(composer)
     await flushPromises()
-    expect(composer.text()).toContain('尚未注册任何 provider')
+    expect(composer.text()).toContain('还没接上任何模型')
     expect(composer.find('[data-testid="composer-input"]').exists()).toBe(false)
   })
 

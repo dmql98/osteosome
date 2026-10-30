@@ -3,9 +3,10 @@
     <div v-if="!providerOptions.length" class="chat-composer__no-provider">
       <EmptyState
         icon="🔌"
-        title="尚未注册任何 provider"
-        description="在设置里配置一家服务商的 API Key，它就会出现在这里。"
+        title="还没接上任何模型"
+        description="选一家服务商、填一个 API Key，几十秒就能发出第一条消息。"
       />
+      <Button size="md" data-testid="composer-open-settings" @click="openModelSettings">打开模型设置</Button>
     </div>
 
     <template v-else>
@@ -52,21 +53,27 @@
 
       <form class="chat-composer__form" @submit.prevent="submit">
         <Textarea
+          ref="inputEl"
           v-model="draft"
-          placeholder="输入消息，Enter 发送"
+          class="chat-composer__input"
+          placeholder="输入消息…（Enter 发送，Shift+Enter 换行）"
           :disabled="sending"
           :rows="2"
           auto-grow
           aria-label="消息输入"
           data-testid="composer-input"
+          @keydown.enter.exact="onEnter"
         />
         <div class="chat-composer__actions">
-          <Button v-if="sending" variant="danger" size="sm" data-testid="composer-stop" @click="cancel">停止</Button>
-          <Button v-else type="submit" size="sm" :disabled="!canSend" data-testid="composer-send">发送</Button>
+          <Button v-if="sending" variant="danger" size="md" data-testid="composer-stop" @click="cancel">停止</Button>
+          <Button v-else type="submit" size="md" :disabled="!canSend" data-testid="composer-send">发送</Button>
         </div>
       </form>
 
-      <p v-if="failed" class="chat-composer__failed" data-testid="composer-failed">{{ failed }}</p>
+      <p v-if="failed" class="chat-composer__failed" data-testid="composer-failed">
+        <span class="chat-composer__failed-text">{{ failed }}</span>
+        <Button v-if="lastAttempt" variant="ghost" size="sm" data-testid="composer-retry" @click="retryFailed">重试</Button>
+      </p>
     </template>
   </div>
 </template>
@@ -94,7 +101,7 @@
  * 靠 `onMounted` 订阅 —— 放进 store 的 getter 里只会拿到空实例。
  * 所以它们留在本组件的 setup 里（这里才是合法的调用上下文）。
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Button, EmptyState, Select, Textarea } from '@osteosome/ui'
 import { useLlmProviders, useModelCatalog, useModelsPrefs } from '@osteosome/core-client'
 import type { ThinkingEffort } from '@osteosome/shared'
@@ -151,6 +158,59 @@ async function onSelectCharacter(value: string): Promise<void> {
 const sending = computed(() => run.sending.value)
 const canSend = computed(() => Boolean(draft.value.trim()) && !sending.value)
 const catalogKind = computed(() => catalog.value ?? '')
+
+/* ── 输入体验：自动聚焦 / Enter 发送 / 草稿按会话暂存 / 失败重试 ── */
+const inputEl = ref<{ $el: HTMLTextAreaElement } | null>(null)
+
+/** Enter 发送；输入法组合中的 Enter 是「选字」，绝不能劫持 */
+function onEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) return
+  event.preventDefault()
+  void submit()
+}
+
+function focusInput(): void {
+  void nextTick(() => inputEl.value?.$el?.focus())
+}
+
+/** 草稿按会话暂存：切走再切回来，写了半截的话还在 */
+const draftKey = (sessionId: string): string => `ost:draft:${sessionId}`
+watch(
+  draft,
+  (value) => {
+    if (typeof sessionStorage === 'undefined') return
+    const key = curId.value
+    if (!key) return
+    if (value.trim()) sessionStorage.setItem(draftKey(key), value)
+    else sessionStorage.removeItem(draftKey(key))
+  },
+  { flush: 'post' },
+)
+
+watch(
+  curId,
+  (sessionId) => {
+    draft.value = sessionId && typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem(draftKey(sessionId)) ?? '') : ''
+    if (sessionId) focusInput()
+  },
+  { immediate: true },
+)
+
+/** 最近一次发送失败的内容（重试用；onError 由 run 回调填 failed） */
+const lastAttempt = ref('')
+async function retryFailed(): Promise<void> {
+  if (!lastAttempt.value || sending.value) return
+  const text = lastAttempt.value
+  lastAttempt.value = ''
+  failed.value = ''
+  draft.value = ''
+  await composer.submit(text)
+}
+
+/** 插件 iframe 没有面板控制器，加面板走宿主：同一 origin，事件直穿顶层窗 */
+function openModelSettings(): void {
+  window.top?.dispatchEvent(new CustomEvent('ost:add-widget', { detail: 'widget.llm-settings' }))
+}
 
 /**
  * 设置页「逐模型开关」写进 models 插件的接入清单（`userData/plugin/models/preferences.json`），
@@ -244,6 +304,7 @@ async function submit(): Promise<void> {
   // `message.appended` 回到时间线 —— 不清空的话用户会以为没发出去。
   draft.value = ''
   failed.value = ''
+  lastAttempt.value = text
   await composer.submit(text)
 }
 
@@ -278,6 +339,7 @@ onMounted(() => {
   void sessions.bootstrap()
   run.bindEvents()
   bindCharacters()
+  focusInput()   // 打开即聚焦输入框 —— 聊天壳最常见的第一个动作就是打字
 })
 
 onBeforeUnmount(() => {
@@ -297,19 +359,26 @@ onBeforeUnmount(() => {
 .chat-composer__params {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
   padding-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--color-border);
 }
 .chat-composer__badge {
   font-size: var(--text-xs); color: var(--color-warning); border: 1px solid var(--color-warning);
   border-radius: var(--radius-full); padding: 1px var(--space-2); white-space: nowrap;
 }
-.chat-composer__form { display: flex; align-items: flex-end; gap: var(--space-2); }
-.chat-composer__form :deep(.ui-textarea) { flex: 1; min-height: 40px; max-height: 120px; }
+.chat-composer__form { display: flex; align-items: flex-end; gap: var(--space-2); padding-top: var(--space-2); }
+.chat-composer__form :deep(.ui-textarea) { flex: 1; min-height: 44px; max-height: 140px; }
+.chat-composer__form :deep(.ui-textarea:focus) { border-color: var(--color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 18%, transparent); outline: none; }
 .chat-composer__actions { display: flex; flex: none; gap: var(--space-2); }
-.chat-composer__no-provider { flex: 1; display: grid; align-content: center; color: var(--color-text-muted); }
+.chat-composer__no-provider {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-3); color: var(--color-text-muted); padding: var(--space-4);
+}
 .chat-composer__failed {
-  margin-top: var(--space-2); display: flex; gap: var(--space-2);
+  margin-top: var(--space-2); display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-3); border: 1px solid var(--color-danger);
   border-radius: var(--radius-md); background: var(--color-danger-soft);
   color: var(--color-danger); font-size: var(--text-xs);
 }
+.chat-composer__failed-text { flex: 1; min-width: 0; }
+.chat-composer__failed :deep(.ui-button) { flex: none; color: var(--color-danger); }
 </style>

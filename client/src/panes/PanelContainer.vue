@@ -474,6 +474,17 @@ watch(() => pluginStore.revision, rebuild)
 }
 
 .panel-boxes--edit .panel-boxes__item { border-style: dashed; cursor: move; }
+/*
+ * 运行态观感（2026-10-28 视觉轮）：编辑态保留了 padding/border 帮你看清边界，
+ * 运行态是「正常用」的样子 —— 组件内容应铺满盒子、贴边渲染，去掉内衬与滚动缝合
+ * （滚动条归组件自己管，时间线/会话列表都自带），盒子只剩一条极淡的描边 + 轻阴影，
+ * 看「拼积木」的画框感就没了。
+ */
+.panel-boxes--runtime .panel-boxes__body { padding: 0; overflow: hidden; }
+.panel-boxes--runtime .panel-boxes__item {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
 .panel-boxes__header { flex: 0 0 auto; height: 26px; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; color: var(--color-topbar-text); background: linear-gradient(180deg, var(--color-topbar-bg) 0%, var(--color-topbar-bg-2) 100%); border-bottom: 1px solid var(--color-topbar-border); user-select: none; }
 .panel-boxes__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel-boxes__remove,

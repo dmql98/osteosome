@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-timeline">
+  <div class="chat-timeline" @click="onRootClick">
     <div class="chat-timeline__bar">
       <span class="chat-timeline__title">{{ currentTitle }}</span>
       <span v-if="running" class="chat-timeline__pill chat-timeline__pill--run" data-testid="timeline-pill">回复中</span>
@@ -7,7 +7,7 @@
       <span class="chat-timeline__sp" />
       <span class="chat-timeline__count">{{ rows.length }} 条</span>
     </div>
-    <div ref="messagesEl" class="chat-timeline__messages" data-testid="timeline-messages">
+    <div ref="messagesEl" class="chat-timeline__messages" data-testid="timeline-messages" @scroll="onScroll">
       <button
         v-if="hasMore"
         class="chat-timeline__more"
@@ -27,12 +27,21 @@
       <template v-for="row in rows" :key="row.key">
         <!-- user / assistant 气泡 -->
         <div
-          class="chat-timeline__bubble"
-          :class="row.role === 'user' ? 'chat-timeline__bubble--user' : 'chat-timeline__bubble--assistant'"
-          :data-testid="`timeline-${row.role}`"
+          v-if="row.role === 'user'"
+          class="chat-timeline__bubble chat-timeline__bubble--user"
+          data-testid="timeline-user"
         >
-          <span v-if="row.pending" class="chat-timeline__spinner"><Spinner :size="12" /></span>
           {{ row.text }}
+        </div>
+        <div
+          v-else
+          class="chat-timeline__bubble chat-timeline__bubble--assistant"
+          :class="{ 'chat-timeline__bubble--streaming': row.pending && !row.text }"
+          data-testid="timeline-assistant"
+        >
+          <span v-if="row.pending && !row.text" class="chat-timeline__spinner"><Spinner :size="12" /></span>
+          <!-- 正文：markdown 渲染（安全见 state/md.ts）；user 气泡保持纯文本 -->
+          <div v-if="row.text" class="chat-md" v-html="row.text && md(row.text)" />
           <!-- 流式尾光标（本轮还在跑且正文已开始） -->
           <span v-if="showCaret(row)" class="chat-timeline__caret" data-testid="timeline-caret" />
         </div>
@@ -85,6 +94,9 @@
       <div v-if="failed" class="chat-timeline__failed" data-testid="timeline-failed">{{ failed }}</div>
     </div>
 
+    <!-- 未钉底时给一个「回到底部」浮钮（running/长会话里被顶上去之后一眼能找回） -->
+    <button v-if="!pinned" class="chat-timeline__jump" data-testid="timeline-jump" @click="jumpBottom">↓ 最新</button>
+
     <!-- 审批卡（P7 WS-13）：exec / workspace 两种 kind 就地答，不跳去 ① 工具页 -->
     <div v-if="approvals.length" class="chat-timeline__approvals" data-testid="timeline-approvals">
       <div v-for="p in approvals" :key="p.requestId" class="chat-timeline__approval" data-testid="timeline-approval">
@@ -133,9 +145,10 @@
  * 真名是 `--color-primary` 与 `--color-surface`。token 名写错 CSS 与 TS 都不报错，
  * 症状是「用户气泡没有底色、流式尾光标是透明的」——这正是 tokens-parity 那类测试想防的事。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Badge, Button, Card, EmptyState, Spinner } from '@osteosome/ui'
 import { sse, useCommand } from '@osteosome/core-client'
+import { copyCodeFrom, renderMarkdown } from '../state/md'
 import { currentSessionId, useRunState, useSessionState, type ChatRow } from '../state'
 
 const sessions = useSessionState()
@@ -144,6 +157,29 @@ const curId = currentSessionId()
 
 /** 消息滚动容器 —— 「加载更早」prepend 后用它做滚动锚定 */
 const messagesEl = ref<HTMLElement | null>(null)
+
+/* ── 自动滚动（钉底）策略 ──────────────────────────────────────
+ * 钉底 = 视口距底部 < 48px。用户上滚超过这个距离就算「解开」，
+ * 之后新 token 不再拽人；回到底部附近自动重新钉上。 */
+const pinned = ref(true)
+
+function onScroll(): void {
+  const el = messagesEl.value
+  if (!el) return
+  pinned.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+}
+
+function scrollToBottom(): void {
+  const el = messagesEl.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+/** 钉底状态下，每批新行/token 都贴到底；解钉时不拽人（浮钮接管）。
+ *  watch 放在 `rows` 定义之后（watch 的 getter 在注册时就要读 rows，提前会踩 TDZ） */
+function jumpBottom(): void {
+  pinned.value = true
+  void nextTick(scrollToBottom)
+}
 
 /**
  * 加载更早一页并把视口锚住：记录 prepend 前的 `scrollHeight`，DOM 更新后按增量下移 `scrollTop`，
@@ -166,6 +202,46 @@ const run = useRunState({
 const rows = computed<ChatRow[]>(() => run.rowsView.value)
 const failed = computed(() => run.failed.value)
 const running = computed(() => run.sending.value)
+
+/** 钉底状态下，每批新行/token 都贴到底；解钉时不拽人（浮钮接管）。
+ *  deep: true —— 流式更新走的是「行内追加」（run.ts 里 `target.text += token`），
+ *  不 deep 的话同一行的追加不触发 watch，钉底就断了。 */
+watch(
+  rows,
+  () => {
+    if (!pinned.value) return
+    void nextTick(scrollToBottom)
+  },
+  { deep: true },
+)
+
+/** markdown 正文（user 走纯文本分支，不会调到这里）。旧行同文本命中缓存。 */
+const mdCache = new Map<string, string>()
+function md(text: string): string {
+  const hit = mdCache.get(text)
+  if (hit !== undefined) return hit
+  const html = renderMarkdown(text)
+  // 流式期间同一行 key 反复出现 Bad 增长的话也不大：粒度按「整段文本」，
+  // 落库后 id 稳定，缓存量级 ≈ 消息数。无界场景（超长会话）由换页自然淘汰。
+  if (mdCache.size > 512) mdCache.clear()
+  mdCache.set(text, html)
+  return html
+}
+
+/** 代码块复制：按钮在 v-html 里不是 Vue 组件 → 容器级委托 */
+async function onRootClick(event: Event): Promise<void> {
+  const target = event.target as HTMLElement | null
+  const copyBtn = target?.closest('[data-copy]')
+  if (!copyBtn) return
+  const btn = copyBtn as HTMLButtonElement
+  const ok = await copyCodeFrom(btn.closest('.md-code') as Element)
+  btn.textContent = ok ? '已复制' : '复制失败'
+  btn.disabled = true
+  setTimeout(() => {
+    btn.textContent = '复制'
+    btn.disabled = false
+  }, 1200)
+}
 /** 标题条上的会话名（会话列表还没载入时退回「对话」） */
 const currentTitle = computed(() => sessions.list.value.find((m) => m.id === curId.value)?.title || '对话')
 
@@ -251,6 +327,7 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 铺满宿主给出的盒子：细标题条固定，消息区滚动（P4b §8，无 Card 外壳） */
 .chat-timeline {
+  position: relative;   /* 「回到底部」浮钮的定位参照 */
   display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 0;
   background: var(--color-surface);
 }
@@ -272,12 +349,14 @@ onBeforeUnmount(() => {
 .chat-timeline__pill--run { color: var(--motion-working); border-color: var(--motion-working); }
 .chat-timeline__pill--err { color: var(--color-danger); border-color: var(--color-danger); }
 .chat-timeline__messages {
-  flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-3);
-  display: flex; flex-direction: column; gap: var(--space-3);
+  flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-4) var(--space-4) var(--space-3);
+  display: flex; flex-direction: column; gap: 10px;
   background: var(--color-bg);
+  scroll-behavior: smooth;
 }
-.chat-timeline__messages::-webkit-scrollbar { width: 8px; }
-.chat-timeline__messages::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); }
+.chat-timeline__messages::-webkit-scrollbar { width: 6px; }
+.chat-timeline__messages::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: var(--radius-full); }
+.chat-timeline__messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
 .chat-timeline__messages::-webkit-scrollbar-track { background: transparent; }
 .chat-timeline__messages > :deep(.ui-empty-state) { flex: 1; align-content: center; }
 .chat-timeline__more {
@@ -289,18 +368,20 @@ onBeforeUnmount(() => {
 .chat-timeline__more:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
 
 .chat-timeline__bubble {
-  max-width: min(760px, 88%);
-  padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg);
-  font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word;
+  max-width: min(760px, 92%);
+  padding: 10px 14px; border-radius: 12px;
+  font-size: var(--text-md); line-height: 1.65; white-space: pre-wrap; word-break: break-word;
 }
 .chat-timeline__bubble--user {
   align-self: flex-end; background: var(--color-primary); color: var(--color-text-inverse);
-  border-bottom-right-radius: var(--radius-sm);
+  border-bottom-right-radius: 4px; box-shadow: var(--shadow-sm);
 }
 .chat-timeline__bubble--assistant {
   align-self: flex-start; background: var(--color-surface); border: 1px solid var(--color-border);
-  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-left-radius: 4px; box-shadow: var(--shadow-sm);
 }
+/* 还没出正文的 assistant 占位：给个最小体感高度，别缩成一条缝 */
+.chat-timeline__bubble--streaming { min-height: 34px; display: inline-flex; align-items: center; }
 .chat-timeline__spinner { display: inline-flex; margin-right: var(--space-1); vertical-align: middle; }
 .chat-timeline__caret {
   display: inline-block; width: 5px; height: 1em; margin-left: 3px; vertical-align: text-bottom;
@@ -308,21 +389,86 @@ onBeforeUnmount(() => {
 }
 @keyframes chat-timeline-blink { to { visibility: hidden; } }
 
+/* ── assistant 正文 markdown（state/md.ts 产出，不用 raw 信任）────────── */
+.chat-md { white-space: normal; }   /* bubble 根上是 pre-wrap，markdown 自己接管换行 */
+.chat-md > :first-child { margin-top: 0; }
+.chat-md > :last-child { margin-bottom: 0; }
+.chat-md p { margin: 0.5em 0; }
+.chat-md h1, .chat-md h2, .chat-md h3, .chat-md h4 {
+  margin: 1em 0 0.4em; font-weight: 650; line-height: 1.4;
+}
+.chat-md h1 { font-size: 1.28em; } .chat-md h2 { font-size: 1.18em; } .chat-md h3 { font-size: 1.08em; }
+.chat-md h2 { padding-bottom: 0.25em; border-bottom: 1px solid var(--color-border); }
+.chat-md ul, .chat-md ol { margin: 0.5em 0; padding-left: 1.5em; }
+.chat-md li { margin: 0.2em 0; }
+.chat-md li > input { margin-right: 0.35em; }
+.chat-md blockquote {
+  margin: 0.6em 0; padding: 0.1em 0 0.1em 0.8em;
+  border-left: 3px solid var(--color-border-strong); color: var(--color-text-muted);
+}
+.chat-md hr { border: 0; border-top: 1px solid var(--color-border); margin: 1em 0; }
+.chat-md a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+.chat-md table { border-collapse: collapse; margin: 0.6em 0; font-size: 0.95em; display: block; overflow-x: auto; }
+.chat-md th, .chat-md td { border: 1px solid var(--color-border); padding: 4px 10px; text-align: left; }
+.chat-md th { background: var(--color-surface-2); font-weight: 600; }
+.chat-md :not(pre) > code {
+  font-family: var(--font-mono); font-size: 0.92em;
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface-2));
+  color: var(--color-text); border-radius: var(--radius-sm); padding: 1px 6px;
+}
+
+/* 代码块：头部（语言 + 复制）+ 深色面板；委托复制，按钮不背行为 */
+.chat-md .md-code {
+  margin: 0.6em 0; border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden;
+}
+.chat-md .md-code__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 10px; background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+}
+.chat-md .md-code__lang { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+.chat-md .md-copy {
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  background: var(--color-surface); color: var(--color-text-muted);
+  font: inherit; font-size: var(--text-xs); padding: 1px 8px; cursor: pointer;
+}
+.chat-md .md-copy:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
+.chat-md .md-copy:disabled { cursor: default; opacity: 0.75; }
+.chat-md .md-code pre { margin: 0; padding: 10px 12px; overflow-x: auto; background: var(--color-surface-2); }
+.chat-md .md-code code {
+  font-family: var(--font-mono); font-size: 0.92em; line-height: 1.55;
+  color: var(--color-text); background: transparent; padding: 0;
+}
+
+/* ── 未钉底时的「回到底部」浮钮 ─────────────────────────────── */
+.chat-timeline__jump {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 5;
+  border: 1px solid var(--color-border); border-radius: var(--radius-full);
+  background: var(--color-surface); color: var(--color-text);
+  font: inherit; font-size: var(--text-xs); padding: 5px 14px; cursor: pointer;
+  box-shadow: var(--shadow-md);
+}
+.chat-timeline__jump:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
 /* 折叠思考块 —— 与正文分开渲染，是「思维链不进正文」的可见证据 */
 .chat-timeline__thinking {
-  align-self: flex-start; max-width: min(760px, 88%);
-  border: 1px solid var(--color-border); border-left: 3px solid var(--color-warning);
+  align-self: flex-start; max-width: min(760px, 92%);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
   border-radius: var(--radius-md); background: var(--color-surface); font-size: var(--text-xs);
+  box-shadow: var(--shadow-sm);
 }
 .chat-timeline__thinking-head {
-  display: flex; align-items: center; gap: var(--space-2); padding: 5px var(--space-3);
+  display: flex; align-items: center; gap: var(--space-2); padding: 6px 12px;
   cursor: pointer; color: var(--color-text-muted); list-style: none;
 }
+.chat-timeline__thinking-head:hover { color: var(--color-text); }
 .chat-timeline__thinking-head::-webkit-details-marker { display: none; }
-.chat-timeline__thinking-label { color: var(--color-text); }
-.chat-timeline__thinking-count { margin-left: auto; }
+.chat-timeline__thinking-label { color: var(--color-text-muted); font-weight: 600; }
+.chat-timeline__thinking-count { margin-left: auto; font-variant-numeric: tabular-nums; }
 .chat-timeline__thinking-body {
-  margin: 0; padding: 0 var(--space-3) var(--space-3);
+  margin: 0; padding: 2px 12px 10px;
   white-space: pre-wrap; word-break: break-word; color: var(--color-text-muted); line-height: 1.6;
 }
 
@@ -332,6 +478,7 @@ onBeforeUnmount(() => {
   padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-primary); border-radius: var(--radius-md);
   font-size: var(--text-xs); background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 .chat-timeline__tool--failed { border-left-color: var(--color-danger); }
 .chat-timeline__tool--running { border-left-color: var(--color-warning); }
