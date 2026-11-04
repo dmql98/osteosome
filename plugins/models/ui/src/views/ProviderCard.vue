@@ -31,6 +31,7 @@ import { computed, ref } from 'vue'
 import { Button } from '@osteosome/ui'
 import { Input } from '@osteosome/ui'
 import ModelWall from './ModelWall.vue'
+import type { ModelProfile } from '@osteosome/shared'
 
 export interface ProviderCardData {
   id: string
@@ -55,6 +56,8 @@ export interface ProviderCardData {
   expanded: boolean
   /** 本端点下已禁用的模型名（省掉子组件再理解 `provider::model`） */
   disabled: string[]
+  /** 模型名 → 能力（同样只在本端点作用域，键不带 provider 前缀） */
+  profiles: Record<string, ModelProfile>
 }
 
 const props = defineProps<{
@@ -73,6 +76,8 @@ const emit = defineEmits<{
   (e: 'set-default', model: string): void
   (e: 'toggle-model', model: string, on: boolean): void
   (e: 'set-all', on: boolean): void
+  /** 模型级的四项能力（上下文 / 输出 / 输入模态 / 思考档位） */
+  (e: 'update-profile', model: string, profile: ModelProfile): void
   /** 退回未连接：把这家从接入清单里摘掉（密钥与端点配置保留） */
   (e: 'disconnect'): void
 }>()
@@ -131,6 +136,11 @@ const canEditUrl = computed(() => Boolean(props.provider.credentialEnv) === fals
 
 function onToggleModel(model: string, on: boolean): void {
   emit('toggle-model', model, on)
+}
+
+/** 函数引用而不是内联语句：`update-profile` 有两个参数，内联只能拿到第一个 */
+function onUpdateProfile(model: string, profile: ModelProfile): void {
+  emit('update-profile', model, profile)
 }
 </script>
 
@@ -229,11 +239,13 @@ function onToggleModel(model: string, on: boolean): void {
       <ModelWall
         :models="provider.models"
         :disabled="provider.disabled"
+        :profiles="provider.profiles"
         :default-model="provider.defaultModel"
         :catalog="provider.reachable === null ? null : provider.reachable ? 'remote' : 'static'"
         :query="query"
         @set-default="emit('set-default', $event)"
         @toggle="onToggleModel"
+        @update-profile="onUpdateProfile"
       />
 
       <p v-if="provider.note" class="pcard__note">{{ provider.note }}</p>

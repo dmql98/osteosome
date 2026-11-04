@@ -119,6 +119,11 @@ export class ModelsStore {
       enabledModels: Array.isArray(patch.enabledModels)
         ? patch.enabledModels.filter((x): x is string => typeof x === 'string')
         : this.prefs.enabledModels,
+      // 整表替换（不是按键合并）：设置页要能**删掉**某一条能力，
+      // 而合并语义下「删一条」和「没提这条」长得一样。
+      modelProfiles: patch.modelProfiles !== undefined
+        ? sanitizeModelProfiles(patch.modelProfiles)
+        : this.prefs.modelProfiles,
     }
     this.prefs = next
     this.writeAtomic(this.prefsFile, next)
@@ -244,6 +249,41 @@ export class ModelsStore {
   }
 }
 
+/**
+ * 模型能力表的容错解析。
+ *
+ * 这份数据是**用户手填的**（上下文窗口可能被输成 `abc`），而且 owner 是唯一写者、
+ * 前端是唯一读者，坏数据的后果是「设置页打不开」或「输入框的思考档位乱掉」。
+ * 所以逐字段收窄，坏的字段直接丢掉（保留其余），而不是整表作废。
+ */
+export function sanitizeModelProfiles(input: unknown): ModelsPrefs['modelProfiles'] {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
+  const out: ModelsPrefs['modelProfiles'] = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!key || !value || typeof value !== 'object' || Array.isArray(value)) continue
+    const raw = value as Record<string, unknown>
+    const profile: ModelsPrefs['modelProfiles'][string] = {}
+    if (typeof raw.contextWindow === 'number' && Number.isFinite(raw.contextWindow) && raw.contextWindow > 0) {
+      profile.contextWindow = Math.floor(raw.contextWindow)
+    }
+    if (typeof raw.maxTokens === 'number' && Number.isFinite(raw.maxTokens) && raw.maxTokens > 0) {
+      profile.maxTokens = Math.floor(raw.maxTokens)
+    }
+    if (Array.isArray(raw.input)) {
+      const modalities = raw.input.filter((m): m is 'text' | 'image' => m === 'text' || m === 'image')
+      if (modalities.length > 0) profile.input = [...new Set(modalities)]
+    }
+    if (Array.isArray(raw.reasoningEfforts)) {
+      const levels = raw.reasoningEfforts.filter((m): m is string => typeof m === 'string' && m.length > 0)
+      // 空数组 = 不限制，不写；否则「全部取消勾选」会被存成「一个档位都不支持」
+      if (levels.length > 0) profile.reasoningEfforts = [...new Set(levels)]
+    }
+    // 一条都没有 = 等同于「没配过」，不占位置
+    if (Object.keys(profile).length > 0) out[key] = profile
+  }
+  return out
+}
+
 /** 容错解析：脏结构退回缺省值，不让一行坏数据把接入清单清空 */
 export function parsePrefs(parsed: unknown): ModelsPrefs {
   const base = emptyModelsPrefs()
@@ -257,5 +297,6 @@ export function parsePrefs(parsed: unknown): ModelsPrefs {
     enabledModels: Array.isArray(p.enabledModels)
       ? p.enabledModels.filter((x): x is string => typeof x === 'string')
       : base.enabledModels,
+    modelProfiles: sanitizeModelProfiles(p.modelProfiles),
   }
 }

@@ -33,6 +33,18 @@
  * 于是连通性是顺带的，见 `useEndpointProbe`。本页只留 probe 一个发送方：
  * 模型墙 = `probe.results[id].models`，状态 = `catalog === 'remote'`。
  *
+ * ## 自建端点的清单为什么要「采纳进配置」
+ *
+ * 探测结果只在内存里（`useEndpointProbe` 的 ref），进程一重启就空 —— 预设端点无所谓
+ * （静态兜底来自 `catalog.json`），自建端点却是**只有探测**，于是重启后模型墙、
+ * 对话输入框的模型下拉会一起变空，除非用户再去点一次「获取模型列表」。
+ *
+ * 所以自建端点多一步：「获取模型列表」拉到候选 → 弹窗勾选 → 采纳进
+ * `vendorOverrides[].models`（`ModelPickerModal`）。owner 把这份喂给实例的
+ * `staticModels`，重启后、或端点一时连不上时，用它而不是空列表。
+ * 采纳**不改连通性**，所以不 `probe.clear()` —— 清了界面会闪一下「未测试」，
+ * 而这两份清单此刻本来就是同一份。
+ *
  * ## 「已连接」= 用户点了连接，不是「后端注册了」
  *
  * 免凭证的本地端点（ollama / vllm / lm-studio）在 `buildVendorInstances` 里**恒注册** ——
@@ -59,11 +71,14 @@ import { useEndpointProbe } from '@osteosome/core-client'
 import { useLlmProviders } from '@osteosome/core-client'
 import { useModelsPrefs, useModelCredentials } from '@osteosome/core-client'
 import CustomEndpointSection from './CustomEndpointSection.vue'
+import type { EndpointRow } from './CustomEndpointSection.vue'
+import ModelPickerModal from './ModelPickerModal.vue'
 import PluginProviderSection from './PluginProviderSection.vue'
 import VendorListSection from './VendorListSection.vue'
 import type { PendingRow } from './ProviderCatalog.vue'
 import type { ProviderCardData } from './ProviderCard.vue'
-import type { EndpointOverride, MaskedCredential, VendorPreset } from '@osteosome/shared'
+import type { EndpointOverride, MaskedCredential, ModelProfile, VendorPreset } from '@osteosome/shared'
+import { modelProfileKey } from '@osteosome/shared'
 import { useCatalog } from '../catalog'
 
 const { list: providerList } = useLlmProviders()
@@ -114,6 +129,13 @@ const disabledModels = ref<string[]>([])
  * 点「连接」的那一次才会把它写进来。
  */
 const connectedVendors = ref<string[]>([])
+/**
+ * 模型能力表：`${providerId}::${model}` → 该模型的四项能力。
+ *
+ * 与 `enabledModels` 的键同一个拼法（`shared` 的 `modelProfileKey`），
+ * 但语义完全不同：那个说「这个模型开不开」，这个说「它有什么能力」。
+ */
+const modelProfiles = ref<Record<string, ModelProfile>>({})
 /** 用户手动收起的卡片。**不在这个名单里 = 展开** —— 连上就该看见模型墙 */
 const collapsed = ref<string[]>([])
 /** 未连接的预设目录是否展开。默认收起 —— 12 家里通常只连 1–2 家 */
@@ -140,6 +162,16 @@ const epNeedKey = ref(false)
 const epCredId = ref('')
 const epCredName = ref('')
 const epKeyValue = ref('')
+
+// ── 模型清单采纳弹窗（自建端点专用）──
+//
+// 候选来自**探测**，`selected` 来自**配置**（`vendorOverrides[].models`）：
+// 前者是「上游有什么」，后者是「我留下了什么」。弹窗里勾的是后者。
+const pickerOpen = ref(false)
+const pickerId = ref('')
+const pickerCandidates = ref<string[]>([])
+const pickerSelected = ref<string[]>([])
+const pickerCatalog = ref<'remote' | 'static' | null>(null)
 
 // ── 派生 ──
 const overrideById = computed(() => {
@@ -187,6 +219,21 @@ function disabledFor(id: string): string[] {
   return disabledModels.value.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length))
 }
 
+/**
+ * 本端点作用域的能力表：把 `provider::model` 的键拆成「模型名 → 能力」。
+ *
+ * 模型墙只需要「这个模型有什么能力」，不该让它理解跨厂商的键格式 ——
+ * 与 `disabledFor` 同一个处置（那边也是先剥掉前缀再交给子组件）。
+ */
+function profilesFor(id: string): Record<string, ModelProfile> {
+  const prefix = `${id}::`
+  const out: Record<string, ModelProfile> = {}
+  for (const [key, profile] of Object.entries(modelProfiles.value)) {
+    if (key.startsWith(prefix)) out[key.slice(prefix.length)] = profile
+  }
+  return out
+}
+
 const credentialFor = (providerId: string): MaskedCredential | undefined =>
   credentials.value.find((c) => c.provider === providerId)
 
@@ -217,6 +264,7 @@ const cards = computed<ProviderCardData[]>(() => {
       latencyMs: result?.latencyMs ?? null,
       expanded: !collapsed.value.includes(v.id) || forceOpen,
       disabled: disabledFor(v.id),
+      profiles: profilesFor(v.id),
     })
   }
   return out
@@ -251,17 +299,40 @@ const reachableMap = computed<Record<string, boolean | null>>(() =>
  *
  * 预设 id 的 override 已经在上面的卡片里就地编辑了；在这儿再列一遍，
  * 同一个端点就会出现在两个地方、两处配置。
+ *
+ * ## 清单取哪一份
+ *
+ * **探测结果优先，没有就用已采纳的配置**（`o.models`）：
+ * - 探过 → 上游刚说的，最准（含「连不上」时 owner 回退的静态清单）；
+ * - 没探过（刚重启 / 刚加）→ 用户上次采纳的那份，否则模型墙会是空的，
+ *   而对话输入框里其实有模型可选 —— 界面自相矛盾。
  */
-const customEndpoints = computed(() => {
+const customEndpoints = computed<EndpointRow[]>(() => {
   const presetIds = new Set(catalog.value.map((v) => v.id))
-  return overrides.value
-    .filter((o) => !presetIds.has(o.id))
-    .map((o) => ({
+  const out: EndpointRow[] = []
+  for (const o of overrides.value) {
+    if (presetIds.has(o.id)) continue
+    const configured = o.models ?? []
+    const result = probe.results.value[o.id]
+    const models = result && result.models.length > 0 ? result.models : configured
+    if (!matches(o.id, o.label ?? o.id, o.baseUrl, models)) continue
+    // 搜到模型名时把这一行顶开：用户要的是那个模型，藏起来等于没搜到
+    const forceOpen = keyword.value !== '' && models.some((m) => m.toLowerCase().includes(keyword.value))
+    out.push({
       id: o.id,
       label: o.label ?? '',
       baseUrl: o.baseUrl,
       needsKey: o.credentialRef !== '',
-    }))
+      models,
+      configuredCount: configured.length,
+      disabled: disabledFor(o.id),
+      defaultModel: effectiveModel.value[o.id] ?? '',
+      catalog: result?.catalog ?? null,
+      expanded: !collapsed.value.includes(o.id) || forceOpen,
+      profiles: profilesFor(o.id),
+    })
+  }
+  return out
 })
 
 /** 插件提供的接入：目前恒为空 —— 没有插件注册原生 wire provider */
@@ -316,26 +387,45 @@ async function onDisconnect(providerId: string): Promise<void> {
 }
 
 // ── 就地改预设：写同 id 的 override ──
-async function upsertOverride(id: string, patch: Partial<EndpointOverride>): Promise<void> {
+/**
+ * 写一条 override（同 id 覆盖）。
+ *
+ * `keepProbe`：改的是**模型清单**时用。端点与凭证没动，连通性结论仍然有效，
+ * 清掉的话模型墙会从「远程清单」退回「已采纳清单」并闪一下「未测试」——
+ * 而这两份内容此刻本来就一样。改了 baseUrl / 模型名就必须清（见调用点）。
+ */
+async function upsertOverride(
+  id: string,
+  patch: Partial<EndpointOverride>,
+  opts: { keepProbe?: boolean } = {},
+): Promise<void> {
   const existing = overrideById.value[id]
   const base = existing ?? { id, baseUrl: '', credentialRef: '' }
   const next: EndpointOverride = { ...base, ...patch, id }
   if (!next.baseUrl) return
   overrides.value = [...overrides.value.filter((o) => o.id !== id), next]
   await saveLlm()
-  probe.clear(id)
+  if (!opts.keepProbe) probe.clear(id)
 }
 
 async function onEditBaseUrl(id: string, value: string): Promise<void> {
   await upsertOverride(id, { baseUrl: value.replace(/\/+$/, '') })
 }
 
+/**
+ * 改默认模型**不动连通性** —— 它不参与实例注册（`reconcile()` 只比
+ * `baseUrl` / `credentialRef`），端点还是那个端点，探测结论仍然有效。
+ *
+ * 之前这里没带 `keepProbe`，于是「点一下模型卡片设默认」会把探测结果清掉：
+ * 模型墙的角标从「远程」跳成「静态」、状态退回「未测试」，
+ * 而没采纳过清单的端点更惨 —— 墙直接空了。用户看到的是「点一下就把模型弄没了」。
+ */
 function onEditModel(id: string, value: string): void {
-  void upsertOverride(id, { defaultModel: String(value).trim() })
+  void upsertOverride(id, { defaultModel: String(value).trim() }, { keepProbe: true })
 }
 
 function onSetDefault(id: string, model: string): void {
-  void upsertOverride(id, { defaultModel: model })
+  void upsertOverride(id, { defaultModel: model }, { keepProbe: true })
 }
 
 // ── 逐模型启用 / 禁用（llm.enabledModels） ──
@@ -359,6 +449,26 @@ async function onSetAll(id: string, on: boolean): Promise<void> {
     for (const m of models) next.add(modelKey(id, m))
     disabledModels.value = [...next]
   }
+  await saveLlm()
+}
+
+// ── 模型能力（per-model：上下文 / 输出 / 输入模态 / 思考档位） ──
+//
+// 键是 `${providerId}::${model}`（与 enabledModels 同一拼法）。**整表替换**：
+// owner 那边也是整表替换，所以「清掉某个模型的能力」= 从这份对象里删掉那个键。
+/**
+ * 写一个模型的能力。
+ *
+ * `{}` = 清除（这个模型全用默认）—— 不留空对象占位，否则「已配置 N 个模型」
+ * 这类计数会虚高，而且下一版加了字段时这种空壳会被误当成「用户配置过」。
+ */
+async function onUpdateProfile(id: string, model: string, profile: ModelProfile): Promise<void> {
+  if (!id || !model) return
+  const key = modelProfileKey(id, model)
+  const next: Record<string, ModelProfile> = { ...modelProfiles.value }
+  if (Object.keys(profile).length === 0) delete next[key]
+  else next[key] = profile
+  modelProfiles.value = next
   await saveLlm()
 }
 
@@ -442,6 +552,9 @@ async function onSaveEndpoint(): Promise<void> {
     ...(epNeedKey.value ? {} : { credentialRef: '' }),
     ...(epLabel.value.trim() ? { label: epLabel.value.trim() } : {}),
     ...(epModel.value.trim() ? { defaultModel: epModel.value.trim() } : {}),
+    // 编辑时**保留已采纳的模型清单**：这张表单不管清单（那是「编辑清单」弹窗的事），
+    // 不带上的话改一次端点就把用户勾过的模型全清空，而界面上没有任何提示。
+    ...(overrideById.value[id]?.models?.length ? { models: overrideById.value[id]!.models } : {}),
   }
   overrides.value = [...overrides.value.filter((o) => o.id !== id), item]
   await saveLlm()
@@ -459,13 +572,59 @@ async function onSaveEndpoint(): Promise<void> {
 
   endpointOpen.value = false
   // 建完立刻探：新增端点的首要疑问就是「它通不通」，顺便把模型列表填上
-  await probe.probe(id)
+  const result = await probe.probe(id)
+  // 探到了就直接问「这些模型要哪些」—— 新建端点是**一次办完**，
+  // 不用让用户存完再回头去点「获取模型列表」。拿不到清单不弹：
+  // 那时弹窗里是空的，用户还得先去修端点。
+  if (result && result.models.length > 0) openPicker(id, result.models)
 }
 
 async function onDeleteOverride(id: string): Promise<void> {
   overrides.value = overrides.value.filter((o) => o.id !== id)
   await saveLlm()
   probe.clear(id)
+}
+
+// ── 模型清单采纳（自建端点）────────────────────────────────
+//
+// 「探测拿到什么」与「我留下什么」是两件事：自建端点的 `/models` 常常一次几十条，
+// 大部分不能用，全写进配置等于把噪音搬进对话输入框的下拉。
+
+/** 打开采纳弹窗：候选 = 探测结果，已选 = 配置里已采纳的那份 */
+function openPicker(id: string, candidates: string[]): void {
+  if (!overrideById.value[id]) return
+  pickerId.value = id
+  pickerCandidates.value = [...candidates]
+  pickerSelected.value = [...(overrideById.value[id]?.models ?? [])]
+  pickerCatalog.value = probe.results.value[id]?.catalog ?? null
+  pickerOpen.value = true
+}
+
+/** 「获取模型列表」：先真探一次，再把候选摆给用户挑 */
+async function onFetchModels(id: string): Promise<void> {
+  if (!id) return
+  const result = await probe.probe(id)
+  openPicker(id, result?.models ?? [])
+}
+
+/** 「编辑清单」：**不联网**，改已采纳的那份（端点挂了也能删/补模型名） */
+function onPickModels(id: string): void {
+  if (!id) return
+  openPicker(id, probe.results.value[id]?.models ?? [])
+}
+
+/**
+ * 采纳：勾上的写进 `vendorOverrides[].models`（owner 拿它当 `staticModels` 兜底）。
+ *
+ * 空数组是合法的（= 不要静态清单，只靠探测），所以不拦「一个都没勾」。
+ */
+async function onAdoptModels(models: string[]): Promise<void> {
+  const id = pickerId.value
+  if (!id) return
+  pickerOpen.value = false
+  const clean = [...new Set(models.map((m) => m.trim()).filter(Boolean))]
+  // 只改了清单，端点与凭证没动 → 连通性结论仍然有效，保留探测结果
+  await upsertOverride(id, { models: clean }, { keepProbe: true })
 }
 
 // ── 接入清单读写（owner = models 插件的服务）──
@@ -478,6 +637,9 @@ async function saveLlm(): Promise<void> {
     vendorOverrides: overrides.value,
     enabledModels: disabledModels.value,
     connectedVendors: connectedVendors.value,
+    // 能力表也在这里**整份**写：`patch` 的键缺省 = 保持原样，但 owner 对这张表
+    // 是整表替换语义，所以漏传就等于「这次没改」，而不是清空。
+    modelProfiles: modelProfiles.value,
   })
 }
 
@@ -494,6 +656,7 @@ watch(
     overrides.value = prefs.vendorOverrides
     disabledModels.value = prefs.enabledModels
     connectedVendors.value = prefs.connectedVendors
+    modelProfiles.value = prefs.modelProfiles
   },
   { immediate: true, deep: true },
 )
@@ -579,6 +742,7 @@ onMounted(async () => {
       @set-default="onSetDefault"
       @toggle-model="onToggleModel"
       @set-all="onSetAll"
+      @update-profile="onUpdateProfile"
       @toggle-dir="toggleDir"
       @connect="onConnect"
       @disconnect="onDisconnect"
@@ -587,11 +751,28 @@ onMounted(async () => {
     <CustomEndpointSection
       :endpoints="customEndpoints"
       :probing="probe.probing.value"
-      :reachable="reachableMap"
+      :query="query"
       @create="openEndpointModal"
       @edit="editEndpoint"
       @remove="onDeleteOverride"
-      @probe="onProbe"
+      @toggle="toggleVendor"
+      @fetch="onFetchModels"
+      @pick="onPickModels"
+      @edit-model="onEditModel"
+      @set-default="onSetDefault"
+      @toggle-model="onToggleModel"
+      @set-all="onSetAll"
+      @update-profile="onUpdateProfile"
+    />
+
+    <ModelPickerModal
+      v-model:open="pickerOpen"
+      :endpoint-id="pickerId"
+      :endpoint-label="overrideById[pickerId]?.label ?? overrideById[pickerId]?.id ?? ''"
+      :candidates="pickerCandidates"
+      :selected="pickerSelected"
+      :catalog="pickerCatalog"
+      @confirm="onAdoptModels"
     />
 
     <PluginProviderSection :plugin-providers="pluginProviders" />

@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
-import PluginListWindow from '../../src/plugins/PluginListWindow.vue'
+import PluginManagerWindow from '../../src/plugins/PluginManagerWindow.vue'
 import type { PluginListResponse } from '../../src/plugins/registry'
 
 /**
@@ -81,15 +81,19 @@ function coreResponse(over: Partial<PluginListResponse> = {}): PluginListRespons
 let body: PluginListResponse
 
 function mountWindow() {
-  return mount(PluginListWindow, { global: { plugins: [createPinia()] } })
+  return mount(PluginManagerWindow, { global: { plugins: [createPinia()] } })
 }
 
-describe('PluginListWindow 插件列表独立窗', () => {
+describe('PluginManagerWindow 插件管理窗（列表 + 详情同窗）', () => {
   beforeEach(() => {
     body = coreResponse()
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockImplementation(async () => ({ ok: true, json: async () => body })),
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/preferences')) return { ok: true, json: async () => ({}) }
+        return { ok: true, status: 202, json: async () => body }
+      }),
     )
   })
 
@@ -160,30 +164,86 @@ describe('PluginListWindow 插件列表独立窗', () => {
     expect(wrapper.text()).toContain('缺必需依赖: models')
   })
 
-  it('启用/停用是动态按钮：已启用显示「禁用」，点击后变「启用」', async () => {
+  /**
+   * D1 的交互约定：卡片右侧是开关，不是一个写着「启用/禁用」的文字按钮。
+   * 开关承载的是**用户意愿**，所以点它必须真的翻转 Core 侧状态 ——
+   * 只测「文案变了」的话，命令没发出去也能通过。
+   */
+  it('卡片右侧是开关，点它翻转启用状态并发命令', async () => {
     const wrapper = mountWindow()
     await flushPromises()
-    const toggle = wrapper.findAll('.plugin-toggle')[0]
-    expect(toggle.text()).toBe('禁用')
-    expect(toggle.classes()).toContain('plugin-toggle--disable')
-    await toggle.trigger('click')
+    const switches = wrapper.findAll('[role="switch"]')
+    expect(switches.length).toBe(2)
+    expect(switches[0]!.attributes('aria-checked')).toBe('true')
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const before = fetchMock.mock.calls.length
+    await switches[0]!.trigger('click')
     await flushPromises()
-    expect(wrapper.findAll('.plugin-toggle')[0].text()).toBe('启用')
+
+    expect(wrapper.findAll('[role="switch"]')[0]!.attributes('aria-checked')).toBe('false')
+    const topics = fetchMock.mock.calls
+      .map(([input, init]) => (String(input).includes('/api/command') ? String((init as RequestInit).body) : ''))
+      .filter(Boolean)
+    expect(topics.some((raw) => raw.includes('plugin.stop'))).toBe(true)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(before)
   })
 
-  it('点击管理打开插件详情独立窗，用的是 Core 给的 plugin id', async () => {
-    const popup = { closed: false, focus: vi.fn(), addEventListener: vi.fn(), close: vi.fn() }
-    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+  it('点开关不会顺带进入配置页（stopPropagation 的回归）', async () => {
     const wrapper = mountWindow()
     await flushPromises()
-    const manage = wrapper.findAll('button').find((button) => button.text() === '管理')
-    expect(manage).toBeTruthy()
-    await manage!.trigger('click')
-    expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('#/plugin-detail/workbench'),
-      expect.any(String),
-      expect.any(String),
-    )
+    await wrapper.findAll('[role="switch"]')[0]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.plugin-detail').exists()).toBe(false)
+    expect(wrapper.find('.plugin-card').exists()).toBe(true)
+  })
+
+  it('在开关上按 Enter 也不会进入配置页（键盘事件同样会冒泡到卡片）', async () => {
+    const wrapper = mountWindow()
+    await flushPromises()
+    await wrapper.findAll('[role="switch"]')[0]!.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.find('.plugin-detail').exists()).toBe(false)
+  })
+
+  /**
+   * D2 改造的核心：点卡片进入配置页，**仍然是同一个窗口**。
+   *
+   * 旧行为是 `new WebviewWindow` 再开一个窗，所以这里同时钉两件事：
+   * · 配置页出现；
+   * · `window.open` 没被调用（换了新窗口就会调到它）。
+   */
+  it('点卡片在同一个窗口进入配置页，返回后回到列表', async () => {
+    const open = vi.spyOn(window, 'open')
+    const wrapper = mountWindow()
+    await flushPromises()
+
+    expect(wrapper.find('.plugin-card').attributes('role')).toBe('button')
+    await wrapper.findAll('.plugin-card')[0]!.trigger('click')
+    await flushPromises()
+
+    expect(open).not.toHaveBeenCalled()
+    expect(wrapper.find('.plugin-win').exists()).toBe(true)
+    expect(wrapper.find('.plugin-detail').exists()).toBe(true)
+    expect(wrapper.text()).toContain('介绍')
+    // 面包屑带插件名：同窗切换后用户要知道自己在哪
+    expect(wrapper.find('.plugin-win__title').text()).toContain('工作台外壳')
+
+    await wrapper.find('.plugin-win__back').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.plugin-detail').exists()).toBe(false)
+    expect(wrapper.text()).toContain('已安装 (2)')
+    // 列表的搜索/刷新在返回后仍然在（说明是同一层窗口，不是重开）
+    expect(wrapper.find('.plugin-refresh').exists()).toBe(true)
+    open.mockRestore()
+  })
+
+  it('键盘也能进入配置页（卡片不是原生按钮，必须自己处理 Enter / Space）', async () => {
+    const wrapper = mountWindow()
+    await flushPromises()
+    await wrapper.findAll('.plugin-card')[0]!.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.find('.plugin-detail').exists()).toBe(true)
   })
 
   it('搜索按 Core 给的名称过滤', async () => {

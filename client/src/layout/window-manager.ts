@@ -1,6 +1,6 @@
 import type { PaneId } from './types'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { isTauri, openPluginWindowViaTauri, openPluginDetailWindowViaTauri } from '../tauri/plugin-window'
+import { isTauri, openPluginWindowViaTauri } from '../tauri/plugin-window'
 import { PANEL_WINDOW_PREFIX, sanitizeWindowLabel } from '../tauri/window-registry'
 
 const popups = new Map<PaneId, Window>()
@@ -102,7 +102,8 @@ export function closeAllPaneWindows(): void { for (const popup of popups.values(
 const pluginWindows = new Map<string, Window>()
 
 /** 插件管理 = 独立原生窗（对齐 demo D1）。同一时刻至多一个，重复打开则聚焦。
- *  Tauri 环境用原生 WebviewWindow（src-tauri 壳负责真窗口），否则回退 window.open。 */
+ *  列表与详情在这**一个**窗内切换（见 plugins/PluginManagerWindow.vue），
+ *  不再为每个插件另开窗口。Tauri 环境用原生 WebviewWindow，否则回退 window.open。 */
 export function openPluginWindow(): Window | null {
   if (isTauri()) {
     void openPluginWindowViaTauri()
@@ -119,23 +120,5 @@ export function pluginWindowOpen(): boolean {
 export function closePluginWindow(): void {
   pluginWindows.get('list')?.close()
   pluginWindows.delete('list')
-}
-
-const pluginDetailWindows = new Map<string, Window>()
-
-/** 插件详情 = 独立原生窗（对齐 demo D2，每个插件一个）；已存在则聚焦。
- *  吸附 / 拖拽 / 拉伸 / 自适应与其它独立窗一致（Rust 壳统一处理吸附）。 */
-export function openPluginDetailWindow(pluginId: string): Window | null {
-  if (isTauri()) {
-    void openPluginDetailWindowViaTauri(pluginId)
-    return null
-  }
-  const url = `${window.location.origin}${window.location.pathname}#/plugin-detail/${encodeURIComponent(pluginId)}`
-  return openOrFocus(pluginDetailWindows, pluginId, url, `osteosome-plugin-detail-${pluginId}`, 'popup,width=600,height=860')
-}
-
-export function closeAllPluginDetailWindows(): void {
-  for (const popup of pluginDetailWindows.values()) popup.close()
-  pluginDetailWindows.clear()
 }
 

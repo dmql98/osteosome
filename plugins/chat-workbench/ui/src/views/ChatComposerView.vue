@@ -105,6 +105,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Button, EmptyState, Select, Textarea } from '@osteosome/ui'
 import { useLlmProviders, useModelCatalog, useModelsPrefs } from '@osteosome/core-client'
 import type { ThinkingEffort } from '@osteosome/shared'
+import { reasoningEffortsOf } from '@osteosome/shared'
 import { cancelRun, currentSessionId, useCharacters, useComposerRun, useRunState, useSessionState } from '../state'
 
 const sessions = useSessionState()
@@ -254,12 +255,38 @@ const modelOptions = computed(() => {
   return visibleModels.value.map((m) => ({ label: m, value: m }))
 })
 
-const thinkingOptions = [
+/** 四档全集。真正给用户看哪些，由当前**模型**声明的档位决定（见 `thinkingOptions`） */
+const ALL_THINKING_OPTIONS = [
   { label: '思考：关', value: 'off' },
   { label: '思考：低', value: 'low' },
   { label: '思考：中', value: 'medium' },
   { label: '思考：高', value: 'high' },
 ]
+
+/**
+ * 当前模型支持的思考档位。
+ *
+ * 设置页的模型卡片可以按模型声明「支持哪几档」（`modelProfiles[provider::model].reasoningEfforts`，
+ * 例如 `deepseek-reasoner` 恒思考、不接受 `reasoning_effort`，就只给「关」）。
+ * **没配 = 四档全给** —— 老配置没有任何一条能力表，行为必须与以前一模一样。
+ *
+ * 这一层不做「档位 → 上游参数」的翻译：provider 那边统一发 `reasoning_effort`（`off` 不发），
+ * 所以这里只管「给不给选」。
+ */
+const thinkingOptions = computed(() => {
+  const declared = reasoningEffortsOf(modelsPrefs.value.modelProfiles, provider.value, model.value)
+  return declared ? ALL_THINKING_OPTIONS.filter((o) => declared.includes(o.value)) : ALL_THINKING_OPTIONS
+})
+
+/**
+ * 换厂商 / 换模型之后，原先选中的档位可能不被新模型支持 ——
+ * 静默回落到第一个可用档，而不是把 `high` 发给一个只接受 `off` 的模型。
+ */
+watch([provider, model, thinkingOptions], () => {
+  if (thinkingOptions.value.some((o) => o.value === thinking.value)) return
+  const fallback = thinkingOptions.value[0]?.value
+  if (fallback) thinking.value = fallback as ThinkingEffort
+})
 
 /** provider 的声明默认模型（目录未到达时的兜底，也是目录不含它时的优先回落） */
 function defaultModelOf(target: string): string {

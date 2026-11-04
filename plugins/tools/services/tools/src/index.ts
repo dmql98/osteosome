@@ -181,6 +181,49 @@ service.subscribe('tools.mcp.test', () => {
   // 连通性测试归 mcp-tools；这里仅占位（无 server 时不做事）
 })
 
+/**
+ * 启动后**主动问一次**「现在都有谁」。
+ *
+ * ## 为什么必须问
+ *
+ * 各执行者在 `main()` 里 `await service.start()` 之后立刻 publish `tool.registered` ——
+ * 那是**一次性广播**，没有订阅者就丢了。而服务启动顺序由 ServiceManager 并行决定：
+ * 实测 fs/misc/shell 常常比闸门先起（它们的注册事件闸门永远收不到），
+ * 而 web/mcp 常常比闸门后起（这些又收得到）。
+ *
+ * 结果就是用户看到的现象：**工具目录空着，模型一个工具都没有**。
+ * 之前唯一的补救是 loop 在 ready 时发一次 `tools.list`，但 loop 往往也早于闸门
+ * （关掉闸门那一步还没订阅），于是那次广播同样落空 —— 之后没有任何人再问。
+ *
+ * 所以闸门自己启动后发 `tools.list`：还活着的执行者收到就重播注册。
+ *
+ * ## 为什么要重试几次
+ *
+ * 「闸门发出 tools.list」与「Core 处理完闸门的 bus.subscribe」之间有一小段窗口，
+ * 刚好在那段时间里起来的执行者既收不到询问、它的注册也没人听。
+ * 目录空着就再问一次（上限 ~3s），拿到之后不再问 —— 运行期的新增/消失由
+ * `tool.registered` / `tool.unregistered` 覆盖。
+ */
+const REGISTRY_WAIT_MS = 3000
+const REGISTRY_POLL_MS = 400
+
+function askRegistry(): void {
+  service.publish('tools.list', {})
+}
+
+async function collectRegistry(): Promise<void> {
+  const deadline = Date.now() + REGISTRY_WAIT_MS
+  while (registered.size === 0 && Date.now() < deadline) {
+    askRegistry()
+    await new Promise((resolve) => setTimeout(resolve, REGISTRY_POLL_MS))
+  }
+  if (registered.size === 0) {
+    logger.warn('tools gate: 没有执行者上报任何工具 —— 模型将没有工具可用（tools 插件的执行者起了吗？）')
+  } else {
+    logger.info(`tools gate: 目录就绪 ${catalog().length} 个工具（来自 ${registered.size} 个执行者）`)
+  }
+}
+
 async function main(): Promise<void> {
   await service.start()
   const dir = service.dataDir || process.env.DS_DATA_DIR
@@ -192,6 +235,8 @@ async function main(): Promise<void> {
   state = { policies: approvals.policies ?? {}, constraints, mcpServers: mcp.servers ?? [] }
   logger.info(`tools gate: policies=${Object.keys(state.policies).length} constraints=${Object.keys(state.constraints).length}`)
   publishState()
+  // 不 await：目录是**增量**补的，晚到的执行者照样会被 tool.registered 追加进来
+  void collectRegistry()
 }
 
 main().catch((err: unknown) => {

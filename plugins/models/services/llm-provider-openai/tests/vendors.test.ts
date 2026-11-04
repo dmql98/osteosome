@@ -153,6 +153,31 @@ describe('buildVendorInstances', () => {
     expect(mine).toMatchObject({ baseUrl: 'http://192.168.1.10:11434/v1', label: '远程 Ollama', credentialRef: '' })
   })
 
+  it('接入清单里的 models 落成实例的静态兜底目录 —— 重启后模型不全靠探测', () => {
+    // 界面「采纳模型清单」写的就是这个字段：它是**静态兜底**，
+    // 于是端点一时连不上、或上游没有 /models 时，模型下拉仍是这份清单。
+    const instances = buildVendorInstances(
+      {
+        env: {},
+        byProvider: new Map<string, string>(),
+        preferences: {
+          vendorOverrides: [
+            {
+              id: 'my-proxy',
+              baseUrl: 'http://10.0.0.5:8000/v1',
+              credentialRef: '',
+              models: ['qwen2.5-7b', 'qwen2.5-3b'],
+            },
+          ],
+        },
+      },
+      VENDOR_PRESETS,
+    )
+    expect(instances.find((i) => i.id === 'my-proxy')).toMatchObject({
+      staticModels: ['qwen2.5-7b', 'qwen2.5-3b'],
+    })
+  })
+
   it('畸形 LLM_VENDORS_EXTRA 静默忽略（不因一条坏配置起不来）', () => {
     expect(parseVendorOverrides('not-json')).toEqual([])
     expect(parseVendorOverrides('{"a":1}')).toEqual([])

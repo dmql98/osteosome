@@ -22,6 +22,7 @@ import ProviderCard from './ProviderCard.vue'
 import type { ProviderCardData } from './ProviderCard.vue'
 import ProviderCatalog from './ProviderCatalog.vue'
 import type { PendingRow } from './ProviderCatalog.vue'
+import type { ModelProfile } from '@osteosome/shared'
 
 export type { ProviderCardData, PendingRow }
 
@@ -50,6 +51,8 @@ const emit = defineEmits<{
   (e: 'set-default', providerId: string, model: string): void
   (e: 'toggle-model', providerId: string, model: string, on: boolean): void
   (e: 'set-all', providerId: string, on: boolean): void
+  /** 模型级能力（上下文 / 输出 / 输入模态 / 思考档位），按 `${providerId}::${model}` 落盘 */
+  (e: 'update-profile', providerId: string, model: string, profile: ModelProfile): void
   (e: 'toggle-dir'): void
   (e: 'connect', providerId: string): void
   /** 卡片上的「删除」：把这家挪回「未连接的预设」 */
@@ -74,6 +77,7 @@ function cardListeners(id: string) {
     setDefault: (model: string) => emit('set-default', id, model),
     toggleModel: (model: string, on: boolean) => emit('toggle-model', id, model, on),
     setAll: (on: boolean) => emit('set-all', id, on),
+    updateProfile: (model: string, profile: ModelProfile) => emit('update-profile', id, model, profile),
     disconnect: () => emit('disconnect', id),
   }
 }

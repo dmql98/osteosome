@@ -34,6 +34,26 @@ export const FS_TOOLS: ToolDecl[] = [
     ],
   },
   {
+    // `ls` 与 `glob` 不是一回事：glob 要你先知道要找什么（给 pattern），
+    // 而「这个目录里到底有什么」必须先看得见才问得出来。缺了它，模型只能猜文件名。
+    name: 'ls',
+    risk: 'read',
+    description: '列出一个目录的内容（默认只看一层，目录带尾斜杠；depth 最多 3 层）',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        depth: { type: 'number' },
+        all: { type: 'boolean' },
+      },
+      required: [],
+    },
+    constraintFields: [
+      { key: 'allowed_paths', label: '允许路径', type: 'string-list', validateArg: 'path', validateRule: 'glob-allow' },
+      { key: 'denied_paths', label: '禁止路径', type: 'string-list', validateArg: 'path', validateRule: 'glob-deny' },
+    ],
+  },
+  {
     name: 'grep',
     risk: 'read',
     description: '在工作区内按正则搜索文件内容',

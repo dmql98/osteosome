@@ -1,11 +1,5 @@
 <template>
   <div class="plugin-detail">
-    <header class="plugin-detail__bar" data-tauri-drag-region>
-      <span class="plugin-detail__title" data-tauri-drag-region>插件管理</span>
-      <span class="plugin-detail__spacer" data-tauri-drag-region></span>
-      <WindowControls />
-    </header>
-
     <div v-if="!plugin" class="plugin-detail__body plugin-detail__body--center">
       <EmptyState icon="🧩" title="插件不存在" :description="`未找到插件：${pluginId}`" />
     </div>
@@ -154,12 +148,16 @@ import { Button } from '@osteosome/ui'
 import { EmptyState } from '@osteosome/ui'
 import { Modal } from '@osteosome/ui'
 import { Switch } from '@osteosome/ui'
-import WindowControls from '@/components/layout/WindowControls.vue'
 import { addableWidgetIds, resolveWidget } from '@/widgets/registry'
 import { usePlugins } from '@/core-sdk/usePlugins'
 import type { PluginView } from './registry'
 import { requestAddWidget, notifyPluginsChanged } from '@/layout/window-events'
-import { closeCurrentWindow } from '@/tauri/plugin-window'
+
+/**
+ * 详情是插件管理窗口里的**一个页面**，不是独立窗口（D2 已废弃）。
+ * 返回列表由外层窗口的标题栏按钮发起，这里只上报意图。
+ */
+const emit = defineEmits<{ back: [] }>()
 
 const props = defineProps<{ pluginId: string }>()
 
@@ -309,12 +307,14 @@ async function doUninstall(): Promise<void> {
   confirmOpen.value = false
   const ok = await store.uninstall(props.pluginId)
   if (!ok) {
-    // 别关窗口：卸载没成功还把窗关了，用户会以为已经卸载了
+    // 别回列表：卸载没成功就回列表，用户会以为已经卸载了
     actionError.value = '卸载失败：Core 未接受停用命令，插件仍在运行'
     return
   }
   notifyPluginsChanged()
-  await closeCurrentWindow()
+  // 插件已从已安装列表消失，再停在它的配置页只会显示「插件不存在」——
+  // 回到列表让用户看到结果（原来这里是关掉整个窗口）
+  emit('back')
 }
 
 onBeforeUnmount(() => {
@@ -323,11 +323,17 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.plugin-detail { display: flex; flex-direction: column; height: 100%; background: var(--color-surface); }
-.plugin-detail__bar { display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 0 0 var(--space-3); border-bottom: 1px solid var(--color-border); flex: none; }
-.plugin-detail__title { font-weight: 700; font-size: var(--text-md); }
-.plugin-detail__spacer { flex: 1; }
+.plugin-detail { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--color-surface); }
 .plugin-detail__body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+/*
+ * 不止一个滚动容器。
+ *
+ * body 是 flex column，子项默认 `flex-shrink: 1`；只要某个卡片内部再自带
+ * `overflow-y: auto`，它的 `min-height: auto` 就退化成 0 —— 于是窗口一矮，
+ * 所有卡片一起被压扁，每个卡片内部各长出一条滚动条，界面看起来就是「信息叠在一起」。
+ * 所以：卡片一律不收缩，滚动只发生在 body 这一层。
+ */
+.plugin-detail__body > * { flex: none; }
 .plugin-detail__body--center { display: grid; place-items: center; }
 
 .plugin-hero { display: flex; align-items: center; gap: var(--space-3); }
@@ -351,7 +357,8 @@ onBeforeUnmount(() => {
 .issue-row__label { color: var(--color-text-muted); flex: none; min-width: 88px; }
 .issue-row__value { font-family: var(--font-mono); }
 .issue-hint { margin: 0; font-size: var(--text-xs); color: var(--color-text-muted); }
-.detail-card__body { padding: var(--space-3); font-size: var(--text-sm); display: flex; flex-direction: column; gap: var(--space-2); line-height: 1.6; max-height: 32vh; overflow-y: auto; }
+/* 不再给单张卡片设内层滚动：滚动统一交给 .plugin-detail__body（见上面的说明） */
+.detail-card__body { padding: var(--space-3); font-size: var(--text-sm); display: flex; flex-direction: column; gap: var(--space-2); line-height: 1.6; }
 .detail-card__empty { margin: 0; color: var(--color-text-muted); font-size: var(--text-xs); }
 
 .cap-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }

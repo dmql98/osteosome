@@ -28,6 +28,7 @@ import {
   type ToolRisk,
 } from '@osteosome/shared'
 import { FS_TOOLS } from './specs'
+import { listTree } from './list-tree'
 
 const SERVICE_ID = 'fs-tools'
 const service = new Service({ id: SERVICE_ID, version: '1.0.0' })
@@ -138,11 +139,13 @@ service.subscribe('tool.execute', async (payload) => {
   if (cviol) return result(T, false, cviol, cviol)
 
   // 2) 路径守卫（越界 → escape，不执行）
-  const rawPath = typeof args.path === 'string' ? args.path : ''
+  // 没给 path 时默认落在**会话工作区**上：`ls` 是可选路径的工具，
+  // 而 `resolve('.')` 是服务进程自己的 cwd（插件目录），不是用户的工作区。
+  const rawPath = typeof args.path === 'string' && args.path !== '' ? args.path : ''
   const effective = rawPath || workspaces[0] || '.'
-  const check = assertPathSafe(rawPath || '.', workspaces)
+  const check = assertPathSafe(effective, workspaces)
   if (!check.ok) {
-    const escape = { requestedPath: rawPath || effective, permissionRoot: workspaceApprovalRoot(rawPath || effective) }
+    const escape = { requestedPath: effective, permissionRoot: workspaceApprovalRoot(effective) }
     return result(T, false, `越界：${check.reason}`, check.reason, escape)
   }
   const abs = check.absolute
@@ -201,6 +204,13 @@ function execute(
       const files = walkFiles(abs, MAX_GLOB_FILES)
       const matched = files.filter((f) => matchGlob(pattern, relative(abs, f).replace(/\\/g, '/')))
       return { content: matched.join('\n'), summary: `glob ${pattern} → ${matched.length} 个文件` }
+    }
+    case 'ls': {
+      const depth = typeof args.depth === 'number' ? args.depth : 1
+      const tree = listTree(abs, { depth, all: args.all === true })
+      // 空目录要明说：一句都不给的话，模型分不清「空的」和「工具坏了」
+      const content = tree.text === '' ? `（空目录，或没有可显示的条目）${abs}` : tree.text
+      return { content, summary: `ls ${abs} (${tree.entries} 项${tree.truncated ? '，已截断' : ''})` }
     }
     case 'grep': {
       const pattern = String(args.pattern ?? '')

@@ -24,6 +24,8 @@
   },
   "capabilities": [
     { "name": "tool.execute", "detail": "派发一次工具执行给执行者（loop → 执行者）" },
+    { "name": "tool.registered", "detail": "执行者上报自己的工具清单（启动时 + 被 tools.list 询问时重播）" },
+    { "name": "tools.list", "detail": "要求所有执行者重播注册（闸门启动后主动问一次，否则早起执行者的注册会丢）" },
     { "name": "tool.approval.resolved", "detail": "审批应答（闸门 / loop）" },
     { "name": "tools.state", "detail": "工具目录 + 策略 + 约束 + MCP（重播整份）" },
     { "name": "workspace.list", "detail": "列目录（只列目录不读文件）" }

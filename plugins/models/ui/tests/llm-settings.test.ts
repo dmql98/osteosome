@@ -17,21 +17,21 @@
  * 3. **同源假设成立**：界面在 iframe 里跑，但 `/api/*` 与 `/events` 都是 Core 的
  *    同源路由，所以这些用例的 mock 方式与在 client 里时**完全一样**。
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { installFakeEventSource } from '@osteosome/core-client/testing'
 import { sse } from '@osteosome/core-client'
 import LlmSettings from '../src/views/LlmSettingsView.vue'
-
-/** 插件自带的厂商目录：构建时被复制进 `dist/ui/`，页面运行时 fetch 它 */
-const CATALOG_BODY = readFileSync(
-  // tests/ → ui/ → models/：catalog.json 在**插件根**，不在 ui 包里
-  resolve(fileURLToPath(import.meta.url), '..', '..', '..', 'catalog.json'),
-  'utf8',
-)
+/**
+ * 插件自带的厂商目录。
+ *
+ * 用 `?raw` 而不是 `readFileSync(import.meta.url)`：这套用例跑在 jsdom 环境里，
+ * Vite 会把 `node:fs` / `node:url` 外部化成空模块（症状是
+ * `fileURLToPath is not a function`，而报错位置在取路径那一行，离真因很远）。
+ * `?raw` 由构建器在打包时把文件内容当字符串内联，没有任何运行时依赖。
+ */
+// tests/ → ui/ → models/：catalog.json 在**插件根**，不在 ui 包里
+import CATALOG_BODY from '../../catalog.json?raw'
 
 const DESCRIPTOR = {
   provider: 'openai',

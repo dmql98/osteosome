@@ -6,7 +6,8 @@
     "publishes":  [
                       "tool.approval.resolved",
                       "tools.state",
-                      "tools.invoke.result"
+                      "tools.invoke.result",
+                      "tools.list"
                   ],
     "subscribes":  [
                        "tool.registered",

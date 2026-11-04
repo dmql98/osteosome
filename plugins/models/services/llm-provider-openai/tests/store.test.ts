@@ -36,6 +36,7 @@ describe('ModelsStore · 落盘位置与形状', () => {
       connectedVendors: ['lm-studio'],
       vendorOverrides: [],
       enabledModels: [],
+      modelProfiles: {},
     })
   })
 
@@ -143,14 +144,14 @@ describe('ModelsStore · 接入清单', () => {
     writeFileSync(path.join(dir, 'preferences.json'), 'nope', 'utf8')
     const store = new ModelsStore(dir)
     expect(store.prefsCorrupted).toBe(true)
-    expect(store.getPrefs()).toEqual({ connectedVendors: [], vendorOverrides: [], enabledModels: [] })
+    expect(store.getPrefs()).toEqual({ connectedVendors: [], vendorOverrides: [], enabledModels: [], modelProfiles: {} })
   })
 })
 
 describe('parsePrefs · 容错解析', () => {
   it('非对象 → 缺省值', () => {
     for (const bad of [null, 42, 'x', [1, 2]]) {
-      expect(parsePrefs(bad)).toEqual({ connectedVendors: [], vendorOverrides: [], enabledModels: [] })
+      expect(parsePrefs(bad)).toEqual({ connectedVendors: [], vendorOverrides: [], enabledModels: [], modelProfiles: {} })
     }
   })
 
@@ -159,7 +160,68 @@ describe('parsePrefs · 容错解析', () => {
       connectedVendors: ['a'],
       vendorOverrides: [],
       enabledModels: [],
+      modelProfiles: {},
     })
+  })
+
+  /**
+   * 能力表是**用户手填**的（上下文窗口可能被输成 `abc`），所以逐字段收窄：
+   * 坏字段丢掉、其余保留。整表作废会让一个模型的能力连同合法的三项一起消失。
+   */
+  it('能力表：坏字段丢掉，好字段留下，空条目不留', () => {
+    expect(
+      parsePrefs({
+        modelProfiles: {
+          'ollama::qwen2.5-7b': {
+            contextWindow: 32768,
+            maxTokens: 'a lot',
+            input: ['text', 'image', 'video'],
+            reasoningEfforts: ['off', 'low', 'low'],
+          },
+          'ollama::broken': {},
+          'ollama::junk': 'nope',
+        },
+      }).modelProfiles,
+    ).toEqual({
+      'ollama::qwen2.5-7b': {
+        contextWindow: 32768,
+        input: ['text', 'image'],
+        reasoningEfforts: ['off', 'low'],
+      },
+    })
+  })
+
+  it('能力表：非对象/非数组一律当空（不抛，服务照常起）', () => {
+    expect(parsePrefs({ modelProfiles: [1, 2] }).modelProfiles).toEqual({})
+    expect(parsePrefs({ modelProfiles: 'x' }).modelProfiles).toEqual({})
+    expect(parsePrefs({ modelProfiles: null }).modelProfiles).toEqual({})
+  })
+})
+
+describe('ModelsStore · 模型能力（patchPrefs）', () => {
+  it('整表替换（不是按键合并）—— 「删掉某条能力」才能真的删掉', () => {
+    const store = new ModelsStore(dir)
+    store.patchPrefs({
+      modelProfiles: {
+        'ollama::a': { contextWindow: 8000 },
+        'ollama::b': { maxTokens: 512 },
+      },
+    })
+    // 合并语义下「删 b」与「没提 b」长得一样，所以这里必须是整表替换
+    store.patchPrefs({ modelProfiles: { 'ollama::a': { contextWindow: 32768 } } })
+    expect(store.getPrefs().modelProfiles).toEqual({ 'ollama::a': { contextWindow: 32768 } })
+  })
+
+  it('没给 modelProfiles 的那次写不改它', () => {
+    const store = new ModelsStore(dir)
+    store.patchPrefs({ modelProfiles: { 'ollama::a': { contextWindow: 8000 } } })
+    store.patchPrefs({ connectedVendors: ['ollama'] })
+    expect(store.getPrefs().modelProfiles).toEqual({ 'ollama::a': { contextWindow: 8000 } })
+  })
+
+  it('落盘再读回：能力表不是只在内存里', () => {
+    new ModelsStore(dir).patchPrefs({ modelProfiles: { 'ollama::a': { input: ['text', 'image'] } } })
+    expect(new ModelsStore(dir).getPrefs().modelProfiles).toEqual({ 'ollama::a': { input: ['text', 'image'] } })
   })
 })
 

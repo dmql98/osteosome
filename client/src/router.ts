@@ -22,15 +22,17 @@ export const routes: RouteRecordRaw[] = [
     }),
   },
   {
+    // 插件管理是**一个**窗口：列表与详情在窗内切换（见 plugins/PluginManagerWindow.vue）
     path: '/plugin-list',
     name: 'plugin-list',
-    component: () => import('./plugins/PluginListWindow.vue'),
+    component: () => import('./plugins/PluginManagerWindow.vue'),
   },
   {
+    // 保留深链：直接落到某个插件的配置页，但仍是同一个窗口，不再新建窗口
     path: '/plugin-detail/:id',
     name: 'plugin-detail',
-    component: () => import('./plugins/PluginDetailWindow.vue'),
-    props: (route) => ({ pluginId: String(route.params.id) }),
+    component: () => import('./plugins/PluginManagerWindow.vue'),
+    props: (route) => ({ initialPluginId: String(route.params.id) }),
   },
   {
     path: '/:pathMatch(.*)*',

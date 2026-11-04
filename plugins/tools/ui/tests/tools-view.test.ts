@@ -10,6 +10,7 @@ import { installFakeEventSource, type FakeEventSource } from '@osteosome/core-cl
 import { sse } from '@osteosome/core-client'
 import { Select } from '@osteosome/ui'
 import ToolsView from '../src/views/ToolsView.vue'
+import { __resetToolsStateForTest } from '../src/state'
 
 let fakeSse: FakeEventSource
 const mounted: VueWrapper[] = []
@@ -21,6 +22,8 @@ function commandBodies(fetchMock: { mock: { calls: unknown[][] } }): Record<stri
 }
 
 beforeEach(() => {
+  // 工具页状态是**模块级单例**：不清就会串用例（上一个用例的工具/事件留到下一个）
+  __resetToolsStateForTest()
   sse.close()
   fakeSse = installFakeEventSource()
 })
@@ -143,5 +146,43 @@ describe('ToolsView（widget.tools）', () => {
     await wrapper.get('[data-testid="tv-tab-events"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="tv-events"]').text()).toContain('tools.state')
+  })
+
+  /**
+   * 回归：面板是**后打开的**，闸门早就播完了。
+   *
+   * 之前这里只订阅、不问，于是「对话里工具能跑，工具面板永远显示目录为空」——
+   * 用户看到的是「工具组件坏了」。现在连上就问一次 `tools.list`。
+   */
+  it('挂载即主动问一次目录（tools.list）—— 否则后打开的面板永远是空目录', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 202 }))
+    // 先播一条：此时还没有订阅者，等价于「闸门在面板打开前已经播过」
+    fakeSse.emit('tools.state', { tools: [tool('read')], policies: {}, constraints: {}, mcpServers: [] })
+    const wrapper = mount(ToolsView)
+    mounted.push(wrapper)
+    await flushPromises()
+
+    expect(commandBodies(fetchMock).some((b) => b.topic === 'tools.list')).toBe(true)
+    // 面板此刻确实是空的（没收到重播），而闸门收到 tools.list 后会整份重播
+    expect(wrapper.text()).toContain('目录为空')
+    fakeSse.emit('tools.state', { tools: [tool('read'), tool('ls')], policies: {}, constraints: {}, mcpServers: [] })
+    await flushPromises()
+    expect(wrapper.text()).toContain('ls')
+    expect(wrapper.text()).not.toContain('目录为空')
+  })
+
+  it('卸载时摘掉订阅：重开面板不会把同一条事件处理两次', async () => {
+    const first = await mountView()
+    first.wrapper.unmount()
+    mounted.length = 0
+    const second = await mountView()
+    fakeSse.emit('tools.state', { tools: [tool('read')], policies: {}, constraints: {}, mcpServers: [] })
+    await flushPromises()
+    await second.wrapper.get('[data-testid="tv-tab-events"]').trigger('click')
+    await flushPromises()
+    // 只该有一条「1 个工具」—— 订阅没摘的话会叠成两条（而且后续每次重开都更多）
+    const rows = second.wrapper.findAll('[data-testid="tv-events"] li')
+    const stateRows = rows.filter((r) => r.text().includes('tools.state'))
+    expect(stateRows).toHaveLength(1)
   })
 })

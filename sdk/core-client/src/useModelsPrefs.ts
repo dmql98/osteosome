@@ -41,6 +41,11 @@ export function useModelsPrefs(): {
       connectedVendors: Array.isArray(p.connectedVendors) ? p.connectedVendors : [],
       vendorOverrides: Array.isArray(p.vendorOverrides) ? p.vendorOverrides : [],
       enabledModels: Array.isArray(p.enabledModels) ? p.enabledModels : [],
+      // 能力表：owner 已经收窄过一次，这里只做「有没有」的兜底
+      modelProfiles:
+        p.modelProfiles && typeof p.modelProfiles === 'object' && !Array.isArray(p.modelProfiles)
+          ? p.modelProfiles
+          : {},
     }
     synced.value = true
   }

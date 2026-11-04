@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia } from 'pinia'
-import PluginDetailWindow from '../../src/plugins/PluginDetailWindow.vue'
+import PluginDetailView from '../../src/plugins/PluginDetailView.vue'
 import type { PluginListResponse } from '../../src/plugins/registry'
 import { __registerLocalWidgetForTest, __resetLocalWidgetsForTest } from '../../src/widgets/registry'
 
@@ -74,13 +74,13 @@ function coreResponse(over: Partial<PluginListResponse> = {}): PluginListRespons
 }
 
 function mountDetail(pluginId: string, body: PluginListResponse = coreResponse()) {
-  return mount(PluginDetailWindow, {
+  return mount(PluginDetailView, {
     props: { pluginId },
     global: { plugins: [createPinia()] },
   })
 }
 
-describe('PluginDetailWindow 插件详情独立窗', () => {
+describe('PluginDetailView 插件配置页（同窗内的详情页）', () => {
   let lastBody: PluginListResponse
 
   beforeEach(() => {
@@ -298,6 +298,29 @@ describe('PluginDetailWindow 插件详情独立窗', () => {
     await flushPromises()
     expect(requested.some((u) => u.includes('/api/preferences'))).toBe(true)
     expect(wrapper.text()).toContain('依赖')
+  })
+
+  /**
+   * 行为变更（D2 合并）：卸载成功不再关掉整个窗口，而是回到列表。
+   * 若还留着「关窗口」，这里就收不到 `back` —— 用户会看到窗口整个消失。
+   */
+  it('卸载成功后上报 back（回到列表，不关窗口）', async () => {
+    const wrapper = mountDetail('workbench')
+    await flushPromises()
+    const uninstall = wrapper.findAll('button').find((b) => b.text() === '卸载插件')
+    expect(uninstall).toBeTruthy()
+    await uninstall!.trigger('click')
+    await flushPromises()
+
+    // Modal 用 Teleport 挂到 body，只能从 document 里找
+    const confirm = Array.from(document.body.querySelectorAll('button'))
+      .find((b) => b.textContent?.includes('确认卸载'))
+    expect(confirm).toBeTruthy()
+    confirm!.click()
+    await flushPromises()
+
+    expect(wrapper.emitted('back')).toBeTruthy()
+    wrapper.unmount()
   })
 
   it('Core 拉取失败时不崩（离线保持空清单）', async () => {

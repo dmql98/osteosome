@@ -464,6 +464,34 @@ describe('chat-composer（③）· 参数链路', () => {
     })
   })
 
+  it('模型卡片声明的思考档位 → 对话框只给这几档，原选档位回落到可用档', async () => {
+    const { composer } = await mountViews()
+    emit('llm.models.list.result', {
+      requestId: 'models-1', provider: 'deepseek',
+      models: ['deepseek-chat', 'deepseek-reasoner'], catalog: 'remote',
+    })
+    await composer.vm.$nextTick()
+    await setSelect(composer, 'composer-model', 'deepseek-reasoner')
+    await setSelect(composer, 'composer-thinking', 'high')
+    expect((composer.get('[data-testid="composer-thinking"] select').element as HTMLSelectElement).value).toBe('high')
+
+    // 设置页的模型卡片声明「这个模型只支持 关/低」
+    emit('models.prefs.state', {
+      prefs: {
+        connectedVendors: [],
+        vendorOverrides: [],
+        enabledModels: [],
+        modelProfiles: { 'deepseek::deepseek-reasoner': { reasoningEfforts: ['off', 'low'] } },
+      },
+    })
+    await flushPromises()
+
+    const select = composer.get('[data-testid="composer-thinking"] select').element as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(['off', 'low'])
+    // 原先选的 high 不被支持 → 静默回落到第一档，而不是把 high 发给只认 off/low 的模型
+    expect(select.value).toBe('off')
+  })
+
   it('思考强度默认 off → loop.run 不带 thinking（用模型默认档）', async () => {
     const { composer, fetchMock } = await mountViews()
     await submitRun(composer, fetchMock, '你好')
