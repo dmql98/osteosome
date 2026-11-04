@@ -1,0 +1,155 @@
+/*
+ * 共享 UI 组件的样式 —— 对应 osteosome `sdk/ui/src/styles/`。
+ *
+ * 所有取值来自 `var(--color-*)` / `var(--space-*)` / `var(--radius-*)` 令牌，
+ * **不硬编码颜色** —— 这样换皮肤（宣纸鎏金 / 深墨）时组件自动跟着变。
+ */
+
+/* ---------------- Button ---------------- */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+.ui-btn--sm { height: 26px; padding: 0 var(--space-2); font-size: var(--text-xs); }
+.ui-btn--md { height: 30px; padding: 0 var(--space-3); font-size: var(--text-sm); }
+.ui-btn--lg { height: 36px; padding: 0 var(--space-4); font-size: var(--text-md); }
+
+.ui-btn--primary { background: var(--color-primary); color: var(--color-text-inverse); }
+.ui-btn--primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.ui-btn--primary:active:not(:disabled) { background: var(--color-primary-active); }
+
+.ui-btn--ghost { background: transparent; color: var(--color-text-muted); border-color: var(--color-border); }
+.ui-btn--ghost:hover:not(:disabled) { background: var(--color-surface-3); color: var(--color-text); }
+
+.ui-btn--danger { background: var(--color-danger); color: var(--color-text-inverse); }
+.ui-btn--danger:hover:not(:disabled) { filter: brightness(1.06); }
+
+.ui-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ui-btn--loading { cursor: progress; }
+.ui-btn__spinner {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: ui-spin 0.7s linear infinite;
+}
+.ui-btn__label { opacity: 0.85; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* ---------------- IconButton ---------------- */
+.ui-icon-btn {
+  display: inline-grid; place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.ui-icon-btn--sm { width: 24px; height: 24px; }
+.ui-icon-btn--md { width: 28px; height: 28px; }
+.ui-icon-btn:hover:not(:disabled) { background: var(--color-surface-3); color: var(--color-text); }
+.ui-icon-btn.is-active { background: var(--color-primary-soft); color: var(--color-primary); }
+.ui-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------------- Badge ---------------- */
+.ui-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  border-radius: var(--radius-full);
+  font-weight: 600; white-space: nowrap;
+}
+.ui-badge--sm { padding: 1px 7px; font-size: 10.5px; }
+.ui-badge--md { padding: 2px 9px; font-size: var(--text-xs); }
+.ui-badge--neutral { background: var(--color-surface-3); color: var(--color-text-muted); }
+.ui-badge--primary { background: var(--color-primary-soft); color: var(--color-primary); }
+.ui-badge--info { background: var(--color-info-soft); color: var(--color-info); }
+.ui-badge--success { background: var(--color-success-soft); color: var(--color-success); }
+.ui-badge--danger { background: var(--color-danger-soft); color: var(--color-danger); }
+
+/* ---------------- StatusDot ---------------- */
+.ui-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--motion-idle); flex: none;
+}
+.ui-dot--idle { background: var(--motion-idle); }
+.ui-dot--thinking { background: var(--motion-thinking); }
+.ui-dot--listening { background: var(--motion-listening); }
+.ui-dot--working { background: var(--motion-working); }
+.ui-dot--speaking { background: var(--motion-speaking); }
+.ui-dot--success { background: var(--motion-success); }
+.ui-dot--error { background: var(--motion-error); }
+.ui-dot.is-pulse { animation: ui-pulse 1.6s var(--ease) infinite; }
+@keyframes ui-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ---------------- Spinner ---------------- */
+.ui-spinner {
+  display: inline-block; border-radius: 50%;
+  border: 2px solid var(--color-border); border-top-color: var(--color-primary);
+  animation: ui-spin 0.7s linear infinite; flex: none;
+}
+
+/* ---------------- EmptyState ---------------- */
+.ui-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); padding: var(--space-6) var(--space-4); text-align: center;
+  margin: auto;
+}
+.ui-empty__icon { font-size: 26px; opacity: 0.55; }
+.ui-empty__title { font-size: var(--text-md); font-weight: 600; }
+.ui-empty__desc { font-size: var(--text-sm); color: var(--color-text-muted); max-width: 42ch; }
+.ui-empty__action { margin-top: var(--space-2); }
+
+/* ---------------- Card ---------------- */
+.ui-card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.ui-card--hoverable { transition: border-color var(--duration-fast) var(--ease); }
+.ui-card--hoverable:hover { border-color: var(--color-border-strong); }
+.ui-card__header {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.ui-card__title { font-size: var(--text-sm); font-weight: 600; }
+.ui-card__body { padding: var(--space-3); }
+.ui-card__footer { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--color-border-soft); }
+
+/* ---------------- Tooltip ---------------- */
+.ui-tooltip { position: relative; display: inline-flex; }
+.ui-tooltip__bubble {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  padding: 3px 8px; border-radius: var(--radius-sm);
+  background: var(--color-text); color: var(--color-text-inverse);
+  font-size: var(--text-xs); white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: var(--z-tooltip);
+  transition: opacity var(--duration-fast) var(--ease);
+}
+.ui-tooltip:hover .ui-tooltip__bubble { opacity: 1; }
+
+/* ---------------- DisclosureRow ---------------- */
+.ui-disclosure__head {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; text-align: left;
+  font-size: var(--text-sm); font-weight: 600;
+  padding: var(--space-1) 0;
+}
+.ui-disclosure__chev {
+  width: 12px; height: 12px; flex: none;
+  border-right: 1.6px solid var(--color-text-faint);
+  border-bottom: 1.6px solid var(--color-text-faint);
+  transform: rotate(-45deg);
+  transition: transform var(--duration-base) var(--ease);
+  margin-left: 2px;
+}
+.ui-disclosure__chev--down { transform: rotate(45deg) translate(-2px, -2px); }
+.ui-disclosure__chev.is-open { transform: rotate(45deg) translate(-1px, -1px); }
+.ui-disclosure__body { padding-top: var(--space-1); }

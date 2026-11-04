@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工作区管理 · 对话流组件 Demo</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+OST.doc.mount({
+  title: '工作区管理',
+  desc: '会话的项目目录、授权根与目录选择器。三件事对应一条沙箱规则：沙箱 = 项目目录 ∪ 授权根，模型只能读写这些目录里的文件。',
+  file: 'src/plugins/chat-workbench/components/WorkspaceManager.js',
+
+  scripts: [
+    '../src/ui/index.js',
+    '../src/plugins/chat-workbench/components/WorkspaceManager.js',
+  ],
+
+  render: function (h) {
+    var C = OST.components
+    var Vue = window.Vue
+    var ref = Vue.ref
+
+    // ---- 交互沙盘：真的能点、能浏览目录树 ----
+    // 模拟 workspace 服务返回的目录结构
+    var FS = {
+      '': { entries: [
+          { name: 'Documents', path: 'C:/Users/PC/Documents', isDir: true },
+          { name: 'Downloads', path: 'C:/Users/PC/Downloads', isDir: true },
+          { name: 'ost组件', path: 'C:/Users/PC/Desktop/ost组件', isDir: true },
+          { name: 'notes.txt', path: 'C:/Users/PC/Documents/notes.txt', isDir: false },
+        ], parent: null },
+      'C:/Users/PC/Documents': { entries: [
+          { name: 'GitHub', path: 'C:/Users/PC/Documents/GitHub', isDir: true },
+          { name: '工作', path: 'C:/Users/PC/Documents/工作', isDir: true },
+          { name: 'readme.md', path: 'C:/Users/PC/Documents/readme.md', isDir: false },
+        ], parent: 'C:/Users/PC' },
+      'C:/Users/PC/Documents/GitHub': { entries: [
+          { name: 'osteosome', path: 'C:/Users/PC/Documents/GitHub/osteosome', isDir: true },
+          { name: 'deepseek-harness', path: 'C:/Users/PC/Documents/GitHub/deepseek-harness', isDir: true },
+          { name: 'tianshu', path: 'C:/Users/PC/Documents/GitHub/tianshu', isDir: true },
+        ], parent: 'C:/Users/PC/Documents' },
+      'C:/Users/PC/Documents/GitHub/osteosome': { entries: [
+          { name: 'client', path: 'C:/Users/PC/Documents/GitHub/osteosome/client', isDir: true },
+          { name: 'plugins', path: 'C:/Users/PC/Documents/GitHub/osteosome/plugins', isDir: true },
+          { name: 'core', path: 'C:/Users/PC/Documents/GitHub/osteosome/core', isDir: true },
+          { name: 'README.md', path: 'C:/Users/PC/Documents/GitHub/osteosome/README.md', isDir: false },
+        ], parent: 'C:/Users/PC/Documents/GitHub' },
+    }
+
+    var DIR_ROOTS = [
+      { name: 'C:', path: 'C:/', kind: 'drive' },
+      { name: 'D:', path: 'D:/', kind: 'drive' },
+      { name: '主目录', path: 'C:/Users/PC', kind: 'quick' },
+      { name: '桌面', path: 'C:/Users/PC/Desktop', kind: 'quick' },
+    ]
+
+    function Sandbox() {
+      var picking = ref(true)
+      var currentPath = ref('C:/Users/PC/Documents')
+      var parentPath = ref('C:/Users/PC')
+      var entries = ref(FS['C:/Users/PC/Documents'].entries)
+      var workspace = ref('C:/Users/PC/Documents/GitHub/osteosome')
+      var roots = ref(['C:/Users/PC/Desktop/ost组件'])
+
+      function list(path) {
+        var node = FS[path]
+        if (!node) {
+          entries.value = []
+          currentPath.value = path
+          parentPath.value = ''
+          return
+        }
+        entries.value = node.entries
+        currentPath.value = path
+        parentPath.value = node.parent || ''
+      }
+      function choose(path) {
+        workspace.value = path
+        picking.value = false
+      }
+      function removeRoot(r) {
+        roots.value = roots.value.filter(function (x) { return x !== r })
+      }
+      function togglePicker() {
+        picking.value = !picking.value
+        if (picking.value) list('')
+      }
+
+      return {
+        picking: picking, currentPath: currentPath, parentPath: parentPath,
+        entries: entries, workspace: workspace, roots: roots,
+        list: list, choose: choose, removeRoot: removeRoot, togglePicker: togglePicker,
+      }
+    }
+
+    var sb = Sandbox()
+
+    return h('div', { class: 'demo-stack' }, [
+      // 交互沙盘
+      h('div', { class: 'demo-cap' }, [
+        h('b', {}, '交互沙盘'),
+        ' · 点「选择项目」展开目录树 · 点目录进入 · 双击目录选为项目 · 点盘符切换根',
+      ]),
+      h('div', { class: 'demo-box' }, [
+        h(C.WorkspaceManager, {
+          workspace: sb.workspace.value,
+          roots: sb.roots.value,
+          entries: sb.entries.value,
+          dirRoots: DIR_ROOTS,
+          currentPath: sb.currentPath.value,
+          parentPath: sb.parentPath.value,
+          picking: sb.picking.value,
+          onList: function (p) { sb.list(p) },
+          onChoose: function (p) { sb.choose(p) },
+          onRemoveRoot: function (r) { sb.removeRoot(r) },
+          onTogglePicker: function () { sb.togglePicker() },
+        }),
+      ]),
+
+      // 未绑定项目
+      h('div', { class: 'demo-cap' }, [h('b', {}, '未绑定项目'), ' · 「打开」按钮禁用 · 提示未绑定']),
+      h('div', { class: 'demo-box' }, [
+        h(C.WorkspaceManager, {
+          workspace: '',
+          roots: [],
+          entries: [],
+          dirRoots: DIR_ROOTS,
+          currentPath: '',
+          parentPath: '',
+          picking: false,
+        }),
+      ]),
+
+      // 无授权根
+      h('div', { class: 'demo-cap' }, [h('b', {}, 'roots: []'), ' · 授权根区块不渲染']),
+      h('div', { class: 'demo-box' }, [
+        h(C.WorkspaceManager, {
+          workspace: 'C:/Users/PC/Documents/GitHub/osteosome',
+          roots: [],
+          entries: [],
+          dirRoots: DIR_ROOTS,
+          currentPath: '',
+          parentPath: '',
+          picking: false,
+        }),
+      ]),
+    ])
+  },
+
+  contract: [
+    ['workspace', 'String', "''", '项目目录（会话级）。空串 = 未绑定'],
+    ['roots', 'Array', '[]', '授权根列表（越界授权后加入）'],
+    ['entries', 'Array', '[]', '当前目录下的条目。每项：{ name, path, isDir }'],
+    ['dirRoots', 'Array', '[]', '盘符 / 快捷入口。每项：{ name, path, kind: \'drive\' | \'quick\' }'],
+    ['currentPath', 'String', "''", '当前浏览路径'],
+    ['parentPath', 'String', "''", '上一级路径'],
+    ['picking', 'Boolean', 'false', '选择器是否展开'],
+    ['@list', 'Function', '—', '浏览目录（走 workspace.list）'],
+    ['@open', 'Function', '—', '用系统文件管理器打开目录（走 workspace.open）'],
+    ['@choose', 'Function', '—', '选为项目目录（走 session.set.workspace）'],
+    ['@remove-root', 'Function', '—', '移除授权根（走 session.set.workspace 的 removeRoot）'],
+    ['@toggle-picker', 'Function', '—', '展开 / 收起选择器'],
+  ],
+
+  points: [
+    '<b>只列目录，不读文件</b>：这是 workspace 服务的能力边界，不是实现细节。它只 <code>readdirSync</code> + <code>statSync</code>，从不 <code>readFile</code> —— 越界读文件的能力，模型与界面都不该经由它拿到。所以界面上也只有「选目录」，没有「预览文件内容」。',
+    '<b>沙箱 = 项目目录 ∪ 授权根</b>：模型只能读写这两个集合里的文件。未绑定项目时任何路径都越界，第一次调用会弹一次工作区授权（<code>kind:\'workspace\'</code> 的审批）。这条规则要在界面上写明 —— 用户得知道自己授权了什么。',
+    '<b>写只有一个写者</b>：<code>session.set.workspace</code>（唯一写者 = session 服务），且是<b>合并式</b>的 —— <code>workspace</code> 设项目根，<code>addRoot</code> / <code>removeRoot</code> 增删授权根。组件自己不调服务，只抛意图给宿主。',
+    '<b>目录在前，文件在后</b>：列表按 <code>isDir</code> 分组、组内按 name 排序。用户在一个目录里找的通常还是目录。',
+    '<b>点击 vs 双击</b>：单击进入、双击选为项目。这套手势在文件浏览器里是通用惯例，不用教。',
+    '<b>授权根可移除</b>：越界授权是<b>临时</b>的，不是永久的。给了 × 才能随时收回来 —— 否则授权只增不减，等于把权限一次性放出去。',
+    '<b>隐藏项过滤</b>：以 <code>.</code> 开头的项不显示（posix 约定）。用户不需要在目录树里翻 <code>.git</code> / <code>node_modules</code>。',
+    '<b>组件可被宿主换掉实现</b>：桌面端（Tauri）可以把目录选择器换成原生 dialog —— 因为组件只抛意图，不绑死数据获取方式。',
+  ],
+
+  code: "// 组件（纯展示，抛意图）\nh(WorkspaceManager, {\n  workspace: session.workspace,\n  roots: session.workspaces,\n  entries: dirEntries,\n  dirRoots: roots,\n  currentPath: currentPath,\n  parentPath: parentPath,\n  picking: picking,\n  onList: (p) => send('workspace.list', { requestId, path: p }),\n  onOpen: (p) => send('workspace.open', { requestId, path: p }),\n  onChoose: (p) => send('session.set.workspace', { requestId, sessionId, workspace: p }),\n  onRemoveRoot: (r) => send('session.set.workspace', { requestId, sessionId, removeRoot: r }),\n  onTogglePicker: () => {},\n})",
+})
+</script>
+</body>
+</html>

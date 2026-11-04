@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>输入框 · 对话流组件 Demo</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+OST.doc.mount({
+  title: '输入框',
+  desc: '常驻输入区。Enter 发送 / Shift+Enter 换行 / Esc 停止生成 / ↑ 调出上一条。右端是上下文占用环，发送按钮在生成中会变成停止按钮。',
+  file: 'src/plugins/chat-workbench/views/ChatComposerView.js',
+  scripts: [
+    '../src/ui/index.js',
+    '../src/plugins/chat-workbench/state/chat-state.js',
+    '../src/plugins/chat-workbench/views/ChatComposerView.js',
+  ],
+  render: function (h) {
+    var C = OST.components
+    var state = { rows: [], sending: false }
+    var chat = { state: state }
+
+    function makeChat(rows, sending) {
+      return { state: { rows: rows || [], sending: !!sending } }
+    }
+
+    return h('div', { class: 'demo-stack' }, [
+      h('div', { class: 'demo-cap' }, [h('b', {}, '空会话'), ' · hero 阶段 · 同一个 DOM，切会话不重挂载，草稿与光标不丢']),
+      h('div', { class: 'demo-box' }, [
+        h(C.ChatComposerView, { chat: makeChat([], false) }),
+      ]),
+
+      h('div', { class: 'demo-cap' }, [h('b', {}, '已有会话'), ' · active 阶段']),
+      h('div', { class: 'demo-box' }, [
+        h(C.ChatComposerView, { chat: makeChat([{ key: 'a', role: 'user', text: '你好' }], false) }),
+      ]),
+
+      h('div', { class: 'demo-cap' }, [h('b', {}, 'sending: true'), ' · 发送按钮变成停止按钮（朱砂色方块）']),
+      h('div', { class: 'demo-box' }, [
+        h(C.ChatComposerView, { chat: makeChat([{ key: 'a', role: 'user', text: '你好' }], true) }),
+      ]),
+
+      h('div', { class: 'demo-cap' }, [h('b', {}, '审批块'), ' · 已独立成组件，不再由输入框接管 —— 见「审批块」页']),
+      h('div', { class: 'demo-box' }, [
+        h('div', { style: { fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.8' } },
+          '审批请求时，输入框保持原样不动，审批块作为独立浮层盖在对话流上方。' +
+          '这样对话流不会被插入一张卡打断叙事，输入框也不会突然变形。'),
+      ]),
+    ])
+  },
+  contract: [
+    ['chat', 'Object', '—', '状态实例。必填。含 state.rows / state.sending'],
+    ['@send', 'Function', '—', '发送消息，携带文本'],
+    ['@stop', 'Function', '—', '停止生成'],
+    ['@approve / @reject', 'Function', '—', '审批应答'],
+  ],
+  points: [
+    '<b>常驻而非重建</b>：从空会话到有会话，<b>同一个 textarea</b>，不是两棵 DOM。草稿、光标位置、输入法状态全部保留 —— 这是 osteosome 明确的设计（Resident Composer）。',
+    '<b>不参与审批</b>：审批块是独立浮层（见「审批块」页），不由输入框接管。输入框保持原样，对话流也不被插入卡片打断 —— 两边都不变形。',
+    '<b>停止按钮换形态不换位置</b>：同一颗按钮，生成中变成朱砂色方块。用户不需要找按钮在哪。',
+    '<b>↑ 调出上一条</b>：ChatGPT / Claude 都有，tianshu 与 deepseek-harness 都缺。空输入时按 ↑ 调出上一条用户消息。',
+    '<b>上下文占用环</b>：14px 圆环显示占比。它决定了「还能不能继续聊」，是输入区该有的信息。',
+    '<b>Enter 的语义要一致</b>：Enter 发送、Shift+Enter 换行，且屏蔽输入法组合态（<code>isComposing</code>）—— 中文用户按 Enter 选字时不能被吃掉。',
+  ],
+  code: "h(ChatComposerView, {\n  chat: chat,          // 状态实例\n  onSend: (text) => {},\n  onStop: () => {},\n})",
+})
+</script>
+</body>
+</html>

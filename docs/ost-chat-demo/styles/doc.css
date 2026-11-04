@@ -1,0 +1,248 @@
+/*
+ * 组件陈列页的公共样式。
+ *
+ * 每个组件一个独立 HTML，都用它来渲染「说明 + 契约 + 示例」三段结构。
+ * 目的：让每个组件**单���打开就能看懂它是什么、怎么用**。
+ */
+
+body {
+  background: var(--color-bg);
+}
+
+/* ---------- 页面骨架 ---------- */
+.doc {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-6);
+}
+
+/* ---------- 头部 ---------- */
+.doc__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-5);
+}
+.doc__id {
+  flex: none;
+  width: 40px; height: 40px;
+  border-radius: var(--radius-lg);
+  display: grid; place-items: center;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-family: "Songti SC", "STSong", serif;
+}
+.doc__title { font-size: var(--text-xl); font-weight: 700; line-height: 1.3; }
+.doc__path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  margin-top: 3px;
+}
+.doc__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+  max-width: 68ch;
+  line-height: 1.7;
+}
+
+/* ---------- 区块 ---------- */
+.doc__sec { margin-bottom: var(--space-6); }
+.doc__sec-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-faint);
+  letter-spacing: 0.6px;
+  margin-bottom: var(--space-3);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.doc__sec-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-soft);
+}
+
+/* ---------- 示例舞台 ---------- */
+.stage {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  position: relative;
+}
+.stage--canvas {
+  background:
+    linear-gradient(var(--color-surface-3) 1px, transparent 1px) 0 0 / 100% 24px,
+    linear-gradient(90deg, var(--color-surface-3) 1px, transparent 1px) 0 0 / 24px 100%,
+    var(--color-bg);
+}
+.stage--inset {
+  background: var(--color-bg);
+}
+.stage__label {
+  position: absolute;
+  top: -9px; left: var(--space-4);
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+}
+.stage__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.stage__row--h { flex-direction: row; align-items: flex-start; gap: var(--space-4); }
+.stage__col { flex: 1; min-width: 0; }
+
+/* ---------- 契约表 ---------- */
+.contract {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.contract th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-faint);
+  padding: 8px 12px;
+  background: var(--color-surface-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.contract td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--color-border-soft);
+  color: var(--color-text-muted);
+  vertical-align: top;
+  line-height: 1.6;
+}
+.contract tr:last-child td { border-bottom: none; }
+.contract code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text);
+  background: var(--color-surface-3);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.contract .c-name { font-family: var(--font-mono); font-size: 11.5px; color: var(--color-text); font-weight: 600; white-space: nowrap; }
+.contract .c-type { font-family: var(--font-mono); font-size: 11px; color: var(--color-info); white-space: nowrap; }
+
+/* ---------- 要点列表 ---------- */
+.points { list-style: none; padding: 0; }
+.points li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.75;
+}
+.points li::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 10px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+.points li b { color: var(--color-text); font-weight: 600; }
+
+/* ---------- 代码块 ---------- */
+.code {
+  background: #191f27;
+  color: #e6eaf0;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.75;
+  overflow-x: auto;
+  white-space: pre;
+}
+.code .k { color: #9ec0ff; }
+.code .s { color: #a5d6a7; }
+.code .c { color: #7b8794; }
+
+/* ---------- 返回导航 ---------- */
+.doc-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+.doc-nav a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition: var(--duration-fast) var(--ease);
+}
+.doc-nav a:hover { background: var(--color-surface-3); color: var(--color-text); }
+.doc-nav__count { margin-left: auto; }
+
+/* ---------- 组件索引 ---------- */
+.index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+.index-card {
+  display: block;
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  transition: var(--duration-fast) var(--ease);
+}
+.index-card:hover {
+  border-color: var(--color-primary-line);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.index-card__name { font-size: var(--text-md); font-weight: 600; color: var(--color-text); }
+.index-card__desc { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 3px; line-height: 1.6; }
+.index-card__file { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-text-faint); margin-top: 6px; }
+
+/* ---------- 组件演示专用 ---------- */
+.demo-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.demo-row { display: flex; gap: var(--space-3); align-items: flex-start; }
+.demo-box {
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--color-surface);
+}
+.demo-cap {
+  font-size: 10.5px;
+  color: var(--color-text-faint);
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.demo-cap b { color: var(--color-text-muted); font-weight: 600; }
+
+/* 组件页专用：静态截图里看不到 hover 态的按钮，强制常显 */
+.stage--reveal .msg-actions { opacity: 1 !important; }

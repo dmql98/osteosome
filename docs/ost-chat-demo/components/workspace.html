@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>检查器 · 对话流组件 Demo</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+var NOTE_STYLE = { fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.85' }
+var NOTE = '<b>上下文占用</b>给的是分解而不只是总数。用户真正想知道的是「是哪部分把它吃掉了」—— 通常是工具定义。所以环下面要拆成系统 / 工具 / 消息三段。<br><br><b>子代理 lineage</b>用缩进 + 竖线表达父子关系。Agent 会派生子代理，用户需要知道「现在是谁在干活」，否则一个跑 5 分钟的任务看起来像卡死了。<br><br><b>快捷键</b>列出来是因为它们是新增的 —— 没人能猜到 <code>⌘⇧R</code> 是重新生成。osteosome 的会话列表重设计文档里有一整节在讲这件事：新能力必须自带可发现性，否则等于不存在。'
+OST.doc.mount({
+  title: '检查器',
+  desc: '右侧栏。装的是「关于这次对话的元信息」—— 上下文占用、本轮统计、子代理 lineage、引用文件、快捷键。放右栏而不是塞进消息里，是为了让消息流保持纯叙事：元信息随时可查，但不打断阅读。',
+  file: 'src/plugins/chat-workbench/views/SessionWorkspaceView.js',
+  scripts: [
+    '../src/ui/index.js',
+    '../src/plugins/chat-workbench/views/SessionWorkspaceView.js',
+  ],
+  render: function (h) {
+    var C = OST.components
+    return h('div', { style: { display: 'flex', gap: '20px', alignItems: 'flex-start' } }, [
+      h('div', { class: 'demo-box', style: { width: '300px', padding: '0', overflow: 'hidden' } }, [
+        h('div', { style: { height: '620px' } }, [
+          h(C.SessionWorkspaceView),
+        ]),
+      ]),
+      h('div', { class: 'demo-box', style: { flex: '1' } }, [
+        h('p', { style: NOTE_STYLE, innerHTML: NOTE }) 
+      ]),
+    ])
+  },
+  contract: [
+    ['—', '—', '—', '无 props。检查器是纯展示，数据由宿主按需注入或组件内取静态配置'],
+  ],
+  points: [
+    '<b>元信息不进消息流</b>：上下文占用、统计、lineage 都是「关于对话的」，不是「对话的一部分」。放右栏，消息流保持纯叙事。',
+    '<b>上下文给分解</b>：环 + 三段（系统 / 工具 / 消息）。只有总数的话，用户无法判断该优化提示词还是精简工具定义。',
+    '<b>子代理 lineage</b>：缩进 + 竖线表达父子。Agent 派生子代理后，用户需要知道「现在是谁在干活」。',
+    '<b>快捷键要列出来</b>：<code>Esc</code> 停止、<code>⌘⇧R</code> 重新生成、<code>↑</code> 编辑上一条、<code>⌘⇧C</code> 折叠工具、<code>⌘K</code> 命令面板 —— 没人能猜到这些。',
+    '<b>Tab 是可切换的</b>：详情 / 文件 / 终端。终端与文件是 Agent 场景的高频需求，但它们不该挤进消息流。',
+  ],
+  code: "h(SessionWorkspaceView)\n\n// 数据来源（真实实现）：\n//   上下文占用 → useContextMeter() 或 SSE 汇总\n//   本轮统计  → message.appended 的 usage / ms / cacheHit\n//   子代理    → subagent.state.changed\n//   引用文件  → 本轮 toolCalls 里出现过的 file path",
+})
+</script>
+</body>
+</html>

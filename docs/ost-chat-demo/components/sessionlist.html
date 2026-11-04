@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对话列表 · 对话流组件 Demo</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+var NOTE_STYLE = { fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.85' }
+var NOTE = '状态点用 <code>--motion-*</code> 令牌而不是硬编码颜色 —— 六个状态色必须色相互不相邻，且深浅两套各自取值。硬编码十六进制在深色主题下会糊，这正是 osteosome 的 <code>tokens-parity.test.ts</code> 要防的老问题。当前轮除了状态点，还有左侧 3px 鎏金条与浅金底 —— 三重标识，扫一眼就知道在哪。'
+OST.doc.mount({
+  title: '对话列表',
+  desc: '会话树。按「今天 / 昨天 / 更早」分组，每行末尾一个 7px 状态点表示这一轮在干什么 —— 颜色与脉动频率是唯一的信息通道。',
+  file: 'src/plugins/chat-workbench/views/SessionListView.js',
+  scripts: [
+    '../src/ui/index.js',
+    '../src/plugins/chat-workbench/views/SessionListView.js',
+  ],
+  render: function (h) {
+    var C = OST.components
+    return h('div', { style: { display: 'flex', gap: '20px', alignItems: 'flex-start' } }, [
+      h('div', { class: 'demo-box', style: { width: '264px', padding: '0', overflow: 'hidden' } }, [
+        h(C.SessionListView, { currentId: 's1' }),
+      ]),
+      h('div', { class: 'demo-box', style: { flex: '1' } }, [
+        h('p', { style: NOTE_STYLE, innerHTML: NOTE }) 
+      ]),
+    ])
+  },
+  contract: [
+    ['currentId', 'String', "''", '当前会话 id。跨视图共享的唯一状态'],
+    ['@select', 'Function', '—', '选中会话，携带 id'],
+    ['@create', 'Function', '—', '新建会话'],
+  ],
+  points: [
+    '<b>状态点是唯一的信息通道</b>：7px 圆点 + 脉动频率表示这一轮在干什么（thinking / working / speaking / success / error）。一个列表能同时显示十几个会话的状态，用户不用逐个点进去看。',
+    '<b>颜色取自令牌</b>：<code>--motion-idle</code> / <code>--motion-thinking</code> / <code>--motion-working</code> / <code>--motion-speaking</code> / <code>--motion-success</code> / <code>--motion-error</code>。',
+    '<b>当前轮三重标识</b>：左侧 3px 鎏金条 + 浅金底 + 状态点 —— 位置、背景、动态三个通道同时指向它。',
+    '<b>分组是展示层的切分</b>：底层数据仍是扁平的会话数组。分组不改变数据形状，只是渲染时归拢。',
+    '<b>搜索与新建在最上面</b>：这两个动作的使用频率远高于「点某个具体会话」，放在顶部省得找。',
+    '<b>跨视图只共享 currentId</b>：真实实现里它走 sessionStorage + storage 事件（<b>本地先赋值再写盘</b>，因为 storage 事件不在写入方自己身上触发）。',
+  ],
+  code: "h(SessionListView, {\n  currentId: curId,        // 跨 iframe 共享的唯一状态\n  onSelect: (id) => {},\n  onCreate: () => {},\n})",
+})
+</script>
+</body>
+</html>

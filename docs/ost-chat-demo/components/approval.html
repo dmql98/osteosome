@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>审批块 · 对话流组件 Demo</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+<style>
+  /* 演示用的联动沙盘 */
+  .sandbox {
+    position: relative;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    background: var(--color-surface);
+    min-height: 300px;
+  }
+  .sandbox__hint {
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+    margin-bottom: var(--space-3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sandbox__hint b { color: var(--color-text-muted); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+OST.doc.mount({
+  title: '审批块',
+  desc: 'Agent 请求授权时的确认面板。它是独立弹出的浮层 —— 不属于对话流组件，而是由工具调用触发的联动组件。关键在于「始终允许」必须写清作用域：工具、会话、有效期，缺一不可。',
+  file: 'src/plugins/chat-workbench/components/ApprovalPanel.js',
+
+  scripts: [
+    '../src/ui/index.js',
+    '../src/plugins/chat-workbench/components/ChatTimeline.js',
+    '../src/plugins/chat-workbench/components/ApprovalPanel.js',
+  ],
+
+  render: function (h) {
+    var C = OST.components
+    var Vue = window.Vue
+    var ref = Vue.ref
+
+    // ---- 联动沙盘：工具调用树里点 Bash 行 → 弹出审批块 ----
+    var rows = [{
+      key: 'a1', role: 'assistant',
+      toolCalls: [
+        { id: 't1', name: 'Read', icon: '▤', path: 'src/auth/session.ts', ok: true, ms: 420 },
+        { id: 't2', name: 'Bash', icon: '▶', path: 'pnpm test --run auth', ok: undefined, ms: 0,
+          needsApproval: true,
+          title: '允许执行 Bash：pnpm test --run auth',
+          description: '该命令会写入 fixtures/ 并触发 2 个集成测试。',
+          scope: '作用域：仅本会话 · 仅 Bash 工具 · 30 分钟有效',
+          tool: 'Bash' },
+        { id: 't3', name: 'Edit', icon: '✎', path: 'src/auth/token.ts', ok: true, ms: 1180, diff: { add: 12, del: 3 } },
+      ],
+      toolsOpen: true,
+      text: '我准备执行测试，需要授权。',
+    }]
+
+    function Sandbox() {
+      var visible = ref(false)
+      var request = ref(null)
+
+      function onRequest(call) {
+        request.value = call
+        visible.value = true
+      }
+      function close() { visible.value = false }
+
+      return { visible: visible, request: request, onRequest: onRequest, close: close }
+    }
+
+    var sandbox = Sandbox()
+
+    return h('div', { class: 'demo-stack' }, [
+      // 联动演示
+      h('div', { class: 'demo-cap' }, [
+        h('b', {}, '与工具联动'),
+        ' · 点击工具行里的「待授权」标记 → 审批块浮出',
+      ]),
+      h('div', { class: 'sandbox' }, [
+        h('div', { class: 'sandbox__hint' }, [
+          h('b', {}, '↓'),
+          '工具调用树里 Bash 那行右侧有「待授权」标记，整行可点 —— 点它试试',
+        ]),
+        h('div', { style: { height: '200px', display: 'flex' } }, [
+          h(C.ChatTimeline, {
+            rows: rows,
+            turns: [{ key: 'a1', label: '执行测试' }],
+            navMaxHeight: 200,
+            onRequestApproval: sandbox.onRequest,
+          }),
+        ]),
+        // 审批块浮层：盖在沙盘上方
+        sandbox.visible.value && sandbox.request.value
+          ? h('div', { style: { position: 'absolute', left: '50%', top: '56px', transform: 'translateX(-50%)', zIndex: '30' } }, [
+              h(C.ApprovalPanel, {
+                request: sandbox.request.value,
+                visible: true,
+                onClose: sandbox.close,
+                onApprove: function () { sandbox.close() },
+                onReject: function () { sandbox.close() },
+              }),
+            ])
+          : null,
+      ]),
+
+      // 独立形态
+      h('div', { class: 'demo-cap' }, [h('b', {}, '独立形态'), ' · 浮层本体']),
+      h('div', { class: 'demo-box' }, [
+        h(C.ApprovalPanel, {
+          request: {
+            title: '允许执行 Bash：pnpm test --run auth',
+            description: '该命令会写入 fixtures/ 并触发 2 个集成测试。',
+            scope: '作用域：仅本会话 · 仅 Bash 工具 · 30 分钟有效',
+            tool: 'Bash',
+          },
+          visible: true,
+        }),
+      ]),
+
+      // 无 scope 字段
+      h('div', { class: 'demo-cap' }, [h('b', {}, '无 scope 字段'), ' · 回落到默认作用域文案，不留空白']),
+      h('div', { class: 'demo-box' }, [
+        h(C.ApprovalPanel, {
+          request: {
+            title: '允许写入 src/config.json',
+            description: '该文件包含本地调试配置。',
+          },
+          visible: true,
+        }),
+      ]),
+
+      // 不可见
+      h('div', { class: 'demo-cap' }, [h('b', {}, 'visible: false'), ' · 不渲染任何东西']),
+      h('div', { class: 'demo-box' }, [
+        h('div', { style: { fontSize: '12px', color: 'var(--color-text-faint)' } }, '（空）'),
+      ]),
+    ])
+  },
+
+  contract: [
+    ['request', 'Object', 'null', '待审批项。字段：title / description / scope / tool'],
+    ['visible', 'Boolean', 'false', '是否浮出。false 时不渲染'],
+    ['@approve', 'Function', '—', '允许（携带 request，调用方可判断是哪一次）'],
+    ['@reject', 'Function', '—', '拒绝'],
+    ['@close', 'Function', '—', '关闭浮层（不改变请求状态）'],
+  ],
+
+  points: [
+    '<b>独立浮出，不插入消息流</b>：确认动作插进消息流会把线性叙事打断 —— 用户读一半被打断。而且用户此刻的注意力在「这个操作要不要批」，不在「上一句话说了什么」。浮层盖在上方，视线不需要移动，也不需要滚动。',
+    '<b>与工具联动</b>：触发点在工具调用树的行上。该行带 <code>needsApproval</code> 时，右侧出现「待授权」标记，整行可点。组件本身不弹窗 —— 抛 <code>request-approval</code> 事件给宿主，弹窗是宿主的职责。',
+    '<b>作用域必须写清</b>：deepseek-harness 的审批卡有三个按钮，但「始终允许」的作用范围一个字都没说 —— 用户不知道自己在授权什么：哪个工具？哪个会话？永久还是临时？这是<b>权限授予</b>，不是普通按钮。',
+    '<b>三档而非两档</b>：拒绝 / 允许一次 / 始终允许。只给「允许」会诱导用户对每个请求都永久授权。',
+    '<b>键盘可达</b>：<code>⌘↵</code> 确认、<code>Esc</code> 拒绝，并屏蔽输入法组合态。',
+    '<b>状态条 + 脉冲点</b>：让「在等谁」一眼可辨 —— 用户离开一会儿回来，得知道有个请求在等他。',
+  ],
+
+  code: "// 宿主：收到工具的请求 → 打开浮层\nfunction requestApproval(call) {\n  approvalTarget.value = call\n  approvalVisible.value = true\n}\n\n// AppFrame 里渲染为独立浮层（不占布局空间）\nh(ApprovalPanel, {\n  request: approval.value,\n  visible: approvalVisible.value,\n  onApprove: (ap) => { ap.approved = true; ap.needsApproval = false },\n  onReject:  (ap) => { ap.approved = true; ap.ok = false },\n  onClose:   () => (approvalVisible.value = false),\n})",
+})
+</script>
+</body>
+</html>

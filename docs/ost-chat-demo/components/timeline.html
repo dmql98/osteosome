@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对话流 · 对话流组件 Demo</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+OST.doc.mount({
+  title: '对话流',
+  desc: '对话区域的主组件。左侧是 Turn 导航轨（26px），右侧是消息滚动区（原生滚动条在右侧）。思考块、工具调用树、对话框、统计栏都是它的内部构造 —— 它们的展开策略各自独立，所以内部拆开；但对外只暴露这一个组件，因为 widget 是宿主摆位的单位，用户拖动的是一个盒子而不是五个。',
+  file: 'src/plugins/chat-workbench/components/ChatTimeline.js',
+
+  scripts: [
+    '../src/ui/index.js',
+    '../src/plugins/chat-workbench/components/ChatTimeline.js',
+  ],
+
+  render: function (h) {
+    var C = OST.components
+
+    // 一轮完整的对话数据
+    var rows = [
+      { key: 'u1', role: 'user', text: '帮我把鉴权层从 Session 换成 Token，且灰度要可回滚。' },
+      { key: 'a1', role: 'assistant',
+        reasoning: '先确认一个前提：鉴权层的迁移不只是把 Session 换成 Token，两者的失效语义不同 —— Session 是自然过期，Token 是被吊销。后者需要主动通知前端。',
+        reasoningMs: 1800, thinkingOpen: true,
+        toolCalls: [
+          { id: 't1', name: 'Read', icon: '▤', path: 'src/auth/session.ts', ok: true, ms: 420 },
+          { id: 't2', name: 'Grep', icon: '⌕', path: '"getSessionToken"', ok: true, ms: 260,
+            children: [{ name: 'Read', args: 'src/auth/token.ts', summary: '42 lines' }] },
+          { id: 't3', name: 'Edit', icon: '✎', path: 'src/auth/token.ts', ok: true, ms: 1180, diff: { add: 12, del: 3 } },
+        ],
+        toolsOpen: true,
+        text: 'Session 是自然过期，Token 是被吊销。后者需要主动通知前端，否则会留下「看似有效、实则已失效」的中间态。',
+        ms: 12400, usage: { prompt: 8200, completion: 1200 }, speed: 38, cacheHit: 74 },
+      { key: 'u2', role: 'user', text: '那灰度开关放哪一层？前端要能自己降级。' },
+      { key: 'a2', role: 'assistant',
+        reasoning: '灰度开关应放在网关层：前端只读一个能力位，网关按位摘流量。',
+        reasoningMs: 2300, thinkingOpen: true,
+        toolCalls: [
+          { id: 't4', name: 'Write', icon: '✎', path: 'src/gateway/capability.ts', ok: true, ms: 890, diff: { add: 24, del: 6 } },
+          { id: 't5', name: 'Bash', icon: '▶', path: 'pnpm test --run auth', ok: undefined, ms: 0,
+            needsApproval: true,
+            title: '允许执行 Bash：pnpm test --run auth',
+            description: '该命令会写入 fixtures/ 并触发 2 个集成测试。',
+            scope: '作用域：仅本会话 · 仅 Bash 工具 · 30 分钟有效',
+            tool: 'Bash' },
+        ],
+        toolsOpen: true,
+        text: '放在网关层。前端只读一个能力位，不做判断；网关按位摘流量，回滚就是把位改回去 —— 前端无需发版。',
+        ms: 8300, usage: { prompt: 9100, completion: 780 }, speed: 41, cacheHit: 81 },
+    ]
+
+    var turns = [
+      { key: 'u1', label: '鉴权层迁移' },
+      { key: 'u2', label: '灰度开关位置' },
+    ]
+
+    return h('div', { class: 'demo-stack' }, [
+      // 完整形态
+      h('div', { class: 'demo-cap' }, [
+        h('b', {}, '完整形态'),
+        ' · 左导航轨 + 消息区（滚动条在右）· 思考块 / 工具调用树 / 对话框 / 统计栏',
+      ]),
+      h('div', { class: 'demo-box', style: { padding: '0', overflow: 'hidden' } }, [
+        h('div', { style: { height: '460px', display: 'flex' } }, [
+          h(C.ChatTimeline, {
+            rows: rows,
+            turns: turns,
+            activeTurnKey: 'u1',
+            sending: false,
+            failed: '',
+            navMaxHeight: 460,
+          }),
+        ]),
+      ]),
+
+      // 空状态
+      h('div', { class: 'demo-cap' }, [h('b', {}, '空状态'), ' · rows 为空时显示引导']),
+      h('div', { class: 'demo-box', style: { padding: '0', overflow: 'hidden' } }, [
+        h('div', { style: { height: '220px', display: 'flex' } }, [
+          h(C.ChatTimeline, { rows: [], turns: [], navMaxHeight: 220 }),
+        ]),
+      ]),
+
+      // 错误态
+      h('div', { class: 'demo-cap' }, [h('b', {}, '错误态'), ' · 错误内联在末尾，不清空上文']),
+      h('div', { class: 'demo-box', style: { padding: '0', overflow: 'hidden' } }, [
+        h('div', { style: { height: '180px', display: 'flex' } }, [
+          h(C.ChatTimeline, {
+            rows: [{ key: 'u1', role: 'user', text: '跑一下测试' }],
+            turns: [{ key: 'u1', label: '跑测试' }],
+            failed: '工具调用失败：Bash 退出码 1（fixtures 写入被拒）',
+            navMaxHeight: 180,
+          }),
+        ]),
+      ]),
+    ])
+  },
+
+  contract: [
+    ['rows', 'Array', '[]', '消息行。每项：key / role / text / reasoning / reasoningMs / pending / thinkingOpen / toolCalls / toolsOpen / ms / usage / speed / cacheHit / stopped'],
+    ['turns', 'Array', '[]', '轮次导航条目。每项：{ key, label }'],
+    ['activeTurnKey', 'String', "''", '当前视口所处的轮次'],
+    ['sending', 'Boolean', 'false', '是否在途'],
+    ['failed', 'String', "''", '错误信息，内联在消息流末尾'],
+    ['navMaxHeight', 'Number', '0', '导航轨可用高度。刻度间距按它自适应（8~18px）'],
+    ['@jump', 'Function', '—', '点击导航轨刻度'],
+    ['@regen / @branch / @copy / @delete', 'Function', '—', '消息级操作'],
+    ['@toggle-think / @toggle-tools', 'Function', '—', '折叠状态切换'],
+    ['@request-approval', 'Function', '—', '工具请求授权 —— 宿主据此弹出审批块'],
+  ],
+
+  points: [
+    '<b>内部构造，不是五个顶层组件</b>：思考块、工具调用树、对话框、统计栏的展开策略各自独立（思考默认展开 / 工具默认折叠 / 统计常驻但按钮 hover 才显形），所以内部拆开；但对外只暴露一个 ChatTimeline —— widget 是宿主摆位的单位，用户拖的是一个盒子。',
+    '<b>导航轨在左侧</b>：deepseek-harness 放右边，与原生滚动条争位置。移左后右侧完整让给滚动条，界面左重右轻更稳，天枢的跳转点条也是这个位置。',
+    '<b>切角造型在形状上区分说话人</b>：用户实心鎏金、右下 4px；助手白卡描边、左下 4px。不只靠颜色。',
+    '<b>呼吸光标</b>：流式时正文尾部跟一个闪烁方块，回答「还在写还是卡了」。tianshu 气泡层零反馈、deepseek 正文裸奔，两者都缺。',
+    '<b>思维链不进正文</b>：reasoning 走独立字段渲染成折叠块 —— 这条不变量让正文可以安全落库。',
+    '<b>工具请求授权时抛事件给宿主</b>：工具行显示「待授权」标记并可点击，组件本身不弹窗 —— 弹窗是宿主的职责。',
+    '<b>统计栏补齐两个项目的缺口</b>：tianshu 存了 <code>llm_duration_ms</code> 却不渲染，deepseek 只显示 token 数。耗时与缓存命中决定用户要不要等。',
+    '<b>错误内联在末尾</b>：不清空上文。前面已收到的内容仍然有效，抹掉等于让用户重新问一遍。',
+  ],
+
+  code: "h(ChatTimeline, {\n  rows: state.rows,\n  turns: state.turns,\n  activeTurnKey: state.activeTurnKey,\n  sending: state.sending,\n  failed: state.failed,\n  navMaxHeight: navHeight.value,     // ResizeObserver 量出\n  onJump: (key) => jumpToTurn(key),\n  onRegen: (row) => {},\n  onBranch: (row) => {},\n  onCopy: (row) => {},\n  onDelete: (row) => {},\n  onToggleThink: (key) => {},\n  onToggleTools: (key) => {},\n  onRequestApproval: (call) => {},   // 宿主据此弹出审批块\n})",
+})
+</script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对话流组件 Demo — osteosome 插件化形态</title>
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../src/ui/styles.css">
+<link rel="stylesheet" href="../src/host/styles.css">
+<link rel="stylesheet" href="../styles/doc.css">
+<style>
+  .hero { margin-bottom: var(--space-6); }
+  .hero h1 { font-size: var(--text-xl); font-weight: 700; }
+  .hero p { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-2); max-width: 76ch; line-height: 1.8; }
+  .hero__meta { display: flex; gap: var(--space-3); margin-top: var(--space-4); flex-wrap: wrap; }
+  .hero__tag {
+    font-size: var(--text-xs); padding: 3px 10px; border-radius: var(--radius-full);
+    background: var(--color-primary-soft); border: 1px solid var(--color-primary-line); color: var(--color-text);
+  }
+  .hero__link {
+    font-size: var(--text-xs); padding: 4px 12px; border-radius: var(--radius-full);
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    color: var(--color-text); text-decoration: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: var(--duration-fast) var(--ease);
+  }
+  .hero__link:hover { background: var(--color-surface-3); border-color: var(--color-primary-line); }
+  .group-title {
+    font-size: var(--text-xs); font-weight: 700; color: var(--color-text-faint);
+    letter-spacing: 0.6px; margin: var(--space-5) 0 var(--space-3);
+    display: flex; align-items: center; gap: var(--space-2);
+  }
+  .group-title::after { content: ""; flex: 1; height: 1px; background: var(--color-border-soft); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="../vendor/vue.global.prod.js"></script>
+<script src="../src/doc/loader.js"></script>
+<script>
+;(function () {
+  var HERO_NOTE = '把对话流拆成一个一个的组件，每个组件一个独立 HTML —— 单击就能看到它长什么样、怎么用、和 osteosome 的哪个文件对应。组件实现放在 <code>src/</code> 下，与 osteosome 的分层一一对应：共享展示组件在 <code>src/ui/</code>（对应 <code>sdk/ui</code>），插件视图与内部组件在 <code>src/plugins/chat-workbench/</code>（对应同名插件目录），宿主的布局与装配在 <code>src/host/</code>（对应 <code>client/src</code>）。'
+  var Vue = window.Vue
+  var h = Vue.h
+
+  // 组件清单 —— 与 loader.js 里的 CATALOG 对应
+  var GROUPS = [
+    {
+      title: '顶层组件（widget）',
+      items: [
+        { file: 'timeline.html', name: '对话流', desc: '对话区主组件。左导航轨 + 右消息区。内含思考块 / 工具调用树 / 对话框 / 统计栏。', src: 'components/ChatTimeline.js' },
+        { file: 'sessionlist.html', name: '对话列表', desc: '会话树。状态点表示这一轮在干什么。', src: 'views/SessionListView.js' },
+        { file: 'composer.html', name: '输入框', desc: '常驻输入区。Enter 发送 / Esc 停止 / ↑ 调出上一条。', src: 'views/ChatComposerView.js' },
+        { file: 'workspace.html', name: '检查器', desc: '上下文占用 / 本轮统计 / 子代理 lineage / 快捷键。', src: 'views/SessionWorkspaceView.js' },
+        { file: 'workspace-manager.html', name: '工作区管理', desc: '项目目录 + 授权根 + 目录选择器。沙箱 = 项目目录 ∪ 授权根。', src: 'components/WorkspaceManager.js' },
+      ],
+    },
+    {
+      title: '联动浮层',
+      items: [
+        { file: 'approval.html', name: '审批块', desc: '独立浮出的授权面板，由工具调用触发。补齐了「始终允许」的作用域说明。', src: 'components/ApprovalPanel.js' },
+      ],
+    },
+  ]
+
+  var App = {
+    setup: function () {
+      var theme = Vue.ref(document.documentElement.getAttribute('data-theme') || 'light')
+      function toggleTheme() {
+        var next = theme.value === 'dark' ? 'light' : 'dark'
+        theme.value = next
+        document.documentElement.setAttribute('data-theme', next)
+        localStorage.setItem('ost-doc-theme', next)
+      }
+      return { groups: GROUPS, theme: theme, toggleTheme: toggleTheme }
+    },
+    render: function () {
+      var self = this
+      return h('div', { class: 'doc' }, [
+        // 头部
+        h('header', { class: 'hero' }, [
+          h('h1', {}, '对话流组件 Demo'),
+          h('p', { class: 'hero__desc', innerHTML: HERO_NOTE }),
+          h('div', { class: 'hero__meta' }, [
+            h('span', { class: 'hero__tag' }, '6 个组件'),
+            h('span', { class: 'hero__tag' }, 'osteosome 插件化形态'),
+            h('a', { class: 'hero__link', href: '../index.html' }, '→ 完整工作台'),
+            h('a', { class: 'hero__link', href: '../README.md' }, '架构说明'),
+            h('button', {
+              class: 'hero__link',
+              style: { cursor: 'pointer' },
+              onClick: function () { self.toggleTheme() },
+            }, this.theme === 'dark' ? '浅色主题' : '深色主题'),
+          ]),
+        ]),
+
+        // 分组索引
+        this.groups.map(function (g) {
+          return h('section', { class: 'doc__sec' }, [
+            h('div', { class: 'group-title' }, g.title),
+            h('div', { class: 'index-grid' }, g.items.map(function (it) {
+              return h('a', { class: 'index-card', href: it.file }, [
+                h('div', { class: 'index-card__name' }, it.name),
+                h('div', { class: 'index-card__desc' }, it.desc),
+                h('div', { class: 'index-card__file' }, it.src),
+              ])
+            })),
+          ])
+        }),
+      ])
+    },
+  }
+
+  // 主题初始化（与 loader 一致）
+  var stored = localStorage.getItem('ost-doc-theme')
+  if (stored) document.documentElement.setAttribute('data-theme', stored)
+  else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  }
+
+  Vue.createApp(App).mount('#app')
+})()
+</script>
+</body>
+</html>

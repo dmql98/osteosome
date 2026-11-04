@@ -1,0 +1,134 @@
+/*
+ * 设计令牌 —— 与 osteosome `sdk/ui/src/tokens.css` 同名同构。
+ *
+ * 差别只有一处：这一份带的是「宣纸鎏金」皮肤的值（鎏金 / 宣纸 / 墨 / 青玉 / 朱砂），
+ * 而 osteosome 那份是中性工业蓝。**令牌名完全一致**，所以换皮肤只改这一处。
+ *
+ * 皮肤令牌（`--skin-motion-*`）与本文件的 `--motion-*` 分属两个前缀、两处定义 ——
+ * 与 `docs/插件demo/决策冻结.md` #13 一致。
+ */
+
+:root {
+  color-scheme: light;
+
+  /* 宣纸底 */
+  --color-bg: #f5f0e8;
+  --color-surface: #ffffff;
+  --color-surface-2: #faf7f1;
+  --color-surface-3: #f1eade;
+  --color-border: #e6ddcc;
+  --color-border-soft: #efe7d8;
+  --color-border-strong: #d3c6a8;
+  /* 墨色 */
+  --color-text: #2c2418;
+  --color-text-muted: #6b6154;
+  --color-text-faint: #9a9081;
+  --color-text-inverse: #ffffff;
+
+  /* 鎏金 */
+  --color-primary: #c8960a;
+  --color-primary-hover: #b08207;
+  --color-primary-active: #8f6905;
+  --color-primary-soft: #fbf1d6;
+  --color-primary-line: #e8d49a;
+
+  /* 状态色 */
+  --color-info: #2f6bd8;
+  --color-info-soft: #e8f0fc;
+  --color-info-line: #c3d7f5;
+  --color-danger: #c45c3c;          /* 朱砂 */
+  --color-danger-soft: #fbede8;
+  --color-success: #2a9d5c;         /* 青玉 */
+  --color-success-soft: #edf6f0;
+  --color-warning: #d9a61b;
+  --color-focus-ring: rgba(200, 150, 10, 0.32);
+
+  /* 运行态 motion 色：会话列表状态点 */
+  --motion-idle: #9a9081;
+  --motion-thinking: #c8960a;
+  --motion-listening: #2f6bd8;
+  --motion-working: #2f6bd8;
+  --motion-speaking: #2a9d5c;
+  --motion-success: #2a9d5c;
+  --motion-error: #c45c3c;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 999px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+
+  --shadow-sm: 0 1px 2px rgba(44, 36, 24, 0.07);
+  --shadow-md: 0 6px 16px rgba(44, 36, 24, 0.13);
+  --shadow-lg: 0 12px 32px rgba(44, 36, 24, 0.18);
+
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+
+  --z-dropdown: 1000;
+  --z-modal: 1100;
+  --z-drawer: 1150;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #17130e;
+  --color-surface: #201b14;
+  --color-surface-2: #241e16;
+  --color-surface-3: #2c251a;
+  --color-border: #3a3226;
+  --color-border-soft: #2e281e;
+  --color-border-strong: #4d4231;
+  --color-text: #f2eadb;
+  --color-text-muted: #b4a891;
+  --color-text-faint: #7d7360;
+  --color-text-inverse: #1c1811;
+
+  --color-primary: #dca61b;
+  --color-primary-hover: #eab634;
+  --color-primary-active: #f0c455;
+  --color-primary-soft: #3a2e12;
+  --color-primary-line: #5a4620;
+
+  --color-info: #7ba6f0;
+  --color-info-soft: #1c2739;
+  --color-info-line: #2e4266;
+  --color-danger: #e08560;
+  --color-danger-soft: #33211a;
+  --color-success: #57c08a;
+  --color-success-soft: #1b2e22;
+  --color-warning: #efc33c;
+  --color-focus-ring: rgba(220, 166, 27, 0.34);
+
+  --motion-idle: #7d7360;
+  --motion-thinking: #dca61b;
+  --motion-listening: #7ba6f0;
+  --motion-working: #7ba6f0;
+  --motion-speaking: #57c08a;
+  --motion-success: #57c08a;
+  --motion-error: #e08560;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}

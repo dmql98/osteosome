@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>对话流组件 Demo — osteosome 插件化形态</title>
+
+<!--
+  加载顺序即依赖顺序（原生 script，无打包器）：
+    1. vendor   —— Vue 运行时
+    2. tokens   —— 设计令牌（唯一取值来源）
+    3. base     —— 全局基础样式
+    4. ui/      —— 共享展示组件库（对应 @osteosome/ui）
+    5. 插件组件 —— views / components / state
+    6. host     —— 宿主外壳与装配
+
+  迁回 osteosome 时，这 6 步分别变成：
+    1. npm i vue
+    2. import '@osteosome/ui/styles/tokens.css'
+    3. import '@osteosome/ui/styles/base.css'
+    4. import { Button, Badge } from '@osteosome/ui'
+    5. 插件目录下的相对 import
+    6. 宿主 main.ts
+-->
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="src/ui/styles.css">
+<link rel="stylesheet" href="src/host/styles.css">
+</head>
+<body>
+
+<div id="app"></div>
+
+<script src="vendor/vue.global.prod.js"></script>
+
+<!-- 核心：widget 注册表 -->
+<script src="src/core/registry.js"></script>
+
+<!-- 共享 UI 组件库 -->
+<script src="src/ui/index.js"></script>
+
+<!-- 插件：chat-workbench -->
+<script src="src/plugins/chat-workbench/state/chat-state.js"></script>
+<!-- 对话流 —— 含思考块 / 工具调用树 / 对话框 / 统计栏 / Turn 导航轨 -->
+<script src="src/plugins/chat-workbench/components/ChatTimeline.js"></script>
+<!-- 审批块 —— 独立浮层，由工具调用触发 -->
+<script src="src/plugins/chat-workbench/components/ApprovalPanel.js"></script>
+<script src="src/plugins/chat-workbench/views/ChatComposerView.js"></script>
+<script src="src/plugins/chat-workbench/views/SessionListView.js"></script>
+<script src="src/plugins/chat-workbench/views/SessionWorkspaceView.js"></script>
+<!-- 插件清单：声明 ui.views[] 并注册组件（真实实现由 Core 扫盘 plugin.json 完成） -->
+<script src="src/plugins/chat-workbench/manifest.js"></script>
+
+<!-- 宿主 -->
+<script src="src/host/AppFrame.js"></script>
+<script src="src/host/app.js"></script>
+
+<script>
+  // 错误可见化：开发期必须能在控制台看到挂载失败的原因
+  window.addEventListener('error', function (e) {
+    var pre = document.createElement('pre')
+    pre.style.cssText = 'position:fixed;left:8px;top:8px;right:8px;z-index:99999;background:#fdecee;color:#cf222e;padding:12px;font:12px/1.6 monospace;white-space:pre-wrap;border:1px solid #cf222e'
+    pre.textContent = 'ERROR: ' + e.message + '\n' + (e.error && e.error.stack ? e.error.stack : 'at ' + e.filename + ':' + e.lineno)
+    document.body.appendChild(pre)
+  })
+  // 首屏演示数据
+  window.addEventListener('load', function () {
+    if (window.OST && window.OST.__seed) window.OST.__seed()
+  })
+</script>
+</body>
+</html>
